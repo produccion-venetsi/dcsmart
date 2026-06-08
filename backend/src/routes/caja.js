@@ -32,6 +32,34 @@ export default async function cajaRoutes(fastify) {
     return { data: cajas, total, page: Number(page), limit: Number(limit) }
   })
 
+  fastify.get('/stats', { preHandler: viewHandler }, async (request) => {
+    const { id_local, desde, hasta } = request.query
+
+    const where = {
+      ...(id_local && { id_local }),
+      ...(desde || hasta ? {
+        fecha_inicio: {
+          ...(desde && { gte: new Date(desde) }),
+          ...(hasta && { lte: new Date(hasta + 'T23:59:59.999') })
+        }
+      } : {})
+    }
+
+    const agg = await fastify.db.caja.aggregate({
+      where,
+      _sum:   { total: true, efectivo: true, tickets: true, comensales: true },
+      _count: { id: true }
+    })
+
+    return {
+      total_recaudado:  Number(agg._sum.total     ?? 0),
+      count_turnos:     agg._count.id,
+      total_efectivo:   Number(agg._sum.efectivo  ?? 0),
+      total_tickets:    agg._sum.tickets           ?? 0,
+      total_comensales: agg._sum.comensales        ?? 0,
+    }
+  })
+
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
     const caja = await fastify.db.caja.findUnique({
       where: { id: request.params.id },
