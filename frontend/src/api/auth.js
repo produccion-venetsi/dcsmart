@@ -5,5 +5,6 @@ export const authApi = {
   login: (email, password) => client.post('/auth/login', { email, password }),
   loginGoogle: (credential) => client.post('/auth/google', { credential }),
   me: () => client.get('/auth/me'),
+  myApps: () => client.get('/auth/my-apps'),
   logout: () => client.post('/auth/logout')
 }

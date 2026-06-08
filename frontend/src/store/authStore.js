@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authApi } from '../api/auth.js'
+import { useAppStore } from './appStore.js'
 
 export const useAuthStore = create(
   persist(
@@ -41,6 +42,7 @@ export const useAuthStore = create(
       logout: async () => {
         try { await authApi.logout() } catch {}
         localStorage.removeItem('token')
+        useAppStore.getState().clearContext()
         set({ user: null, token: null })
       },
 

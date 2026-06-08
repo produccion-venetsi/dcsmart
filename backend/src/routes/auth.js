@@ -138,6 +138,45 @@ export default async function authRoutes(fastify) {
     return user
   })
 
+  // GET /api/auth/my-apps
+  fastify.get('/my-apps', { preHandler: [fastify.authenticate] }, async (request) => {
+    const userRoles = await fastify.db.userAppRole.findMany({
+      where: { id_user: request.user.id },
+      include: {
+        app: {
+          include: {
+            locales: { where: { activo: true }, orderBy: { nombre: 'asc' } }
+          }
+        },
+        role: true,
+        local: true
+      }
+    })
+
+    // super_admin: si tiene algún rol super_admin asignado, ve todos los grupos
+    const isSuperAdmin = userRoles.some(r => r.role.nombre === 'super_admin')
+    if (isSuperAdmin) {
+      const allApps = await fastify.db.app.findMany({
+        where: { activo: true },
+        include: { locales: { where: { activo: true }, orderBy: { nombre: 'asc' } } },
+        orderBy: { nombre: 'asc' }
+      })
+      return allApps.map(a => ({
+        app:     { id: a.id, nombre: a.nombre, slug: a.slug },
+        role:    'super_admin',
+        locales: a.locales.map(l => ({ id: l.id, nombre: l.nombre }))
+      }))
+    }
+
+    return userRoles.map(r => ({
+      app: { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
+      role: r.role.nombre,
+      locales: r.id_local
+        ? (r.local ? [{ id: r.local.id, nombre: r.local.nombre }] : [])
+        : r.app.locales.map(l => ({ id: l.id, nombre: l.nombre }))
+    }))
+  })
+
   // POST /api/auth/logout
   fastify.post('/logout', async (request, reply) => {
     reply.clearCookie('token', { path: '/' })

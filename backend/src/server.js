@@ -15,6 +15,9 @@ import cajaMoveRoutes from './routes/caja_movimientos.js'
 import pagosRoutes from './routes/pagos.js'
 import proveedoresRoutes from './routes/proveedores.js'
 import rubcatRoutes from './routes/rubcat.js'
+import metodosRoutes from './routes/metodos_pago.js'
+import rolesRoutes from './routes/roles.js'
+import impuestosRoutes from './routes/impuestos.js'
 
 const app = Fastify({ logger: true })
 
@@ -48,7 +51,10 @@ await app.register(cajaRoutes, { prefix: '/api/cajas' })
 await app.register(cajaMoveRoutes, { prefix: '/api/caja-movimientos' })
 await app.register(pagosRoutes, { prefix: '/api/pagos' })
 await app.register(proveedoresRoutes, { prefix: '/api/proveedores' })
-await app.register(rubcatRoutes, { prefix: '/api/rubcat' })
+await app.register(rubcatRoutes,    { prefix: '/api/rubcat' })
+await app.register(metodosRoutes,  { prefix: '/api/metodos-pago' })
+await app.register(rolesRoutes,    { prefix: '/api/roles' })
+await app.register(impuestosRoutes,{ prefix: '/api/impuestos' })
 
 app.get('/health', async () => ({ status: 'ok' }))
 

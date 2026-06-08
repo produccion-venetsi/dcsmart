@@ -1,0 +1,246 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore.js'
+import { useAppStore } from '../store/appStore.js'
+import { authApi } from '../api/auth.js'
+import './auth.css'
+
+/* ---- gradient palette — derivo por ID de app ---- */
+const GRADS = [
+  ['#E1CBA0', '#A98F63'],
+  ['#84C1F0', '#4B82D4'],
+  ['#B5A7EA', '#7E6FC9'],
+  ['#74CCA0', '#3F9970'],
+  ['#F09B84', '#C96A50'],
+  ['#F0D484', '#C9A340'],
+]
+function appGrad(id) {
+  const h = [...(id || 'x')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) & 0xffff, 0)
+  const [a, b] = GRADS[h % GRADS.length]
+  return `linear-gradient(150deg, ${a}, ${b})`
+}
+
+const ROLE_LABELS = {
+  admin: 'Administrador',
+  gerente: 'Gerente',
+  cajero: 'Cajero',
+  operador: 'Operador',
+}
+function roleBadgeClass(role) {
+  if (['admin'].includes(role)) return 'admin'
+  if (['gerente'].includes(role)) return 'gerente'
+  if (['cajero'].includes(role)) return 'cajero'
+  if (['operador'].includes(role)) return 'operador'
+  return 'default'
+}
+
+/* ---- SVG icons ---- */
+function IconLayers() {
+  return (
+    <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor"
+      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+      <polyline points="2 17 12 22 22 17"/>
+      <polyline points="2 12 12 17 22 12"/>
+    </svg>
+  )
+}
+function IconGrid() {
+  return (
+    <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+      <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+      <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+    </svg>
+  )
+}
+function IconArrow() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m9 18 6-6-6-6"/>
+    </svg>
+  )
+}
+function IconLogout() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor"
+      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+      <polyline points="16 17 21 12 16 7"/>
+      <line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
+  )
+}
+function IconInbox() {
+  return (
+    <svg viewBox="0 0 24 24" width={40} height={40} fill="none" stroke="currentColor"
+      strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>
+    </svg>
+  )
+}
+
+/* ---- initials avatar ---- */
+function initials(nombre) {
+  if (!nombre) return '?'
+  return nombre.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')
+}
+
+export default function AppSelector() {
+  const navigate = useNavigate()
+  const { user, logout } = useAuthStore()
+  const { setActiveApp, setActiveLocal } = useAppStore()
+
+  const [apps, setApps] = useState(null)
+  const [fetchError, setFetchError] = useState(null)
+  const [selecting, setSelecting] = useState(false)
+
+  useEffect(() => {
+    authApi.myApps()
+      .then(({ data }) => {
+        setApps(data)
+        // si tiene un solo app, auto-seleccionar
+        if (data.length === 1) {
+          handleSelect(data[0])
+        }
+      })
+      .catch(() => setFetchError('No se pudieron cargar tus grupos. Intentá nuevamente.'))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleSelect = (item) => {
+    if (selecting) return
+    setSelecting(true)
+    setActiveApp(item)
+    if (item.locales.length === 1) {
+      setActiveLocal(item.locales[0])
+    }
+    navigate('/dashboard', { replace: true })
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
+  return (
+    <div className="auth-root">
+      <div className="auth-grid-veil" />
+
+      {/* Header */}
+      <header className="sel-header">
+        <div className="sel-brand">
+          <div className="mark"><IconLayers /></div>
+          <div className="wm">
+            <b>DCSmart</b>
+            <span>Backoffice</span>
+          </div>
+        </div>
+        {user && (
+          <div className="sel-user">
+            <div className="sel-user-name">
+              {user.nombre}
+              <small>Cuenta personal</small>
+            </div>
+            <div className="sel-avatar">
+              {user.avatar_url
+                ? <img src={user.avatar_url} alt={user.nombre} />
+                : initials(user.nombre)}
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Main */}
+      <main className="sel-main">
+        <div className="sel-heading">
+          <h1>Seleccioná tu grupo de trabajo</h1>
+          <p>Elegí la empresa o sucursal con la que querés operar hoy</p>
+        </div>
+
+        {/* Estado: cargando */}
+        {apps === null && !fetchError && (
+          <div className="sel-auto">
+            <span className="auth-spinner" style={{ borderTopColor: 'var(--gold)', borderColor: 'rgba(201,176,134,0.2)', width: 28, height: 28 }} />
+            Cargando tus grupos…
+          </div>
+        )}
+
+        {/* Estado: error */}
+        {fetchError && (
+          <div className="sel-empty">
+            <IconInbox />
+            <p>{fetchError}</p>
+          </div>
+        )}
+
+        {/* Estado: sin apps */}
+        {apps && apps.length === 0 && (
+          <div className="sel-empty">
+            <IconInbox />
+            <p>Tu cuenta no tiene grupos asignados.<br />Contactá al administrador.</p>
+          </div>
+        )}
+
+        {/* Grid de apps */}
+        {apps && apps.length > 1 && (
+          <div className="app-grid">
+            {apps.map((item, i) => (
+              <button
+                key={item.app.id}
+                className="app-card"
+                style={{ '--i': i }}
+                onClick={() => handleSelect(item)}
+                disabled={selecting}
+              >
+                {/* Banner de color */}
+                <div
+                  className="app-card-banner"
+                  style={{ background: appGrad(item.app.id) }}
+                >
+                  <div className="app-card-banner-icon">
+                    <IconGrid />
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="app-card-body">
+                  <h2>{item.app.nombre}</h2>
+                  <span className={`role-badge ${roleBadgeClass(item.role)}`}>
+                    {ROLE_LABELS[item.role] || item.role}
+                  </span>
+                </div>
+
+                {/* Footer */}
+                <div className="app-card-foot">
+                  <span>
+                    {item.locales.length === 0
+                      ? 'Sin locales'
+                      : item.locales.length === 1
+                        ? item.locales[0].nombre
+                        : `${item.locales.length} locales`}
+                  </span>
+                  <div className="app-card-arrow">
+                    <IconArrow />
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="sel-footer">
+        <button className="sel-logout" onClick={handleLogout}>
+          <IconLogout />
+          Cerrar sesión
+        </button>
+      </footer>
+    </div>
+  )
+}

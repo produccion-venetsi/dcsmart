@@ -2,14 +2,48 @@ import { useEffect, useState } from 'react'
 import { usersApi } from '../../api/users.js'
 import { useUiStore } from '../../store/uiStore.js'
 
+function IcoUsersEmpty() {
+  return (
+    <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  )
+}
+function IcoTrash() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    </svg>
+  )
+}
+
+const ROLE_BADGE = {
+  super_admin: 'badge-gold',
+  admin:       'badge-gold',
+  gerente:     'badge-blue',
+  cajero:      'badge-green',
+  operador:    'badge-purple',
+}
+
+function initials(nombre) {
+  if (!nombre) return '?'
+  return nombre.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')
+}
+
 export default function Users() {
-  const notify = useUiStore((s) => s.notify)
-  const [users, setUsers] = useState([])
+  const notify   = useUiStore((s) => s.notify)
+  const [users,   setUsers]   = useState([])
   const [loading, setLoading] = useState(true)
 
   const load = () => {
     setLoading(true)
-    usersApi.list().then(({ data }) => setUsers(data)).catch(() => notify('Error al cargar usuarios', 'error')).finally(() => setLoading(false))
+    usersApi.list()
+      .then(({ data }) => setUsers(data))
+      .catch(() => notify('Error al cargar usuarios', 'error'))
+      .finally(() => setLoading(false))
   }
 
   useEffect(load, [])
@@ -20,52 +54,85 @@ export default function Users() {
     catch { notify('Error al desactivar', 'error') }
   }
 
-  if (loading) return <div style={{ padding: '2rem', color: '#64748b' }}>Cargando...</div>
-
   return (
-    <div>
-      <h1 style={{ margin: '0 0 1.5rem', fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>Usuarios</h1>
+    <div className="page">
+      <div className="page-head">
+        <div className="page-head-left">
+          <h1 className="page-title">Usuarios</h1>
+          <p className="page-sub">Gestión de accesos y roles</p>
+        </div>
+      </div>
 
-      <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-          <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              {['Usuario', 'Email', 'Rol', 'App', 'Activo', 'Acciones'].map((h) => (
-                <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 600, color: '#374151' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => {
-              const primaryRole = u.user_app_roles?.[0]
-              return (
-                <tr key={u.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      {u.avatar_url && <img src={u.avatar_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} />}
-                      <span style={{ fontWeight: 500 }}>{u.nombre}</span>
+      {loading ? (
+        <div className="page-loading"><div className="spinner" /></div>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Email</th>
+                <th>Rol</th>
+                <th>App</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const primaryRole = u.user_app_roles?.[0]
+                const roleName    = primaryRole?.role?.nombre ?? ''
+                return (
+                  <tr key={u.id}>
+                    <td>
+                      <div className="user-cell">
+                        <div className="user-cell-avatar">
+                          {u.avatar_url
+                            ? <img src={u.avatar_url} alt={u.nombre} />
+                            : initials(u.nombre)}
+                        </div>
+                        <span className="user-cell-name">{u.nombre}</span>
+                      </div>
+                    </td>
+                    <td className="td-muted">{u.email}</td>
+                    <td>
+                      {roleName
+                        ? <span className={`badge ${ROLE_BADGE[roleName] ?? 'badge-muted'}`}>{roleName}</span>
+                        : <span className="td-muted">—</span>}
+                    </td>
+                    <td className="td-muted">{primaryRole?.app?.nombre || '—'}</td>
+                    <td>
+                      <span className={u.activo ? 'bool-yes' : 'bool-no'}>
+                        {u.activo ? '● Activo' : '○ Inactivo'}
+                      </span>
+                    </td>
+                    <td>
+                      {u.activo && (
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDeactivate(u.id)}
+                        >
+                          <IcoTrash /> Desactivar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="table-empty">
+                      <IcoUsersEmpty />
+                      <p>No hay usuarios registrados.</p>
                     </div>
                   </td>
-                  <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{u.email}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    {primaryRole?.role?.nombre ? (
-                      <span style={{ background: '#eff6ff', color: '#1e40af', padding: '0.2rem 0.5rem', borderRadius: 12, fontSize: '0.75rem', fontWeight: 600 }}>{primaryRole.role.nombre}</span>
-                    ) : '—'}
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{primaryRole?.app?.nombre || '—'}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}><span style={{ color: u.activo ? '#16a34a' : '#dc2626' }}>{u.activo ? '✓' : '✗'}</span></td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    {u.activo && (
-                      <button onClick={() => handleDeactivate(u.id)} style={{ padding: '0.3rem 0.6rem', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.75rem' }}>Desactivar</button>
-                    )}
-                  </td>
                 </tr>
-              )
-            })}
-            {users.length === 0 && <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No hay usuarios</td></tr>}
-          </tbody>
-        </table>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

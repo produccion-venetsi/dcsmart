@@ -4,13 +4,48 @@ import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { useUiStore } from '../../store/uiStore.js'
 
+function IcoBack() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 18-6-6 6-6"/>
+    </svg>
+  )
+}
+function IcoTrash() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    </svg>
+  )
+}
+function IcoPlus() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  )
+}
+function IcoMovs() {
+  return (
+    <svg viewBox="0 0 24 24" width={34} height={34} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  )
+}
+
+function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
+function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
+
 export default function CajaDetail() {
-  const { id } = useParams()
+  const { id }   = useParams()
   const navigate = useNavigate()
-  const notify = useUiStore((s) => s.notify)
-  const [caja, setCaja] = useState(null)
+  const notify   = useUiStore((s) => s.notify)
+
+  const [caja,    setCaja]    = useState(null)
   const [loading, setLoading] = useState(true)
-  const [newMov, setNewMov] = useState({ tipo: 'INGRESO', monto: '', id_metodo: '' })
+  const [newMov,  setNewMov]  = useState({ tipo: 'INGRESO', monto: '', id_metodo: '' })
+  const [saving,  setSaving]  = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -24,12 +59,14 @@ export default function CajaDetail() {
 
   const handleAddMovimiento = async (e) => {
     e.preventDefault()
+    setSaving(true)
     try {
       await movimientosApi.create({ ...newMov, monto: parseFloat(newMov.monto), id_caja: id })
       notify('Movimiento agregado', 'success')
       setNewMov({ tipo: 'INGRESO', monto: '', id_metodo: '' })
       load()
     } catch { notify('Error al agregar movimiento', 'error') }
+    finally { setSaving(false) }
   }
 
   const handleDeleteMov = async (movId) => {
@@ -41,90 +78,135 @@ export default function CajaDetail() {
     } catch { notify('Error al eliminar', 'error') }
   }
 
-  if (loading) return <div style={{ padding: '2rem', color: '#64748b' }}>Cargando...</div>
-  if (!caja) return <div style={{ padding: '2rem', color: '#dc2626' }}>Caja no encontrada</div>
+  if (loading) return <div className="page-loading"><div className="spinner" /></div>
+  if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
-  const totalMovimientos = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
+  const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
+
+  const infoRows = [
+    ['Local',        caja.local?.nombre ?? '—'],
+    ['Inicio',       fmtDT(caja.fecha_inicio)],
+    ['Cierre',       fmtDT(caja.fecha_cierre)],
+    ['Cajero',       caja.cajero ?? '—'],
+    ['Total',        fmt$(caja.total),   true],
+    ['Efectivo',     fmt$(caja.efectivo)],
+    ['Fiscal',       fmt$(caja.fiscal)],
+    ['Comensales',   caja.comensales ?? '—'],
+    ['Tickets',      caja.tickets ?? '—'],
+    ['Origen',       caja.origin ?? '—'],
+  ]
 
   return (
-    <div>
-      <button onClick={() => navigate('/cajas')} style={{ marginBottom: '1rem', background: 'none', border: 'none', color: '#1e40af', cursor: 'pointer', fontSize: '0.9rem' }}>
-        ← Volver a Cajas
+    <div className="page">
+      <button className="back-link" onClick={() => navigate('/cajas')}>
+        <IcoBack /> Volver a Cajas
       </button>
 
-      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 280, background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-          <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 700 }}>
-            Caja {caja.nro_turno || `#${caja.id.slice(0, 8)}`}
-          </h2>
-          {[
-            ['Local', caja.local?.nombre],
-            ['Inicio', new Date(caja.fecha_inicio).toLocaleString('es-AR')],
-            ['Cierre', caja.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString('es-AR') : '—'],
-            ['Cajero', caja.cajero || '—'],
-            ['Total', caja.total ? `$${Number(caja.total).toLocaleString('es-AR')}` : '—'],
-            ['Efectivo', caja.efectivo ? `$${Number(caja.efectivo).toLocaleString('es-AR')}` : '—'],
-            ['Fiscal', caja.fiscal ? `$${Number(caja.fiscal).toLocaleString('es-AR')}` : '—'],
-            ['Comensales', caja.comensales ?? '—'],
-            ['Tickets', caja.tickets ?? '—'],
-            ['Origen', caja.origin]
-          ].map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: '1px solid #f1f5f9' }}>
-              <span style={{ color: '#64748b', fontSize: '0.875rem' }}>{k}</span>
-              <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{v}</span>
+      <div className="page-head">
+        <div className="page-head-left">
+          <h1 className="page-title">
+            {caja.nro_turno ? `Turno ${caja.nro_turno}` : `Caja #${caja.id.slice(0, 8)}`}
+          </h1>
+          <p className="page-sub">{caja.local?.nombre} · {new Date(caja.fecha_inicio).toLocaleDateString('es-AR')}</p>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        {/* Info column */}
+        <div className="card" style={{ flex: '0 0 280px', minWidth: 240 }}>
+          <div className="card-body">
+            <div className="card-title">Datos del turno</div>
+            <div className="detail-rows">
+              {infoRows.map(([k, v, gold]) => (
+                <div className="detail-row" key={k}>
+                  <span className="detail-key">{k}</span>
+                  <span className={`detail-val${gold ? ' gold' : ''}`}>{v}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
 
-        <div style={{ flex: 2, minWidth: 320 }}>
-          <div style={{ background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', marginBottom: '1rem' }}>
-            <h3 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 700 }}>
-              Movimientos ({caja.movimientos?.length || 0}) — Total: ${totalMovimientos.toLocaleString('es-AR')}
-            </h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+        {/* Movements column */}
+        <div style={{ flex: 1, minWidth: 320 }}>
+          {/* Movimientos table */}
+          <div className="table-wrap" style={{ marginBottom: '1.25rem' }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="card-title" style={{ margin: 0 }}>
+                Movimientos ({caja.movimientos?.length || 0})
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold-bright)' }}>
+                Total: {fmt$(totalMov)}
+              </span>
+            </div>
+            <table className="data-table">
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  {['Tipo', 'Método', 'Monto', 'Cantidad', ''].map((h) => (
-                    <th key={h} style={{ padding: '0.5rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#374151' }}>{h}</th>
-                  ))}
+                <tr>
+                  <th>Tipo</th>
+                  <th>Método</th>
+                  <th>Monto</th>
+                  <th>Cantidad</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {(caja.movimientos || []).map((m) => (
-                  <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '0.5rem 0.75rem' }}>{m.tipo}</td>
-                    <td style={{ padding: '0.5rem 0.75rem' }}>{m.metodo_pago?.nombre || '—'}</td>
-                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>${Number(m.monto).toLocaleString('es-AR')}</td>
-                    <td style={{ padding: '0.5rem 0.75rem' }}>{m.cantidad ?? '—'}</td>
-                    <td style={{ padding: '0.5rem 0.75rem' }}>
-                      <button onClick={() => handleDeleteMov(m.id)} style={{ padding: '0.2rem 0.5rem', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.75rem' }}>✕</button>
+                  <tr key={m.id}>
+                    <td>
+                      <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>
+                        {m.tipo}
+                      </span>
+                    </td>
+                    <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                    <td className="td-number">{fmt$(m.monto)}</td>
+                    <td className="td-muted">{m.cantidad ?? '—'}</td>
+                    <td>
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                        <IcoTrash />
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {(!caja.movimientos || caja.movimientos.length === 0) && (
-                  <tr><td colSpan={5} style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8' }}>Sin movimientos</td></tr>
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="table-empty">
+                        <IcoMovs />
+                        <p>Sin movimientos registrados.</p>
+                      </div>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          <form onSubmit={handleAddMovimiento} style={{ background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-            <h3 style={{ margin: '0 0 0.75rem', fontSize: '1rem', fontWeight: 700 }}>Agregar Movimiento</h3>
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 3, color: '#374151' }}>Tipo</label>
-                <select value={newMov.tipo} onChange={(e) => setNewMov({ ...newMov, tipo: e.target.value })} style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid #d1d5db' }}>
-                  <option>INGRESO</option>
-                  <option>EGRESO</option>
-                  <option>APERTURA</option>
-                  <option>CIERRE</option>
-                </select>
+          {/* Add movement form */}
+          <form className="form-panel" onSubmit={handleAddMovimiento}>
+            <div className="form-panel-title"><IcoPlus /> Agregar Movimiento</div>
+            <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+              <div className="form-group">
+                <label className="form-label">Tipo</label>
+                <div className="form-input-wrap">
+                  <select value={newMov.tipo} onChange={e => setNewMov({ ...newMov, tipo: e.target.value })}>
+                    <option>INGRESO</option>
+                    <option>EGRESO</option>
+                    <option>APERTURA</option>
+                    <option>CIERRE</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 3, color: '#374151' }}>Monto</label>
-                <input type="number" step="0.01" required value={newMov.monto} onChange={(e) => setNewMov({ ...newMov, monto: e.target.value })} style={{ padding: '0.5rem', borderRadius: 4, border: '1px solid #d1d5db', width: 120 }} />
+              <div className="form-group">
+                <label className="form-label">Monto *</label>
+                <div className="form-input-wrap">
+                  <input type="number" step="0.01" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
+                </div>
               </div>
-              <button type="submit" style={{ padding: '0.5rem 1rem', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>Agregar</button>
+            </div>
+            <div className="form-actions">
+              <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
+                {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
+              </button>
             </div>
           </form>
         </div>

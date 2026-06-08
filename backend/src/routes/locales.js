@@ -2,12 +2,23 @@ export default async function localesRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('locales', 'view')]
 
   fastify.get('/', { preHandler: viewHandler }, async (request) => {
-    const { id_app } = request.query
-    return fastify.db.local.findMany({
-      where: id_app ? { id_app } : undefined,
-      include: { app: { select: { id: true, nombre: true, slug: true } } },
-      orderBy: { nombre: 'asc' }
-    })
+    const { id_app, page = 1, limit = 100 } = request.query
+    const skip = (Number(page) - 1) * Number(limit)
+    const take = Number(limit)
+    const where = id_app ? { id_app } : undefined
+
+    const [data, total] = await Promise.all([
+      fastify.db.local.findMany({
+        where,
+        include: { app: { select: { id: true, nombre: true, slug: true } } },
+        orderBy: { nombre: 'asc' },
+        skip,
+        take
+      }),
+      fastify.db.local.count({ where })
+    ])
+
+    return { data, total, page: Number(page), limit: take }
   })
 
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {

@@ -4,19 +4,67 @@ import { cajasApi } from '../../api/cajas.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
-const EMPTY_CAJA = { nro_turno: '', fecha_inicio: '', cajero: '', total: '', efectivo: '', fiscal: '', comensales: '', tickets: '', observaciones: '' }
+const EMPTY_CAJA = {
+  nro_turno: '', fecha_inicio: '', cajero: '', total: '',
+  efectivo: '', fiscal: '', comensales: '', tickets: '', observaciones: '', foto_url: ''
+}
+
+function IcoPlus() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  )
+}
+function IcoEye() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+    </svg>
+  )
+}
+function IcoTrash() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+    </svg>
+  )
+}
+function IcoCaja() {
+  return (
+    <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2"/>
+      <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+    </svg>
+  )
+}
+function IcoLink() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </svg>
+  )
+}
+
+function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 
 export default function CajaList() {
-  const navigate = useNavigate()
+  const navigate    = useNavigate()
   const activeLocal = useAppStore((s) => s.activeLocal)
-  const notify = useUiStore((s) => s.notify)
-  const [cajas, setCajas] = useState([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(EMPTY_CAJA)
-  const [saving, setSaving] = useState(false)
+  const notify      = useUiStore((s) => s.notify)
+
+  const [cajas,     setCajas]     = useState([])
+  const [total,     setTotal]     = useState(0)
+  const [page,      setPage]      = useState(1)
+  const [loading,   setLoading]   = useState(true)
+  const [showForm,  setShowForm]  = useState(false)
+  const [form,      setForm]      = useState(EMPTY_CAJA)
+  const [saving,    setSaving]    = useState(false)
+
+  const totalPages = Math.ceil(total / 20)
 
   const load = () => {
     setLoading(true)
@@ -26,15 +74,20 @@ export default function CajaList() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [page, activeLocal?.id])
+  useEffect(() => {
+    const ctrl = new AbortController()
+    setLoading(true)
+    cajasApi.list({ id_local: activeLocal?.id, page, limit: 20 }, ctrl.signal)
+      .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
+      .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
+    return () => ctrl.abort()
+  }, [page, activeLocal?.id])
 
   const handleDelete = async (id) => {
     if (!confirm('¿Eliminar esta caja?')) return
-    try {
-      await cajasApi.remove(id)
-      notify('Caja eliminada', 'success')
-      load()
-    } catch { notify('Error al eliminar', 'error') }
+    try { await cajasApi.remove(id); notify('Caja eliminada', 'success'); load() }
+    catch { notify('Error al eliminar', 'error') }
   }
 
   const handleCreate = async (e) => {
@@ -52,103 +105,189 @@ export default function CajaList() {
     } finally { setSaving(false) }
   }
 
-  if (loading) return <div style={{ padding: '2rem', color: '#64748b' }}>Cargando...</div>
+  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>Cajas</h1>
-          {activeLocal && <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.875rem' }}>Local: {activeLocal.nombre}</p>}
+    <div className="page">
+      {/* Header */}
+      <div className="page-head">
+        <div className="page-head-left">
+          <h1 className="page-title">Cajas</h1>
+          {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          style={{ padding: '0.6rem 1.25rem', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}
-        >
-          {showForm ? 'Cancelar' : '+ Nueva Caja'}
-        </button>
+        <div className="page-actions">
+          <button className="btn btn-primary" onClick={() => setShowForm(v => !v)}>
+            {showForm ? 'Cancelar' : <><IcoPlus /> Nueva Caja</>}
+          </button>
+        </div>
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} style={{ background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', marginBottom: '1.5rem' }}>
-          <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Nueva Caja</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-            {[
-              ['fecha_inicio', 'Fecha Inicio *', 'datetime-local', true],
-              ['nro_turno', 'Nro Turno', 'text', false],
-              ['cajero', 'Cajero', 'text', false],
-              ['total', 'Total', 'number', false],
-              ['efectivo', 'Efectivo', 'number', false],
-              ['fiscal', 'Fiscal', 'number', false],
-              ['comensales', 'Comensales', 'number', false],
-              ['tickets', 'Tickets', 'number', false]
-            ].map(([f, l, t, req]) => (
-              <div key={f}>
-                <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 3, color: '#374151' }}>{l}</label>
-                <input
-                  type={t}
-                  required={req}
-                  step={t === 'number' ? '0.01' : undefined}
-                  value={form[f]}
-                  onChange={(e) => setForm({ ...form, [f]: e.target.value })}
-                  style={{ width: '100%', padding: '0.45rem', borderRadius: 6, border: '1px solid #d1d5db', boxSizing: 'border-box' }}
-                />
+        <form className="form-panel" onSubmit={handleCreate}>
+          <div className="form-panel-title">Nueva Caja</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label">Fecha Inicio *</label>
+              <div className="form-input-wrap">
+                <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
               </div>
-            ))}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Nro Turno</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="T-001" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Cajero</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Nombre del cajero" value={form.cajero} onChange={e => setF('cajero', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Total</label>
+              <div className="form-input-wrap">
+                <input type="number" step="0.01" placeholder="0.00" value={form.total} onChange={e => setF('total', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Efectivo</label>
+              <div className="form-input-wrap">
+                <input type="number" step="0.01" placeholder="0.00" value={form.efectivo} onChange={e => setF('efectivo', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Fiscal</label>
+              <div className="form-input-wrap">
+                <input type="number" step="0.01" placeholder="0.00" value={form.fiscal} onChange={e => setF('fiscal', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Comensales</label>
+              <div className="form-input-wrap">
+                <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Tickets</label>
+              <div className="form-input-wrap">
+                <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">URL Foto</label>
+              <div className="form-input-wrap">
+                <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">Observaciones</label>
+              <div className="form-input-wrap form-textarea-wrap">
+                <textarea rows={2} value={form.observaciones} onChange={e => setF('observaciones', e.target.value)} placeholder="Notas opcionales..." />
+              </div>
+            </div>
           </div>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 3, color: '#374151' }}>Observaciones</label>
-            <textarea value={form.observaciones} onChange={(e) => setForm({ ...form, observaciones: e.target.value })} rows={2} style={{ width: '100%', padding: '0.45rem', borderRadius: 6, border: '1px solid #d1d5db', resize: 'vertical', boxSizing: 'border-box' }} />
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : 'Crear Caja'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
           </div>
-          <button type="submit" disabled={saving} style={{ padding: '0.55rem 1.25rem', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, opacity: saving ? 0.7 : 1 }}>
-            {saving ? 'Guardando...' : 'Crear Caja'}
-          </button>
         </form>
       )}
 
       {!activeLocal && (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', background: '#fff', borderRadius: 10 }}>
-          Seleccioná un local desde el Dashboard para ver sus cajas.
+        <div className="table-wrap">
+          <div className="table-empty">
+            <IcoCaja />
+            <p>Seleccioná un local desde el Dashboard<br/>para ver sus cajas.</p>
+          </div>
         </div>
       )}
 
       {activeLocal && (
         <>
-          <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  {['Nro Turno', 'Inicio', 'Cierre', 'Total', 'Efectivo', 'Cajero', 'Acciones'].map((h) => (
-                    <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 600, color: '#374151' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {cajas.map((c) => (
-                  <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '0.75rem 1rem' }}>{c.nro_turno || '-'}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>{new Date(c.fecha_inicio).toLocaleDateString('es-AR')}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>{c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleDateString('es-AR') : '—'}</td>
-                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{c.total ? `$${Number(c.total).toLocaleString('es-AR')}` : '—'}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>{c.efectivo ? `$${Number(c.efectivo).toLocaleString('es-AR')}` : '—'}</td>
-                    <td style={{ padding: '0.75rem 1rem' }}>{c.cajero || '—'}</td>
-                    <td style={{ padding: '0.75rem 1rem', display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => navigate(`/cajas/${c.id}`)} style={{ padding: '0.3rem 0.75rem', background: '#eff6ff', color: '#1e40af', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Ver</button>
-                      <button onClick={() => handleDelete(c.id)} style={{ padding: '0.3rem 0.75rem', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer' }}>✕</button>
-                    </td>
+          {loading ? (
+            <div className="page-loading"><div className="spinner" /></div>
+          ) : (
+            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Nro Turno</th>
+                    <th>Inicio</th>
+                    <th>Cierre</th>
+                    <th>Cajero</th>
+                    <th>Total</th>
+                    <th>Efectivo</th>
+                    <th>Fiscal</th>
+                    <th>Comensales</th>
+                    <th>Tickets</th>
+                    <th>Origen</th>
+                    <th>Observaciones</th>
+                    <th>Foto</th>
+                    <th></th>
                   </tr>
-                ))}
-                {cajas.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No hay cajas registradas</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {cajas.map((c) => (
+                    <tr key={c.id}>
+                      <td className="td-primary">{c.nro_turno || <span className="td-muted">—</span>}</td>
+                      <td>{fmtDate(c.fecha_inicio)}</td>
+                      <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
+                      <td>{c.cajero || <span className="td-muted">—</span>}</td>
+                      <td className="td-number">{fmt$(c.total)}</td>
+                      <td className="td-number">{fmt$(c.efectivo)}</td>
+                      <td className="td-number">{fmt$(c.fiscal)}</td>
+                      <td className="td-muted" style={{ textAlign: 'right' }}>{c.comensales ?? '—'}</td>
+                      <td className="td-muted" style={{ textAlign: 'right' }}>{c.tickets ?? '—'}</td>
+                      <td>
+                        {c.origin && c.origin !== 'DCSMART'
+                          ? <span className="badge badge-muted">{c.origin}</span>
+                          : <span className="td-muted">—</span>}
+                      </td>
+                      <td style={{ maxWidth: 180 }}>
+                        {c.observaciones
+                          ? <span title={c.observaciones} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170, fontSize: 12, color: 'var(--t2)' }}>{c.observaciones}</span>
+                          : <span className="td-muted">—</span>}
+                      </td>
+                      <td>
+                        {c.foto_url
+                          ? <a href={c.foto_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
+                          : <span className="td-muted">—</span>}
+                      </td>
+                      <td>
+                        <div className="td-actions">
+                          <button className="btn btn-sm btn-secondary" onClick={() => navigate(`/cajas/${c.id}`)}>
+                            <IcoEye /> Ver
+                          </button>
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDelete(c.id)}>
+                            <IcoTrash />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {cajas.length === 0 && (
+                    <tr>
+                      <td colSpan={13}>
+                        <div className="table-empty">
+                          <IcoCaja />
+                          <p>No hay cajas registradas para este local.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {total > 20 && (
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', alignItems: 'center' }}>
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} style={{ padding: '0.4rem 0.75rem', borderRadius: 4, border: '1px solid #e2e8f0', cursor: page === 1 ? 'not-allowed' : 'pointer' }}>← Anterior</button>
-              <span style={{ color: '#64748b', fontSize: '0.875rem' }}>Página {page} de {Math.ceil(total / 20)}</span>
-              <button disabled={page >= Math.ceil(total / 20)} onClick={() => setPage((p) => p + 1)} style={{ padding: '0.4rem 0.75rem', borderRadius: 4, border: '1px solid #e2e8f0', cursor: page >= Math.ceil(total / 20) ? 'not-allowed' : 'pointer' }}>Siguiente →</button>
+            <div className="pagination">
+              <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+              <span className="pagination-info">Página {page} de {totalPages}</span>
+              <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
             </div>
           )}
         </>

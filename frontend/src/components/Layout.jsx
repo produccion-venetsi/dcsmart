@@ -2,32 +2,46 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar.jsx'
 import { useUiStore } from '../store/uiStore.js'
 
+function NotifIcon({ type }) {
+  if (type === 'success') return (
+    <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="8"/><path d="m7 10 2 2 4-4"/>
+    </svg>
+  )
+  if (type === 'error') return (
+    <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="8"/><path d="M10 7v4M10 13h.01"/>
+    </svg>
+  )
+  return (
+    <svg viewBox="0 0 20 20" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="8"/><path d="M10 10v4M10 7h.01"/>
+    </svg>
+  )
+}
+
 export default function Layout() {
   const notifications = useUiStore((s) => s.notifications)
   const removeNotification = useUiStore((s) => s.removeNotification)
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
+    <div className="app-layout">
       <Sidebar />
-      <main style={{ flex: 1, padding: '1.5rem', background: '#f8fafc', overflowY: 'auto' }}>
-        <Outlet />
-      </main>
+      <div className="app-body">
+        <main className="app-main">
+          <Outlet />
+        </main>
+      </div>
 
-      <div style={{ position: 'fixed', bottom: '1rem', right: '1rem', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <div className="notifications-container">
         {notifications.map((n) => (
           <div
             key={n.id}
+            className={`notification notification-${n.type || 'info'}`}
             onClick={() => removeNotification(n.id)}
-            style={{
-              padding: '0.75rem 1rem',
-              borderRadius: 6,
-              background: n.type === 'error' ? '#ef4444' : n.type === 'success' ? '#22c55e' : '#3b82f6',
-              color: '#fff',
-              cursor: 'pointer',
-              maxWidth: 320,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-            }}
+            title="Click para cerrar"
           >
+            <NotifIcon type={n.type} />
             {n.message}
           </div>
         ))}

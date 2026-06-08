@@ -3,8 +3,13 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { useUiStore } from '../../store/uiStore.js'
 
-const inputStyle = { width: '100%', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px solid #d1d5db', fontSize: '0.9rem', boxSizing: 'border-box' }
-const labelStyle = { display: 'block', marginBottom: 4, fontSize: '0.8rem', fontWeight: 500, color: '#374151' }
+function IcoBack() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 18-6-6 6-6"/>
+    </svg>
+  )
+}
 
 const EMPTY = {
   nombre: '', razon_social: '', cuit: '', banco: '', cbu: '', alias: '',
@@ -13,11 +18,12 @@ const EMPTY = {
 }
 
 export default function ProveedorForm() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const notify = useUiStore((s) => s.notify)
-  const isEditing = Boolean(id)
-  const [form, setForm] = useState(EMPTY)
+  const { id }      = useParams()
+  const navigate    = useNavigate()
+  const notify      = useUiStore((s) => s.notify)
+  const isEditing   = Boolean(id)
+
+  const [form,    setForm]    = useState(EMPTY)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -28,7 +34,7 @@ export default function ProveedorForm() {
     }
   }, [id])
 
-  const set = (field, value) => setForm((f) => ({ ...f, [field]: value }))
+  const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -48,42 +54,123 @@ export default function ProveedorForm() {
     } finally { setLoading(false) }
   }
 
-  const fields = [
-    ['nombre', 'Nombre *', 'text'], ['razon_social', 'Razón Social', 'text'],
-    ['cuit', 'CUIT', 'text'], ['banco', 'Banco', 'text'],
-    ['cbu', 'CBU', 'text'], ['alias', 'Alias', 'text'],
-    ['telefono', 'Teléfono', 'text'], ['mail_contacto', 'Email Contacto', 'email'],
-    ['mail_envio', 'Email Envío', 'email'], ['direccion_url', 'URL Dirección', 'url'],
-    ['detalle_direc', 'Detalle Dirección', 'text'], ['tag', 'Tag', 'text']
-  ]
-
   return (
-    <div>
-      <button onClick={() => navigate('/proveedores')} style={{ marginBottom: '1rem', background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', fontSize: '0.9rem' }}>
-        ← Volver a Proveedores
+    <div className="page">
+      <button className="back-link" onClick={() => navigate('/proveedores')}>
+        <IcoBack /> Volver a Proveedores
       </button>
-      <h1 style={{ margin: '0 0 1.5rem', fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>
-        {isEditing ? 'Editar Proveedor' : 'Nuevo Proveedor'}
-      </h1>
 
-      <form onSubmit={handleSubmit} style={{ background: '#fff', borderRadius: 10, padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
-          {fields.map(([field, label, type]) => (
-            <div key={field}>
-              <label style={labelStyle}>{label}</label>
-              <input type={type} value={form[field]} onChange={(e) => set(field, e.target.value)} required={field === 'nombre'} style={inputStyle} />
+      <div className="page-head">
+        <h1 className="page-title">{isEditing ? 'Editar Proveedor' : 'Nuevo Proveedor'}</h1>
+      </div>
+
+      <form onSubmit={handleSubmit}>
+        {/* Datos principales */}
+        <div className="form-panel">
+          <div className="form-panel-title">Datos principales</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label">Nombre *</label>
+              <div className="form-input-wrap">
+                <input type="text" required placeholder="Nombre del proveedor" value={form.nombre} onChange={e => set('nombre', e.target.value)} />
+              </div>
             </div>
-          ))}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingTop: '1.5rem' }}>
-            <input type="checkbox" checked={form.activo} onChange={(e) => set('activo', e.target.checked)} id="activo" />
-            <label htmlFor="activo" style={{ fontSize: '0.9rem', color: '#374151', cursor: 'pointer' }}>Activo</label>
+            <div className="form-group">
+              <label className="form-label">Razón Social</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Razón social" value={form.razon_social} onChange={e => set('razon_social', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">CUIT</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="XX-XXXXXXXX-X" value={form.cuit} onChange={e => set('cuit', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Tag</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Etiqueta" value={form.tag} onChange={e => set('tag', e.target.value)} />
+              </div>
+            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="submit" disabled={loading} style={{ padding: '0.65rem 1.5rem', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, opacity: loading ? 0.7 : 1 }}>
-            {loading ? 'Guardando...' : isEditing ? 'Actualizar' : 'Crear Proveedor'}
+
+        {/* Datos bancarios */}
+        <div className="form-panel">
+          <div className="form-panel-title">Datos bancarios</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label">Banco</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Nombre del banco" value={form.banco} onChange={e => set('banco', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">CBU</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="CBU" value={form.cbu} onChange={e => set('cbu', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Alias</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Alias de transferencia" value={form.alias} onChange={e => set('alias', e.target.value)} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Contacto */}
+        <div className="form-panel">
+          <div className="form-panel-title">Contacto</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label">Teléfono</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="+54 11 ..." value={form.telefono} onChange={e => set('telefono', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email Contacto</label>
+              <div className="form-input-wrap">
+                <input type="email" placeholder="contacto@empresa.com" value={form.mail_contacto} onChange={e => set('mail_contacto', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email Envío</label>
+              <div className="form-input-wrap">
+                <input type="email" placeholder="facturas@empresa.com" value={form.mail_envio} onChange={e => set('mail_envio', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">URL Dirección</label>
+              <div className="form-input-wrap">
+                <input type="url" placeholder="https://maps.google.com/..." value={form.direccion_url} onChange={e => set('direccion_url', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">Detalle Dirección</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Calle, número, piso..." value={form.detalle_direc} onChange={e => set('detalle_direc', e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <label className="checkbox-wrap">
+            <input type="checkbox" checked={form.activo} onChange={e => set('activo', e.target.checked)} />
+            <span className="checkbox-label">Proveedor activo</span>
+          </label>
+        </div>
+
+        <div className="form-actions">
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading
+              ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</>
+              : isEditing ? 'Actualizar Proveedor' : 'Crear Proveedor'}
           </button>
-          <button type="button" onClick={() => navigate('/proveedores')} style={{ padding: '0.65rem 1.5rem', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate('/proveedores')}>
+            Cancelar
+          </button>
         </div>
       </form>
     </div>

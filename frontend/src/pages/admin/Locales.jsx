@@ -3,41 +3,91 @@ import { localesApi } from '../../api/locales.js'
 import { appsApi } from '../../api/apps.js'
 import { useUiStore } from '../../store/uiStore.js'
 
+const LIMIT = 50
+
+function IcoLocalesEmpty() {
+  return (
+    <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+      <circle cx="12" cy="10" r="3"/>
+    </svg>
+  )
+}
+function IcoEdit() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+function IcoTrash() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    </svg>
+  )
+}
+function IcoFilter() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+    </svg>
+  )
+}
+
+const EMPTY = { nombre: '', id_app: '', direccion: '', telefono: '', activo: true }
+
 export default function Locales() {
-  const notify = useUiStore((s) => s.notify)
-  const [locales, setLocales] = useState([])
-  const [apps, setApps] = useState([])
-  const [form, setForm] = useState({ nombre: '', id_app: '', direccion: '', telefono: '', activo: true })
-  const [editing, setEditing] = useState(null)
+  const notify  = useUiStore((s) => s.notify)
+
+  const [locales,   setLocales]   = useState([])
+  const [apps,      setApps]      = useState([])
+  const [form,      setForm]      = useState(EMPTY)
+  const [editing,   setEditing]   = useState(null)
   const [filterApp, setFilterApp] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [page,      setPage]      = useState(1)
+  const [total,     setTotal]     = useState(0)
+
+  const totalPages = Math.ceil(total / LIMIT)
 
   const load = () => {
     setLoading(true)
     Promise.all([
-      localesApi.list(filterApp ? { id_app: filterApp } : {}),
+      localesApi.list({ ...(filterApp ? { id_app: filterApp } : {}), page, limit: LIMIT }),
       appsApi.list()
     ])
-      .then(([l, a]) => { setLocales(l.data); setApps(a.data) })
+      .then(([l, a]) => { setLocales(l.data.data); setTotal(l.data.total); setApps(a.data) })
       .catch(() => notify('Error al cargar', 'error'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [filterApp])
+  useEffect(() => setPage(1), [filterApp])
+  useEffect(load, [filterApp, page])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.id_app) { notify('Seleccioná una app', 'error'); return }
+    setSaving(true)
     try {
       if (editing) { await localesApi.update(editing, form); notify('Local actualizado', 'success') }
-      else { await localesApi.create(form); notify('Local creado', 'success') }
-      setForm({ nombre: '', id_app: '', direccion: '', telefono: '', activo: true })
+      else         { await localesApi.create(form);          notify('Local creado', 'success') }
+      setForm(EMPTY)
       setEditing(null)
       load()
     } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
+    finally { setSaving(false) }
   }
 
-  const startEdit = (l) => { setEditing(l.id); setForm({ nombre: l.nombre, id_app: l.id_app, direccion: l.direccion || '', telefono: l.telefono || '', activo: l.activo }) }
+  const startEdit = (l) => {
+    setEditing(l.id)
+    setForm({ nombre: l.nombre, id_app: l.id_app, direccion: l.direccion || '', telefono: l.telefono || '', activo: l.activo })
+  }
+
+  const cancelEdit = () => { setEditing(null); setForm(EMPTY) }
 
   const handleDelete = async (id) => {
     if (!confirm('¿Eliminar local?')) return
@@ -45,68 +95,145 @@ export default function Locales() {
     catch { notify('Error al eliminar', 'error') }
   }
 
-  if (loading) return <div style={{ padding: '2rem', color: '#64748b' }}>Cargando...</div>
-
   return (
-    <div>
-      <h1 style={{ margin: '0 0 1.5rem', fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>Locales</h1>
+    <div className="page">
+      <div className="page-head">
+        <div className="page-head-left">
+          <h1 className="page-title">Locales</h1>
+          <p className="page-sub">Sucursales y puntos de venta</p>
+        </div>
+      </div>
 
-      <form onSubmit={handleSubmit} style={{ background: '#fff', borderRadius: 10, padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', marginBottom: '1.5rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        {[['nombre','Nombre','text',true,180],['direccion','Dirección','text',false,200],['telefono','Teléfono','text',false,120]].map(([f,l,t,req,w]) => (
-          <div key={f}>
-            <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 3, color: '#374151' }}>{l}</label>
-            <input type={t} required={req} value={form[f]} onChange={(e) => setForm({ ...form, [f]: e.target.value })} style={{ padding: '0.5rem', borderRadius: 6, border: '1px solid #d1d5db', width: w }} />
+      {/* Inline form */}
+      <form className="form-panel" onSubmit={handleSubmit}>
+        <div className="form-panel-title">
+          {editing ? 'Editar Local' : 'Nuevo Local'}
+        </div>
+        <div className="form-grid">
+          <div className="form-group">
+            <label className="form-label">App *</label>
+            <div className="form-input-wrap">
+              <select required value={form.id_app} onChange={e => setForm({ ...form, id_app: e.target.value })}>
+                <option value="">Seleccionar app...</option>
+                {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+              </select>
+            </div>
           </div>
-        ))}
-        <div>
-          <label style={{ display: 'block', fontSize: '0.8rem', marginBottom: 3, color: '#374151' }}>App</label>
-          <select required value={form.id_app} onChange={(e) => setForm({ ...form, id_app: e.target.value })} style={{ padding: '0.5rem', borderRadius: 6, border: '1px solid #d1d5db' }}>
-            <option value="">Seleccionar...</option>
-            {apps.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-          </select>
+          <div className="form-group">
+            <label className="form-label">Nombre *</label>
+            <div className="form-input-wrap">
+              <input required placeholder="Sucursal Centro" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Dirección</label>
+            <div className="form-input-wrap">
+              <input placeholder="Av. Corrientes 1234" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Teléfono</label>
+            <div className="form-input-wrap">
+              <input placeholder="+54 11 ..." value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group" style={{ justifyContent: 'flex-end' }}>
+            <label className="checkbox-wrap">
+              <input type="checkbox" checked={form.activo} onChange={e => setForm({ ...form, activo: e.target.checked })} />
+              <span className="checkbox-label">Activo</span>
+            </label>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', paddingBottom: 2 }}>
-          <input type="checkbox" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} id="local-activo" />
-          <label htmlFor="local-activo" style={{ fontSize: '0.875rem' }}>Activo</label>
+        <div className="form-actions">
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving
+              ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</>
+              : editing ? 'Actualizar' : 'Crear Local'}
+          </button>
+          {editing && (
+            <button type="button" className="btn btn-secondary" onClick={cancelEdit}>Cancelar</button>
+          )}
         </div>
-        <button type="submit" style={{ padding: '0.5rem 1rem', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}>{editing ? 'Actualizar' : 'Crear'}</button>
-        {editing && <button type="button" onClick={() => { setEditing(null); setForm({ nombre: '', id_app: '', direccion: '', telefono: '', activo: true }) }} style={{ padding: '0.5rem 1rem', background: '#f1f5f9', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancelar</button>}
       </form>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <select value={filterApp} onChange={(e) => setFilterApp(e.target.value)} style={{ padding: '0.5rem', borderRadius: 6, border: '1px solid #d1d5db' }}>
+      {/* Filter */}
+      <div className="filter-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--t3)', fontSize: 12, fontWeight: 600 }}>
+          <IcoFilter /> Filtrar por app
+        </div>
+        <select
+          className="filter-select"
+          value={filterApp}
+          onChange={e => setFilterApp(e.target.value)}
+        >
           <option value="">Todas las apps</option>
-          {apps.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+          {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
         </select>
       </div>
 
-      <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-          <thead>
-            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-              {['Nombre', 'App', 'Dirección', 'Teléfono', 'Activo', 'Acciones'].map((h) => (
-                <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 600, color: '#374151' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {locales.map((l) => (
-              <tr key={l.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{l.nombre}</td>
-                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{l.app?.nombre}</td>
-                <td style={{ padding: '0.75rem 1rem' }}>{l.direccion || '—'}</td>
-                <td style={{ padding: '0.75rem 1rem' }}>{l.telefono || '—'}</td>
-                <td style={{ padding: '0.75rem 1rem' }}><span style={{ color: l.activo ? '#16a34a' : '#dc2626' }}>{l.activo ? '✓' : '✗'}</span></td>
-                <td style={{ padding: '0.75rem 1rem', display: 'flex', gap: '0.4rem' }}>
-                  <button onClick={() => startEdit(l)} style={{ padding: '0.3rem 0.6rem', background: '#eff6ff', color: '#1e40af', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.75rem' }}>Editar</button>
-                  <button onClick={() => handleDelete(l.id)} style={{ padding: '0.3rem 0.6rem', background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.75rem' }}>✕</button>
-                </td>
+      {loading ? (
+        <div className="page-loading"><div className="spinner" /></div>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>App</th>
+                <th>Dirección</th>
+                <th>Teléfono</th>
+                <th>Estado</th>
+                <th></th>
               </tr>
-            ))}
-            {locales.length === 0 && <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No hay locales</td></tr>}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {locales.map((l) => (
+                <tr key={l.id}>
+                  <td className="td-primary">{l.nombre}</td>
+                  <td>
+                    <span className="badge badge-muted">{l.app?.nombre}</span>
+                  </td>
+                  <td className="td-muted">{l.direccion || '—'}</td>
+                  <td className="td-muted">{l.telefono  || '—'}</td>
+                  <td>
+                    <span className={`badge ${l.activo ? 'badge-green' : 'badge-muted'}`}>
+                      {l.activo ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="td-actions">
+                      <button className="btn btn-sm btn-secondary btn-icon" onClick={() => startEdit(l)}>
+                        <IcoEdit />
+                      </button>
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDelete(l.id)}>
+                        <IcoTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {locales.length === 0 && (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="table-empty">
+                      <IcoLocalesEmpty />
+                      <p>No hay locales registrados.</p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {total > LIMIT && (
+        <div className="pagination">
+          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+          <span className="pagination-info">Página {page} de {totalPages} — {total} locales</span>
+          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+        </div>
+      )}
     </div>
   )
 }
