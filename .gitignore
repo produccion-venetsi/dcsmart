@@ -6,6 +6,8 @@ frontend/.env
 frontend/.env.local
 *.cloudrun.yaml
 *.cloudrun.yml
+*.local.sql
+backend/scripts/
 
 # Node
 node_modules/
