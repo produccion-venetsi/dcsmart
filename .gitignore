@@ -19,6 +19,9 @@ backend/prisma/migrations/
 *.log
 npm-debug.log*
 
+# Firebase
+.firebase/
+
 # OS
 .DS_Store
 Thumbs.db
