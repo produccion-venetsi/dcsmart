@@ -25,10 +25,11 @@ export default async function pagosRoutes(fastify) {
       fastify.db.pago.findMany({
         where,
         include: {
-          proveedor: { select: { id: true, nombre: true } },
-          rubcat: { include: { rubro: true, categoria: true } },
+          proveedor:   { select: { id: true, nombre: true } },
+          rubcat:      { include: { rubro: true, categoria: true } },
           metodo_pago: true,
-          creador: { select: { id: true, nombre: true } }
+          local:       { select: { id: true, nombre: true } },
+          creador:     { select: { id: true, nombre: true } }
         },
         orderBy: { created_at: 'desc' },
         skip,
@@ -38,6 +39,83 @@ export default async function pagosRoutes(fastify) {
     ])
 
     return { data: pagos, total, page: Number(page), limit: Number(limit) }
+  })
+
+  fastify.get('/stats', { preHandler: viewHandler }, async (request) => {
+    const { id_local, desde, hasta } = request.query
+    const where = {
+      ...(id_local ? { id_local } : {}),
+      ...(desde || hasta ? {
+        fecha: {
+          ...(desde ? { gte: new Date(desde) } : {}),
+          ...(hasta ? { lte: new Date(hasta + 'T23:59:59.999') } : {})
+        }
+      } : {})
+    }
+
+    const [total, pendientes, pagados] = await Promise.all([
+      fastify.db.pago.aggregate({
+        where,
+        _sum:   { importe: true },
+        _count: { id: true }
+      }),
+      fastify.db.pago.aggregate({
+        where: { ...where, estado_op: 'PENDIENTE' },
+        _sum:   { importe: true },
+        _count: { id: true }
+      }),
+      fastify.db.pago.aggregate({
+        where: { ...where, pagado: true },
+        _sum:   { importe: true },
+        _count: { id: true }
+      })
+    ])
+
+    return {
+      importe_total:      Number(total._sum.importe      ?? 0),
+      count_total:        total._count.id,
+      importe_pendientes: Number(pendientes._sum.importe  ?? 0),
+      count_pendientes:   pendientes._count.id,
+      importe_pagados:    Number(pagados._sum.importe     ?? 0),
+      count_pagados:      pagados._count.id
+    }
+  })
+
+  fastify.get('/chart', { preHandler: viewHandler }, async (request) => {
+    const { id_local, desde, hasta } = request.query
+
+    const params = []
+    let conditions = `WHERE fecha IS NOT NULL`
+
+    if (id_local) {
+      params.push(id_local)
+      conditions += ` AND id_local = $${params.length}`
+    }
+    if (desde) {
+      params.push(new Date(desde))
+      conditions += ` AND fecha >= $${params.length}`
+    }
+    if (hasta) {
+      params.push(new Date(hasta + 'T23:59:59.999'))
+      conditions += ` AND fecha <= $${params.length}`
+    }
+
+    const rows = await fastify.db.$queryRawUnsafe(`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', fecha), 'YYYY-MM') AS mes,
+        SUM(CASE WHEN pagado = true THEN COALESCE(importe, 0) ELSE 0 END)  AS pagados,
+        SUM(CASE WHEN estado_op = 'PENDIENTE' THEN COALESCE(importe, 0) ELSE 0 END) AS pendientes
+      FROM pagos
+      ${conditions}
+      GROUP BY DATE_TRUNC('month', fecha)
+      ORDER BY DATE_TRUNC('month', fecha)
+    `, ...params)
+
+    return rows.map(r => ({
+      mes:        r.mes,
+      pagados:    Number(r.pagados    ?? 0),
+      pendientes: Number(r.pendientes ?? 0)
+    }))
   })
 
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
