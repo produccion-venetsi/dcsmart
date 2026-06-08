@@ -49,6 +49,11 @@ function getPresetRange(preset) {
     const d = new Date(now.getFullYear(), 0, 1)
     return { desde: toDateStr(d), hasta: hoy }
   }
+  if (preset === '12m') {
+    const d = new Date(now)
+    d.setFullYear(d.getFullYear() - 1)
+    return { desde: toDateStr(d), hasta: hoy }
+  }
   return { desde: hoy, hasta: hoy }
 }
 
@@ -58,10 +63,10 @@ const currentMes = (() => {
 })()
 
 const PRESETS = [
-  { key: 'hoy',    label: 'Hoy' },
-  { key: 'semana', label: 'Esta semana' },
-  { key: 'mes',    label: 'Este mes' },
+  { key: '12m',    label: 'Últ. 12 meses' },
   { key: 'año',    label: 'Este año' },
+  { key: 'mes',    label: 'Este mes' },
+  { key: 'hoy',    label: 'Hoy' },
 ]
 
 /* ── icons ── */
@@ -337,8 +342,8 @@ export default function Dashboard() {
   const firstName  = user?.nombre?.split(' ')[0] ?? ''
 
   // ── period state ──
-  const initialRange = getPresetRange('mes')
-  const [preset, setPreset] = useState('mes')
+  const initialRange = getPresetRange('12m')
+  const [preset, setPreset] = useState('12m')
   const [desde,  setDesde]  = useState(initialRange.desde)
   const [hasta,  setHasta]  = useState(initialRange.hasta)
 
