@@ -343,19 +343,26 @@ export default function Dashboard() {
 
   // ── period state ──
   const initialRange = getPresetRange('12m')
-  const [preset, setPreset] = useState('12m')
-  const [desde,  setDesde]  = useState(initialRange.desde)
-  const [hasta,  setHasta]  = useState(initialRange.hasta)
+  const [preset,        setPreset]        = useState('12m')
+  const [desde,         setDesde]         = useState(initialRange.desde)
+  const [hasta,         setHasta]         = useState(initialRange.hasta)
+  const [appliedDesde,  setAppliedDesde]  = useState(initialRange.desde)
+  const [appliedHasta,  setAppliedHasta]  = useState(initialRange.hasta)
+
+  const pendingChange = desde !== appliedDesde || hasta !== appliedHasta
 
   const handlePreset = useCallback((key) => {
     const r = getPresetRange(key)
     setPreset(key)
     setDesde(r.desde)
     setHasta(r.hasta)
+    setAppliedDesde(r.desde)
+    setAppliedHasta(r.hasta)
   }, [])
 
   const handleDesde = (v) => { setDesde(v); setPreset('') }
   const handleHasta = (v) => { setHasta(v); setPreset('') }
+  const handleApply = () => { setAppliedDesde(desde); setAppliedHasta(hasta) }
 
   // ── data state ──
   const [pagosStats, setPagosStats] = useState(null)
@@ -364,12 +371,12 @@ export default function Dashboard() {
   const [loading,    setLoading]    = useState(true)
 
   useEffect(() => {
-    if (!desde || !hasta) return
+    if (!appliedDesde || !appliedHasta) return
     setLoading(true)
     const ctrl   = new AbortController()
     const params = {
-      desde,
-      hasta,
+      desde: appliedDesde,
+      hasta: appliedHasta,
       ...(activeLocal ? { id_local: activeLocal.id } : {})
     }
 
@@ -387,7 +394,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
 
     return () => ctrl.abort()
-  }, [desde, hasta, activeLocal?.id])
+  }, [appliedDesde, appliedHasta, activeLocal?.id])
 
   // derived caja stats
   const totalRecaudado  = cajaStats?.total_recaudado  ?? 0
@@ -485,6 +492,11 @@ export default function Dashboard() {
           min={desde}
           onChange={(e) => handleHasta(e.target.value)}
         />
+        {pendingChange && (
+          <button className="btn btn-primary btn-sm" onClick={handleApply}>
+            Aplicar
+          </button>
+        )}
       </div>
 
       {/* ── pagos KPIs ── */}
