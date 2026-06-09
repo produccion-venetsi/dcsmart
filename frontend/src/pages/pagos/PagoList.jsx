@@ -5,12 +5,16 @@ import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const ESTADO_BADGE = {
-  PENDIENTE: 'badge-amber',
-  APROBADO:  'badge-blue',
-  RECHAZADO: 'badge-red',
-  PAGADO:    'badge-green',
+  'CAJA':       'badge-green',
+  'CUENTA CTE': 'badge-amber',
+  'MP PDP':     'badge-blue',
+  'PDP':        'badge-purple',
 }
-const TIPO_BADGE = { A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber', INTERCOMPANY: 'badge-purple' }
+const TIPO_BADGE = {
+  A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
+  'DC (1)': 'badge-purple', 'DC (2)': 'badge-purple',
+  DDJJ: 'badge-red', M: 'badge-muted', NCA: 'badge-amber', NDA: 'badge-amber', STK: 'badge-blue',
+}
 
 function IcoPlus() {
   return (
@@ -148,7 +152,7 @@ export default function PagoList() {
         </select>
         <select className="filter-select" value={filters.estado_op} onChange={e => setFilter('estado_op', e.target.value)}>
           <option value="">Todos los estados</option>
-          {['PENDIENTE','APROBADO','RECHAZADO','PAGADO'].map(s => <option key={s} value={s}>{s}</option>)}
+          {['CAJA','CUENTA CTE','MP PDP','PDP'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <input
           type="date"
@@ -251,11 +255,9 @@ export default function PagoList() {
                   </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
                   <td style={{ minWidth: 100 }}>
-                    {p.audit
-                      ? <span className="badge badge-green"><IcoCheck /> Sí</span>
-                      : <button className="btn btn-sm btn-secondary" onClick={() => handleAudit(p.id)}>Auditar</button>}
+                    <button className="btn btn-sm btn-secondary" onClick={() => handleAudit(p.id)}>Auditar</button>
                   </td>
-                  <td style={{ minWidth: 90 }}>{fmtDate(p.audit_date)}</td>
+                  <td style={{ minWidth: 90 }}>—</td>
                   <td style={{ minWidth: 160 }}>
                     {p.observaciones
                       ? <span title={p.observaciones} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150, fontSize: 11 }}>{p.observaciones}</span>

@@ -19,6 +19,9 @@ import metodosRoutes from './routes/metodos_pago.js'
 import rolesRoutes from './routes/roles.js'
 import impuestosRoutes from './routes/impuestos.js'
 
+// Serializar BigInt como string en JSON (para columnas como pagos.nro con IDs de MP)
+BigInt.prototype.toJSON = function () { return this.toString() }
+
 const app = Fastify({ logger: true })
 
 await app.register(cors, {

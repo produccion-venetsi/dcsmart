@@ -30,7 +30,7 @@ export default function PagoForm() {
     fecha: '', id_proveedor: '', id_rubcat: '', id_tipo: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', observaciones: '', pagado: false,
-    estado_op: 'PENDIENTE', ingresa_egreso: true,
+    estado_op: 'CAJA', ingresa_egreso: true,
     id_local: activeLocal?.id || ''
   })
 
@@ -59,7 +59,7 @@ export default function PagoForm() {
             id_metodo:      d.id_metodo      || '',
             observaciones:  d.observaciones  || '',
             pagado:         d.pagado,
-            estado_op:      d.estado_op      || 'PENDIENTE',
+            estado_op:      d.estado_op      || 'CAJA',
             ingresa_egreso: d.ingresa_egreso,
             id_local:       d.id_local       || '',
           })
@@ -145,7 +145,7 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
                   <option value="">—</option>
-                  {['A','B','C','CM','INTERCOMPANY'].map(t => <option key={t}>{t}</option>)}
+                  {['A','B','C','CM','DC (1)','DC (2)','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
             </div>
@@ -153,7 +153,7 @@ export default function PagoForm() {
               <label className="form-label">Estado</label>
               <div className="form-input-wrap">
                 <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
-                  {['PENDIENTE','APROBADO','RECHAZADO','PAGADO'].map(s => <option key={s}>{s}</option>)}
+                  {['CAJA','CUENTA CTE','MP PDP','PDP'].map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
             </div>
