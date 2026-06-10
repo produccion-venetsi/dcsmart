@@ -140,10 +140,7 @@ export default function Login() {
           </div>
 
           {/* Headings */}
-          <div className="auth-h">
-            <h1>Bienvenido de nuevo</h1>
-            <p>Ingresá para administrar tus locales</p>
-          </div>
+       
 
           {/* Error banner */}
           {error && (
@@ -223,9 +220,6 @@ export default function Login() {
               </div>
             </>
           )}
-
-          {/* Footer */}
-          <div className="auth-foot">DCSmart · acceso seguro a tu operación</div>
         </form>
       </div>
     </div>

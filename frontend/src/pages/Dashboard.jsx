@@ -206,10 +206,21 @@ function StatCard({ colorClass = '', Icon, label, value, sub, loading }) {
     <div className={`stat-card ${colorClass}`}>
       <div className="stat-icon"><Icon /></div>
       <div className="stat-label">{label}</div>
-      <div className="stat-value">
-        {loading ? <span className="spinner" style={{ width: 18, height: 18 }} /> : value}
-      </div>
-      <div className="stat-sub">{sub}</div>
+      {loading ? (
+        <>
+          <div className="stat-value">
+            <span className="skel" style={{ width: '72%', height: 22, borderRadius: 8 }} />
+          </div>
+          <div className="stat-sub">
+            <span className="skel" style={{ width: '48%', height: 10 }} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="stat-value">{value}</div>
+          <div className="stat-sub">{sub}</div>
+        </>
+      )}
     </div>
   )
 }
@@ -256,7 +267,11 @@ function PagosChart({ data, loading }) {
         <div className="chart-head">
           <span className="chart-title">Pagos por mes</span>
         </div>
-        <div className="chart-empty"><div className="spinner" /></div>
+        <div className="chart-skel">
+          {[55, 80, 45, 90, 65, 75, 50, 85, 60, 70, 40, 95].map((h, i) => (
+            <span key={i} className="skel chart-skel-bar" style={{ height: `${h}%` }} />
+          ))}
+        </div>
       </div>
     )
   }
@@ -372,6 +387,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!appliedDesde || !appliedHasta) return
+    // Resetear datos a null antes del fetch garantiza que el skeleton
+    // se muestre aunque React batche el primer render con el efecto
+    setPagosStats(null)
+    setCajaStats(null)
+    setChartData([])
     setLoading(true)
     const ctrl   = new AbortController()
     const params = {
@@ -391,10 +411,14 @@ export default function Dashboard() {
         setChartData(chRes.data)
       })
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
-      .finally(() => setLoading(false))
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
 
     return () => ctrl.abort()
   }, [appliedDesde, appliedHasta, activeLocal?.id])
+
+  // skeleton se activa mientras no haya datos (más fiable que solo loading)
+  const skelPagos = pagosStats === null
+  const skelCajas = cajaStats  === null
 
   // derived caja stats
   const totalRecaudado  = cajaStats?.total_recaudado  ?? 0
@@ -508,7 +532,7 @@ export default function Dashboard() {
           label="Importe total"
           value={fmt(pagosStats?.importe_total ?? 0)}
           sub={`${pagosStats?.count_total ?? 0} comprobantes`}
-          loading={loading}
+          loading={skelPagos}
         />
         <StatCard
           colorClass="amber"
@@ -516,7 +540,7 @@ export default function Dashboard() {
           label="Pendientes"
           value={fmt(pagosStats?.importe_pendientes ?? 0)}
           sub={`${pagosStats?.count_pendientes ?? 0} comprobantes`}
-          loading={loading}
+          loading={skelPagos}
         />
         <StatCard
           colorClass="green"
@@ -524,7 +548,7 @@ export default function Dashboard() {
           label="Pagados"
           value={fmt(pagosStats?.importe_pagados ?? 0)}
           sub={`${pagosStats?.count_pagados ?? 0} comprobantes`}
-          loading={loading}
+          loading={skelPagos}
         />
       </div>
 
@@ -537,7 +561,7 @@ export default function Dashboard() {
           label="Total recaudado"
           value={fmt(totalRecaudado)}
           sub={`${countTurnos} turno${countTurnos !== 1 ? 's' : ''}`}
-          loading={loading}
+          loading={skelCajas}
         />
         <StatCard
           colorClass="teal"
@@ -545,7 +569,7 @@ export default function Dashboard() {
           label="Efectivo"
           value={fmt(totalEfectivo)}
           sub={`${pctEfectivo}% del total`}
-          loading={loading}
+          loading={skelCajas}
         />
         <StatCard
           colorClass="orange"
@@ -553,12 +577,12 @@ export default function Dashboard() {
           label="Tickets / Comensales"
           value={(totalTickets + totalComensales).toLocaleString('es-AR')}
           sub={`${totalTickets} tickets · ${totalComensales} comensales`}
-          loading={loading}
+          loading={skelCajas}
         />
       </div>
 
       {/* ── chart ── */}
-      <PagosChart data={chartData} loading={loading} />
+      <PagosChart data={chartData} loading={skelPagos} />
 
       {/* ── quick actions ── */}
       <div className="selector-label" style={{ marginBottom: 14 }}>Acceso rápido</div>

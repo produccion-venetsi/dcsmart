@@ -41,7 +41,35 @@ export default function Roles() {
       </div>
 
       {loading ? (
-        <div className="page-loading"><div className="spinner" /></div>
+        Array.from({ length: 3 }, (_, i) => (
+          <div key={i} style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <span className="skel" style={{ width: 100, height: 14 }} />
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Módulo</th>
+                    <th style={{ textAlign: 'center' }}>Ver</th>
+                    <th style={{ textAlign: 'center' }}>Crear</th>
+                    <th style={{ textAlign: 'center' }}>Editar</th>
+                    <th style={{ textAlign: 'center' }}>Eliminar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 4 }, (_, j) => (
+                    <tr key={j} className="skel-row">
+                      {Array.from({ length: 5 }, (_, k) => (
+                        <td key={k}><span className="skel" style={{ width: `${50 + (k * 11 + j * 9) % 40}%` }} /></td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))
       ) : (
         <>
           {roles.map((role) => {
@@ -51,7 +79,6 @@ export default function Roles() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                   <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{role.nombre}</h2>
                   {role.descripcion && <span style={{ fontSize: 12, color: 'var(--t3)' }}>{role.descripcion}</span>}
-                  <span className="td-mono" style={{ fontSize: 10, color: 'var(--t4)', marginLeft: 'auto' }}>{role.id.slice(0, 8)}…</span>
                 </div>
                 <div className="table-wrap" style={{ overflowX: 'auto' }}>
                   <table className="data-table">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { rubrosApi, categoriasApi, rubcatApi } from '../../api/rubcat.js'
 import { useUiStore } from '../../store/uiStore.js'
+import DrawerPanel from '../../components/DrawerPanel.jsx'
 
 function IcoEdit() {
   return (
@@ -26,37 +27,6 @@ function IcoPlus() {
   )
 }
 
-function SimpleTable({ title, items, columns, onEdit, onDelete, renderRow }) {
-  return (
-    <div className="table-wrap" style={{ marginBottom: '1.5rem' }}>
-      <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 13 }}>
-        {title} <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({items.length})</span>
-      </div>
-      <table className="data-table">
-        <thead>
-          <tr>{columns.map(c => <th key={c}>{c}</th>)}<th></th></tr>
-        </thead>
-        <tbody>
-          {items.map(item => (
-            <tr key={item.id}>
-              {renderRow(item)}
-              <td>
-                <div className="td-actions">
-                  <button className="btn btn-sm btn-secondary btn-icon" onClick={() => onEdit(item)}><IcoEdit /></button>
-                  <button className="btn btn-sm btn-danger btn-icon"   onClick={() => onDelete(item.id)}><IcoTrash /></button>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {items.length === 0 && (
-            <tr><td colSpan={columns.length + 1} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>Sin datos</td></tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function NombreSection({ title, items, onSave, onDelete }) {
   const [form,    setForm]    = useState('')
   const [editing, setEditing] = useState(null)
@@ -76,7 +46,7 @@ function NombreSection({ title, items, onSave, onDelete }) {
   }
 
   return (
-    <div style={{ marginBottom: '2rem' }}>
+    <div>
       <form className="form-panel" onSubmit={handleSubmit} style={{ marginBottom: '1rem' }}>
         <div className="form-panel-title">{editing ? `Editar ${title}` : `Nuevo ${title}`}</div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
@@ -92,22 +62,36 @@ function NombreSection({ title, items, onSave, onDelete }) {
         </div>
       </form>
 
-      <SimpleTable
-        title={title + 's'}
-        items={items}
-        columns={['ID', 'Nombre']}
-        onEdit={item => { setEditing(item.id); setForm(item.nombre) }}
-        onDelete={onDelete}
-        renderRow={item => (
-          <>
-            <td className="td-mono" style={{ fontSize: 11, color: 'var(--t3)' }}>{item.id.slice(0, 8)}…</td>
-            <td className="td-primary">{item.nombre}</td>
-          </>
-        )}
-      />
+      <div className="table-wrap">
+        <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 13 }}>
+          {title}s <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({items.length})</span>
+        </div>
+        <table className="data-table">
+          <thead>
+            <tr><th>Nombre</th><th></th></tr>
+          </thead>
+          <tbody>
+            {items.map(item => (
+              <tr key={item.id} className="row-clickable" onClick={() => { setEditing(item.id); setForm(item.nombre) }}>
+                <td className="td-primary">{item.nombre}</td>
+                <td>
+                  <div className="td-actions">
+                    <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => { e.stopPropagation(); onDelete(item.id) }}><IcoTrash /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr><td colSpan={2} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>Sin datos</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
+
+const RC_EMPTY = { id_rub: '', id_cat: '', cuenta: '', tipo: '', costo: '', clasificacion: '' }
 
 export default function RubCat() {
   const notify = useUiStore((s) => s.notify)
@@ -116,10 +100,11 @@ export default function RubCat() {
   const [categorias, setCategorias] = useState([])
   const [rubcat,     setRubcat]     = useState([])
   const [loading,    setLoading]    = useState(true)
-
-  const [rcForm,    setRcForm]    = useState({ id_rub: '', id_cat: '', cuenta: '', tipo: '', costo: '', clasificacion: '' })
-  const [rcEditing, setRcEditing] = useState(null)
-  const [rcSaving,  setRcSaving]  = useState(false)
+  const [tab,        setTab]        = useState('rubcat')
+  const [panelOpen,  setPanelOpen]  = useState(false)
+  const [selectedRc, setSelectedRc] = useState(null)
+  const [rcForm,     setRcForm]     = useState(RC_EMPTY)
+  const [rcSaving,   setRcSaving]   = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -138,24 +123,29 @@ export default function RubCat() {
     else    { await rubrosApi.create({ nombre });      notify('Rubro creado', 'success') }
     load()
   }
-
   const delRubro = async (id) => {
     if (!confirm('¿Eliminar rubro?')) return
     try { await rubrosApi.remove(id); notify('Eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }
-
   const saveCat = async (id, nombre) => {
     if (id) { await categoriasApi.update(id, { nombre }); notify('Categoría actualizada', 'success') }
     else    { await categoriasApi.create({ nombre });      notify('Categoría creada', 'success') }
     load()
   }
-
   const delCat = async (id) => {
     if (!confirm('¿Eliminar categoría?')) return
     try { await categoriasApi.remove(id); notify('Eliminada', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }
+
+  const openCreate = () => { setSelectedRc(null); setRcForm(RC_EMPTY); setPanelOpen(true) }
+  const openEdit   = (rc) => {
+    setSelectedRc(rc)
+    setRcForm({ id_rub: rc.id_rub, id_cat: rc.id_cat, cuenta: rc.cuenta || '', tipo: rc.tipo || '', costo: rc.costo || '', clasificacion: rc.clasificacion || '' })
+    setPanelOpen(true)
+  }
+  const closePanel = () => setPanelOpen(false)
 
   const setRcF = (k, v) => setRcForm(f => ({ ...f, [k]: v }))
 
@@ -164,25 +154,26 @@ export default function RubCat() {
     if (!rcForm.id_rub || !rcForm.id_cat) { notify('Seleccioná rubro y categoría', 'error'); return }
     setRcSaving(true)
     try {
-      if (rcEditing) { await rubcatApi.update(rcEditing, rcForm); notify('RubCat actualizado', 'success') }
-      else           { await rubcatApi.create(rcForm);             notify('RubCat creado', 'success') }
-      setRcForm({ id_rub: '', id_cat: '', cuenta: '', tipo: '', costo: '', clasificacion: '' })
-      setRcEditing(null)
+      if (selectedRc) { await rubcatApi.update(selectedRc.id, rcForm); notify('RubCat actualizado', 'success') }
+      else            { await rubcatApi.create(rcForm);                  notify('RubCat creado', 'success') }
+      setPanelOpen(false)
       load()
     } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
     finally { setRcSaving(false) }
   }
 
-  const startRcEdit = (rc) => {
-    setRcEditing(rc.id)
-    setRcForm({ id_rub: rc.id_rub, id_cat: rc.id_cat, cuenta: rc.cuenta || '', tipo: rc.tipo || '', costo: rc.costo || '', clasificacion: rc.clasificacion || '' })
-  }
-
-  const delRc = async (id) => {
+  const delRc = async (id, e) => {
+    e.stopPropagation()
     if (!confirm('¿Eliminar RubCat?')) return
     try { await rubcatApi.remove(id); notify('Eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }
+
+  const TABS = [
+    { key: 'rubcat',     label: 'RubCat' },
+    { key: 'rubros',     label: 'Rubros' },
+    { key: 'categorias', label: 'Categorías' },
+  ]
 
   return (
     <div className="page">
@@ -191,113 +182,156 @@ export default function RubCat() {
           <h1 className="page-title">Rubros, Categorías y RubCat</h1>
           <p className="page-sub">Clasificación contable de gastos e ingresos</p>
         </div>
+        {tab === 'rubcat' && (
+          <div className="page-actions">
+            <button className="btn btn-primary" onClick={openCreate}><IcoPlus /> Nuevo RubCat</button>
+          </div>
+        )}
+      </div>
+
+      <div className="selector-pills" style={{ marginBottom: '1.5rem' }}>
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            className={'selector-pill' + (tab === t.key ? ' active' : '')}
+            onClick={() => setTab(t.key)}
+          >
+            {tab === t.key && <span className="selector-pill-dot" />}
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
-        <div className="page-loading"><div className="spinner" /></div>
+        <>
+          {Array.from({ length: 2 }, (_, s) => (
+            <div key={s} className="table-wrap" style={{ marginBottom: '1.5rem' }}>
+              <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+                <span className="skel" style={{ width: 80, height: 12 }} />
+              </div>
+              <table className="data-table">
+                <tbody>
+                  {Array.from({ length: 4 }, (_, i) => (
+                    <tr key={i} className="skel-row">
+                      <td><span className="skel" style={{ width: `${55 + (i * 13) % 35}%` }} /></td>
+                      <td><span className="skel" style={{ width: 60 }} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </>
       ) : (
         <>
-          <NombreSection title="Rubro"     items={rubros}     onSave={saveRubro} onDelete={delRubro} />
-          <NombreSection title="Categoría" items={categorias} onSave={saveCat}   onDelete={delCat} />
-
-          {/* RubCat */}
-          <form className="form-panel" onSubmit={handleRcSubmit} style={{ marginBottom: '1rem' }}>
-            <div className="form-panel-title">{rcEditing ? 'Editar RubCat' : 'Nuevo RubCat'}</div>
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Rubro *</label>
-                <div className="form-input-wrap">
-                  <select required value={rcForm.id_rub} onChange={e => setRcF('id_rub', e.target.value)}>
-                    <option value="">Seleccionar...</option>
-                    {rubros.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                  </select>
-                </div>
+          {tab === 'rubros' && (
+            <NombreSection title="Rubro" items={rubros} onSave={saveRubro} onDelete={delRubro} />
+          )}
+          {tab === 'categorias' && (
+            <NombreSection title="Categoría" items={categorias} onSave={saveCat} onDelete={delCat} />
+          )}
+          {tab === 'rubcat' && (
+            <div className="table-wrap" style={{ overflowX: 'auto' }}>
+              <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 13 }}>
+                RubCat <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({rubcat.length})</span>
               </div>
-              <div className="form-group">
-                <label className="form-label">Categoría *</label>
-                <div className="form-input-wrap">
-                  <select required value={rcForm.id_cat} onChange={e => setRcF('id_cat', e.target.value)}>
-                    <option value="">Seleccionar...</option>
-                    {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Cuenta</label>
-                <div className="form-input-wrap">
-                  <input placeholder="5.1.01" value={rcForm.cuenta} onChange={e => setRcF('cuenta', e.target.value)} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tipo</label>
-                <div className="form-input-wrap">
-                  <input placeholder="Operativo / Fijo" value={rcForm.tipo} onChange={e => setRcF('tipo', e.target.value)} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Costo</label>
-                <div className="form-input-wrap">
-                  <input placeholder="Variable / Fijo" value={rcForm.costo} onChange={e => setRcF('costo', e.target.value)} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Clasificación</label>
-                <div className="form-input-wrap">
-                  <input placeholder="Costo de Ventas" value={rcForm.clasificacion} onChange={e => setRcF('clasificacion', e.target.value)} />
-                </div>
-              </div>
-            </div>
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary" disabled={rcSaving}>
-                {rcSaving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : (rcEditing ? 'Actualizar' : <><IcoPlus /> Crear RubCat</>)}
-              </button>
-              {rcEditing && <button type="button" className="btn btn-secondary" onClick={() => { setRcEditing(null); setRcForm({ id_rub: '', id_cat: '', cuenta: '', tipo: '', costo: '', clasificacion: '' }) }}>Cancelar</button>}
-            </div>
-          </form>
-
-          <div className="table-wrap" style={{ overflowX: 'auto' }}>
-            <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 13 }}>
-              RubCat <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({rubcat.length})</span>
-            </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Rubro</th>
-                  <th>Categoría</th>
-                  <th>Cuenta</th>
-                  <th>Tipo</th>
-                  <th>Costo</th>
-                  <th>Clasificación</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rubcat.map((rc) => (
-                  <tr key={rc.id}>
-                    <td className="td-mono" style={{ fontSize: 11, color: 'var(--t3)' }}>{rc.id.slice(0, 8)}…</td>
-                    <td className="td-primary">{rc.rubro?.nombre || '—'}</td>
-                    <td>{rc.categoria?.nombre || '—'}</td>
-                    <td className="td-mono">{rc.cuenta || <span className="td-muted">—</span>}</td>
-                    <td>{rc.tipo || <span className="td-muted">—</span>}</td>
-                    <td>{rc.costo || <span className="td-muted">—</span>}</td>
-                    <td>{rc.clasificacion || <span className="td-muted">—</span>}</td>
-                    <td>
-                      <div className="td-actions">
-                        <button className="btn btn-sm btn-secondary btn-icon" onClick={() => startRcEdit(rc)}><IcoEdit /></button>
-                        <button className="btn btn-sm btn-danger btn-icon"   onClick={() => delRc(rc.id)}><IcoTrash /></button>
-                      </div>
-                    </td>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Rubro</th>
+                    <th>Categoría</th>
+                    <th>Cuenta</th>
+                    <th>Tipo</th>
+                    <th>Costo</th>
+                    <th>Clasificación</th>
+                    <th></th>
                   </tr>
-                ))}
-                {rubcat.length === 0 && (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>Sin combinaciones</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rubcat.map((rc) => (
+                    <tr key={rc.id} className="row-clickable" onClick={() => openEdit(rc)}>
+                      <td className="td-primary">{rc.rubro?.nombre || '—'}</td>
+                      <td>{rc.categoria?.nombre || '—'}</td>
+                      <td className="td-mono">{rc.cuenta || <span className="td-muted">—</span>}</td>
+                      <td>{rc.tipo || <span className="td-muted">—</span>}</td>
+                      <td>{rc.costo || <span className="td-muted">—</span>}</td>
+                      <td>{rc.clasificacion || <span className="td-muted">—</span>}</td>
+                      <td>
+                        <div className="td-actions">
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => delRc(rc.id, e)}><IcoTrash /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {rubcat.length === 0 && (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>Sin combinaciones</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
+
+      <DrawerPanel
+        open={panelOpen}
+        onClose={closePanel}
+        title={selectedRc ? `Editar RubCat` : 'Nuevo RubCat'}
+        width={480}
+      >
+        <form onSubmit={handleRcSubmit}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Rubro *</label>
+              <div className="form-input-wrap">
+                <select required value={rcForm.id_rub} onChange={e => setRcF('id_rub', e.target.value)}>
+                  <option value="">Seleccionar...</option>
+                  {rubros.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Categoría *</label>
+              <div className="form-input-wrap">
+                <select required value={rcForm.id_cat} onChange={e => setRcF('id_cat', e.target.value)}>
+                  <option value="">Seleccionar...</option>
+                  {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Cuenta</label>
+              <div className="form-input-wrap">
+                <input placeholder="5.1.01" value={rcForm.cuenta} onChange={e => setRcF('cuenta', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Tipo</label>
+              <div className="form-input-wrap">
+                <input placeholder="Operativo / Fijo" value={rcForm.tipo} onChange={e => setRcF('tipo', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Costo</label>
+              <div className="form-input-wrap">
+                <input placeholder="Variable / Fijo" value={rcForm.costo} onChange={e => setRcF('costo', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Clasificación</label>
+              <div className="form-input-wrap">
+                <input placeholder="Costo de Ventas" value={rcForm.clasificacion} onChange={e => setRcF('clasificacion', e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <div className="form-actions" style={{ marginTop: '1.5rem' }}>
+            <button type="submit" className="btn btn-primary" disabled={rcSaving}>
+              {rcSaving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : selectedRc ? 'Actualizar' : <><IcoPlus /> Crear RubCat</>}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={closePanel}>Cancelar</button>
+          </div>
+        </form>
+      </DrawerPanel>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { usersApi } from '../../api/users.js'
 import { useUiStore } from '../../store/uiStore.js'
+import DrawerPanel from '../../components/DrawerPanel.jsx'
 
 function IcoUsersEmpty() {
   return (
@@ -35,8 +36,10 @@ function initials(nombre) {
 
 export default function Users() {
   const notify   = useUiStore((s) => s.notify)
-  const [users,   setUsers]   = useState([])
-  const [loading, setLoading] = useState(true)
+  const [users,     setUsers]     = useState([])
+  const [loading,   setLoading]   = useState(true)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [selected,  setSelected]  = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -48,11 +51,15 @@ export default function Users() {
 
   useEffect(load, [])
 
-  const handleDeactivate = async (id) => {
+  const handleDeactivate = async (id, e) => {
+    e.stopPropagation()
     if (!confirm('¿Desactivar usuario?')) return
     try { await usersApi.remove(id); notify('Usuario desactivado', 'success'); load() }
     catch { notify('Error al desactivar', 'error') }
   }
+
+  const openDetail = (u) => { setSelected(u); setPanelOpen(true) }
+  const closePanel = () => setPanelOpen(false)
 
   return (
     <div className="page">
@@ -63,76 +70,138 @@ export default function Users() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="page-loading"><div className="spinner" /></div>
-      ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Usuario</th>
-                <th>Email</th>
-                <th>Rol</th>
-                <th>App</th>
-                <th>Estado</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => {
-                const primaryRole = u.user_app_roles?.[0]
-                const roleName    = primaryRole?.role?.nombre ?? ''
-                return (
-                  <tr key={u.id}>
-                    <td>
-                      <div className="user-cell">
-                        <div className="user-cell-avatar">
-                          {u.avatar_url
-                            ? <img src={u.avatar_url} alt={u.nombre} />
-                            : initials(u.nombre)}
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Email</th>
+              <th>Rol</th>
+              <th>App</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 6 }, (_, i) => (
+                <tr key={i} className="skel-row">
+                  {Array.from({ length: 6 }, (_, j) => (
+                    <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 11) % 40}%` }} /></td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+              <>
+                {users.map((u) => {
+                  const primaryRole = u.user_app_roles?.[0]
+                  const roleName    = primaryRole?.role?.nombre ?? ''
+                  return (
+                    <tr key={u.id} className="row-clickable" onClick={() => openDetail(u)}>
+                      <td>
+                        <div className="user-cell">
+                          <div className="user-cell-avatar">
+                            {u.avatar_url
+                              ? <img src={u.avatar_url} alt={u.nombre} />
+                              : initials(u.nombre)}
+                          </div>
+                          <span className="user-cell-name">{u.nombre}</span>
                         </div>
-                        <span className="user-cell-name">{u.nombre}</span>
+                      </td>
+                      <td className="td-muted">{u.email}</td>
+                      <td>
+                        {roleName
+                          ? <span className={`badge ${ROLE_BADGE[roleName] ?? 'badge-muted'}`}>{roleName}</span>
+                          : <span className="td-muted">—</span>}
+                      </td>
+                      <td className="td-muted">{primaryRole?.app?.nombre || '—'}</td>
+                      <td>
+                        <span className={u.activo ? 'bool-yes' : 'bool-no'}>
+                          {u.activo ? '● Activo' : '○ Inactivo'}
+                        </span>
+                      </td>
+                      <td>
+                        {u.activo && (
+                          <button className="btn btn-sm btn-danger" onClick={(e) => handleDeactivate(u.id, e)}>
+                            <IcoTrash /> Desactivar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="table-empty">
+                        <IcoUsersEmpty />
+                        <p>No hay usuarios registrados.</p>
                       </div>
                     </td>
-                    <td className="td-muted">{u.email}</td>
-                    <td>
-                      {roleName
-                        ? <span className={`badge ${ROLE_BADGE[roleName] ?? 'badge-muted'}`}>{roleName}</span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                    <td className="td-muted">{primaryRole?.app?.nombre || '—'}</td>
-                    <td>
-                      <span className={u.activo ? 'bool-yes' : 'bool-no'}>
-                        {u.activo ? '● Activo' : '○ Inactivo'}
-                      </span>
-                    </td>
-                    <td>
-                      {u.activo && (
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDeactivate(u.id)}
-                        >
-                          <IcoTrash /> Desactivar
-                        </button>
-                      )}
-                    </td>
                   </tr>
-                )
-              })}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="table-empty">
-                      <IcoUsersEmpty />
-                      <p>No hay usuarios registrados.</p>
-                    </div>
-                  </td>
-                </tr>
+                )}
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <DrawerPanel
+        open={panelOpen}
+        onClose={closePanel}
+        title={selected ? selected.nombre : 'Usuario'}
+        width={440}
+      >
+        {selected && (() => {
+          const roles = selected.user_app_roles ?? []
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="user-cell-avatar" style={{ width: 52, height: 52, fontSize: 18, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--t1)', fontWeight: 700 }}>
+                  {selected.avatar_url ? <img src={selected.avatar_url} alt={selected.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} /> : initials(selected.nombre)}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--t1)' }}>{selected.nombre}</div>
+                  <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{selected.email}</div>
+                </div>
+              </div>
+
+              <div className="drawer-section-title">Estado</div>
+              <div className="drawer-detail" style={{ marginBottom: '1.25rem' }}>
+                <div className="drawer-detail-row">
+                  <span className="drawer-detail-key">Cuenta</span>
+                  <span className="drawer-detail-val">
+                    <span className={selected.activo ? 'bool-yes' : 'bool-no'}>
+                      {selected.activo ? '● Activo' : '○ Inactivo'}
+                    </span>
+                  </span>
+                </div>
+                <div className="drawer-detail-row">
+                  <span className="drawer-detail-key">Google</span>
+                  <span className="drawer-detail-val">{selected.google_id ? 'Vinculado' : 'No vinculado'}</span>
+                </div>
+              </div>
+
+              {roles.length > 0 && (
+                <>
+                  <div className="drawer-section-title">Roles y Accesos</div>
+                  <div className="drawer-detail">
+                    {roles.map((r) => (
+                      <div key={r.id} className="drawer-detail-row">
+                        <span className="drawer-detail-key">{r.app?.nombre || '—'}</span>
+                        <span className="drawer-detail-val">
+                          <span className={`badge ${ROLE_BADGE[r.role?.nombre] ?? 'badge-muted'}`}>{r.role?.nombre || '—'}</span>
+                          {r.local && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--t3)' }}>{r.local.nombre}</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+          )
+        })()}
+      </DrawerPanel>
     </div>
   )
 }

@@ -131,7 +131,6 @@ const NAV_ADMIN = [
   { to: '/admin/roles',         label: 'Roles',         Icon: IcoRoles },
   { to: '/admin/rubcat',        label: 'Rubros/Cats',   Icon: IcoRubCat },
   { to: '/admin/metodos-pago',  label: 'Métodos Pago',  Icon: IcoMetodos },
-  { to: '/admin/impuestos',     label: 'Impuestos',     Icon: IcoImpuestos },
 ]
 
 export default function Sidebar() {
