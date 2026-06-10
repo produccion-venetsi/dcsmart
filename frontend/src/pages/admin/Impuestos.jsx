@@ -122,22 +122,29 @@ export default function Impuestos() {
         </form>
       )}
 
-      {loading ? (
-        <div className="page-loading"><div className="spinner" /></div>
-      ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Pago Nro</th>
-                <th>Fecha Pago</th>
-                <th>Tipo</th>
-                <th>Monto</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Pago Nro</th>
+              <th>Fecha Pago</th>
+              <th>Tipo</th>
+              <th>Monto</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 6 }, (_, i) => (
+                <tr key={i} className="skel-row">
+                  {Array.from({ length: 6 }, (_, j) => (
+                    <td key={j}><span className="skel" style={{ width: `${50 + (j * 11 + i * 13) % 42}%` }} /></td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+            <>
               {impuestos.map((imp) => (
                 <tr key={imp.id}>
                   <td className="td-mono" style={{ fontSize: 11, color: 'var(--t3)' }}>{imp.id.slice(0, 8)}…</td>
@@ -157,10 +164,11 @@ export default function Impuestos() {
               {impuestos.length === 0 && (
                 <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>Sin impuestos registrados</td></tr>
               )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {total > 50 && (
         <div className="pagination">

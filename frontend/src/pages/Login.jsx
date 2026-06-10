@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import './auth.css'
+import AppLogo from '../components/AppLogo.jsx'
 
 /* ---- SVG icon helpers ---- */
 function IconMail() {
@@ -46,16 +47,6 @@ function IconAlert() {
       <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
       <line x1="12" y1="9" x2="12" y2="13"/>
       <line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-  )
-}
-function IconLayers() {
-  return (
-    <svg viewBox="0 0 24 24" width={30} height={30} fill="none" stroke="currentColor"
-      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-      <polyline points="2 17 12 22 22 17"/>
-      <polyline points="2 12 12 17 22 12"/>
     </svg>
   )
 }
@@ -145,18 +136,11 @@ export default function Login() {
 
           {/* Brand */}
           <div className="auth-brand">
-            <div className="mark"><IconLayers /></div>
-            <div className="wm">
-              <b>DCSmart</b>
-              <span>Backoffice</span>
-            </div>
+            <AppLogo variant="horizontal" />
           </div>
 
           {/* Headings */}
-          <div className="auth-h">
-            <h1>Bienvenido de nuevo</h1>
-            <p>Ingresá para administrar tus locales</p>
-          </div>
+       
 
           {/* Error banner */}
           {error && (
@@ -236,9 +220,6 @@ export default function Login() {
               </div>
             </>
           )}
-
-          {/* Footer */}
-          <div className="auth-foot">DCSmart · acceso seguro a tu operación</div>
         </form>
       </div>
     </div>

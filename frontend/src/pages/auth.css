@@ -127,42 +127,15 @@
 /* ---------- brand ---------- */
 .auth-brand {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 13px;
   margin-bottom: 28px;
 }
-.auth-brand .mark {
-  width: 58px;
-  height: 58px;
-  border-radius: 17px;
-  display: grid;
-  place-items: center;
-  color: #20303f;
-  background: linear-gradient(150deg, var(--gold-bright), var(--gold-deep));
-  box-shadow:
-    0 10px 26px rgba(201, 176, 134, calc(var(--glow-a) * 0.55)),
-    inset 0 1px 1px rgba(255, 255, 255, 0.55);
-}
-.auth-brand .wm {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  line-height: 1.1;
-  gap: 3px;
-}
-.auth-brand .wm b {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--t1);
-}
-.auth-brand .wm span {
-  font-size: 10.5px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--gold);
-  font-weight: 600;
+
+.auth-brand .app-logo {
+  height: 100px;
+  width: auto;
+  display: block;
 }
 
 /* ---------- headings ---------- */
@@ -444,37 +417,12 @@
 .sel-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
-.sel-brand .mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: #20303f;
-  background: linear-gradient(150deg, var(--gold-bright), var(--gold-deep));
-  box-shadow: 0 6px 18px rgba(201, 176, 134, calc(var(--glow-a) * 0.50));
-  flex: 0 0 auto;
-}
-.sel-brand .wm {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-  gap: 2px;
-}
-.sel-brand .wm b {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--t1);
-}
-.sel-brand .wm span {
-  font-size: 9.5px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--gold);
-  font-weight: 600;
+
+.sel-brand .app-logo {
+  height: 112px;
+  width: auto;
+  display: block;
 }
 
 .sel-user {
@@ -525,7 +473,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 52px 24px 40px;
+  padding: 52px 48px 40px;
+  max-width: 1600px;
+  width: 100%;
+  align-self: center;
 }
 
 .sel-heading {
@@ -550,7 +501,6 @@
 /* ---- app grid ---- */
 .app-grid {
   width: 100%;
-  max-width: 820px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
   gap: 18px;
@@ -715,6 +665,58 @@
   padding: 40px;
 }
 
+/* ---- buscador de apps ---- */
+.sel-search {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  margin-bottom: 32px;
+  animation: fadeUp 0.5s var(--ease) 0.12s both;
+}
+.sel-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--t3);
+  pointer-events: none;
+}
+.sel-search input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 10px 16px 10px 40px;
+  color: var(--t1);
+  font-size: 14px;
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.sel-search input:focus {
+  border-color: var(--glass-border-hi);
+  box-shadow: 0 0 0 3px rgba(201, 176, 134, 0.08);
+}
+.sel-search input::placeholder { color: var(--t3); }
+
+.sel-no-results {
+  font-size: 14px;
+  color: var(--t3);
+  text-align: center;
+  margin: 12px 0 0;
+  animation: fadeUp 0.3s var(--ease) both;
+}
+
+/* ---- logout en header ---- */
+.sel-logout-header {
+  margin-left: 4px;
+}
+.sel-logout-label {
+  display: inline;
+}
+
 /* ---- footer ---- */
 .sel-footer {
   position: relative;
@@ -781,6 +783,7 @@
 @media (max-width: 620px) {
   .sel-header { padding: 16px 20px; }
   .sel-user-name { display: none; }
+  .sel-logout-label { display: none; }
   .sel-main { padding: 36px 16px 32px; }
   .sel-heading h1 { font-size: 22px; }
   .app-grid { grid-template-columns: 1fr; }

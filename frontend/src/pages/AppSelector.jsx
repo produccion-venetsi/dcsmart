@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { authApi } from '../api/auth.js'
 import './auth.css'
+import AppLogo from '../components/AppLogo.jsx'
 
 /* ---- gradient palette — derivo por ID de app ---- */
 const GRADS = [
@@ -35,16 +36,6 @@ function roleBadgeClass(role) {
 }
 
 /* ---- SVG icons ---- */
-function IconLayers() {
-  return (
-    <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor"
-      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-      <polyline points="2 17 12 22 22 17"/>
-      <polyline points="2 12 12 17 22 12"/>
-    </svg>
-  )
-}
 function IconGrid() {
   return (
     <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke="currentColor"
@@ -98,6 +89,7 @@ export default function AppSelector() {
   const [apps, setApps] = useState(null)
   const [fetchError, setFetchError] = useState(null)
   const [selecting, setSelecting] = useState(false)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     authApi.myApps()
@@ -134,11 +126,7 @@ export default function AppSelector() {
       {/* Header */}
       <header className="sel-header">
         <div className="sel-brand">
-          <div className="mark"><IconLayers /></div>
-          <div className="wm">
-            <b>DCSmart</b>
-            <span>Backoffice</span>
-          </div>
+          <AppLogo variant="horizontal" />
         </div>
         {user && (
           <div className="sel-user">
@@ -151,6 +139,10 @@ export default function AppSelector() {
                 ? <img src={user.avatar_url} alt={user.nombre} />
                 : initials(user.nombre)}
             </div>
+            <button className="sel-logout sel-logout-header" onClick={handleLogout}>
+              <IconLogout />
+              <span className="sel-logout-label">Cerrar sesión</span>
+            </button>
           </div>
         )}
       </header>
@@ -159,7 +151,7 @@ export default function AppSelector() {
       <main className="sel-main">
         <div className="sel-heading">
           <h1>Seleccioná tu grupo de trabajo</h1>
-          <p>Elegí la empresa o sucursal con la que querés operar hoy</p>
+          <p>Elegí el grupo con el que querés operar hoy</p>
         </div>
 
         {/* Estado: cargando */}
@@ -186,10 +178,33 @@ export default function AppSelector() {
           </div>
         )}
 
+        {/* Buscador */}
+        {apps && apps.length >= 5 && (
+          <div className="sel-search">
+            <svg className="sel-search-icon" viewBox="0 0 24 24" width={16} height={16} fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar grupo..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+        )}
+
         {/* Grid de apps */}
-        {apps && apps.length > 1 && (
+        {apps && apps.length > 1 && (() => {
+          const visible = apps.filter(item =>
+            item.app.nombre.toLowerCase().includes(search.toLowerCase())
+          )
+          return visible.length === 0
+            ? <p className="sel-no-results">No encontramos grupos con ese nombre.</p>
+            : (
           <div className="app-grid">
-            {apps.map((item, i) => (
+            {visible.map((item, i) => (
               <button
                 key={item.app.id}
                 className="app-card"
@@ -197,22 +212,12 @@ export default function AppSelector() {
                 onClick={() => handleSelect(item)}
                 disabled={selecting}
               >
-                {/* Banner de color */}
-                <div
-                  className="app-card-banner"
-                  style={{ background: appGrad(item.app.id) }}
-                >
-                  <div className="app-card-banner-icon">
-                    <IconGrid />
-                  </div>
-                </div>
+        
 
                 {/* Body */}
                 <div className="app-card-body">
                   <h2>{item.app.nombre}</h2>
-                  <span className={`role-badge ${roleBadgeClass(item.role)}`}>
-                    {ROLE_LABELS[item.role] || item.role}
-                  </span>
+                 
                 </div>
 
                 {/* Footer */}
@@ -231,16 +236,9 @@ export default function AppSelector() {
               </button>
             ))}
           </div>
-        )}
+            )
+        })()}
       </main>
-
-      {/* Footer */}
-      <footer className="sel-footer">
-        <button className="sel-logout" onClick={handleLogout}>
-          <IconLogout />
-          Cerrar sesión
-        </button>
-      </footer>
     </div>
   )
 }
