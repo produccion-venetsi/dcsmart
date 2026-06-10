@@ -25,10 +25,5 @@ jobs:
         run: npm run build
         working-directory: frontend
 
-      - name: Autenticar con Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.firabase }}
-
       - name: Deploy a Firebase Hosting
-        run: npx firebase-tools@latest deploy --only hosting --project dc-smart-mvp
+        run: npx firebase-tools@latest deploy --only hosting --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
