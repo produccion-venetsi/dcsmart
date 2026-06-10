@@ -417,37 +417,12 @@
 .sel-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
-.sel-brand .mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: #20303f;
-  background: linear-gradient(150deg, var(--gold-bright), var(--gold-deep));
-  box-shadow: 0 6px 18px rgba(201, 176, 134, calc(var(--glow-a) * 0.50));
-  flex: 0 0 auto;
-}
-.sel-brand .wm {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-  gap: 2px;
-}
-.sel-brand .wm b {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--t1);
-}
-.sel-brand .wm span {
-  font-size: 9.5px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--gold);
-  font-weight: 600;
+
+.sel-brand .app-logo {
+  height: 32px;
+  width: auto;
+  display: block;
 }
 
 .sel-user {
