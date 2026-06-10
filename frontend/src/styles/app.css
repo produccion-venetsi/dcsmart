@@ -151,43 +151,14 @@ body {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 11px;
   padding: 20px 18px 16px;
   border-bottom: 1px solid var(--border);
 }
 
-.sidebar-brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #1e2b38;
-  background: linear-gradient(150deg, var(--gold-bright), var(--gold-deep));
-  box-shadow: 0 4px 14px rgba(201,176,134,0.30);
-  flex-shrink: 0;
-}
-
-.sidebar-brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-  gap: 2px;
-}
-
-.sidebar-brand-text b {
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--t1);
-  letter-spacing: 0.01em;
-}
-
-.sidebar-brand-text span {
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--gold);
+.sidebar-brand .app-logo {
+  height: 28px;
+  width: auto;
+  display: block;
 }
 
 /* ── context ── */

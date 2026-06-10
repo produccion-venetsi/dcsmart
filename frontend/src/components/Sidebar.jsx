@@ -2,17 +2,9 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
+import AppLogo from './AppLogo.jsx'
 
 /* ── SVG icons ── */
-function IcoLayers() {
-  return (
-    <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-      <polyline points="2 17 12 22 22 17"/>
-      <polyline points="2 12 12 17 22 12"/>
-    </svg>
-  )
-}
 function IcoDashboard() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -171,13 +163,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       {/* Brand */}
       <div className="sidebar-brand">
-        <div className="sidebar-brand-mark">
-          <IcoLayers />
-        </div>
-        <div className="sidebar-brand-text">
-          <b>DCSmart</b>
-          <span>Backoffice</span>
-        </div>
+        <AppLogo variant="horizontal" />
       </div>
 
       {/* App / Local context */}
