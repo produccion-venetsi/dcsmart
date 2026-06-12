@@ -130,7 +130,7 @@ export default async function authRoutes(fastify) {
         id: true, email: true, nombre: true, avatar_url: true,
         activo: true, created_at: true,
         user_app_roles: {
-          include: { app: true, role: true, local: true }
+          include: { app: true, role: true }
         }
       }
     })
@@ -148,8 +148,7 @@ export default async function authRoutes(fastify) {
             locales: { where: { activo: true }, orderBy: { nombre: 'asc' } }
           }
         },
-        role: true,
-        local: true
+        role: true
       }
     })
 
@@ -168,11 +167,25 @@ export default async function authRoutes(fastify) {
       }))
     }
 
+    // Para usuarios normales: resolver locales permitidos desde user_local_access
+    const localAccesses = await fastify.db.userLocalAccess.findMany({
+      where: { id_user: request.user.id },
+      include: { local: { select: { id: true, nombre: true } } }
+    })
+
+    // Agrupar por app
+    const accessByApp = {}
+    for (const la of localAccesses) {
+      if (!accessByApp[la.id_app]) accessByApp[la.id_app] = []
+      accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
+    }
+
     return userRoles.map(r => ({
       app: { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
       role: r.role.nombre,
-      locales: r.id_local
-        ? (r.local ? [{ id: r.local.id, nombre: r.local.nombre }] : [])
+      // Sin registros en user_local_access → todos los locales de la app
+      locales: accessByApp[r.id_app]?.length > 0
+        ? accessByApp[r.id_app]
         : r.app.locales.map(l => ({ id: l.id, nombre: l.nombre }))
     }))
   })

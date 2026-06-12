@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
+import { detallesApi } from '../../api/detalles.js'
+import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 
 const EMPTY_CAJA = {
-  nro_turno: '', fecha_inicio: '', cajero: '', total: '',
+  nro_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
   efectivo: '', fiscal: '', comensales: '', tickets: '', observaciones: '', foto_url: ''
 }
 
@@ -49,10 +51,14 @@ function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 
 function CajaDetailPanel({ cajaId, onRefreshList }) {
   const notify = useUiStore((s) => s.notify)
-  const [caja,    setCaja]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [newMov,  setNewMov]  = useState({ tipo: 'INGRESO', monto: '' })
-  const [saving,  setSaving]  = useState(false)
+  const [caja,       setCaja]      = useState(null)
+  const [loading,    setLoading]   = useState(true)
+  const [metodos,    setMetodos]   = useState([])
+  const [tipos,      setTipos]     = useState([])
+  const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+  const [saving,     setSaving]    = useState(false)
+  const [newDet,     setNewDet]    = useState({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [savingDet,  setSavingDet] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -62,15 +68,34 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { if (cajaId) load() }, [cajaId])
+  useEffect(() => {
+    if (!cajaId) return
+    load()
+    metodosApi.list()
+      .then(r => setMetodos(r.data || []))
+      .catch(() => {})
+  }, [cajaId])
+
+  useEffect(() => {
+    if (!caja?.id_local) return
+    detallesApi.tipos(caja.id_local)
+      .then(r => setTipos(r.data || []))
+      .catch(() => {})
+  }, [caja?.id_local])
 
   const handleAddMov = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      await movimientosApi.create({ ...newMov, monto: parseFloat(newMov.monto), id_caja: cajaId })
+      await movimientosApi.create({
+        tipo:      newMov.tipo,
+        id_metodo: newMov.id_metodo || null,
+        monto:     parseFloat(newMov.monto),
+        id_caja:   cajaId,
+        cantidad:  newMov.cantidad ? parseInt(newMov.cantidad) : null
+      })
       notify('Movimiento agregado', 'success')
-      setNewMov({ tipo: 'INGRESO', monto: '' })
+      setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
       load()
     } catch { notify('Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
@@ -82,12 +107,37 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
     catch { notify('Error al eliminar', 'error') }
   }
 
+  const handleAddDet = async (e) => {
+    e.preventDefault()
+    setSavingDet(true)
+    try {
+      await detallesApi.create({
+        id_caja:       cajaId,
+        id_tipo:       newDet.id_tipo       || null,
+        monto:         parseFloat(newDet.monto),
+        observaciones: newDet.observaciones || null
+      })
+      notify('Detalle agregado', 'success')
+      setNewDet({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+      load()
+    } catch { notify('Error al agregar detalle', 'error') }
+    finally { setSavingDet(false) }
+  }
+
+  const handleDeleteDet = async (detId) => {
+    if (!confirm('¿Eliminar detalle?')) return
+    try { await detallesApi.remove(detId); notify('Eliminado', 'success'); load() }
+    catch { notify('Error al eliminar', 'error') }
+  }
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
   if (!caja) return <div style={{ color: 'var(--red)', padding: '1rem' }}>No se pudo cargar la caja.</div>
 
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
+  const totalDet = caja.detalles?.reduce((acc, d) => acc + Number(d.monto), 0) || 0
 
   const rows = [
+    ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
     ['Local',      caja.local?.nombre ?? '—'],
     ['Inicio',     fmtDT(caja.fecha_inicio)],
     ['Cierre',     fmtDT(caja.fecha_cierre)],
@@ -118,6 +168,81 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         ))}
       </div>
 
+      {/* ── DETALLES ─────────────────────────────────────────────────────── */}
+      <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Detalles ({caja.detalles?.length || 0})</span>
+        <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalDet)}</span>
+      </div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th></th></tr>
+          </thead>
+          <tbody>
+            {(caja.detalles || []).map((d) => (
+              <tr key={d.id}>
+                <td className="td-muted">{d.tipo || '—'}</td>
+                <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                <td className="td-number">{fmt$2(d.monto)}</td>
+                <td>
+                  <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                    <IcoTrash />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {(!caja.detalles || caja.detalles.length === 0) && (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin detalles</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="drawer-section-title">Agregar Detalle</div>
+      <form onSubmit={handleAddDet}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Clasificación</label>
+            <div className="form-input-wrap">
+              <input
+                type="text"
+                readOnly
+                value={(() => {
+                  const t = tipos.find(x => x.id === newDet.id_tipo)
+                  const labels = { canal: 'Canal', medio_pago: 'Medio de pago', calculo: 'Cálculo', otro: 'Otro' }
+                  return t ? (labels[t.clasificacion] || 'Otro') : '— Según el tipo —'
+                })()}
+              />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Nombre</label>
+            <div className="form-input-wrap">
+              <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
+                <option value="">— Seleccionar —</option>
+                {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Monto *</label>
+            <div className="form-input-wrap">
+              <input type="number" step="0.01" required placeholder="0.00" value={newDet.monto} onChange={e => setNewDet({ ...newDet, monto: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Observaciones</label>
+            <div className="form-input-wrap">
+              <input type="text" placeholder="Opcional" value={newDet.observaciones} onChange={e => setNewDet({ ...newDet, observaciones: e.target.value })} />
+            </div>
+          </div>
+        </div>
+        <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginTop: '0.75rem', marginBottom: '1.5rem' }}>
+          {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
+        </button>
+      </form>
+
+      {/* ── MOVIMIENTOS ──────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
         <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalMov)}</span>
@@ -125,12 +250,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
       <div className="table-wrap" style={{ marginBottom: '1rem' }}>
         <table className="data-table">
           <thead>
-            <tr>
-              <th>Tipo</th>
-              <th>Método</th>
-              <th>Monto</th>
-              <th></th>
-            </tr>
+            <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
           </thead>
           <tbody>
             {(caja.movimientos || []).map((m) => (
@@ -140,6 +260,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
                 </td>
                 <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                 <td className="td-number">{fmt$2(m.monto)}</td>
+                <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
                 <td>
                   <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
                     <IcoTrash />
@@ -148,7 +269,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
               </tr>
             ))}
             {(!caja.movimientos || caja.movimientos.length === 0) && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin movimientos</td></tr>
+              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin movimientos</td></tr>
             )}
           </tbody>
         </table>
@@ -169,9 +290,24 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Método</label>
+            <div className="form-input-wrap">
+              <select value={newMov.id_metodo} onChange={e => setNewMov({ ...newMov, id_metodo: e.target.value })}>
+                <option value="">Sin método</option>
+                {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
               <input type="number" step="0.01" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Cantidad</label>
+            <div className="form-input-wrap">
+              <input type="number" min="1" step="1" placeholder="Opcional" value={newMov.cantidad} onChange={e => setNewMov({ ...newMov, cantidad: e.target.value })} />
             </div>
           </div>
         </div>
@@ -183,19 +319,22 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   )
 }
 
-function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
+function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const notify = useUiStore((s) => s.notify)
-  const [form,   setForm]   = useState(EMPTY_CAJA)
-  const [saving, setSaving] = useState(false)
+  const [form,      setForm]    = useState(EMPTY_CAJA)
+  const [localId,   setLocalId] = useState(activeLocal?.id || '')
+  const [saving,    setSaving]  = useState(false)
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  const targetLocalId = activeLocal?.id || localId
+
   const handleCreate = async (e) => {
     e.preventDefault()
-    if (!activeLocal) { notify('Seleccioná un local primero', 'error'); return }
+    if (!targetLocalId) { notify('Seleccioná un local', 'error'); return }
     setSaving(true)
     try {
-      await cajasApi.create({ ...form, id_local: activeLocal.id })
+      await cajasApi.create({ ...form, id_local: targetLocalId })
       notify('Caja creada', 'success')
       onCreated()
       onClose()
@@ -207,6 +346,17 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
   return (
     <form onSubmit={handleCreate}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        {!activeLocal && locales.length > 0 && (
+          <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+            <label className="form-label">Local *</label>
+            <div className="form-input-wrap">
+              <select required value={localId} onChange={e => setLocalId(e.target.value)}>
+                <option value="">Seleccioná un local…</option>
+                {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fecha Inicio *</label>
           <div className="form-input-wrap">
@@ -214,9 +364,15 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fecha Cierre</label>
+          <div className="form-input-wrap">
+            <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nro Turno</label>
           <div className="form-input-wrap">
-            <input placeholder="T-001" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
+            <input type="number" min="1" step="1" placeholder="1" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
@@ -255,7 +411,7 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">URL Foto</label>
           <div className="form-input-wrap">
             <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
@@ -279,8 +435,9 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
 }
 
 export default function CajaList() {
-  const activeLocal = useAppStore((s) => s.activeLocal)
-  const notify      = useUiStore((s) => s.notify)
+  const { activeApp, activeLocal } = useAppStore()
+  const locales = activeApp?.locales ?? []
+  const notify  = useUiStore((s) => s.notify)
 
   const [cajas,     setCajas]     = useState([])
   const [total,     setTotal]     = useState(0)
@@ -323,8 +480,8 @@ export default function CajaList() {
 
   const drawerTitle = panelMode === 'create'
     ? 'Nueva Caja'
-    : cajas.find(c => c.id === selectedId)
-        ? `Turno ${cajas.find(c => c.id === selectedId)?.nro_turno || selectedId?.slice(0, 8)}`
+    : cajas.find(c => c.id === selectedId)?.nro_turno
+        ? `TRN ${cajas.find(c => c.id === selectedId).nro_turno}`
         : 'Detalle de Caja'
 
   return (
@@ -383,7 +540,7 @@ export default function CajaList() {
                   <>
                     {cajas.map((c) => (
                       <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
-                        <td className="td-primary">{c.nro_turno || <span className="td-muted">—</span>}</td>
+                        <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
                         <td>{fmtDate(c.fecha_inicio)}</td>
                         <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
                         <td>{c.cajero || <span className="td-muted">—</span>}</td>
@@ -439,7 +596,7 @@ export default function CajaList() {
 
       <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
         {panelMode === 'create'
-          ? <CajaCreatePanel activeLocal={activeLocal} onCreated={load} onClose={closePanel} />
+          ? <CajaCreatePanel activeLocal={activeLocal} locales={locales} onCreated={load} onClose={closePanel} />
           : <CajaDetailPanel cajaId={selectedId} onRefreshList={load} />
         }
       </DrawerPanel>

@@ -18,6 +18,7 @@ const Locales       = lazy(() => import('./pages/admin/Locales.jsx'))
 const RubCat        = lazy(() => import('./pages/admin/RubCat.jsx'))
 const MetodosPago   = lazy(() => import('./pages/admin/MetodosPago.jsx'))
 const Roles         = lazy(() => import('./pages/admin/Roles.jsx'))
+const DetalleTipos  = lazy(() => import('./pages/admin/DetalleTipos.jsx'))
 
 function PageFallback() {
   return (
@@ -64,6 +65,7 @@ export default function App() {
           <Route path="admin/rubcat"               element={<RubCat />} />
           <Route path="admin/metodos-pago"         element={<MetodosPago />} />
           <Route path="admin/roles"                element={<Roles />} />
+          <Route path="admin/detalle-tipos"        element={<DetalleTipos />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
