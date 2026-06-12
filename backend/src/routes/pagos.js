@@ -12,13 +12,11 @@ export default async function pagosRoutes(fastify) {
     } = request.query
     const skip = (Number(page) - 1) * Number(limit)
 
-    if (id_local && !request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
-    const localFilter = request.isSuperAdmin
-      ? (id_local ? { id_local } : {})
-      : { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
+    const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
 
     const where = {
       ...localFilter,
@@ -57,13 +55,11 @@ export default async function pagosRoutes(fastify) {
   fastify.get('/stats', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, desde, hasta } = request.query
 
-    if (id_local && !request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
-    const localFilter = request.isSuperAdmin
-      ? (id_local ? { id_local } : {})
-      : { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
+    const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
 
     const where = {
       ...localFilter,
@@ -95,7 +91,7 @@ export default async function pagosRoutes(fastify) {
   fastify.get('/chart', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, desde, hasta } = request.query
 
-    if (id_local && !request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
@@ -105,8 +101,7 @@ export default async function pagosRoutes(fastify) {
     if (id_local) {
       params.push(id_local)
       conditions += ` AND id_local = $${params.length}`
-    } else if (!request.isSuperAdmin) {
-      // Construir IN clause con los locales permitidos
+    } else {
       const placeholders = request.allowedLocalIds
         .map((_, i) => `$${params.length + i + 1}`)
         .join(', ')
@@ -156,7 +151,7 @@ export default async function pagosRoutes(fastify) {
     })
     if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(pago.id_local)) {
+    if (!request.allowedLocalIds.includes(pago.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
@@ -172,7 +167,7 @@ export default async function pagosRoutes(fastify) {
       periodo, ingresa_egreso, id_local, impuestos
     } = request.body
 
-    if (id_local && !request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
@@ -221,7 +216,7 @@ export default async function pagosRoutes(fastify) {
     })
     if (!existing) return reply.code(404).send({ error: 'Pago no encontrado' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(existing.id_local)) {
+    if (!request.allowedLocalIds.includes(existing.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
@@ -232,7 +227,7 @@ export default async function pagosRoutes(fastify) {
       periodo, ingresa_egreso, id_local
     } = request.body
 
-    if (id_local && !request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso al local destino' })
     }
 
@@ -272,7 +267,7 @@ export default async function pagosRoutes(fastify) {
     })
     if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(pago.id_local)) {
+    if (!request.allowedLocalIds.includes(pago.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
@@ -297,7 +292,7 @@ export default async function pagosRoutes(fastify) {
     })
     if (!existing) return reply.code(404).send({ error: 'Pago no encontrado' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(existing.id_local)) {
+    if (!request.allowedLocalIds.includes(existing.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 

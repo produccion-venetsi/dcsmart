@@ -10,9 +10,7 @@ export default async function cajaMoveRoutes(fastify) {
 
     const where = {
       ...(id_caja ? { id_caja } : {}),
-      ...(request.isSuperAdmin ? {} : {
-        caja: { id_local: { in: request.allowedLocalIds } }
-      })
+      caja: { id_local: { in: request.allowedLocalIds } }
     }
 
     return fastify.db.cajaMovimiento.findMany({
@@ -30,7 +28,7 @@ export default async function cajaMoveRoutes(fastify) {
     })
     if (!mov) return reply.code(404).send({ error: 'Movimiento no encontrado' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(mov.caja.id_local)) {
+    if (!request.allowedLocalIds.includes(mov.caja.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
@@ -50,7 +48,7 @@ export default async function cajaMoveRoutes(fastify) {
     })
     if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(caja.id_local)) {
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
@@ -75,7 +73,7 @@ export default async function cajaMoveRoutes(fastify) {
     })
     if (!existing) return reply.code(404).send({ error: 'Movimiento no encontrado' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(existing.caja.id_local)) {
+    if (!request.allowedLocalIds.includes(existing.caja.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
@@ -101,7 +99,7 @@ export default async function cajaMoveRoutes(fastify) {
     })
     if (!existing) return reply.code(404).send({ error: 'Movimiento no encontrado' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(existing.caja.id_local)) {
+    if (!request.allowedLocalIds.includes(existing.caja.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 

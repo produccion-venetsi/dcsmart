@@ -9,13 +9,11 @@ export default async function cajaRoutes(fastify) {
     const { id_local, desde, hasta, page = 1, limit = 50 } = request.query
     const skip = (Number(page) - 1) * Number(limit)
 
-    if (id_local && !request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
-    const localFilter = request.isSuperAdmin
-      ? (id_local ? { id_local } : {})
-      : { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
+    const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
 
     const where = {
       ...localFilter,
@@ -48,13 +46,11 @@ export default async function cajaRoutes(fastify) {
   fastify.get('/stats', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, desde, hasta } = request.query
 
-    if (id_local && !request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
-    const localFilter = request.isSuperAdmin
-      ? (id_local ? { id_local } : {})
-      : { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
+    const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
 
     const where = {
       ...localFilter,
@@ -93,7 +89,7 @@ export default async function cajaRoutes(fastify) {
     })
     if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(caja.id_local)) {
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
@@ -111,7 +107,7 @@ export default async function cajaRoutes(fastify) {
       return reply.code(400).send({ error: 'fecha_inicio e id_local son requeridos' })
     }
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(id_local)) {
+    if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
@@ -141,7 +137,7 @@ export default async function cajaRoutes(fastify) {
     })
     if (!existing) return reply.code(404).send({ error: 'Caja no encontrada' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(existing.id_local)) {
+    if (!request.allowedLocalIds.includes(existing.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
@@ -175,7 +171,7 @@ export default async function cajaRoutes(fastify) {
     })
     if (!existing) return reply.code(404).send({ error: 'Caja no encontrada' })
 
-    if (!request.isSuperAdmin && !request.allowedLocalIds.includes(existing.id_local)) {
+    if (!request.allowedLocalIds.includes(existing.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 

@@ -19,7 +19,16 @@ async function appContextPlugin(fastify) {
     request.activeAppId = appId
     request.isSuperAdmin = userAppRole.role.nombre === 'super_admin'
 
-    if (request.isSuperAdmin) return
+    // Super_admin: todos los locales activos de la app (aislamiento por app igualmente)
+    // Usuario normal: locales según user_local_access, o todos si no tiene registros
+    if (request.isSuperAdmin) {
+      const locales = await fastify.db.local.findMany({
+        where: { id_app: appId, activo: true },
+        select: { id: true }
+      })
+      request.allowedLocalIds = locales.map(l => l.id)
+      return
+    }
 
     const localAccess = await fastify.db.userLocalAccess.findMany({
       where: { id_user: request.user.id, id_app: appId },
