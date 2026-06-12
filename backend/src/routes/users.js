@@ -8,7 +8,8 @@ export default async function usersRoutes(fastify) {
       select: {
         id: true, email: true, nombre: true, avatar_url: true,
         activo: true, created_at: true,
-        user_app_roles: { include: { app: true, role: true, local: true } }
+        user_app_roles: { include: { app: true, role: true } },
+        local_access: { include: { local: { select: { id: true, nombre: true } }, app: { select: { id: true } } } }
       },
       orderBy: { nombre: 'asc' }
     })
@@ -20,7 +21,8 @@ export default async function usersRoutes(fastify) {
       select: {
         id: true, email: true, nombre: true, avatar_url: true,
         activo: true, created_at: true, updated_at: true,
-        user_app_roles: { include: { app: true, role: true, local: true } },
+        user_app_roles: { include: { app: true, role: true } },
+        local_access: { include: { local: { select: { id: true, nombre: true } }, app: { select: { id: true } } } },
         user_permissions: { include: { module: true } }
       }
     })
@@ -95,9 +97,19 @@ export default async function usersRoutes(fastify) {
 
     const userAppRole = await fastify.db.userAppRole.upsert({
       where: { id_user_id_app: { id_user: request.params.id, id_app } },
-      create: { id_user: request.params.id, id_app, id_role, id_local },
-      update: { id_role, id_local }
+      create: { id_user: request.params.id, id_app, id_role },
+      update: { id_role }
     })
+
+    // Si se especifica id_local, crear registro de acceso específico a ese local
+    if (id_local) {
+      await fastify.db.userLocalAccess.upsert({
+        where: { id_user_id_app_id_local: { id_user: request.params.id, id_app, id_local } },
+        create: { id_user: request.params.id, id_app, id_local },
+        update: {}
+      })
+    }
+
     return userAppRole
   })
 }
