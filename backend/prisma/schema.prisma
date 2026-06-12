@@ -86,16 +86,14 @@ model Module {
 }
 
 model UserLocalAccess {
-  id                String @id @default(uuid())
-  id_user           String
-  id_app            String
-  id_local          String
-  id_user_app_role  String
+  id       String @id @default(uuid())
+  id_user  String
+  id_app   String
+  id_local String
 
-  user         User        @relation(fields: [id_user], references: [id])
-  app          App         @relation(fields: [id_app], references: [id])
-  local        Local       @relation(fields: [id_local], references: [id])
-  user_app_role UserAppRole @relation(fields: [id_user_app_role], references: [id])
+  user  User  @relation(fields: [id_user], references: [id])
+  app   App   @relation(fields: [id_app], references: [id])
+  local Local @relation(fields: [id_local], references: [id])
 
   @@unique([id_user, id_app, id_local])
   @@map("user_local_access")
@@ -123,10 +121,9 @@ model UserAppRole {
   id_app  String
   id_role String
 
-  user         User              @relation(fields: [id_user], references: [id])
-  app          App               @relation(fields: [id_app], references: [id])
-  role         Role              @relation(fields: [id_role], references: [id])
-  local_access UserLocalAccess[]
+  user  User  @relation(fields: [id_user], references: [id])
+  app   App   @relation(fields: [id_app], references: [id])
+  role  Role  @relation(fields: [id_role], references: [id])
 
   @@unique([id_user, id_app])
   @@map("user_app_roles")
