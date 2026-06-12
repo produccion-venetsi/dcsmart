@@ -141,12 +141,16 @@ async function main() {
   })
 
   // ─── DETALLE TIPOS POR DEFECTO ────────────────────────────────────────
-  const tiposDefault = ['Total Digitales', 'MP Total', 'MP QR']
-  for (const nombre of tiposDefault) {
+  const tiposDefault = [
+    { nombre: 'Total Digitales', clasificacion: 'calculo' },
+    { nombre: 'MP Total',        clasificacion: 'medio_pago' },
+    { nombre: 'MP QR',           clasificacion: 'medio_pago' }
+  ]
+  for (const { nombre, clasificacion } of tiposDefault) {
     await prisma.detalleTipo.upsert({
       where: { nombre_id_app: { nombre, id_app: demoApp.id } },
-      create: { nombre, id_app: demoApp.id, id_local: null, activo: true },
-      update: {}
+      create: { nombre, clasificacion, id_app: demoApp.id, id_local: null, activo: true },
+      update: { clasificacion }
     })
   }
   console.log('✓ DetalleTipos por defecto creados')
