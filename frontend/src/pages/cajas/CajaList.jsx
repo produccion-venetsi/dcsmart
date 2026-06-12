@@ -113,9 +113,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
     try {
       await detallesApi.create({
         id_caja:       cajaId,
-        tipo:          newDet.tipo          || null,
         id_tipo:       newDet.id_tipo       || null,
-        nombre:        null,
         monto:         parseFloat(newDet.monto),
         observaciones: newDet.observaciones || null
       })
@@ -204,14 +202,17 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
       <form onSubmit={handleAddDet}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Tipo</label>
+            <label className="form-label">Clasificación</label>
             <div className="form-input-wrap">
-              <select value={newDet.tipo} onChange={e => setNewDet({ ...newDet, tipo: e.target.value })}>
-                <option value="">— Sin tipo —</option>
-                <option value="CANAL">Canal</option>
-                <option value="CALCULO">Cálculo</option>
-                <option value="OTROS">Otros</option>
-              </select>
+              <input
+                type="text"
+                readOnly
+                value={(() => {
+                  const t = tipos.find(x => x.id === newDet.id_tipo)
+                  const labels = { canal: 'Canal', medio_pago: 'Medio de pago', calculo: 'Cálculo', otro: 'Otro' }
+                  return t ? (labels[t.clasificacion] || 'Otro') : '— Según el tipo —'
+                })()}
+              />
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
