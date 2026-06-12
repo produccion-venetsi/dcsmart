@@ -26,7 +26,10 @@ async function permissionsPlugin(fastify) {
       }
 
       const userAppRole = await fastify.db.userAppRole.findFirst({
-        where: { id_user: userId }
+        where: {
+          id_user: userId,
+          ...(request.activeAppId ? { id_app: request.activeAppId } : {})
+        }
       })
 
       if (!userAppRole) {
