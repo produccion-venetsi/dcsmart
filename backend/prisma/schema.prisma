@@ -18,6 +18,7 @@ model App {
 
   locales        Local[]
   user_app_roles UserAppRole[]
+  detalle_tipos  DetalleTipo[]
 
   @@map("apps")
 }
@@ -197,6 +198,7 @@ model MetodoPago {
   activo Boolean @default(true)
 
   caja_movimientos CajaMovimiento[]
+  caja_detalles    CajaDetalle[]
   pagos            Pago[]
 
   @@map("metodos_pago")
@@ -224,8 +226,52 @@ model Caja {
   local       Local            @relation(fields: [id_local], references: [id])
   creador     User?            @relation("CajaCreatedBy", fields: [created_by], references: [id])
   movimientos CajaMovimiento[]
+  detalles    CajaDetalle[]
 
   @@map("cajas")
+}
+
+enum TipoDetalleCaja {
+  SALON
+  DELIVERY
+  BARRA
+  MOSTRADOR
+  ONLINE
+
+  @@map("tipo_detalle_caja")
+}
+
+model DetalleTipo {
+  id         String   @id @default(uuid())
+  id_app     String
+  nombre     String
+  activo     Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  app      App           @relation(fields: [id_app], references: [id])
+  detalles CajaDetalle[]
+
+  @@unique([nombre, id_app])
+  @@map("detalle_tipos")
+}
+
+model CajaDetalle {
+  id            String           @id @default(uuid())
+  id_caja       String
+  tipo          TipoDetalleCaja?
+  id_tipo       String?
+  nombre        String?
+  monto         Decimal          @db.Decimal(12, 2)
+  id_metodo     String?
+  observaciones String?
+  created_at    DateTime         @default(now())
+
+  caja         Caja         @relation(fields: [id_caja], references: [id])
+  metodo       MetodoPago?  @relation(fields: [id_metodo], references: [id])
+  detalle_tipo DetalleTipo? @relation(fields: [id_tipo], references: [id])
+
+  @@map("caja_detalles")
 }
 
 enum Origin {
