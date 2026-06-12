@@ -40,7 +40,7 @@ export default async function cajaDetallesRoutes(fastify) {
 
   // ── POST / ────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
-    const { id_caja, tipo, id_tipo, nombre, monto, observaciones } = request.body
+    const { id_caja, id_tipo, nombre, monto, observaciones } = request.body
 
     if (!id_caja || monto === undefined) {
       return reply.code(400).send({ error: 'id_caja y monto son requeridos' })
@@ -56,12 +56,25 @@ export default async function cajaDetallesRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
+    // tipo y nombre se derivan del tipo del catálogo cuando se elige id_tipo
+    let tipo = null
+    let nombreFinal = nombre || null
+    if (id_tipo) {
+      const dt = await fastify.db.detalleTipo.findUnique({
+        where: { id: id_tipo },
+        select: { clasificacion: true, nombre: true }
+      })
+      if (!dt) return reply.code(400).send({ error: 'Tipo de detalle inexistente' })
+      tipo = dt.clasificacion
+      nombreFinal = dt.nombre
+    }
+
     const detalle = await fastify.db.cajaDetalle.create({
       data: {
         id_caja,
-        tipo:          tipo          || null,
+        tipo,
         id_tipo:       id_tipo       || null,
-        nombre:        nombre        || null,
+        nombre:        nombreFinal,
         monto:         parseFloat(monto),
         observaciones: observaciones || null
       },
