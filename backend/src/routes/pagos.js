@@ -258,7 +258,7 @@ export default async function pagosRoutes(fastify) {
         foto_url, pdf_url,
         periodo:        periodo                     ? new Date(periodo)           : undefined,
         ingresa_egreso,
-        id_local
+        id_local:       id_local       !== undefined ? id_local                  : undefined,
       }
     })
     return pago
