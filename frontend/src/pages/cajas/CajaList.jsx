@@ -184,19 +184,22 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   )
 }
 
-function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
+function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const notify = useUiStore((s) => s.notify)
-  const [form,   setForm]   = useState(EMPTY_CAJA)
-  const [saving, setSaving] = useState(false)
+  const [form,      setForm]    = useState(EMPTY_CAJA)
+  const [localId,   setLocalId] = useState(activeLocal?.id || '')
+  const [saving,    setSaving]  = useState(false)
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  const targetLocalId = activeLocal?.id || localId
+
   const handleCreate = async (e) => {
     e.preventDefault()
-    if (!activeLocal) { notify('Seleccioná un local primero', 'error'); return }
+    if (!targetLocalId) { notify('Seleccioná un local', 'error'); return }
     setSaving(true)
     try {
-      await cajasApi.create({ ...form, id_local: activeLocal.id })
+      await cajasApi.create({ ...form, id_local: targetLocalId })
       notify('Caja creada', 'success')
       onCreated()
       onClose()
@@ -208,6 +211,17 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
   return (
     <form onSubmit={handleCreate}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        {!activeLocal && locales.length > 0 && (
+          <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+            <label className="form-label">Local *</label>
+            <div className="form-input-wrap">
+              <select required value={localId} onChange={e => setLocalId(e.target.value)}>
+                <option value="">Seleccioná un local…</option>
+                {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fecha Inicio *</label>
           <div className="form-input-wrap">
@@ -286,8 +300,9 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
 }
 
 export default function CajaList() {
-  const activeLocal = useAppStore((s) => s.activeLocal)
-  const notify      = useUiStore((s) => s.notify)
+  const { activeApp, activeLocal } = useAppStore()
+  const locales = activeApp?.locales ?? []
+  const notify  = useUiStore((s) => s.notify)
 
   const [cajas,     setCajas]     = useState([])
   const [total,     setTotal]     = useState(0)
@@ -446,7 +461,7 @@ export default function CajaList() {
 
       <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
         {panelMode === 'create'
-          ? <CajaCreatePanel activeLocal={activeLocal} onCreated={load} onClose={closePanel} />
+          ? <CajaCreatePanel activeLocal={activeLocal} locales={locales} onCreated={load} onClose={closePanel} />
           : <CajaDetailPanel cajaId={selectedId} onRefreshList={load} />
         }
       </DrawerPanel>
