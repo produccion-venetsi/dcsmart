@@ -246,11 +246,12 @@ model Caja {
 }
 
 model DetalleTipo {
-  id       String  @id @default(uuid())
-  id_app   String
-  id_local String?
-  nombre   String
-  activo   Boolean @default(true)
+  id            String  @id @default(uuid())
+  id_app        String
+  id_local      String?
+  nombre        String
+  clasificacion String  @default("otro")
+  activo        Boolean @default(true)
 
   app      App           @relation(fields: [id_app], references: [id])
   local    Local?        @relation(fields: [id_local], references: [id])
