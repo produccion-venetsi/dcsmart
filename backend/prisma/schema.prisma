@@ -19,6 +19,7 @@ model App {
   locales        Local[]
   user_app_roles UserAppRole[]
   detalle_tipos  DetalleTipo[]
+  local_access   UserLocalAccess[]
 
   @@map("apps")
 }
@@ -33,10 +34,11 @@ model Local {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  app            App           @relation(fields: [id_app], references: [id])
+  app            App               @relation(fields: [id_app], references: [id])
   cajas          Caja[]
   pagos          Pago[]
   user_app_roles UserAppRole[]
+  local_access   UserLocalAccess[]
 
   @@map("locales")
 }
@@ -54,8 +56,9 @@ model User {
 
   user_app_roles   UserAppRole[]
   user_permissions UserPermission[]
-  cajas_creadas    Caja[]           @relation("CajaCreatedBy")
-  pagos_creados    Pago[]           @relation("PagoCreatedBy")
+  cajas_creadas    Caja[]            @relation("CajaCreatedBy")
+  pagos_creados    Pago[]            @relation("PagoCreatedBy")
+  local_access     UserLocalAccess[]
 
   @@map("users")
 }
@@ -81,6 +84,20 @@ model Module {
   user_permissions UserPermission[]
 
   @@map("modules")
+}
+
+model UserLocalAccess {
+  id       String @id @default(uuid())
+  id_user  String
+  id_app   String
+  id_local String
+
+  user  User  @relation(fields: [id_user], references: [id])
+  app   App   @relation(fields: [id_app], references: [id])
+  local Local @relation(fields: [id_local], references: [id])
+
+  @@unique([id_user, id_app, id_local])
+  @@map("user_local_access")
 }
 
 model RolePermission {
