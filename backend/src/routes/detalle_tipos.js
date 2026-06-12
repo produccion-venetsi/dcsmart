@@ -1,3 +1,5 @@
+const CLASIFICACIONES = ['canal', 'medio_pago', 'calculo', 'otro']
+
 export default async function detalleTiposRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
@@ -15,8 +17,13 @@ export default async function detalleTiposRoutes(fastify) {
 
   // ── POST / — crear tipo nuevo ──────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
-    const { nombre, id_local } = request.body
+    const { nombre, id_local, clasificacion } = request.body
     if (!nombre) return reply.code(400).send({ error: 'nombre es requerido' })
+
+    const clasif = clasificacion || 'otro'
+    if (!CLASIFICACIONES.includes(clasif)) {
+      return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+    }
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a ese local' })
@@ -26,6 +33,7 @@ export default async function detalleTiposRoutes(fastify) {
       const tipo = await fastify.db.detalleTipo.create({
         data: {
           nombre,
+          clasificacion: clasif,
           id_app: request.activeAppId,
           id_local: id_local || null,
           activo: true
@@ -39,16 +47,24 @@ export default async function detalleTiposRoutes(fastify) {
     }
   })
 
-  // ── PUT /:id — editar (nombre y activo) ───────────────────────────────
+  // ── PUT /:id — editar (nombre, clasificacion y activo) ─────────────────
   fastify.put('/:id', { preHandler: editHandler }, async (request, reply) => {
     const existing = await fastify.db.detalleTipo.findUnique({ where: { id: request.params.id } })
     if (!existing) return reply.code(404).send({ error: 'Tipo no encontrado' })
     if (existing.id_app !== request.activeAppId) return reply.code(403).send({ error: 'Sin acceso' })
 
-    const { nombre, activo } = request.body
+    const { nombre, activo, clasificacion } = request.body
+    if (clasificacion !== undefined && !CLASIFICACIONES.includes(clasificacion)) {
+      return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+    }
+
     const tipo = await fastify.db.detalleTipo.update({
       where: { id: request.params.id },
-      data: { nombre, activo },
+      data: {
+        ...(nombre !== undefined ? { nombre } : {}),
+        ...(activo !== undefined ? { activo } : {}),
+        ...(clasificacion !== undefined ? { clasificacion } : {})
+      },
       include: { local: { select: { id: true, nombre: true } } }
     })
     return tipo
