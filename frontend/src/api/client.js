@@ -12,7 +12,7 @@ client.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`
 
   const { activeApp } = useAppStore.getState()
-  if (activeApp?.id) config.headers['X-App-Id'] = activeApp.id
+  if (activeApp?.app?.id) config.headers['X-App-Id'] = activeApp.app.id
 
   return config
 })
