@@ -84,7 +84,14 @@ export default async function cajaRoutes(fastify) {
       include: {
         local:       true,
         creador:     { select: { id: true, nombre: true } },
-        movimientos: { include: { metodo_pago: true } }
+        movimientos: { include: { metodo_pago: true } },
+        detalles: {
+          include: {
+            metodo:       { select: { id: true, nombre: true } },
+            detalle_tipo: { select: { id: true, nombre: true } }
+          },
+          orderBy: { created_at: 'asc' }
+        }
       }
     })
     if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })

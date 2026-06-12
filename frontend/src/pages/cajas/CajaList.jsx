@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
+import { detallesApi } from '../../api/detalles.js'
+import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
@@ -49,10 +51,14 @@ function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 
 function CajaDetailPanel({ cajaId, onRefreshList }) {
   const notify = useUiStore((s) => s.notify)
-  const [caja,    setCaja]    = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [newMov,  setNewMov]  = useState({ tipo: 'INGRESO', monto: '' })
-  const [saving,  setSaving]  = useState(false)
+  const [caja,       setCaja]      = useState(null)
+  const [loading,    setLoading]   = useState(true)
+  const [metodos,    setMetodos]   = useState([])
+  const [tipos,      setTipos]     = useState([])
+  const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+  const [saving,     setSaving]    = useState(false)
+  const [newDet,     setNewDet]    = useState({ id_tipo: '', nombre: '', monto: '', id_metodo: '', observaciones: '' })
+  const [savingDet,  setSavingDet] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -62,15 +68,30 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { if (cajaId) load() }, [cajaId])
+  useEffect(() => {
+    if (!cajaId) return
+    load()
+    Promise.all([metodosApi.list(), detallesApi.tipos()])
+      .then(([mRes, tRes]) => {
+        setMetodos(mRes.data || [])
+        setTipos(tRes.data || [])
+      })
+      .catch(() => {})
+  }, [cajaId])
 
   const handleAddMov = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      await movimientosApi.create({ ...newMov, monto: parseFloat(newMov.monto), id_caja: cajaId })
+      await movimientosApi.create({
+        tipo:      newMov.tipo,
+        id_metodo: newMov.id_metodo || null,
+        monto:     parseFloat(newMov.monto),
+        id_caja:   cajaId,
+        cantidad:  newMov.cantidad ? parseInt(newMov.cantidad) : null
+      })
       notify('Movimiento agregado', 'success')
-      setNewMov({ tipo: 'INGRESO', monto: '' })
+      setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
       load()
     } catch { notify('Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
@@ -82,10 +103,36 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
     catch { notify('Error al eliminar', 'error') }
   }
 
+  const handleAddDet = async (e) => {
+    e.preventDefault()
+    setSavingDet(true)
+    try {
+      await detallesApi.create({
+        id_caja:       cajaId,
+        id_tipo:       newDet.id_tipo       || null,
+        nombre:        newDet.nombre        || null,
+        monto:         parseFloat(newDet.monto),
+        id_metodo:     newDet.id_metodo     || null,
+        observaciones: newDet.observaciones || null
+      })
+      notify('Detalle agregado', 'success')
+      setNewDet({ id_tipo: '', nombre: '', monto: '', id_metodo: '', observaciones: '' })
+      load()
+    } catch { notify('Error al agregar detalle', 'error') }
+    finally { setSavingDet(false) }
+  }
+
+  const handleDeleteDet = async (detId) => {
+    if (!confirm('¿Eliminar detalle?')) return
+    try { await detallesApi.remove(detId); notify('Eliminado', 'success'); load() }
+    catch { notify('Error al eliminar', 'error') }
+  }
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
   if (!caja) return <div style={{ color: 'var(--red)', padding: '1rem' }}>No se pudo cargar la caja.</div>
 
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
+  const totalDet = caja.detalles?.reduce((acc, d) => acc + Number(d.monto), 0) || 0
 
   const rows = [
     ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
@@ -119,6 +166,83 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         ))}
       </div>
 
+      {/* ── DETALLES ─────────────────────────────────────────────────────── */}
+      <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Detalles ({caja.detalles?.length || 0})</span>
+        <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalDet)}</span>
+      </div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th>Método</th><th></th></tr>
+          </thead>
+          <tbody>
+            {(caja.detalles || []).map((d) => (
+              <tr key={d.id}>
+                <td className="td-muted">{d.detalle_tipo?.nombre || '—'}</td>
+                <td>{d.nombre || <span className="td-muted">—</span>}</td>
+                <td className="td-number">{fmt$2(d.monto)}</td>
+                <td className="td-muted">{d.metodo?.nombre || '—'}</td>
+                <td>
+                  <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                    <IcoTrash />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {(!caja.detalles || caja.detalles.length === 0) && (
+              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin detalles</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="drawer-section-title">Agregar Detalle</div>
+      <form onSubmit={handleAddDet}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Tipo</label>
+            <div className="form-input-wrap">
+              <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
+                <option value="">Sin tipo</option>
+                {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Nombre</label>
+            <div className="form-input-wrap">
+              <input placeholder="Descripción opcional" value={newDet.nombre} onChange={e => setNewDet({ ...newDet, nombre: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Monto *</label>
+            <div className="form-input-wrap">
+              <input type="number" step="0.01" required placeholder="0.00" value={newDet.monto} onChange={e => setNewDet({ ...newDet, monto: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Método</label>
+            <div className="form-input-wrap">
+              <select value={newDet.id_metodo} onChange={e => setNewDet({ ...newDet, id_metodo: e.target.value })}>
+                <option value="">Sin método</option>
+                {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+            <label className="form-label">Observaciones</label>
+            <div className="form-input-wrap">
+              <input placeholder="Notas opcionales..." value={newDet.observaciones} onChange={e => setNewDet({ ...newDet, observaciones: e.target.value })} />
+            </div>
+          </div>
+        </div>
+        <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginBottom: '1.5rem' }}>
+          {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
+        </button>
+      </form>
+
+      {/* ── MOVIMIENTOS ──────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
         <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalMov)}</span>
@@ -126,12 +250,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
       <div className="table-wrap" style={{ marginBottom: '1rem' }}>
         <table className="data-table">
           <thead>
-            <tr>
-              <th>Tipo</th>
-              <th>Método</th>
-              <th>Monto</th>
-              <th></th>
-            </tr>
+            <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
           </thead>
           <tbody>
             {(caja.movimientos || []).map((m) => (
@@ -141,6 +260,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
                 </td>
                 <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                 <td className="td-number">{fmt$2(m.monto)}</td>
+                <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
                 <td>
                   <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
                     <IcoTrash />
@@ -149,7 +269,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
               </tr>
             ))}
             {(!caja.movimientos || caja.movimientos.length === 0) && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin movimientos</td></tr>
+              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin movimientos</td></tr>
             )}
           </tbody>
         </table>
@@ -170,9 +290,24 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Método</label>
+            <div className="form-input-wrap">
+              <select value={newMov.id_metodo} onChange={e => setNewMov({ ...newMov, id_metodo: e.target.value })}>
+                <option value="">Sin método</option>
+                {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
               <input type="number" step="0.01" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Cantidad</label>
+            <div className="form-input-wrap">
+              <input type="number" min="1" step="1" placeholder="Opcional" value={newMov.cantidad} onChange={e => setNewMov({ ...newMov, cantidad: e.target.value })} />
             </div>
           </div>
         </div>

@@ -13,6 +13,7 @@ import localesRoutes from './routes/locales.js'
 import usersRoutes from './routes/users.js'
 import cajaRoutes from './routes/caja.js'
 import cajaMoveRoutes from './routes/caja_movimientos.js'
+import cajaDetallesRoutes from './routes/caja_detalles.js'
 import pagosRoutes from './routes/pagos.js'
 import proveedoresRoutes from './routes/proveedores.js'
 import rubcatRoutes from './routes/rubcat.js'
@@ -54,6 +55,7 @@ await app.register(localesRoutes, { prefix: '/api/locales' })
 await app.register(usersRoutes, { prefix: '/api/users' })
 await app.register(cajaRoutes, { prefix: '/api/cajas' })
 await app.register(cajaMoveRoutes, { prefix: '/api/caja-movimientos' })
+await app.register(cajaDetallesRoutes, { prefix: '/api/caja-detalles' })
 await app.register(pagosRoutes, { prefix: '/api/pagos' })
 await app.register(proveedoresRoutes, { prefix: '/api/proveedores' })
 await app.register(rubcatRoutes,    { prefix: '/api/rubcat' })
