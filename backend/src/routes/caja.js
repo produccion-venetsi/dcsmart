@@ -99,7 +99,7 @@ export default async function cajaRoutes(fastify) {
   // ── POST / ────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
     const {
-      nro_turno, fecha_inicio, id_local, cajero,
+      nro_turno, fecha_inicio, fecha_cierre, id_local, cajero,
       total, efectivo, fiscal, comensales, tickets, observaciones, foto_url, origin
     } = request.body
 
@@ -113,14 +113,15 @@ export default async function cajaRoutes(fastify) {
 
     const caja = await fastify.db.caja.create({
       data: {
-        nro_turno,
+        nro_turno:    nro_turno    ? String(parseInt(nro_turno)) : null,
         fecha_inicio: new Date(fecha_inicio),
+        fecha_cierre: fecha_cierre ? new Date(fecha_cierre)      : null,
         id_local, cajero,
-        total:        total        ? parseFloat(total)        : null,
-        efectivo:     efectivo     ? parseFloat(efectivo)     : null,
-        fiscal:       fiscal       ? parseFloat(fiscal)       : null,
-        comensales:   comensales   ? parseInt(comensales)     : null,
-        tickets:      tickets      ? parseInt(tickets)        : null,
+        total:        total        ? parseFloat(total)           : null,
+        efectivo:     efectivo     ? parseFloat(efectivo)        : null,
+        fiscal:       fiscal       ? parseFloat(fiscal)          : null,
+        comensales:   comensales   ? parseInt(comensales)        : null,
+        tickets:      tickets      ? parseInt(tickets)           : null,
         observaciones, foto_url,
         origin: origin || 'DCSMART',
         created_by: request.user.id

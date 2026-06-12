@@ -6,7 +6,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 
 const EMPTY_CAJA = {
-  nro_turno: '', fecha_inicio: '', cajero: '', total: '',
+  nro_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
   efectivo: '', fiscal: '', comensales: '', tickets: '', observaciones: '', foto_url: ''
 }
 
@@ -88,6 +88,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
 
   const rows = [
+    ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
     ['Local',      caja.local?.nombre ?? '—'],
     ['Inicio',     fmtDT(caja.fecha_inicio)],
     ['Cierre',     fmtDT(caja.fecha_cierre)],
@@ -214,9 +215,15 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fecha Cierre</label>
+          <div className="form-input-wrap">
+            <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nro Turno</label>
           <div className="form-input-wrap">
-            <input placeholder="T-001" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
+            <input type="number" min="1" step="1" placeholder="1" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
@@ -255,7 +262,7 @@ function CajaCreatePanel({ activeLocal, onCreated, onClose }) {
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">URL Foto</label>
           <div className="form-input-wrap">
             <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
@@ -323,8 +330,8 @@ export default function CajaList() {
 
   const drawerTitle = panelMode === 'create'
     ? 'Nueva Caja'
-    : cajas.find(c => c.id === selectedId)
-        ? `Turno ${cajas.find(c => c.id === selectedId)?.nro_turno || selectedId?.slice(0, 8)}`
+    : cajas.find(c => c.id === selectedId)?.nro_turno
+        ? `TRN ${cajas.find(c => c.id === selectedId).nro_turno}`
         : 'Detalle de Caja'
 
   return (
@@ -383,7 +390,7 @@ export default function CajaList() {
                   <>
                     {cajas.map((c) => (
                       <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
-                        <td className="td-primary">{c.nro_turno || <span className="td-muted">—</span>}</td>
+                        <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
                         <td>{fmtDate(c.fecha_inicio)}</td>
                         <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
                         <td>{c.cajero || <span className="td-muted">—</span>}</td>
