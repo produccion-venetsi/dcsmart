@@ -6,6 +6,7 @@ import 'dotenv/config'
 
 import dbPlugin from './plugins/db.js'
 import permissionsPlugin from './plugins/permissions.js'
+import appContextPlugin from './plugins/appContext.js'
 import authRoutes from './routes/auth.js'
 import appsRoutes from './routes/apps.js'
 import localesRoutes from './routes/locales.js'
@@ -37,6 +38,7 @@ await app.register(jwt, {
 await app.register(cookie)
 await app.register(dbPlugin)
 await app.register(permissionsPlugin)
+await app.register(appContextPlugin)
 
 app.decorate('authenticate', async (request, reply) => {
   try {
