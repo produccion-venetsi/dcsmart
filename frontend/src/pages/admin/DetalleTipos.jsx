@@ -20,7 +20,13 @@ function IcoPlus() {
   )
 }
 
-const EMPTY = { nombre: '', id_local: '', activo: true }
+const CLASIFICACIONES = [
+  { value: 'canal',      label: 'Canal' },
+  { value: 'medio_pago', label: 'Medio de pago' },
+  { value: 'calculo',    label: 'Cálculo' },
+  { value: 'otro',       label: 'Otro' }
+]
+const EMPTY = { nombre: '', id_local: '', clasificacion: 'otro', activo: true }
 
 export default function DetalleTipos() {
   const notify    = useUiStore((s) => s.notify)
@@ -47,7 +53,7 @@ export default function DetalleTipos() {
   useEffect(load, [])
 
   const openCreate = () => { setSelected(null); setForm(EMPTY); setPanelOpen(true) }
-  const openEdit   = (t) => { setSelected(t); setForm({ nombre: t.nombre, id_local: t.id_local || '', activo: t.activo }); setPanelOpen(true) }
+  const openEdit   = (t) => { setSelected(t); setForm({ nombre: t.nombre, id_local: t.id_local || '', clasificacion: t.clasificacion || 'otro', activo: t.activo }); setPanelOpen(true) }
   const closePanel = () => setPanelOpen(false)
 
   const handleSubmit = async (e) => {
@@ -56,10 +62,10 @@ export default function DetalleTipos() {
     setSaving(true)
     try {
       if (selected) {
-        await detalleTiposApi.update(selected.id, { nombre: form.nombre, activo: form.activo })
+        await detalleTiposApi.update(selected.id, { nombre: form.nombre, clasificacion: form.clasificacion, activo: form.activo })
         notify('Tipo actualizado', 'success')
       } else {
-        await detalleTiposApi.create({ nombre: form.nombre, id_local: form.id_local || null })
+        await detalleTiposApi.create({ nombre: form.nombre, id_local: form.id_local || null, clasificacion: form.clasificacion })
         notify('Tipo creado', 'success')
       }
       setPanelOpen(false)
@@ -99,6 +105,7 @@ export default function DetalleTipos() {
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Clasificación</th>
               <th>Alcance</th>
               <th>Estado</th>
               {isAdmin && <th></th>}
@@ -108,7 +115,7 @@ export default function DetalleTipos() {
             {loading ? (
               Array.from({ length: 5 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: isAdmin ? 4 : 3 }, (_, j) => (
+                  {Array.from({ length: isAdmin ? 5 : 4 }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${50 + (j * 17 + i * 13) % 40}%` }} /></td>
                   ))}
                 </tr>
@@ -122,6 +129,7 @@ export default function DetalleTipos() {
                     onClick={isAdmin ? () => openEdit(t) : undefined}
                   >
                     <td className="td-primary">{t.nombre}</td>
+                    <td className="td-muted">{(CLASIFICACIONES.find(c => c.value === t.clasificacion)?.label) || 'Otro'}</td>
                     <td className="td-muted">{getScopeLabel(t)}</td>
                     <td>
                       <span className={`badge ${t.activo ? 'badge-green' : 'badge-muted'}`}>
@@ -141,7 +149,7 @@ export default function DetalleTipos() {
                 ))}
                 {tipos.length === 0 && (
                   <tr>
-                    <td colSpan={isAdmin ? 4 : 3} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>
+                    <td colSpan={isAdmin ? 5 : 4} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>
                       Sin tipos de detalle
                     </td>
                   </tr>
@@ -164,6 +172,14 @@ export default function DetalleTipos() {
               <label className="form-label">Nombre *</label>
               <div className="form-input-wrap">
                 <input required placeholder="MP QR, Total Digitales…" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-group" style={{ marginTop: '1rem' }}>
+              <label className="form-label">Clasificación *</label>
+              <div className="form-input-wrap">
+                <select value={form.clasificacion} onChange={e => setForm({ ...form, clasificacion: e.target.value })}>
+                  {CLASIFICACIONES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
               </div>
             </div>
             {!selected && locales.length > 1 && (
