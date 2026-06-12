@@ -87,7 +87,6 @@ export default async function cajaRoutes(fastify) {
         movimientos: { include: { metodo_pago: true } },
         detalles: {
           include: {
-            metodo:       { select: { id: true, nombre: true } },
             detalle_tipo: { select: { id: true, nombre: true } }
           },
           orderBy: { created_at: 'asc' }
