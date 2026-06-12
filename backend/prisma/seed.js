@@ -140,6 +140,17 @@ async function main() {
     }
   })
 
+  // ─── DETALLE TIPOS POR DEFECTO ────────────────────────────────────────
+  const tiposDefault = ['Total Digitales', 'MP Total', 'MP QR']
+  for (const nombre of tiposDefault) {
+    await prisma.detalleTipo.upsert({
+      where: { nombre_id_app: { nombre, id_app: demoApp.id } },
+      create: { nombre, id_app: demoApp.id, id_local: null, activo: true },
+      update: {}
+    })
+  }
+  console.log('✓ DetalleTipos por defecto creados')
+
   console.log('✓ Usuario admin@dcsmart.com creado (password: Admin2024!)')
   console.log('✓ App y Local demo creados')
   console.log('\nSeed completado exitosamente.')

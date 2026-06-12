@@ -4,9 +4,18 @@ export default async function cajaDetallesRoutes(fastify) {
   const deleteHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'delete')]
 
   // ── GET /tipos ─────────────────────────────────────────────────────────
+  // Acepta id_local opcional y devuelve tipos app-wide + tipos del local específico
   fastify.get('/tipos', { preHandler: viewHandler }, async (request) => {
+    const { id_local } = request.query
     return fastify.db.detalleTipo.findMany({
-      where: { id_app: request.activeAppId, activo: true },
+      where: {
+        id_app: request.activeAppId,
+        activo: true,
+        OR: [
+          { id_local: null },
+          ...(id_local ? [{ id_local }] : [])
+        ]
+      },
       orderBy: { nombre: 'asc' }
     })
   })
@@ -23,7 +32,6 @@ export default async function cajaDetallesRoutes(fastify) {
     return fastify.db.cajaDetalle.findMany({
       where,
       include: {
-        metodo:       { select: { id: true, nombre: true } },
         detalle_tipo: { select: { id: true, nombre: true } }
       },
       orderBy: { created_at: 'asc' }
@@ -32,7 +40,7 @@ export default async function cajaDetallesRoutes(fastify) {
 
   // ── POST / ────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
-    const { id_caja, id_tipo, nombre, monto, id_metodo, observaciones } = request.body
+    const { id_caja, tipo, id_tipo, nombre, monto, observaciones } = request.body
 
     if (!id_caja || monto === undefined) {
       return reply.code(400).send({ error: 'id_caja y monto son requeridos' })
@@ -51,14 +59,13 @@ export default async function cajaDetallesRoutes(fastify) {
     const detalle = await fastify.db.cajaDetalle.create({
       data: {
         id_caja,
-        id_tipo:      id_tipo      || null,
-        nombre:       nombre       || null,
-        monto:        parseFloat(monto),
-        id_metodo:    id_metodo    || null,
+        tipo:          tipo          || null,
+        id_tipo:       id_tipo       || null,
+        nombre:        nombre        || null,
+        monto:         parseFloat(monto),
         observaciones: observaciones || null
       },
       include: {
-        metodo:       { select: { id: true, nombre: true } },
         detalle_tipo: { select: { id: true, nombre: true } }
       }
     })

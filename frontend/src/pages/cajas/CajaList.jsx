@@ -57,7 +57,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   const [tipos,      setTipos]     = useState([])
   const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [saving,     setSaving]    = useState(false)
-  const [newDet,     setNewDet]    = useState({ id_tipo: '', nombre: '', monto: '', id_metodo: '', observaciones: '' })
+  const [newDet,     setNewDet]    = useState({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDet,  setSavingDet] = useState(false)
 
   const load = () => {
@@ -71,13 +71,17 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   useEffect(() => {
     if (!cajaId) return
     load()
-    Promise.all([metodosApi.list(), detallesApi.tipos()])
-      .then(([mRes, tRes]) => {
-        setMetodos(mRes.data || [])
-        setTipos(tRes.data || [])
-      })
+    metodosApi.list()
+      .then(r => setMetodos(r.data || []))
       .catch(() => {})
   }, [cajaId])
+
+  useEffect(() => {
+    if (!caja?.id_local) return
+    detallesApi.tipos(caja.id_local)
+      .then(r => setTipos(r.data || []))
+      .catch(() => {})
+  }, [caja?.id_local])
 
   const handleAddMov = async (e) => {
     e.preventDefault()
@@ -109,14 +113,14 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
     try {
       await detallesApi.create({
         id_caja:       cajaId,
+        tipo:          newDet.tipo          || null,
         id_tipo:       newDet.id_tipo       || null,
-        nombre:        newDet.nombre        || null,
+        nombre:        null,
         monto:         parseFloat(newDet.monto),
-        id_metodo:     newDet.id_metodo     || null,
         observaciones: newDet.observaciones || null
       })
       notify('Detalle agregado', 'success')
-      setNewDet({ id_tipo: '', nombre: '', monto: '', id_metodo: '', observaciones: '' })
+      setNewDet({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
       load()
     } catch { notify('Error al agregar detalle', 'error') }
     finally { setSavingDet(false) }
@@ -174,15 +178,14 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
       <div className="table-wrap" style={{ marginBottom: '1rem' }}>
         <table className="data-table">
           <thead>
-            <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th>Método</th><th></th></tr>
+            <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th></th></tr>
           </thead>
           <tbody>
             {(caja.detalles || []).map((d) => (
               <tr key={d.id}>
-                <td className="td-muted">{d.detalle_tipo?.nombre || '—'}</td>
-                <td>{d.nombre || <span className="td-muted">—</span>}</td>
+                <td className="td-muted">{d.tipo || '—'}</td>
+                <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
                 <td className="td-number">{fmt$2(d.monto)}</td>
-                <td className="td-muted">{d.metodo?.nombre || '—'}</td>
                 <td>
                   <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
                     <IcoTrash />
@@ -191,7 +194,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
               </tr>
             ))}
             {(!caja.detalles || caja.detalles.length === 0) && (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin detalles</td></tr>
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin detalles</td></tr>
             )}
           </tbody>
         </table>
@@ -199,20 +202,25 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
 
       <div className="drawer-section-title">Agregar Detalle</div>
       <form onSubmit={handleAddDet}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
             <div className="form-input-wrap">
-              <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
-                <option value="">Sin tipo</option>
-                {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              <select value={newDet.tipo} onChange={e => setNewDet({ ...newDet, tipo: e.target.value })}>
+                <option value="">— Sin tipo —</option>
+                <option value="CANAL">Canal</option>
+                <option value="CALCULO">Cálculo</option>
+                <option value="OTROS">Otros</option>
               </select>
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Nombre</label>
             <div className="form-input-wrap">
-              <input placeholder="Descripción opcional" value={newDet.nombre} onChange={e => setNewDet({ ...newDet, nombre: e.target.value })} />
+              <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
+                <option value="">— Seleccionar —</option>
+                {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+              </select>
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -222,22 +230,13 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Método</label>
-            <div className="form-input-wrap">
-              <select value={newDet.id_metodo} onChange={e => setNewDet({ ...newDet, id_metodo: e.target.value })}>
-                <option value="">Sin método</option>
-                {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
             <label className="form-label">Observaciones</label>
             <div className="form-input-wrap">
-              <input placeholder="Notas opcionales..." value={newDet.observaciones} onChange={e => setNewDet({ ...newDet, observaciones: e.target.value })} />
+              <input type="text" placeholder="Opcional" value={newDet.observaciones} onChange={e => setNewDet({ ...newDet, observaciones: e.target.value })} />
             </div>
           </div>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginBottom: '1.5rem' }}>
+        <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginTop: '0.75rem', marginBottom: '1.5rem' }}>
           {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
         </button>
       </form>

@@ -34,10 +34,11 @@ model Local {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  app          App               @relation(fields: [id_app], references: [id])
-  cajas        Caja[]
-  pagos        Pago[]
-  local_access UserLocalAccess[]
+  app           App               @relation(fields: [id_app], references: [id])
+  cajas         Caja[]
+  pagos         Pago[]
+  local_access  UserLocalAccess[]
+  detalle_tipos DetalleTipo[]
 
   @@map("locales")
 }
@@ -212,7 +213,6 @@ model MetodoPago {
   activo Boolean @default(true)
 
   caja_movimientos CajaMovimiento[]
-  caja_detalles    CajaDetalle[]
   pagos            Pago[]
 
   @@map("metodos_pago")
@@ -245,25 +245,15 @@ model Caja {
   @@map("cajas")
 }
 
-enum TipoDetalleCaja {
-  SALON
-  DELIVERY
-  BARRA
-  MOSTRADOR
-  ONLINE
-
-  @@map("tipo_detalle_caja")
-}
-
 model DetalleTipo {
-  id         String   @id @default(uuid())
-  id_app     String
-  nombre     String
-  activo     Boolean  @default(true)
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id       String  @id @default(uuid())
+  id_app   String
+  id_local String?
+  nombre   String
+  activo   Boolean @default(true)
 
   app      App           @relation(fields: [id_app], references: [id])
+  local    Local?        @relation(fields: [id_local], references: [id])
   detalles CajaDetalle[]
 
   @@unique([nombre, id_app])
@@ -271,18 +261,16 @@ model DetalleTipo {
 }
 
 model CajaDetalle {
-  id            String           @id @default(uuid())
+  id            String   @id @default(uuid())
   id_caja       String
-  tipo          TipoDetalleCaja?
+  tipo          String?
   id_tipo       String?
   nombre        String?
-  monto         Decimal          @db.Decimal(12, 2)
-  id_metodo     String?
+  monto         Decimal  @db.Decimal(12, 2)
   observaciones String?
-  created_at    DateTime         @default(now())
+  created_at    DateTime @default(now())
 
   caja         Caja         @relation(fields: [id_caja], references: [id])
-  metodo       MetodoPago?  @relation(fields: [id_metodo], references: [id])
   detalle_tipo DetalleTipo? @relation(fields: [id_tipo], references: [id])
 
   @@map("caja_detalles")
