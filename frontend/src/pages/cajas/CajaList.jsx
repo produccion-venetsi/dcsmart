@@ -6,6 +6,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import { clasificacionLabel } from '../../lib/clasificaciones.js'
 
 const EMPTY_CAJA = {
   nro_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
@@ -181,7 +182,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
           <tbody>
             {(caja.detalles || []).map((d) => (
               <tr key={d.id}>
-                <td className="td-muted">{d.tipo || '—'}</td>
+                <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
                 <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
                 <td className="td-number">{fmt$2(d.monto)}</td>
                 <td>
@@ -209,8 +210,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
                 readOnly
                 value={(() => {
                   const t = tipos.find(x => x.id === newDet.id_tipo)
-                  const labels = { canal: 'Canal', medio_pago: 'Medio de pago', calculo: 'Cálculo', otro: 'Otro' }
-                  return t ? (labels[t.clasificacion] || 'Otro') : '— Según el tipo —'
+                  return t ? clasificacionLabel(t.clasificacion, 'Otro') : '— Según el tipo —'
                 })()}
               />
             </div>

@@ -3,6 +3,7 @@ import { detalleTiposApi } from '../../api/detalleTipos.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAppStore } from '../../store/appStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import { CLASIFICACIONES, clasificacionLabel } from '../../lib/clasificaciones.js'
 
 function IcoTrash() {
   return (
@@ -20,12 +21,6 @@ function IcoPlus() {
   )
 }
 
-const CLASIFICACIONES = [
-  { value: 'canal',      label: 'Canal' },
-  { value: 'medio_pago', label: 'Medio de pago' },
-  { value: 'calculo',    label: 'Cálculo' },
-  { value: 'otro',       label: 'Otro' }
-]
 const EMPTY = { nombre: '', id_local: '', clasificacion: 'otro', activo: true }
 
 export default function DetalleTipos() {
@@ -129,7 +124,7 @@ export default function DetalleTipos() {
                     onClick={isAdmin ? () => openEdit(t) : undefined}
                   >
                     <td className="td-primary">{t.nombre}</td>
-                    <td className="td-muted">{(CLASIFICACIONES.find(c => c.value === t.clasificacion)?.label) || 'Otro'}</td>
+                    <td className="td-muted">{clasificacionLabel(t.clasificacion, 'Otro')}</td>
                     <td className="td-muted">{getScopeLabel(t)}</td>
                     <td>
                       <span className={`badge ${t.activo ? 'badge-green' : 'badge-muted'}`}>
