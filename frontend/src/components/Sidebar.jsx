@@ -193,8 +193,8 @@ export default function Sidebar() {
               className="sidebar-local-select"
               value={activeLocal?.id ?? ''}
               onChange={(e) => {
-                const l = locales.find(x => x.id === e.target.value)
-                if (l) setActiveLocal(l)
+                const l = locales.find(x => x.id === e.target.value) ?? null
+                setActiveLocal(l)
               }}
             >
               <option value="">Todos los locales</option>
