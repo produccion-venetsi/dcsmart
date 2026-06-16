@@ -304,7 +304,6 @@ export default function PdpDashboard() {
   const notify      = useUiStore((s) => s.notify)
 
   const [deuda,   setDeuda]   = useState([])
-  const [enPdp,   setEnPdp]   = useState([])
   const [pagar,   setPagar]   = useState([])
   const [metodos, setMetodos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -323,11 +322,10 @@ export default function PdpDashboard() {
     const base = { limit: 1000, ...(activeLocal?.id ? { id_local: activeLocal.id } : {}) }
     Promise.all([
       pagosApi.list({ ...base, estado_op: 'CUENTA_CTE', pagado: 'false' }),
-      pagosApi.list({ ...base, estado_op: 'PDP' }),
       pagosApi.list({ ...base, estado_op: 'PDP', pagado: 'false' }),
     ])
-      .then(([d, e, p]) => {
-        setDeuda(d.data.data); setEnPdp(e.data.data); setPagar(p.data.data)
+      .then(([d, p]) => {
+        setDeuda(d.data.data); setPagar(p.data.data)
         setSelDeuda(new Set()); setSelPagar(new Set())
       })
       .catch(() => notify('Error al cargar el PDP', 'error'))
@@ -341,7 +339,6 @@ export default function PdpDashboard() {
   useEffect(() => { load() }, [activeLocal?.id])
 
   const groupsDeuda = useMemo(() => groupByProveedor(deuda), [deuda])
-  const groupsEnPdp = useMemo(() => groupByProveedor(enPdp), [enPdp])
   const groupsPagar = useMemo(() => groupByProveedor(pagar), [pagar])
 
   const toggleSet = (setSel) => (id) =>
@@ -411,15 +408,6 @@ export default function PdpDashboard() {
           actionIcon={<IcoArrow />}
           onAction={handleMandar}
           working={working}
-        />
-
-        <PdpColumn
-          title="En PDP"
-          loading={loading}
-          groups={groupsEnPdp}
-          total={sumImporte(enPdp)}
-          emptyText="No hay órdenes en el PDP"
-          onRowClick={openDetail}
         />
 
         <PdpColumn

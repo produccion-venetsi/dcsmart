@@ -1707,7 +1707,7 @@ tr.row-clickable:hover td {
    ═══════════════════════════════════════════════ */
 .pdp-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(290px, 1fr));
+  grid-template-columns: repeat(2, minmax(340px, 1fr));
   gap: 1rem;
   align-items: start;
   overflow-x: auto;
