@@ -2,25 +2,38 @@
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
 
 // Devuelve un Set con los ids de pago que están auditados, de entre los ids dados.
+// Si la tabla `audits` no existiera / fallara la consulta, degradamos a "ninguno
+// auditado" para no romper el listado de pagos.
 async function getAuditedSet(fastify, pagoIds) {
   if (!pagoIds.length) return new Set()
-  const rows = await fastify.db.audit.findMany({
-    where: { tabla: 'pagos', id_registro: { in: pagoIds } },
-    select: { id_registro: true }
-  })
-  return new Set(rows.map(r => r.id_registro))
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'pagos', id_registro: { in: pagoIds } },
+      select: { id_registro: true }
+    })
+    return new Set(rows.map(r => r.id_registro))
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedSet)')
+    return new Set()
+  }
 }
 
 // Construye el filtro Prisma { id: { in/notIn } } para auditados/no-auditados.
-// Si `audit` es undefined, no filtra (devuelve {}).
+// Si `audit` es undefined, no filtra (devuelve {}). Ante un error de la tabla
+// `audits`, devolvemos {} (sin filtrar) para no romper la consulta de pagos.
 async function buildAuditFilter(fastify, audit) {
   if (audit === undefined) return {}
-  const rows = await fastify.db.audit.findMany({
-    where: { tabla: 'pagos' },
-    select: { id_registro: true }
-  })
-  const auditedIds = [...new Set(rows.map(r => r.id_registro))]
-  return audit === 'true' ? { id: { in: auditedIds } } : { id: { notIn: auditedIds } }
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'pagos' },
+      select: { id_registro: true }
+    })
+    const auditedIds = [...new Set(rows.map(r => r.id_registro))]
+    return audit === 'true' ? { id: { in: auditedIds } } : { id: { notIn: auditedIds } }
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (buildAuditFilter)')
+    return {}
+  }
 }
 
 export default async function pagosRoutes(fastify) {
