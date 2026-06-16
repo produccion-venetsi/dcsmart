@@ -36,6 +36,15 @@ function IcoPagos() {
     </svg>
   )
 }
+function IcoPdp() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="16 4 16 9 21 9"/>
+      <path d="M8 13h6"/><path d="M8 17h4"/>
+    </svg>
+  )
+}
 function IcoProveedor() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -129,6 +138,7 @@ const NAV_MAIN = [
   { to: '/dashboard',   label: 'Dashboard',   Icon: IcoDashboard },
   { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja },
   { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos },
+  { to: '/pdp',         label: 'PDP',         Icon: IcoPdp },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor },
 ]
 

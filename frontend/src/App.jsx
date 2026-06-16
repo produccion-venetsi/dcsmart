@@ -10,6 +10,7 @@ const CajaList      = lazy(() => import('./pages/cajas/CajaList.jsx'))
 const CajaDetail    = lazy(() => import('./pages/cajas/CajaDetail.jsx'))
 const PagoList      = lazy(() => import('./pages/pagos/PagoList.jsx'))
 const PagoForm      = lazy(() => import('./pages/pagos/PagoForm.jsx'))
+const PdpDashboard  = lazy(() => import('./pages/pdp/PdpDashboard.jsx'))
 const ProveedorList = lazy(() => import('./pages/proveedores/ProveedorList.jsx'))
 const ProveedorForm = lazy(() => import('./pages/proveedores/ProveedorForm.jsx'))
 const Users         = lazy(() => import('./pages/admin/Users.jsx'))
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="pagos"                      element={<PagoList />} />
           <Route path="pagos/nuevo"                element={<PagoForm />} />
           <Route path="pagos/:id/editar"           element={<PagoForm />} />
+          <Route path="pdp"                        element={<PdpDashboard />} />
           <Route path="proveedores"                element={<ProveedorList />} />
           <Route path="proveedores/nuevo"          element={<ProveedorForm />} />
           <Route path="proveedores/:id/editar"     element={<ProveedorForm />} />

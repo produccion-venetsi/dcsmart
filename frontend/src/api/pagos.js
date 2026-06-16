@@ -8,5 +8,7 @@ export const pagosApi = {
   create: (data)           => client.post('/pagos',              data),
   update: (id, data)       => client.put(`/pagos/${id}`,         data),
   remove: (id)             => client.delete(`/pagos/${id}`),
-  audit:  (id)             => client.patch(`/pagos/${id}/audit`)
+  audit:  (id)             => client.patch(`/pagos/${id}/audit`),
+  mandarPdp: (ids)         => client.post('/pagos/mandar-pdp', { ids }),
+  pagar:     (ids, data)   => client.post('/pagos/pagar', { ids, ...data })
 }

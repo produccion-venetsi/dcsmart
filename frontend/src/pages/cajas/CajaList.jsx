@@ -498,100 +498,89 @@ export default function CajaList() {
         </div>
       </div>
 
-      {!activeLocal && (
-        <div className="table-wrap">
-          <div className="table-empty">
-            <IcoCaja />
-            <p>Seleccioná un local desde el Dashboard<br/>para ver sus cajas.</p>
-          </div>
-        </div>
-      )}
-
-      {activeLocal && (
-        <>
-          <div className="table-wrap" style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Nro Turno</th>
-                  <th>Inicio</th>
-                  <th>Cierre</th>
-                  <th>Cajero</th>
-                  <th>Total</th>
-                  <th>Efectivo</th>
-                  <th>Fiscal</th>
-                  <th>Comensales</th>
-                  <th>Tickets</th>
-                  <th>Origen</th>
-                  <th>Foto</th>
-                  <th></th>
+      <div className="table-wrap" style={{ overflowX: 'auto' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Nro Turno</th>
+              <th>Inicio</th>
+              <th>Cierre</th>
+              <th>Cajero</th>
+              <th>Total</th>
+              <th>Efectivo</th>
+              <th>Fiscal</th>
+              <th>Comensales</th>
+              <th>Tickets</th>
+              <th>Origen</th>
+              <th>Foto</th>
+              <th>Local</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 7 }, (_, i) => (
+                <tr key={i} className="skel-row">
+                  {Array.from({ length: 13 }, (_, j) => (
+                    <td key={j}><span className="skel" style={{ width: `${48 + (j * 11 + i * 9) % 44}%` }} /></td>
+                  ))}
                 </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 7 }, (_, i) => (
-                    <tr key={i} className="skel-row">
-                      {Array.from({ length: 12 }, (_, j) => (
-                        <td key={j}><span className="skel" style={{ width: `${48 + (j * 11 + i * 9) % 44}%` }} /></td>
-                      ))}
-                    </tr>
-                  ))
-                ) : (
-                  <>
-                    {cajas.map((c) => (
-                      <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
-                        <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
-                        <td>{fmtDate(c.fecha_inicio)}</td>
-                        <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
-                        <td>{c.cajero || <span className="td-muted">—</span>}</td>
-                        <td className="td-number">{fmt$(c.total)}</td>
-                        <td className="td-number">{fmt$(c.efectivo)}</td>
-                        <td className="td-number">{fmt$(c.fiscal)}</td>
-                        <td className="td-muted" style={{ textAlign: 'right' }}>{c.comensales ?? '—'}</td>
-                        <td className="td-muted" style={{ textAlign: 'right' }}>{c.tickets ?? '—'}</td>
-                        <td>
-                          {c.origin && c.origin !== 'DCSMART'
-                            ? <span className="badge badge-muted">{c.origin}</span>
-                            : <span className="td-muted">—</span>}
-                        </td>
-                        <td>
-                          {c.foto_url
-                            ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
-                            : <span className="td-muted">—</span>}
-                        </td>
-                        <td>
-                          <div className="td-actions">
-                            <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
-                              <IcoTrash />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {cajas.length === 0 && (
-                      <tr>
-                        <td colSpan={12}>
-                          <div className="table-empty">
-                            <IcoCaja />
-                            <p>No hay cajas registradas para este local.</p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
+              ))
+            ) : (
+              <>
+                {cajas.map((c) => (
+                  <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
+                    <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
+                    <td>{fmtDate(c.fecha_inicio)}</td>
+                    <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
+                    <td>{c.cajero || <span className="td-muted">—</span>}</td>
+                    <td className="td-number">{fmt$(c.total)}</td>
+                    <td className="td-number">{fmt$(c.efectivo)}</td>
+                    <td className="td-number">{fmt$(c.fiscal)}</td>
+                    <td className="td-muted" style={{ textAlign: 'right' }}>{c.comensales ?? '—'}</td>
+                    <td className="td-muted" style={{ textAlign: 'right' }}>{c.tickets ?? '—'}</td>
+                    <td>
+                      {c.origin && c.origin !== 'DCSMART'
+                        ? <span className="badge badge-muted">{c.origin}</span>
+                        : <span className="td-muted">—</span>}
+                    </td>
+                    <td>
+                      {c.foto_url
+                        ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
+                        : <span className="td-muted">—</span>}
+                    </td>
+                    <td className="td-muted">{c.local?.nombre ?? '—'}</td>
+                    <td>
+                      <div className="td-actions">
+                        <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
+                          <IcoTrash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {cajas.length === 0 && (
+                  <tr>
+                    <td colSpan={13}>
+                      <div className="table-empty">
+                        <IcoCaja />
+                        <p>No hay cajas registradas{activeLocal ? ' para este local' : ''}.</p>
+                      </div>
+                    </td>
+                  </tr>
                 )}
-              </tbody>
-            </table>
-          </div>
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
 
-          {total > 20 && (
-            <div className="pagination">
-              <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-              <span className="pagination-info">Página {page} de {totalPages}</span>
-              <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
-            </div>
-          )}
-        </>
+      {total > 20 && (
+        <div className="pagination">
+          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+          <span className="pagination-info">Página {page} de {totalPages}</span>
+          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+        </div>
       )}
 
       <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
