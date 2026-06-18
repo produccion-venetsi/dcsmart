@@ -117,13 +117,13 @@ model RolePermission {
 }
 
 model UserAppRole {
-  id      String @id @default(uuid())
+  id      String  @id @default(uuid())
   id_user String
-  id_app  String
+  id_app  String? // null = acceso global (super_admin / dcsmart)
   id_role String
 
   user  User  @relation(fields: [id_user], references: [id])
-  app   App   @relation(fields: [id_app], references: [id])
+  app   App?  @relation(fields: [id_app], references: [id])
   role  Role  @relation(fields: [id_role], references: [id])
 
   @@unique([id_user, id_app])

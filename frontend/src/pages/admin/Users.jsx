@@ -59,12 +59,16 @@ const ROLE_BADGE = {
   cajero:      'badge-green',
 }
 
-// Roles con acceso global — no se vinculan a una app específica
 const GLOBAL_ROLES = new Set(['super_admin', 'dcsmart'])
 
 function roleAppLabel(r) {
   if (GLOBAL_ROLES.has(r.role?.nombre)) return 'Todos los grupos'
   return r.app?.nombre || '—'
+}
+
+function isGlobalRole(roles, id_role) {
+  const r = roles.find(r => r.id === id_role)
+  return r ? GLOBAL_ROLES.has(r.nombre) : false
 }
 
 const EMPTY_USER = { nombre: '', email: '', password: '', password2: '', activo: true }
@@ -163,7 +167,7 @@ export default function Users() {
   // ── load locales for every app the selected user has a role in ─────────────
 
   useEffect(() => {
-    const appIds = [...new Set((selected?.user_app_roles ?? []).map(r => r.id_app))]
+    const appIds = [...new Set((selected?.user_app_roles ?? []).map(r => r.id_app).filter(Boolean))]
     if (appIds.length === 0) { setLocalesByApp({}); return }
     Promise.all(appIds.map(id =>
       localesApi.list({ id_app: id, limit: 100 })
@@ -258,15 +262,14 @@ export default function Users() {
 
   const handleAssignRole = async (e) => {
     e.preventDefault()
-    if (!roleForm.id_app || !roleForm.id_role) {
-      notify('App y Rol son requeridos', 'error')
-      return
-    }
+    const global = isGlobalRole(roles, roleForm.id_role)
+    if (!roleForm.id_role) { notify('El Rol es requerido', 'error'); return }
+    if (!global && !roleForm.id_app) { notify('El Grupo es requerido para este rol', 'error'); return }
     setRoleSaving(true)
     try {
       const payload = {
-        id_app:  roleForm.id_app,
         id_role: roleForm.id_role,
+        ...(global ? {} : { id_app: roleForm.id_app }),
         ...(roleForm.id_local ? { id_local: roleForm.id_local } : {}),
       }
       await usersApi.assignRole(selected.id, payload)
@@ -666,36 +669,14 @@ export default function Users() {
                       Asignar / cambiar Rol
                     </div>
 
-                    {/* App select */}
-                    <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                      <label className="form-label">App *</label>
-                      <div className="form-input-wrap">
-                        <select
-                          required
-                          value={roleForm.id_app}
-                          onChange={e => {
-                            const existing = userRoles.find(r => r.id_app === e.target.value)
-                            setRoleForm({
-                              id_app: e.target.value,
-                              id_role: existing?.id_role ?? '',
-                              id_local: ''
-                            })
-                          }}
-                        >
-                          <option value="">Seleccionar app...</option>
-                          {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Role select */}
+                    {/* Rol — siempre primero */}
                     <div className="form-group" style={{ marginBottom: '0.75rem' }}>
                       <label className="form-label">Rol *</label>
                       <div className="form-input-wrap">
                         <select
                           required
                           value={roleForm.id_role}
-                          onChange={e => setRoleForm({ ...roleForm, id_role: e.target.value })}
+                          onChange={e => setRoleForm({ id_role: e.target.value, id_app: '', id_local: '' })}
                         >
                           <option value="">Seleccionar rol...</option>
                           {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
@@ -703,23 +684,48 @@ export default function Users() {
                       </div>
                     </div>
 
-                    {/* Local select (optional) */}
-                    <div className="form-group" style={{ marginBottom: '1rem' }}>
-                      <label className="form-label">Local inicial (opcional)</label>
-                      <div className="form-input-wrap">
-                        <select
-                          value={roleForm.id_local}
-                          onChange={e => setRoleForm({ ...roleForm, id_local: e.target.value })}
-                          disabled={!roleForm.id_app}
-                        >
-                          <option value="">Sin local (asignar luego)</option>
-                          {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-                        </select>
+                    {roleForm.id_role && isGlobalRole(roles, roleForm.id_role) ? (
+                      // Rol global: no necesita app ni local
+                      <div style={{
+                        padding: '0.5rem 0.75rem', borderRadius: 8, marginBottom: '1rem',
+                        background: 'rgba(255,255,255,0.05)', fontSize: 12, color: 'var(--t3)',
+                      }}>
+                        Acceso global a todos los grupos y locales del sistema.
                       </div>
-                      <span style={{ fontSize: 11, color: 'var(--t3)' }}>
-                        super_admin y dcsmart acceden a todos los locales. admin/cajero solo a los asignados.
-                      </span>
-                    </div>
+                    ) : (
+                      <>
+                        {/* Grupo */}
+                        <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                          <label className="form-label">Grupo *</label>
+                          <div className="form-input-wrap">
+                            <select
+                              required
+                              value={roleForm.id_app}
+                              onChange={e => setRoleForm({ ...roleForm, id_app: e.target.value, id_local: '' })}
+                              disabled={!roleForm.id_role}
+                            >
+                              <option value="">Seleccionar grupo...</option>
+                              {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Local inicial (opcional) */}
+                        <div className="form-group" style={{ marginBottom: '1rem' }}>
+                          <label className="form-label">Local inicial (opcional)</label>
+                          <div className="form-input-wrap">
+                            <select
+                              value={roleForm.id_local}
+                              onChange={e => setRoleForm({ ...roleForm, id_local: e.target.value })}
+                              disabled={!roleForm.id_app}
+                            >
+                              <option value="">Sin local (asignar luego)</option>
+                              {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button type="submit" className="btn btn-primary btn-sm" disabled={roleSaving}>

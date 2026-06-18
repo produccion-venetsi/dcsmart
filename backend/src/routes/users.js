@@ -90,11 +90,34 @@ export default async function usersRoutes(fastify) {
   })
 
   // ─── Asignación de rol/app — solo super_admin ──────────────────────────────
+  // Roles globales (super_admin, dcsmart): id_app debe omitirse → null en DB
+  // Roles scoped (admin, cajero): id_app requerido
+  const GLOBAL_ROLE_NAMES = ['super_admin', 'dcsmart']
+
   fastify.post('/:id/roles', {
     preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
   }, async (request, reply) => {
-    const { id_app, id_role, id_local } = request.body
-    if (!id_app || !id_role) return reply.code(400).send({ error: 'id_app e id_role son requeridos' })
+    const { id_app, id_role } = request.body
+    if (!id_role) return reply.code(400).send({ error: 'id_role es requerido' })
+
+    const roleRecord = await fastify.db.role.findUnique({ where: { id: id_role } })
+    if (!roleRecord) return reply.code(400).send({ error: 'Rol no encontrado' })
+
+    const isGlobal = GLOBAL_ROLE_NAMES.includes(roleRecord.nombre)
+
+    if (isGlobal) {
+      // Rol global: sin app. Buscar si ya tiene un registro global y actualizarlo.
+      const existing = await fastify.db.userAppRole.findFirst({
+        where: { id_user: request.params.id, id_app: null }
+      })
+      const userAppRole = existing
+        ? await fastify.db.userAppRole.update({ where: { id: existing.id }, data: { id_role } })
+        : await fastify.db.userAppRole.create({ data: { id_user: request.params.id, id_role } })
+      return userAppRole
+    }
+
+    // Rol scoped: requiere id_app
+    if (!id_app) return reply.code(400).send({ error: 'id_app es requerido para roles admin/cajero' })
 
     const userAppRole = await fastify.db.userAppRole.upsert({
       where: { id_user_id_app: { id_user: request.params.id, id_app } },
@@ -102,7 +125,7 @@ export default async function usersRoutes(fastify) {
       update: { id_role }
     })
 
-    // Si se especifica id_local, crear registro de acceso específico a ese local
+    const { id_local } = request.body
     if (id_local) {
       await fastify.db.userLocalAccess.upsert({
         where: { id_user_id_app_id_local: { id_user: request.params.id, id_app, id_local } },
@@ -114,13 +137,15 @@ export default async function usersRoutes(fastify) {
     return userAppRole
   })
 
-  // Quitar rol/app de un usuario (también limpia sus accesos a locales de esa app)
+  // Quitar rol de un usuario.
+  // :id_app = UUID del grupo, o "global" para quitar el rol de acceso global.
   fastify.delete('/:id/roles/:id_app', {
     preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
   }, async (request, reply) => {
     const { id, id_app } = request.params
-    await fastify.db.userLocalAccess.deleteMany({ where: { id_user: id, id_app } })
-    await fastify.db.userAppRole.deleteMany({ where: { id_user: id, id_app } })
+    const appFilter = id_app === 'global' ? null : id_app
+    await fastify.db.userLocalAccess.deleteMany({ where: { id_user: id, id_app: appFilter } })
+    await fastify.db.userAppRole.deleteMany({ where: { id_user: id, id_app: appFilter } })
     return reply.code(204).send()
   })
 

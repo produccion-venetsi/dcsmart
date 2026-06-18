@@ -151,6 +151,10 @@ async function main() {
   async function createUser(email, nombre) {
     return prisma.user.create({ data: { email, nombre, password_hash, activo: true } })
   }
+  // Rol global (super_admin / dcsmart): id_app = null → acceso a todos los grupos
+  async function assignGlobalRole(userId, roleId) {
+    return prisma.userAppRole.create({ data: { id_user: userId, id_role: roleId } })
+  }
   async function assignRole(userId, appId, roleId) {
     return prisma.userAppRole.create({ data: { id_user: userId, id_app: appId, id_role: roleId } })
   }
@@ -158,16 +162,16 @@ async function main() {
     return prisma.userLocalAccess.create({ data: { id_user: userId, id_app: appId, id_local: localId } })
   }
 
-  // super_admin — acceso global a todos los grupos (no requiere local_access)
+  // super_admin — acceso global, sin atarse a ningún grupo
   for (const [email, nombre] of [['super1@dcsmart.com', 'Super Admin 1'], ['super2@dcsmart.com', 'Super Admin 2']]) {
     const u = await createUser(email, nombre)
-    await assignRole(u.id, rvlrApp.id, roles.super_admin.id)
+    await assignGlobalRole(u.id, roles.super_admin.id)
   }
 
-  // dcsmart — acceso global a todos los grupos (no requiere local_access)
+  // dcsmart — acceso global, sin atarse a ningún grupo
   for (const [email, nombre] of [['dc1@dcsmart.com', 'DC Operaciones 1'], ['dc2@dcsmart.com', 'DC Operaciones 2']]) {
     const u = await createUser(email, nombre)
-    await assignRole(u.id, rvlrApp.id, roles.dcsmart.id)
+    await assignGlobalRole(u.id, roles.dcsmart.id)
   }
 
   // admin — 2 grupos con varios locales cada uno
