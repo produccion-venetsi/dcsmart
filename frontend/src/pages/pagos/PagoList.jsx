@@ -69,7 +69,7 @@ function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' }) : '—' }
 function mono(v)     { return v ? <span className="td-mono" style={{ fontSize: 11 }}>{v}</span> : <span className="td-muted">—</span> }
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit }) {
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, canDelete = false }) {
   const notify = useUiStore((s) => s.notify)
   const [impuestos,   setImpuestos]   = useState([])
   const [loadingImp,  setLoadingImp]  = useState(true)
@@ -144,22 +144,28 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
-          <IcoEdit /> Editar
-        </button>
-        <button
-          className={`btn ${audited ? 'btn-secondary' : 'btn-primary'}`}
-          onClick={handlePanelAudit}
-          disabled={auditando}
-        >
-          {auditando
-            ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-            : audited ? '✓ Auditado' : 'Auditar'
-          }
-        </button>
-        <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
-          <IcoTrash /> Eliminar
-        </button>
+        {canEdit && (
+          <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
+            <IcoEdit /> Editar
+          </button>
+        )}
+        {canEdit && (
+          <button
+            className={`btn ${audited ? 'btn-secondary' : 'btn-primary'}`}
+            onClick={handlePanelAudit}
+            disabled={auditando}
+          >
+            {auditando
+              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+              : audited ? '✓ Auditado' : 'Auditar'
+            }
+          </button>
+        )}
+        {canDelete && (
+          <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
+            <IcoTrash /> Eliminar
+          </button>
+        )}
       </div>
 
       {pago.observaciones && (
@@ -259,7 +265,11 @@ const FILTER_INIT = {
 export default function PagoList() {
   const navigate    = useNavigate()
   const activeLocal = useAppStore((s) => s.activeLocal)
+  const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
+  const role        = activeApp?.role
+  const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canDelete   = ['super_admin', 'dcsmart'].includes(role)
 
   const [pagos,      setPagos]      = useState([])
   const [total,      setTotal]      = useState(0)
@@ -330,7 +340,7 @@ export default function PagoList() {
       setPanelOpen(false)
       load()
     }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
   const [auditingId, setAuditingId] = useState(null)
@@ -669,7 +679,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} canEdit={canEdit} canDelete={canDelete} />
         )}
       </DrawerPanel>
     </div>

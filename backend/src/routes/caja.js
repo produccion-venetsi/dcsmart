@@ -182,6 +182,9 @@ export default async function cajaRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
+    // Eliminar registros dependientes antes que la caja (FK constraints)
+    await fastify.db.cajaMovimiento.deleteMany({ where: { id_caja: request.params.id } })
+    await fastify.db.cajaDetalle.deleteMany({ where: { id_caja: request.params.id } })
     await fastify.db.caja.delete({ where: { id: request.params.id } })
     return reply.code(204).send()
   })

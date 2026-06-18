@@ -50,7 +50,7 @@ function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { m
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 
-function CajaDetailPanel({ cajaId, onRefreshList }) {
+function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete }) {
   const notify = useUiStore((s) => s.notify)
   const [caja,       setCaja]      = useState(null)
   const [loading,    setLoading]   = useState(true)
@@ -105,7 +105,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   const handleDeleteMov = async (movId) => {
     if (!confirm('¿Eliminar movimiento?')) return
     try { await movimientosApi.remove(movId); notify('Eliminado', 'success'); load() }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
   const handleAddDet = async (e) => {
@@ -128,7 +128,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   const handleDeleteDet = async (detId) => {
     if (!confirm('¿Eliminar detalle?')) return
     try { await detallesApi.remove(detId); notify('Eliminado', 'success'); load() }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
@@ -186,9 +186,11 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
                 <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
                 <td className="td-number">{fmt$2(d.monto)}</td>
                 <td>
-                  <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
-                    <IcoTrash />
-                  </button>
+                  {canDelete && (
+                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                      <IcoTrash />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -199,8 +201,8 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         </table>
       </div>
 
-      <div className="drawer-section-title">Agregar Detalle</div>
-      <form onSubmit={handleAddDet}>
+      {canEdit && <div className="drawer-section-title">Agregar Detalle</div>}
+      {canEdit && <form onSubmit={handleAddDet}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Clasificación</label>
@@ -240,7 +242,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginTop: '0.75rem', marginBottom: '1.5rem' }}>
           {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
         </button>
-      </form>
+      </form>}
 
       {/* ── MOVIMIENTOS ──────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -262,9 +264,11 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
                 <td className="td-number">{fmt$2(m.monto)}</td>
                 <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
                 <td>
-                  <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                    <IcoTrash />
-                  </button>
+                  {canDelete && (
+                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                      <IcoTrash />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -275,8 +279,8 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         </table>
       </div>
 
-      <div className="drawer-section-title">Agregar Movimiento</div>
-      <form onSubmit={handleAddMov}>
+      {canEdit && <div className="drawer-section-title">Agregar Movimiento</div>}
+      {canEdit && <form onSubmit={handleAddMov}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
@@ -314,7 +318,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
         </button>
-      </form>
+      </form>}
     </div>
   )
 }
@@ -436,8 +440,12 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
 export default function CajaList() {
   const { activeApp, activeLocal } = useAppStore()
-  const locales = activeApp?.locales ?? []
-  const notify  = useUiStore((s) => s.notify)
+  const locales   = activeApp?.locales ?? []
+  const notify    = useUiStore((s) => s.notify)
+  const role      = activeApp?.role
+  const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canDelete = ['super_admin', 'dcsmart', 'admin'].includes(role)
 
   const [cajas,     setCajas]     = useState([])
   const [total,     setTotal]     = useState(0)
@@ -471,7 +479,7 @@ export default function CajaList() {
     e.stopPropagation()
     if (!confirm('¿Eliminar esta caja?')) return
     try { await cajasApi.remove(id); notify('Caja eliminada', 'success'); load() }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
   const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
@@ -492,9 +500,11 @@ export default function CajaList() {
           {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={openCreate}>
-            <IcoPlus /> Nueva Caja
-          </button>
+          {canCreate && (
+            <button className="btn btn-primary" onClick={openCreate}>
+              <IcoPlus /> Nueva Caja
+            </button>
+          )}
         </div>
       </div>
 
@@ -552,9 +562,11 @@ export default function CajaList() {
                     <td className="td-muted">{c.local?.nombre ?? '—'}</td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
-                          <IcoTrash />
-                        </button>
+                        {canDelete && (
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
+                            <IcoTrash />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -586,7 +598,7 @@ export default function CajaList() {
       <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
         {panelMode === 'create'
           ? <CajaCreatePanel activeLocal={activeLocal} locales={locales} onCreated={load} onClose={closePanel} />
-          : <CajaDetailPanel cajaId={selectedId} onRefreshList={load} />
+          : <CajaDetailPanel cajaId={selectedId} onRefreshList={load} canEdit={canEdit} canDelete={canDelete} />
         }
       </DrawerPanel>
     </div>

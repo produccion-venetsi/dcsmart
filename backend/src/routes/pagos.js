@@ -169,6 +169,11 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
+    // Sin locales permitidos (admin/cajero sin asignaciones) ⇒ nada que mostrar.
+    if (!id_local && request.allowedLocalIds.length === 0) {
+      return []
+    }
+
     const params = []
     let conditions = `WHERE fecha IS NOT NULL`
 
@@ -434,6 +439,9 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
+    // Eliminar registros dependientes antes que el pago (FK constraints)
+    await fastify.db.impuesto.deleteMany({ where: { id_pago: request.params.id } })
+    await fastify.db.audit.deleteMany({ where: { tabla: 'pagos', id_registro: request.params.id } })
     await fastify.db.pago.delete({ where: { id: request.params.id } })
     return reply.code(204).send()
   })
