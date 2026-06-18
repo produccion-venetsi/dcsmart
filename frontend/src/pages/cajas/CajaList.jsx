@@ -44,13 +44,28 @@ function IcoLink() {
     </svg>
   )
 }
+function IcoEdit() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+function IcoBack() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  )
+}
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 
-function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete }) {
+function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) {
   const notify = useUiStore((s) => s.notify)
   const [caja,       setCaja]      = useState(null)
   const [loading,    setLoading]   = useState(true)
@@ -153,6 +168,14 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete }) {
 
   return (
     <div>
+      {canEdit && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+          <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IcoEdit /> Editar
+          </button>
+        </div>
+      )}
+
       {caja.observaciones && (
         <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
           {caja.observaciones}
@@ -323,6 +346,144 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete }) {
   )
 }
 
+function CajaEditPanel({ cajaId, onSaved, onBack }) {
+  const notify  = useUiStore((s) => s.notify)
+  const [form,   setForm]   = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!cajaId) return
+    cajasApi.get(cajaId).then(({ data }) => {
+      const toLocal = (d) => d ? new Date(d).toISOString().slice(0, 16) : ''
+      setForm({
+        nro_turno:    data.nro_turno    ?? '',
+        fecha_inicio: toLocal(data.fecha_inicio),
+        fecha_cierre: toLocal(data.fecha_cierre),
+        cajero:       data.cajero       ?? '',
+        total:        data.total        != null ? String(data.total)        : '',
+        efectivo:     data.efectivo     != null ? String(data.efectivo)     : '',
+        fiscal:       data.fiscal       != null ? String(data.fiscal)       : '',
+        comensales:   data.comensales   != null ? String(data.comensales)   : '',
+        tickets:      data.tickets      != null ? String(data.tickets)      : '',
+        observaciones: data.observaciones ?? '',
+        foto_url:     data.foto_url     ?? '',
+      })
+    }).catch(() => notify('Error al cargar caja', 'error'))
+  }, [cajaId])
+
+  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await cajasApi.update(cajaId, {
+        nro_turno:    form.nro_turno    || null,
+        fecha_cierre: form.fecha_cierre || null,
+        cajero:       form.cajero       || null,
+        total:        form.total        !== '' ? parseFloat(form.total)      : null,
+        efectivo:     form.efectivo     !== '' ? parseFloat(form.efectivo)   : null,
+        fiscal:       form.fiscal       !== '' ? parseFloat(form.fiscal)     : null,
+        comensales:   form.comensales   !== '' ? parseInt(form.comensales)   : null,
+        tickets:      form.tickets      !== '' ? parseInt(form.tickets)      : null,
+        observaciones: form.observaciones || null,
+        foto_url:     form.foto_url     || null,
+      })
+      notify('Caja actualizada', 'success')
+      onSaved()
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al guardar', 'error')
+    } finally { setSaving(false) }
+  }
+
+  if (!form) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.25rem' }}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <IcoBack /> Volver al detalle
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fecha Inicio</label>
+          <div className="form-input-wrap">
+            <input type="datetime-local" value={form.fecha_inicio} readOnly style={{ opacity: 0.6, cursor: 'not-allowed' }} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fecha Cierre</label>
+          <div className="form-input-wrap">
+            <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Nro Turno</label>
+          <div className="form-input-wrap">
+            <input type="number" min="1" step="1" placeholder="1" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Cajero</label>
+          <div className="form-input-wrap">
+            <input placeholder="Nombre del cajero" value={form.cajero} onChange={e => setF('cajero', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Total</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={form.total} onChange={e => setF('total', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Efectivo</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={form.efectivo} onChange={e => setF('efectivo', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fiscal</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={form.fiscal} onChange={e => setF('fiscal', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Comensales</label>
+          <div className="form-input-wrap">
+            <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Tickets</label>
+          <div className="form-input-wrap">
+            <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">URL Foto</label>
+          <div className="form-input-wrap">
+            <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <label className="form-label">Observaciones</label>
+          <div className="form-input-wrap form-textarea-wrap">
+            <textarea rows={2} value={form.observaciones} onChange={e => setF('observaciones', e.target.value)} placeholder="Notas opcionales..." />
+          </div>
+        </div>
+      </div>
+      <div className="form-actions" style={{ marginTop: '1.5rem' }}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : 'Guardar cambios'}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={onBack}>Cancelar</button>
+      </div>
+    </form>
+  )
+}
+
 function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const notify = useUiStore((s) => s.notify)
   const [form,      setForm]    = useState(EMPTY_CAJA)
@@ -484,13 +645,18 @@ export default function CajaList() {
 
   const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
   const openDetail = (id) => { setSelectedId(id); setPanelMode('detail'); setPanelOpen(true) }
+  const openEdit   = (id) => { setSelectedId(id); setPanelMode('edit');   setPanelOpen(true) }
+  const backToDetail = ()  => { setPanelMode('detail') }
   const closePanel = () => setPanelOpen(false)
+
+  const selectedCaja = cajas.find(c => c.id === selectedId)
+  const selectedLabel = selectedCaja?.nro_turno ? `TRN ${selectedCaja.nro_turno}` : 'Detalle de Caja'
 
   const drawerTitle = panelMode === 'create'
     ? 'Nueva Caja'
-    : cajas.find(c => c.id === selectedId)?.nro_turno
-        ? `TRN ${cajas.find(c => c.id === selectedId).nro_turno}`
-        : 'Detalle de Caja'
+    : panelMode === 'edit'
+      ? `Editar — ${selectedLabel}`
+      : selectedLabel
 
   return (
     <div className="page">
@@ -596,10 +762,25 @@ export default function CajaList() {
       )}
 
       <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
-        {panelMode === 'create'
-          ? <CajaCreatePanel activeLocal={activeLocal} locales={locales} onCreated={load} onClose={closePanel} />
-          : <CajaDetailPanel cajaId={selectedId} onRefreshList={load} canEdit={canEdit} canDelete={canDelete} />
-        }
+        {panelMode === 'create' && (
+          <CajaCreatePanel activeLocal={activeLocal} locales={locales} onCreated={load} onClose={closePanel} />
+        )}
+        {panelMode === 'detail' && (
+          <CajaDetailPanel
+            cajaId={selectedId}
+            onRefreshList={load}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            onEdit={() => openEdit(selectedId)}
+          />
+        )}
+        {panelMode === 'edit' && (
+          <CajaEditPanel
+            cajaId={selectedId}
+            onSaved={() => { load(); backToDetail() }}
+            onBack={backToDetail}
+          />
+        )}
       </DrawerPanel>
     </div>
   )
