@@ -134,22 +134,24 @@ function initials(nombre) {
   return nombre.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')
 }
 
+// `roles`: qué roles ven cada ítem. Si se omite, lo ven todos.
+const ALL = ['super_admin', 'dcsmart', 'admin', 'cajero']
+
 const NAV_MAIN = [
-  { to: '/dashboard',   label: 'Dashboard',   Icon: IcoDashboard },
-  { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja },
-  { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos },
-  { to: '/pdp',         label: 'PDP',         Icon: IcoPdp },
-  { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor },
+  { to: '/dashboard',   label: 'Dashboard',   Icon: IcoDashboard, roles: ALL },
+  { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja,      roles: ALL },
+  { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
+  { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
 ]
 
 const NAV_ADMIN = [
-  { to: '/admin/apps',          label: 'Apps',           Icon: IcoApps },
-  { to: '/admin/locales',       label: 'Locales',        Icon: IcoLocales },
-  { to: '/admin/users',         label: 'Usuarios',       Icon: IcoUsers },
-  { to: '/admin/roles',         label: 'Roles',          Icon: IcoRoles },
-  { to: '/admin/rubcat',        label: 'Rubros/Cats',    Icon: IcoRubCat },
-  { to: '/admin/metodos-pago',  label: 'Métodos Pago',   Icon: IcoMetodos },
-  { to: '/admin/detalle-tipos', label: 'Tipos Detalle',  Icon: IcoTag },
+  { to: '/admin/locales',       label: 'Locales',       Icon: IcoLocales, roles: ['super_admin'] },
+  { to: '/admin/users',         label: 'Usuarios',      Icon: IcoUsers,   roles: ['super_admin'] },
+  { to: '/admin/roles',         label: 'Roles',         Icon: IcoRoles,   roles: ['super_admin'] },
+  { to: '/admin/rubcat',        label: 'Rubros/Cats',   Icon: IcoRubCat,  roles: ['super_admin'] },
+  { to: '/admin/metodos-pago',  label: 'Métodos Pago',  Icon: IcoMetodos, roles: ['super_admin', 'dcsmart'] },
+  { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
 ]
 
 export default function Sidebar() {
@@ -176,6 +178,11 @@ export default function Sidebar() {
   const locales    = activeApp?.locales ?? []
   const multiLocal = locales.length > 1
   const appName    = activeApp?.app?.nombre ?? activeApp?.nombre ?? 'DCSmart'
+
+  const role       = activeApp?.role
+  const visibleFor = (item) => !item.roles || item.roles.includes(role)
+  const mainItems  = NAV_MAIN.filter(visibleFor)
+  const adminItems = NAV_ADMIN.filter(visibleFor)
 
   return (
     <aside className="sidebar">
@@ -216,7 +223,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {NAV_MAIN.map(({ to, label, Icon }) => (
+        {mainItems.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -227,18 +234,21 @@ export default function Sidebar() {
           </NavLink>
         ))}
 
-        <div className="nav-section-label">Admin</div>
-
-        {NAV_ADMIN.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-          >
-            <Icon />
-            {label}
-          </NavLink>
-        ))}
+        {adminItems.length > 0 && (
+          <>
+            <div className="nav-section-label">Admin</div>
+            {adminItems.map(({ to, label, Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+              >
+                <Icon />
+                {label}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* User footer */}
