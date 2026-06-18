@@ -180,6 +180,7 @@ export default function Sidebar() {
   const appName    = activeApp?.app?.nombre ?? activeApp?.nombre ?? 'DCSmart'
 
   const role       = activeApp?.role
+  const isGlobal   = role === 'super_admin' || role === 'dcsmart'
   const visibleFor = (item) => !item.roles || item.roles.includes(role)
   const mainItems  = NAV_MAIN.filter(visibleFor)
   const adminItems = NAV_ADMIN.filter(visibleFor)
@@ -194,7 +195,19 @@ export default function Sidebar() {
       {/* App / Local context */}
       {activeApp && (
         <div className="sidebar-context">
-          <div className="sidebar-app-name">{appName}</div>
+          {isGlobal ? (
+            <div style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: role === 'super_admin' ? 'var(--gold, #C9B086)' : '#a78bfa',
+              marginBottom: 4, opacity: 0.9,
+            }}>
+              {role === 'super_admin' ? '● Super Admin' : '● DCSmart'} — Acceso global
+            </div>
+          ) : null}
+          <div className="sidebar-app-name" style={isGlobal ? { fontSize: 12, color: 'var(--t2)', fontWeight: 500 } : {}}>
+            {isGlobal ? `Viendo: ${appName}` : appName}
+          </div>
           {multiLocal ? (
             <select
               className="sidebar-local-select"
@@ -216,7 +229,7 @@ export default function Sidebar() {
             </div>
           ) : null}
           <button className="sidebar-change-link" onClick={handleChangeApp}>
-            Cambiar grupo
+            {isGlobal ? 'Cambiar vista' : 'Cambiar grupo'}
           </button>
         </div>
       )}

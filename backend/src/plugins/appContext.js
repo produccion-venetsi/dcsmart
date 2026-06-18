@@ -7,21 +7,35 @@ async function appContextPlugin(fastify) {
       return reply.code(400).send({ error: 'Header X-App-Id requerido' })
     }
 
-    const userAppRole = await fastify.db.userAppRole.findFirst({
+    // Rol del usuario en ESTA app (si tiene fila explícita).
+    const appRole = await fastify.db.userAppRole.findFirst({
       where: { id_user: request.user.id, id_app: appId },
       include: { role: true }
     })
 
-    if (!userAppRole) {
+    // Roles globales del usuario: super_admin / dcsmart tienen acceso a TODAS las apps,
+    // tengan o no una fila UserAppRole para esta app puntual.
+    const allRoles = await fastify.db.userAppRole.findMany({
+      where: { id_user: request.user.id },
+      include: { role: true }
+    })
+    const elevated = allRoles.find(r => r.role.nombre === 'super_admin')
+      || allRoles.find(r => r.role.nombre === 'dcsmart')
+
+    // Rol efectivo para esta app: el elevado global manda; si no, el rol específico.
+    const effective = elevated || appRole
+    if (!effective) {
       return reply.code(403).send({ error: 'Sin acceso a esta app' })
     }
 
-    request.activeAppId = appId
-    request.isSuperAdmin = userAppRole.role.nombre === 'super_admin'
+    const roleName = effective.role.nombre
+    request.activeAppId   = appId
+    request.activeRole    = roleName
+    request.effectiveRoleId = effective.id_role
+    request.isSuperAdmin  = roleName === 'super_admin'
 
-    // Super_admin: todos los locales activos de la app (aislamiento por app igualmente)
-    // Usuario normal: locales según user_local_access, o todos si no tiene registros
-    if (request.isSuperAdmin) {
+    // super_admin y dcsmart: acceso a todos los locales activos de la app.
+    if (roleName === 'super_admin' || roleName === 'dcsmart') {
       const locales = await fastify.db.local.findMany({
         where: { id_app: appId, activo: true },
         select: { id: true }
@@ -35,15 +49,18 @@ async function appContextPlugin(fastify) {
       select: { id_local: true }
     })
 
-    if (localAccess.length === 0) {
-      const locales = await fastify.db.local.findMany({
+    // admin sin locales específicos = acceso a TODOS los locales activos de la app
+    if (roleName === 'admin' && localAccess.length === 0) {
+      const allLocales = await fastify.db.local.findMany({
         where: { id_app: appId, activo: true },
         select: { id: true }
       })
-      request.allowedLocalIds = locales.map(l => l.id)
-    } else {
-      request.allowedLocalIds = localAccess.map(la => la.id_local)
+      request.allowedLocalIds = allLocales.map(l => l.id)
+      return
     }
+
+    // cajero: solo el local explícitamente asignado (siempre 1)
+    request.allowedLocalIds = localAccess.map(la => la.id_local)
   })
 }
 

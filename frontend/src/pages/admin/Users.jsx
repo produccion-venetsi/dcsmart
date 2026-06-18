@@ -72,7 +72,7 @@ function isGlobalRole(roles, id_role) {
 }
 
 const EMPTY_USER = { nombre: '', email: '', password: '', password2: '', activo: true }
-const EMPTY_ROLE = { id_app: '', id_role: '', id_local: '' }
+const EMPTY_ROLE = { id_app: '', id_role: '', id_local: '', all_locals: true }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -127,9 +127,6 @@ export default function Users() {
   const [locales,      setLocales]      = useState([])
   const [localesByApp, setLocalesByApp] = useState({})  // { [id_app]: [{id,nombre}] }
   const [accessBusy,   setAccessBusy]   = useState(false)
-
-  // roles que se limitan por local (super_admin/dcsmart acceden a todos)
-  const SCOPED_ROLES = ['admin', 'cajero']
 
   // ── load list ──────────────────────────────────────────────────────────────
 
@@ -263,14 +260,22 @@ export default function Users() {
   const handleAssignRole = async (e) => {
     e.preventDefault()
     const global = isGlobalRole(roles, roleForm.id_role)
+    const selectedRole = roles.find(r => r.id === roleForm.id_role)
+    const roleName = selectedRole?.nombre
+
     if (!roleForm.id_role) { notify('El Rol es requerido', 'error'); return }
-    if (!global && !roleForm.id_app) { notify('El Grupo es requerido para este rol', 'error'); return }
+    if (!global && !roleForm.id_app) { notify('El Grupo es requerido', 'error'); return }
+    if (roleName === 'cajero' && !roleForm.id_local) { notify('El Local es requerido para cajero', 'error'); return }
+
     setRoleSaving(true)
     try {
       const payload = {
         id_role: roleForm.id_role,
         ...(global ? {} : { id_app: roleForm.id_app }),
-        ...(roleForm.id_local ? { id_local: roleForm.id_local } : {}),
+        // cajero: siempre envía local; admin: solo si eligió locales específicos
+        ...(!global && roleForm.id_local && (roleName === 'cajero' || !roleForm.all_locals)
+          ? { id_local: roleForm.id_local }
+          : {}),
       }
       await usersApi.assignRole(selected.id, payload)
       notify('Rol asignado', 'success')
@@ -286,10 +291,17 @@ export default function Users() {
 
   // ── local access (add / remove) + remove role ─────────────────────────────
 
-  const handleAddLocal = async (id_app, id_local) => {
+  const handleAddLocal = async (id_app, id_local, roleName) => {
     if (!id_local) return
     setAccessBusy(true)
     try {
+      // cajero: solo puede tener 1 local — reemplazar el existente
+      if (roleName === 'cajero') {
+        const existing = (selected.local_access ?? []).filter(la => la.id_app === id_app)
+        for (const la of existing) {
+          await usersApi.removeLocalAccess(selected.id, { id_app, id_local: la.local.id })
+        }
+      }
       await usersApi.addLocalAccess(selected.id, { id_app, id_local })
       await reloadSelected(selected.id)
     } catch (err) {
@@ -556,11 +568,16 @@ export default function Users() {
               ) : (
                 <div style={{ marginBottom: '1rem' }}>
                   {userRoles.map((r) => {
+                    const isAdmin    = r.role?.nombre === 'admin'
+                    const isCajero   = r.role?.nombre === 'cajero'
+                    const scoped     = isAdmin || isCajero
                     const granted    = accessByApp[r.id_app] ?? []
                     const grantedIds = new Set(granted.map(l => l.id))
                     const appLocales = localesByApp[r.id_app] ?? []
                     const available  = appLocales.filter(l => !grantedIds.has(l.id))
-                    const scoped     = SCOPED_ROLES.includes(r.role?.nombre)
+                    // admin sin locales específicos = todos los locales
+                    const adminAllLocals = isAdmin && granted.length === 0
+
                     return (
                       <div key={r.id} style={{
                         padding: '0.75rem 1rem',
@@ -593,8 +610,26 @@ export default function Users() {
 
                         <div style={{ marginTop: 8, fontSize: 12, color: 'var(--t3)' }}>
                           {!scoped ? (
-                            <span style={{ fontStyle: 'italic' }}>Acceso a todos los locales</span>
+                            // super_admin / dcsmart
+                            <span style={{ fontStyle: 'italic' }}>Acceso a todos los grupos y locales</span>
+                          ) : adminAllLocals ? (
+                            // admin sin restricción de locales
+                            <>
+                              <span style={{ fontStyle: 'italic' }}>Todos los locales del grupo</span>
+                              {amISuperAdmin && available.length > 0 && (
+                                <select
+                                  value=""
+                                  disabled={accessBusy}
+                                  onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
+                                  style={{ marginTop: 8, width: '100%' }}
+                                >
+                                  <option value="">↳ Limitar a locales específicos…</option>
+                                  {available.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                                </select>
+                              )}
+                            </>
                           ) : (
+                            // admin con locales específicos, o cajero
                             <>
                               {granted.length > 0 ? (
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -607,7 +642,7 @@ export default function Users() {
                                       fontSize: 11, color: 'var(--t2)',
                                     }}>
                                       {l.nombre}
-                                      {amISuperAdmin && (
+                                      {amISuperAdmin && isAdmin && (
                                         <button
                                           onClick={() => handleRemoveLocal(r.id_app, l.id)}
                                           disabled={accessBusy}
@@ -623,19 +658,33 @@ export default function Users() {
                                 </div>
                               ) : (
                                 <span style={{ fontStyle: 'italic', color: 'var(--danger)' }}>
-                                  Sin locales — no verá datos hasta asignar al menos uno
+                                  Sin local asignado — no verá datos
                                 </span>
                               )}
 
-                              {amISuperAdmin && available.length > 0 && (
+                              {/* Admin: agregar más locales (quitar todos = vuelve a "todos los locales") */}
+                              {amISuperAdmin && isAdmin && available.length > 0 && (
                                 <select
                                   value=""
                                   disabled={accessBusy}
-                                  onChange={(e) => handleAddLocal(r.id_app, e.target.value)}
+                                  onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
                                   style={{ marginTop: 8, width: '100%' }}
                                 >
                                   <option value="">+ Agregar local…</option>
                                   {available.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                                </select>
+                              )}
+
+                              {/* Cajero: cambiar local (reemplaza el existente) */}
+                              {amISuperAdmin && isCajero && (
+                                <select
+                                  value=""
+                                  disabled={accessBusy}
+                                  onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
+                                  style={{ marginTop: 8, width: '100%' }}
+                                >
+                                  <option value="">↕ Cambiar local…</option>
+                                  {appLocales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
                                 </select>
                               )}
                             </>
@@ -676,7 +725,7 @@ export default function Users() {
                         <select
                           required
                           value={roleForm.id_role}
-                          onChange={e => setRoleForm({ id_role: e.target.value, id_app: '', id_local: '' })}
+                          onChange={e => setRoleForm({ id_role: e.target.value, id_app: '', id_local: '', all_locals: true })}
                         >
                           <option value="">Seleccionar rol...</option>
                           {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
@@ -684,48 +733,89 @@ export default function Users() {
                       </div>
                     </div>
 
-                    {roleForm.id_role && isGlobalRole(roles, roleForm.id_role) ? (
-                      // Rol global: no necesita app ni local
-                      <div style={{
-                        padding: '0.5rem 0.75rem', borderRadius: 8, marginBottom: '1rem',
-                        background: 'rgba(255,255,255,0.05)', fontSize: 12, color: 'var(--t3)',
-                      }}>
-                        Acceso global a todos los grupos y locales del sistema.
-                      </div>
-                    ) : (
-                      <>
-                        {/* Grupo */}
-                        <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                          <label className="form-label">Grupo *</label>
-                          <div className="form-input-wrap">
-                            <select
-                              required
-                              value={roleForm.id_app}
-                              onChange={e => setRoleForm({ ...roleForm, id_app: e.target.value, id_local: '' })}
-                              disabled={!roleForm.id_role}
-                            >
-                              <option value="">Seleccionar grupo...</option>
-                              {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-                            </select>
-                          </div>
-                        </div>
+                    {roleForm.id_role && (() => {
+                      const selRole = roles.find(r => r.id === roleForm.id_role)
+                      const roleName = selRole?.nombre
 
-                        {/* Local inicial (opcional) */}
-                        <div className="form-group" style={{ marginBottom: '1rem' }}>
-                          <label className="form-label">Local inicial (opcional)</label>
-                          <div className="form-input-wrap">
-                            <select
-                              value={roleForm.id_local}
-                              onChange={e => setRoleForm({ ...roleForm, id_local: e.target.value })}
-                              disabled={!roleForm.id_app}
-                            >
-                              <option value="">Sin local (asignar luego)</option>
-                              {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-                            </select>
+                      if (GLOBAL_ROLES.has(roleName)) {
+                        return (
+                          <div style={{
+                            padding: '0.5rem 0.75rem', borderRadius: 8, marginBottom: '1rem',
+                            background: 'rgba(255,255,255,0.05)', fontSize: 12, color: 'var(--t3)',
+                          }}>
+                            Acceso global a todos los grupos y locales del sistema.
                           </div>
-                        </div>
-                      </>
-                    )}
+                        )
+                      }
+
+                      return (
+                        <>
+                          {/* Grupo — requerido para admin y cajero */}
+                          <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                            <label className="form-label">Grupo *</label>
+                            <div className="form-input-wrap">
+                              <select
+                                required
+                                value={roleForm.id_app}
+                                onChange={e => setRoleForm({ ...roleForm, id_app: e.target.value, id_local: '', all_locals: true })}
+                              >
+                                <option value="">Seleccionar grupo...</option>
+                                {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                              </select>
+                            </div>
+                          </div>
+
+                          {roleName === 'admin' && (
+                            <>
+                              {/* Admin: todos los locales O específicos */}
+                              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                                <label className="checkbox-wrap">
+                                  <input
+                                    type="checkbox"
+                                    checked={roleForm.all_locals}
+                                    onChange={e => setRoleForm({ ...roleForm, all_locals: e.target.checked, id_local: '' })}
+                                  />
+                                  <span className="checkbox-label">Acceso a todos los locales del grupo</span>
+                                </label>
+                              </div>
+                              {!roleForm.all_locals && (
+                                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                                  <label className="form-label">Local inicial (opcional)</label>
+                                  <div className="form-input-wrap">
+                                    <select
+                                      value={roleForm.id_local}
+                                      onChange={e => setRoleForm({ ...roleForm, id_local: e.target.value })}
+                                      disabled={!roleForm.id_app}
+                                    >
+                                      <option value="">Sin local (agregar luego)</option>
+                                      {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {roleName === 'cajero' && (
+                            /* Cajero: 1 solo local, requerido */
+                            <div className="form-group" style={{ marginBottom: '1rem' }}>
+                              <label className="form-label">Local *</label>
+                              <div className="form-input-wrap">
+                                <select
+                                  required
+                                  value={roleForm.id_local}
+                                  onChange={e => setRoleForm({ ...roleForm, id_local: e.target.value })}
+                                  disabled={!roleForm.id_app}
+                                >
+                                  <option value="">Seleccionar local...</option>
+                                  {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
 
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button type="submit" className="btn btn-primary btn-sm" disabled={roleSaving}>
