@@ -4,6 +4,7 @@ import { appsApi }   from '../../api/apps.js'
 import { localesApi } from '../../api/locales.js'
 import { rolesApi }  from '../../api/roles.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { useAuthStore } from '../../store/authStore.js'
 import DrawerPanel   from '../../components/DrawerPanel.jsx'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ function initials(nombre) {
 
 const ROLE_BADGE = {
   super_admin: 'badge-gold',
+  dcsmart:     'badge-purple',
   admin:       'badge-blue',
   cajero:      'badge-green',
 }
@@ -81,6 +83,8 @@ function Avatar({ u, size = 36, radius = 10, fontSize = 13 }) {
 
 export default function Users() {
   const notify = useUiStore((s) => s.notify)
+  const currentUser = useAuthStore((s) => s.user)
+  const amISuperAdmin = currentUser?.user_app_roles?.some(r => r.role?.nombre === 'super_admin') ?? false
 
   // List state
   const [users,   setUsers]   = useState([])
@@ -90,6 +94,11 @@ export default function Users() {
   const [panelOpen,  setPanelOpen]  = useState(false)
   const [selected,   setSelected]   = useState(null)
   const [reloading,  setReloading]  = useState(false)
+
+  // Edit nombre inline
+  const [editingNombre, setEditingNombre] = useState(false)
+  const [editNombre,    setEditNombre]    = useState('')
+  const [editSaving,    setEditSaving]    = useState(false)
 
   // New-user drawer
   const [newOpen,    setNewOpen]    = useState(false)
@@ -104,6 +113,11 @@ export default function Users() {
   const [apps,         setApps]         = useState([])
   const [roles,        setRoles]        = useState([])
   const [locales,      setLocales]      = useState([])
+  const [localesByApp, setLocalesByApp] = useState({})  // { [id_app]: [{id,nombre}] }
+  const [accessBusy,   setAccessBusy]   = useState(false)
+
+  // roles que se limitan por local (super_admin/dcsmart acceden a todos)
+  const SCOPED_ROLES = ['admin', 'cajero']
 
   // ── load list ──────────────────────────────────────────────────────────────
 
@@ -138,18 +152,32 @@ export default function Users() {
       .catch(() => {})
   }, [roleForm.id_app])
 
+  // ── load locales for every app the selected user has a role in ─────────────
+
+  useEffect(() => {
+    const appIds = [...new Set((selected?.user_app_roles ?? []).map(r => r.id_app))]
+    if (appIds.length === 0) { setLocalesByApp({}); return }
+    Promise.all(appIds.map(id =>
+      localesApi.list({ id_app: id, limit: 100 })
+        .then(r => [id, r.data?.data || r.data || []])
+        .catch(() => [id, []])
+    )).then(pairs => setLocalesByApp(Object.fromEntries(pairs)))
+  }, [selected])
+
   // ── open / close detail drawer ────────────────────────────────────────────
 
   const openDetail = (u) => {
     setSelected(u)
     setShowRoleForm(false)
     setRoleForm(EMPTY_ROLE)
+    setEditingNombre(false)
     setPanelOpen(true)
   }
 
   const closeDetail = () => {
     setPanelOpen(false)
     setShowRoleForm(false)
+    setEditingNombre(false)
   }
 
   // Reload the selected user after role assignment
@@ -168,7 +196,7 @@ export default function Users() {
     }
   }
 
-  // ── deactivate ────────────────────────────────────────────────────────────
+  // ── deactivate / reactivate ───────────────────────────────────────────────
 
   const handleDeactivate = async (id, e) => {
     e?.stopPropagation?.()
@@ -180,6 +208,41 @@ export default function Users() {
       load()
     } catch {
       notify('Error al desactivar', 'error')
+    }
+  }
+
+  const handleReactivate = async (id) => {
+    if (!confirm('¿Reactivar este usuario?')) return
+    try {
+      await usersApi.update(id, { activo: true })
+      notify('Usuario reactivado', 'success')
+      await reloadSelected(id)
+      load()
+    } catch {
+      notify('Error al reactivar', 'error')
+    }
+  }
+
+  // ── edit nombre ───────────────────────────────────────────────────────────
+
+  const startEditNombre = () => {
+    setEditNombre(selected.nombre)
+    setEditingNombre(true)
+  }
+
+  const handleSaveNombre = async (e) => {
+    e.preventDefault()
+    if (!editNombre.trim()) return
+    setEditSaving(true)
+    try {
+      await usersApi.update(selected.id, { nombre: editNombre.trim() })
+      notify('Nombre actualizado', 'success')
+      setEditingNombre(false)
+      await reloadSelected(selected.id)
+    } catch {
+      notify('Error al actualizar', 'error')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -207,6 +270,46 @@ export default function Users() {
       notify(err.response?.data?.error || 'Error al asignar rol', 'error')
     } finally {
       setRoleSaving(false)
+    }
+  }
+
+  // ── local access (add / remove) + remove role ─────────────────────────────
+
+  const handleAddLocal = async (id_app, id_local) => {
+    if (!id_local) return
+    setAccessBusy(true)
+    try {
+      await usersApi.addLocalAccess(selected.id, { id_app, id_local })
+      await reloadSelected(selected.id)
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al agregar local', 'error')
+    } finally {
+      setAccessBusy(false)
+    }
+  }
+
+  const handleRemoveLocal = async (id_app, id_local) => {
+    setAccessBusy(true)
+    try {
+      await usersApi.removeLocalAccess(selected.id, { id_app, id_local })
+      await reloadSelected(selected.id)
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al quitar local', 'error')
+    } finally {
+      setAccessBusy(false)
+    }
+  }
+
+  const handleRemoveRole = async (id_app) => {
+    if (!confirm('¿Quitar este rol y todos sus accesos en esta app?')) return
+    setAccessBusy(true)
+    try {
+      await usersApi.removeRole(selected.id, id_app)
+      await reloadSelected(selected.id)
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al quitar rol', 'error')
+    } finally {
+      setAccessBusy(false)
     }
   }
 
@@ -368,8 +471,37 @@ export default function Users() {
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
                 <Avatar u={selected} size={52} radius={14} fontSize={18} />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--t1)' }}>{selected.nombre}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {editingNombre ? (
+                    <form onSubmit={handleSaveNombre} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div className="form-input-wrap" style={{ flex: 1 }}>
+                        <input
+                          autoFocus
+                          value={editNombre}
+                          onChange={e => setEditNombre(e.target.value)}
+                          style={{ fontSize: 14, padding: '4px 8px' }}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-sm btn-primary" disabled={editSaving}>
+                        {editSaving ? '…' : 'OK'}
+                      </button>
+                      <button type="button" className="btn btn-sm btn-secondary"
+                        onClick={() => setEditingNombre(false)}>✕</button>
+                    </form>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--t1)' }}>{selected.nombre}</div>
+                      {amISuperAdmin && (
+                        <button
+                          onClick={startEditNombre}
+                          title="Editar nombre"
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer',
+                            color: 'var(--t3)', fontSize: 12, padding: '0 2px', lineHeight: 1 }}>
+                          ✎
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{selected.email}</div>
                   {selected.created_at && (
                     <div style={{ fontSize: 11, color: 'var(--t4)', marginTop: 3 }}>
@@ -413,7 +545,11 @@ export default function Users() {
               ) : (
                 <div style={{ marginBottom: '1rem' }}>
                   {userRoles.map((r) => {
-                    const localesRestringidos = accessByApp[r.id_app] ?? []
+                    const granted    = accessByApp[r.id_app] ?? []
+                    const grantedIds = new Set(granted.map(l => l.id))
+                    const appLocales = localesByApp[r.id_app] ?? []
+                    const available  = appLocales.filter(l => !grantedIds.has(l.id))
+                    const scoped     = SCOPED_ROLES.includes(r.role?.nombre)
                     return (
                       <div key={r.id} style={{
                         padding: '0.75rem 1rem',
@@ -426,26 +562,72 @@ export default function Users() {
                           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)' }}>
                             {r.app?.nombre || '—'}
                           </span>
-                          <span className={`badge ${ROLE_BADGE[r.role?.nombre] ?? 'badge-muted'}`}>
-                            {r.role?.nombre || '—'}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span className={`badge ${ROLE_BADGE[r.role?.nombre] ?? 'badge-muted'}`}>
+                              {r.role?.nombre || '—'}
+                            </span>
+                            {amISuperAdmin && (
+                              <button
+                                className="btn btn-sm btn-danger"
+                                style={{ padding: '2px 6px' }}
+                                disabled={accessBusy}
+                                title="Quitar rol de esta app"
+                                onClick={() => handleRemoveRole(r.id_app)}
+                              >
+                                <IcoTrash />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--t3)' }}>
-                          {localesRestringidos.length > 0 ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                              {localesRestringidos.map((l) => (
-                                <span key={l.id} style={{
-                                  padding: '1px 8px', borderRadius: 6,
-                                  background: 'rgba(255,255,255,0.06)',
-                                  border: '1px solid rgba(255,255,255,0.1)',
-                                  fontSize: 11, color: 'var(--t2)',
-                                }}>
-                                  {l.nombre}
-                                </span>
-                              ))}
-                            </div>
+
+                        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--t3)' }}>
+                          {!scoped ? (
+                            <span style={{ fontStyle: 'italic' }}>Acceso a todos los locales</span>
                           ) : (
-                            <span style={{ fontStyle: 'italic' }}>Todos los locales</span>
+                            <>
+                              {granted.length > 0 ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                  {granted.map((l) => (
+                                    <span key={l.id} style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                                      padding: '2px 6px 2px 8px', borderRadius: 6,
+                                      background: 'rgba(255,255,255,0.06)',
+                                      border: '1px solid rgba(255,255,255,0.1)',
+                                      fontSize: 11, color: 'var(--t2)',
+                                    }}>
+                                      {l.nombre}
+                                      {amISuperAdmin && (
+                                        <button
+                                          onClick={() => handleRemoveLocal(r.id_app, l.id)}
+                                          disabled={accessBusy}
+                                          title="Quitar local"
+                                          style={{
+                                            border: 'none', background: 'transparent', cursor: 'pointer',
+                                            color: 'var(--t3)', lineHeight: 1, padding: 0, fontSize: 13,
+                                          }}
+                                        >×</button>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ fontStyle: 'italic', color: 'var(--danger)' }}>
+                                  Sin locales — no verá datos hasta asignar al menos uno
+                                </span>
+                              )}
+
+                              {amISuperAdmin && available.length > 0 && (
+                                <select
+                                  value=""
+                                  disabled={accessBusy}
+                                  onChange={(e) => handleAddLocal(r.id_app, e.target.value)}
+                                  style={{ marginTop: 8, width: '100%' }}
+                                >
+                                  <option value="">+ Agregar local…</option>
+                                  {available.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                                </select>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -454,96 +636,117 @@ export default function Users() {
                 </div>
               )}
 
-              {/* Role sub-form */}
-              {!showRoleForm ? (
-                <button
-                  className="btn btn-sm btn-secondary"
-                  style={{ marginBottom: '1rem', gap: 6 }}
-                  onClick={() => { setShowRoleForm(true); setRoleForm(EMPTY_ROLE) }}
-                >
-                  <IcoShield /> Asignar Rol
-                </button>
-              ) : (
-                <form onSubmit={handleAssignRole} style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 12,
-                  padding: '1rem',
-                  marginBottom: '1rem',
-                }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)', marginBottom: '0.75rem' }}>
-                    Asignar Rol
-                  </div>
-
-                  {/* App select */}
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label">App *</label>
-                    <div className="form-input-wrap">
-                      <select
-                        required
-                        value={roleForm.id_app}
-                        onChange={e => setRoleForm({ ...roleForm, id_app: e.target.value, id_local: '' })}
-                      >
-                        <option value="">Seleccionar app...</option>
-                        {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-                      </select>
+              {/* Role sub-form — solo super_admin */}
+              {amISuperAdmin && (
+                !showRoleForm ? (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    style={{ marginBottom: '1rem', gap: 6 }}
+                    onClick={() => { setShowRoleForm(true); setRoleForm(EMPTY_ROLE) }}
+                  >
+                    <IcoShield /> Asignar Rol
+                  </button>
+                ) : (
+                  <form onSubmit={handleAssignRole} style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 12,
+                    padding: '1rem',
+                    marginBottom: '1rem',
+                  }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)', marginBottom: '0.75rem' }}>
+                      Asignar / cambiar Rol
                     </div>
-                  </div>
 
-                  {/* Role select */}
-                  <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label">Rol *</label>
-                    <div className="form-input-wrap">
-                      <select
-                        required
-                        value={roleForm.id_role}
-                        onChange={e => setRoleForm({ ...roleForm, id_role: e.target.value })}
-                      >
-                        <option value="">Seleccionar rol...</option>
-                        {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                      </select>
+                    {/* App select */}
+                    <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                      <label className="form-label">App *</label>
+                      <div className="form-input-wrap">
+                        <select
+                          required
+                          value={roleForm.id_app}
+                          onChange={e => {
+                            const existing = userRoles.find(r => r.id_app === e.target.value)
+                            setRoleForm({
+                              id_app: e.target.value,
+                              id_role: existing?.id_role ?? '',
+                              id_local: ''
+                            })
+                          }}
+                        >
+                          <option value="">Seleccionar app...</option>
+                          {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                        </select>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Local select (optional) */}
-                  <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label className="form-label">Local (opcional)</label>
-                    <div className="form-input-wrap">
-                      <select
-                        value={roleForm.id_local}
-                        onChange={e => setRoleForm({ ...roleForm, id_local: e.target.value })}
-                        disabled={!roleForm.id_app}
-                      >
-                        <option value="">Todos los locales</option>
-                        {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-                      </select>
+                    {/* Role select */}
+                    <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                      <label className="form-label">Rol *</label>
+                      <div className="form-input-wrap">
+                        <select
+                          required
+                          value={roleForm.id_role}
+                          onChange={e => setRoleForm({ ...roleForm, id_role: e.target.value })}
+                        >
+                          <option value="">Seleccionar rol...</option>
+                          {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                        </select>
+                      </div>
                     </div>
-                  </div>
 
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={roleSaving}>
-                      {roleSaving
-                        ? <><span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Guardando...</>
-                        : 'Guardar'}
-                    </button>
-                    <button type="button" className="btn btn-secondary btn-sm"
-                      onClick={() => { setShowRoleForm(false); setRoleForm(EMPTY_ROLE) }}>
-                      Cancelar
-                    </button>
-                  </div>
-                </form>
+                    {/* Local select (optional) */}
+                    <div className="form-group" style={{ marginBottom: '1rem' }}>
+                      <label className="form-label">Local inicial (opcional)</label>
+                      <div className="form-input-wrap">
+                        <select
+                          value={roleForm.id_local}
+                          onChange={e => setRoleForm({ ...roleForm, id_local: e.target.value })}
+                          disabled={!roleForm.id_app}
+                        >
+                          <option value="">Sin local (asignar luego)</option>
+                          {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                        </select>
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                        super_admin y dcsmart acceden a todos los locales. admin/cajero solo a los asignados.
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="submit" className="btn btn-primary btn-sm" disabled={roleSaving}>
+                        {roleSaving
+                          ? <><span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> Guardando...</>
+                          : 'Guardar'}
+                      </button>
+                      <button type="button" className="btn btn-secondary btn-sm"
+                        onClick={() => { setShowRoleForm(false); setRoleForm(EMPTY_ROLE) }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )
               )}
 
-              {/* Deactivate */}
-              {selected.activo && (
+              {/* Activate / Deactivate — solo super_admin */}
+              {amISuperAdmin && (
                 <>
                   <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '1rem 0' }} />
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={(e) => handleDeactivate(selected.id, e)}
-                  >
-                    <IcoTrash /> Desactivar usuario
-                  </button>
+                  {selected.activo ? (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={(e) => handleDeactivate(selected.id, e)}
+                    >
+                      <IcoTrash /> Desactivar usuario
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleReactivate(selected.id)}
+                    >
+                      ↺ Reactivar usuario
+                    </button>
+                  )}
                 </>
               )}
             </div>

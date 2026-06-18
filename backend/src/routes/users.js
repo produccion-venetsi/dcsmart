@@ -20,7 +20,7 @@ export default async function usersRoutes(fastify) {
       where: { id: request.params.id },
       select: {
         id: true, email: true, nombre: true, avatar_url: true,
-        activo: true, created_at: true, updated_at: true,
+        activo: true, google_id: true, created_at: true, updated_at: true,
         user_app_roles: { include: { app: true, role: true } },
         local_access: { include: { local: { select: { id: true, nombre: true } }, app: { select: { id: true } } } },
         user_permissions: { include: { module: true } }
@@ -89,8 +89,9 @@ export default async function usersRoutes(fastify) {
     }
   })
 
+  // ─── Asignación de rol/app — solo super_admin ──────────────────────────────
   fastify.post('/:id/roles', {
-    preHandler: [fastify.authenticate, fastify.can('usuarios', 'edit')]
+    preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
   }, async (request, reply) => {
     const { id_app, id_role, id_local } = request.body
     if (!id_app || !id_role) return reply.code(400).send({ error: 'id_app e id_role son requeridos' })
@@ -111,5 +112,49 @@ export default async function usersRoutes(fastify) {
     }
 
     return userAppRole
+  })
+
+  // Quitar rol/app de un usuario (también limpia sus accesos a locales de esa app)
+  fastify.delete('/:id/roles/:id_app', {
+    preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { id, id_app } = request.params
+    await fastify.db.userLocalAccess.deleteMany({ where: { id_user: id, id_app } })
+    await fastify.db.userAppRole.deleteMany({ where: { id_user: id, id_app } })
+    return reply.code(204).send()
+  })
+
+  // ─── Acceso a locales — solo super_admin ───────────────────────────────────
+  // Agregar acceso a un local puntual (el usuario debe tener rol en la app)
+  fastify.post('/:id/local-access', {
+    preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { id_app, id_local } = request.body
+    if (!id_app || !id_local) return reply.code(400).send({ error: 'id_app e id_local son requeridos' })
+
+    const hasRole = await fastify.db.userAppRole.findUnique({
+      where: { id_user_id_app: { id_user: request.params.id, id_app } }
+    })
+    if (!hasRole) return reply.code(400).send({ error: 'El usuario no tiene rol en esta app' })
+
+    const access = await fastify.db.userLocalAccess.upsert({
+      where: { id_user_id_app_id_local: { id_user: request.params.id, id_app, id_local } },
+      create: { id_user: request.params.id, id_app, id_local },
+      update: {}
+    })
+    return reply.code(201).send(access)
+  })
+
+  // Quitar acceso a un local puntual
+  fastify.delete('/:id/local-access', {
+    preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { id_app, id_local } = request.body
+    if (!id_app || !id_local) return reply.code(400).send({ error: 'id_app e id_local son requeridos' })
+
+    await fastify.db.userLocalAccess.deleteMany({
+      where: { id_user: request.params.id, id_app, id_local }
+    })
+    return reply.code(204).send()
   })
 }
