@@ -59,6 +59,14 @@ const ROLE_BADGE = {
   cajero:      'badge-green',
 }
 
+// Roles con acceso global — no se vinculan a una app específica
+const GLOBAL_ROLES = new Set(['super_admin', 'dcsmart'])
+
+function roleAppLabel(r) {
+  if (GLOBAL_ROLES.has(r.role?.nombre)) return 'Todos los grupos'
+  return r.app?.nombre || '—'
+}
+
 const EMPTY_USER = { nombre: '', email: '', password: '', password2: '', activo: true }
 const EMPTY_ROLE = { id_app: '', id_role: '', id_local: '' }
 
@@ -416,8 +424,8 @@ export default function Users() {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                           {u.user_app_roles.map((r) => (
                             <span key={r.id} className={`badge ${ROLE_BADGE[r.role?.nombre] ?? 'badge-muted'}`}
-                              title={r.app?.nombre}>
-                              {r.app?.nombre} · {r.role?.nombre}
+                              title={roleAppLabel(r)}>
+                              {roleAppLabel(r)} · {r.role?.nombre}
                             </span>
                           ))}
                         </div>
@@ -560,7 +568,7 @@ export default function Users() {
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)' }}>
-                            {r.app?.nombre || '—'}
+                            {roleAppLabel(r)}
                           </span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span className={`badge ${ROLE_BADGE[r.role?.nombre] ?? 'badge-muted'}`}>
