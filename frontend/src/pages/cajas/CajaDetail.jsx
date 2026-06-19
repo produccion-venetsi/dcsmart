@@ -40,7 +40,8 @@ function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 export default function CajaDetail() {
   const { id }   = useParams()
   const navigate = useNavigate()
-  const notify   = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
 
   const [caja,    setCaja]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -70,7 +71,7 @@ export default function CajaDetail() {
   }
 
   const handleDeleteMov = async (movId) => {
-    if (!confirm('¿Eliminar movimiento?')) return
+    if (!(await showConfirm('¿Eliminar movimiento?'))) return
     try {
       await movimientosApi.remove(movId)
       notify('Movimiento eliminado', 'success')

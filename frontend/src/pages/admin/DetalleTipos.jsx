@@ -24,7 +24,8 @@ function IcoPlus() {
 const EMPTY = { nombre: '', id_local: '', clasificacion: 'otro', activo: true }
 
 export default function DetalleTipos() {
-  const notify    = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const activeApp = useAppStore((s) => s.activeApp)
   const isAdmin   = ['admin', 'super_admin'].includes(activeApp?.role)
 
@@ -71,7 +72,7 @@ export default function DetalleTipos() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Eliminar tipo de detalle?')) return
+    if (!(await showConfirm('¿Eliminar tipo de detalle?'))) return
     try { await detalleTiposApi.remove(id); notify('Eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }

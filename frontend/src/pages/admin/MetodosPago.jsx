@@ -23,7 +23,8 @@ function IcoPlus() {
 const EMPTY = { nombre: '', activo: true }
 
 export default function MetodosPago() {
-  const notify     = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const activeApp  = useAppStore((s) => s.activeApp)
   const isAdmin    = ['admin', 'super_admin'].includes(activeApp?.role)
 
@@ -63,7 +64,7 @@ export default function MetodosPago() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Eliminar método de pago?')) return
+    if (!(await showConfirm('¿Eliminar método de pago?'))) return
     try { await metodosApi.remove(id); notify('Eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }

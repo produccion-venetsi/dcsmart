@@ -70,7 +70,8 @@ function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year
 function mono(v)     { return v ? <span className="td-mono" style={{ fontSize: 11 }}>{v}</span> : <span className="td-muted">—</span> }
 
 function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, canDelete = false }) {
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const [impuestos,   setImpuestos]   = useState([])
   const [loadingImp,  setLoadingImp]  = useState(true)
   const [impForm,     setImpForm]     = useState({ tipo: 'IVA21', monto: '' })
@@ -89,7 +90,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
   useEffect(() => { if (pago) loadImpuestos() }, [pago?.id])
 
   const handlePanelAudit = async () => {
-    if (audited && !confirm('Esta orden ya está auditada. ¿Querés desauditarla?')) return
+    if (audited && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
     setAuditando(true)
     try {
       const { data } = await pagosApi.audit(pago.id)
@@ -114,7 +115,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
   }
 
   const handleDeleteImp = async (id) => {
-    if (!confirm('¿Eliminar impuesto?')) return
+    if (!(await showConfirm('¿Eliminar impuesto?'))) return
     try { await impuestosApi.remove(id); notify('Eliminado', 'success'); loadImpuestos() }
     catch { notify('Error al eliminar', 'error') }
   }
@@ -267,6 +268,7 @@ export default function PagoList() {
   const activeLocal = useAppStore((s) => s.activeLocal)
   const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const role        = activeApp?.role
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
@@ -333,7 +335,7 @@ export default function PagoList() {
   ])
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este pago?')) return
+    if (!(await showConfirm('¿Eliminar este pago?'))) return
     try {
       await pagosApi.remove(id)
       notify('Pago eliminado', 'success')
@@ -351,7 +353,7 @@ export default function PagoList() {
   const handleAudit = async (id, e) => {
     e.stopPropagation()
     const current = pagos.find(p => p.id === id)
-    if (current?.audit && !confirm('Esta orden ya está auditada. ¿Querés desauditarla?')) return
+    if (current?.audit && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
     setAuditingId(id)
     try {
       const { data } = await pagosApi.audit(id)

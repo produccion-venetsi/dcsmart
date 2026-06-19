@@ -53,7 +53,8 @@ function IcoProvEmpty() {
 
 export default function ProveedorList() {
   const navigate = useNavigate()
-  const notify   = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
 
   const LIMIT = 50
 
@@ -92,7 +93,7 @@ export default function ProveedorList() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Desactivar este proveedor?')) return
+    if (!(await showConfirm('¿Desactivar este proveedor?'))) return
     try { await proveedoresApi.remove(id); notify('Proveedor desactivado', 'success'); load() }
     catch { notify('Error al desactivar', 'error') }
   }

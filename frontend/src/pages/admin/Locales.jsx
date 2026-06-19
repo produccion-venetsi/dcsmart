@@ -40,7 +40,8 @@ function IcoFilter() {
 const EMPTY = { nombre: '', id_app: '', direccion: '', telefono: '', activo: true }
 
 export default function Locales() {
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
 
   const [locales,   setLocales]   = useState([])
   const [apps,      setApps]      = useState([])
@@ -92,7 +93,7 @@ export default function Locales() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Eliminar local?')) return
+    if (!(await showConfirm('¿Eliminar local?'))) return
     try { await localesApi.remove(id); notify('Local eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }

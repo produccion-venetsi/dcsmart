@@ -94,7 +94,8 @@ function Avatar({ u, size = 36, radius = 10, fontSize = 13 }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Users() {
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const currentUser = useAuthStore((s) => s.user)
   const amISuperAdmin = currentUser?.user_app_roles?.some(r => r.role?.nombre === 'super_admin') ?? false
 
@@ -209,7 +210,7 @@ export default function Users() {
 
   const handleDeactivate = async (id, e) => {
     e?.stopPropagation?.()
-    if (!confirm('¿Desactivar este usuario?')) return
+    if (!(await showConfirm('¿Desactivar este usuario?'))) return
     try {
       await usersApi.remove(id)
       notify('Usuario desactivado', 'success')
@@ -221,7 +222,7 @@ export default function Users() {
   }
 
   const handleReactivate = async (id) => {
-    if (!confirm('¿Reactivar este usuario?')) return
+    if (!(await showConfirm('¿Reactivar este usuario?'))) return
     try {
       await usersApi.update(id, { activo: true })
       notify('Usuario reactivado', 'success')
@@ -324,7 +325,7 @@ export default function Users() {
   }
 
   const handleRemoveRole = async (id_app) => {
-    if (!confirm('¿Quitar este rol y todos sus accesos en esta app?')) return
+    if (!(await showConfirm('¿Quitar este rol y todos sus accesos en esta app?'))) return
     setAccessBusy(true)
     try {
       await usersApi.removeRole(selected.id, id_app)

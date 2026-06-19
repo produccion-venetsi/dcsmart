@@ -30,7 +30,8 @@ function IcoPlus() {
 const EMPTY = { nombre: '', slug: '', activo: true }
 
 export default function Apps() {
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
 
   const [apps,    setApps]    = useState([])
   const [loading, setLoading] = useState(true)
@@ -67,7 +68,7 @@ export default function Apps() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Eliminar app?')) return
+    if (!(await showConfirm('¿Eliminar app?'))) return
     try { await appsApi.remove(id); notify('App eliminada', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }

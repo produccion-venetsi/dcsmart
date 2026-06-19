@@ -66,7 +66,8 @@ function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—'
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) {
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const [caja,       setCaja]      = useState(null)
   const [loading,    setLoading]   = useState(true)
   const [metodos,    setMetodos]   = useState([])
@@ -118,7 +119,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
   }
 
   const handleDeleteMov = async (movId) => {
-    if (!confirm('¿Eliminar movimiento?')) return
+    if (!(await showConfirm('¿Eliminar movimiento?'))) return
     try { await movimientosApi.remove(movId); notify('Eliminado', 'success'); load() }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
@@ -141,7 +142,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
   }
 
   const handleDeleteDet = async (detId) => {
-    if (!confirm('¿Eliminar detalle?')) return
+    if (!(await showConfirm('¿Eliminar detalle?'))) return
     try { await detallesApi.remove(detId); notify('Eliminado', 'success'); load() }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
@@ -602,8 +603,9 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 export default function CajaList() {
   const { activeApp, activeLocal } = useAppStore()
   const locales   = activeApp?.locales ?? []
-  const notify    = useUiStore((s) => s.notify)
-  const role      = activeApp?.role
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
+  const role        = activeApp?.role
   const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete = ['super_admin', 'dcsmart', 'admin'].includes(role)
@@ -638,7 +640,7 @@ export default function CajaList() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Eliminar esta caja?')) return
+    if (!(await showConfirm('¿Eliminar esta caja?'))) return
     try { await cajasApi.remove(id); notify('Caja eliminada', 'success'); load() }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
