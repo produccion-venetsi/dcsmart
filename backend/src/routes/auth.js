@@ -195,12 +195,27 @@ export default async function authRoutes(fastify) {
       accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
     }
 
-    // admin / cajero: SOLO los locales asignados en user_local_access.
-    return userRoles.map(r => ({
-      app: { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
-      role: r.role.nombre,
-      locales: accessByApp[r.id_app] ?? []
-    }))
+    // admin / cajero: locales asignados en user_local_access.
+    // Excepción: admin sin filas explícitas = acceso a TODOS los locales activos de la app.
+    const result = []
+    for (const r of userRoles) {
+      const assigned = accessByApp[r.id_app] ?? []
+      let locales = assigned
+      if (r.role.nombre === 'admin' && assigned.length === 0) {
+        const allLocales = await fastify.db.local.findMany({
+          where: { id_app: r.id_app, activo: true },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' }
+        })
+        locales = allLocales
+      }
+      result.push({
+        app:    { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
+        role:   r.role.nombre,
+        locales
+      })
+    }
+    return result
   })
 
   // POST /api/auth/logout
