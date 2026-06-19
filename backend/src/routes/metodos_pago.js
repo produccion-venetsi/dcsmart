@@ -1,12 +1,12 @@
 export default async function metodosRoutes(fastify) {
-  const viewHandler = [fastify.authenticate, fastify.can('pagos', 'view')]
+  const viewHandler = [fastify.authenticate, fastify.can('metodos_pago', 'view')]
 
   fastify.get('/', { preHandler: viewHandler }, async () => {
     return fastify.db.metodoPago.findMany({ orderBy: { nombre: 'asc' } })
   })
 
   fastify.post('/', {
-    preHandler: [fastify.authenticate, fastify.can('pagos', 'create')]
+    preHandler: [fastify.authenticate, fastify.can('metodos_pago', 'create')]
   }, async (request, reply) => {
     const { nombre, activo } = request.body
     if (!nombre) return reply.code(400).send({ error: 'nombre es requerido' })
@@ -20,7 +20,7 @@ export default async function metodosRoutes(fastify) {
   })
 
   fastify.put('/:id', {
-    preHandler: [fastify.authenticate, fastify.can('pagos', 'edit')]
+    preHandler: [fastify.authenticate, fastify.can('metodos_pago', 'edit')]
   }, async (request, reply) => {
     const { nombre, activo } = request.body
     try {
@@ -36,7 +36,7 @@ export default async function metodosRoutes(fastify) {
   })
 
   fastify.delete('/:id', {
-    preHandler: [fastify.authenticate, fastify.can('pagos', 'delete')]
+    preHandler: [fastify.authenticate, fastify.can('metodos_pago', 'delete')]
   }, async (request, reply) => {
     try {
       await fastify.db.metodoPago.delete({ where: { id: request.params.id } })

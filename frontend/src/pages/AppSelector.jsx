@@ -21,20 +21,6 @@ function appGrad(id) {
   return `linear-gradient(150deg, ${a}, ${b})`
 }
 
-const ROLE_LABELS = {
-  admin: 'Administrador',
-  gerente: 'Gerente',
-  cajero: 'Cajero',
-  operador: 'Operador',
-}
-function roleBadgeClass(role) {
-  if (['admin'].includes(role)) return 'admin'
-  if (['gerente'].includes(role)) return 'gerente'
-  if (['cajero'].includes(role)) return 'cajero'
-  if (['operador'].includes(role)) return 'operador'
-  return 'default'
-}
-
 /* ---- SVG icons ---- */
 function IconGrid() {
   return (
