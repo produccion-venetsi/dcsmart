@@ -94,7 +94,7 @@ export default async function pagosRoutes(fastify) {
           local:       { select: { id: true, nombre: true } },
           creador:     { select: { id: true, nombre: true } }
         },
-        orderBy: { created_at: 'desc' },
+        orderBy: { fecha: 'desc' },
         skip,
         take: Number(limit)
       }),
