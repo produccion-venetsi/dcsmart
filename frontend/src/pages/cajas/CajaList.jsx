@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
@@ -247,7 +246,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
             <label className="form-label">Nombre</label>
             <div className="form-input-wrap">
               <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
-                <option value="">— Seleccionar —</option>
+                <option value="">Seleccionar nombre…</option>
                 {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
               </select>
             </div>
@@ -513,7 +512,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   return (
     <form onSubmit={handleCreate}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-        {!activeLocal && locales.length > 0 && (
+        {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
             <label className="form-label">Local *</label>
             <div className="form-input-wrap">
@@ -602,7 +601,6 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 }
 
 export default function CajaList() {
-  const navigate = useNavigate()
   const { activeApp, activeLocal } = useAppStore()
   const locales   = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
@@ -615,6 +613,7 @@ export default function CajaList() {
   const [cajas,     setCajas]     = useState([])
   const [total,     setTotal]     = useState(0)
   const [page,      setPage]      = useState(1)
+  const [pageSize,  setPageSize]  = useState(20)
   const [loading,   setLoading]   = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelMode, setPanelMode] = useState('create')
@@ -622,7 +621,7 @@ export default function CajaList() {
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
 
-  const totalPages = Math.ceil(total / 20)
+  const totalPages = Math.ceil(total / pageSize)
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -643,7 +642,7 @@ export default function CajaList() {
 
   const load = () => {
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, page, limit: 20 })
+    cajasApi.list({ id_local: activeLocal?.id, page, limit: pageSize })
       .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
       .catch(() => notify('Error al cargar cajas', 'error'))
       .finally(() => setLoading(false))
@@ -652,12 +651,12 @@ export default function CajaList() {
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, page, limit: 20 }, ctrl.signal)
+    cajasApi.list({ id_local: activeLocal?.id, page, limit: pageSize }, ctrl.signal)
       .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [page, activeLocal?.id])
+  }, [page, pageSize, activeLocal?.id])
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
@@ -690,7 +689,7 @@ export default function CajaList() {
         </div>
         <div className="page-actions">
           {canCreate && (
-            <button className="btn btn-primary" onClick={() => navigate('/cajas/nueva')}>
+            <button className="btn btn-primary" onClick={openCreate}>
               <IcoPlus /> Nueva Caja
             </button>
           )}
@@ -776,21 +775,31 @@ export default function CajaList() {
         </table>
       </div>
 
-      {total > 20 && (
+      {total > 0 && (
         <div className="pagination">
-          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
-          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-          <span className="pagination-info">
-            Pág.&nbsp;
-            <input
-              type="number" min={1} max={totalPages} value={page}
-              onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
-              style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-            />
-            &nbsp;de {totalPages}
-          </span>
-          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
-          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
+          <select
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+            style={{ padding: '3px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+          >
+            {[10, 15, 20].map(n => <option key={n} value={n}>{n} por pág.</option>)}
+          </select>
+          {totalPages > 1 && <>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+            <span className="pagination-info">
+              Pág.&nbsp;
+              <input
+                type="number" min={1} max={totalPages} value={page}
+                onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
+                style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+              />
+              &nbsp;de {totalPages}
+            </span>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
+          </>}
+          <span className="pagination-info" style={{ marginLeft: 'auto' }}>{total} cajas</span>
         </div>
       )}
 

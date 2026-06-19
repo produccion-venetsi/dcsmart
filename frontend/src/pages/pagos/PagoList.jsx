@@ -282,13 +282,14 @@ export default function PagoList() {
   const [selectedPago, setSelectedPago] = useState(null)
   const [sortField,  setSortField]  = useState('fecha')
   const [sortDir,    setSortDir]    = useState('desc')
+  const [pageSize,   setPageSize]   = useState(20)
 
   const [rubros,     setRubros]     = useState([])
   const [categorias, setCategorias] = useState([])
   const [rubcats,    setRubcats]    = useState([])
   const [metodos,    setMetodos]    = useState([])
 
-  const LIMIT = 50
+  const LIMIT = pageSize
   const totalPages = Math.ceil(total / LIMIT)
 
   useEffect(() => {
@@ -333,7 +334,8 @@ export default function PagoList() {
     page, activeLocal?.id,
     filters.pagado, filters.estado_op, filters.desde, filters.hasta,
     filters.id_tipo, filters.id_rub, filters.id_cat,
-    filters.audit, filters.ingresa_egreso, filters.id_metodo
+    filters.audit, filters.ingresa_egreso, filters.id_metodo,
+    pageSize
   ])
 
   const handleDelete = async (id) => {
@@ -689,21 +691,31 @@ export default function PagoList() {
         </table>
       </div>
 
-      {total > LIMIT && (
+      {total > 0 && (
         <div className="pagination">
-          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
-          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-          <span className="pagination-info">
-            Pág.&nbsp;
-            <input
-              type="number" min={1} max={totalPages} value={page}
-              onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
-              style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-            />
-            &nbsp;de {totalPages} — {total} pagos
-          </span>
-          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
-          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
+          <select
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+            style={{ padding: '3px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+          >
+            {[10, 15, 20].map(n => <option key={n} value={n}>{n} por pág.</option>)}
+          </select>
+          {totalPages > 1 && <>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+            <span className="pagination-info">
+              Pág.&nbsp;
+              <input
+                type="number" min={1} max={totalPages} value={page}
+                onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
+                style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+              />
+              &nbsp;de {totalPages}
+            </span>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
+          </>}
+          <span className="pagination-info" style={{ marginLeft: 'auto' }}>{total} pagos</span>
         </div>
       )}
 
