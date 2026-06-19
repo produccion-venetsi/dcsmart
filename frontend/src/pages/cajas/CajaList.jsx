@@ -237,7 +237,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
                 style={{ opacity: 0.5, cursor: 'not-allowed' }}
                 value={(() => {
                   const t = tipos.find(x => x.id === newDet.id_tipo)
-                  return t ? clasificacionLabel(t.clasificacion, 'Otro') : 'Ver opciones'
+                  return t ? clasificacionLabel(t.clasificacion, 'Otro') : 'Seleccioná un nombre'
                 })()}
               />
             </div>
