@@ -91,13 +91,20 @@ export default function PagoForm() {
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
   const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
 
+  const ESTADO_OP_OPTIONS = [
+    { value: 'CAJA',       label: 'CAJA' },
+    { value: 'CUENTA_CTE', label: 'CUENTA CTE' },
+    { value: 'MP_PDP',     label: 'MP PDP' },
+    { value: 'PDP',        label: 'PDP' },
+  ]
+
   const [form, setForm] = useState({
     fecha: '', id_proveedor: '', id_rubcat: '', id_tipo: '',
     pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
     pagado: false, fecha_pago: '', periodo: '',
-    estado_op: 'CUENTA CTE', ingresa_egreso: true,
+    estado_op: 'CUENTA_CTE', ingresa_egreso: true,
     id_local: activeLocal?.id || ''
   })
 
@@ -366,7 +373,7 @@ export default function PagoForm() {
               <label className="form-label">Estado</label>
               <div className="form-input-wrap">
                 <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
-                  {['CAJA','CUENTA CTE','MP PDP','PDP'].map(s => <option key={s}>{s}</option>)}
+                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             </div>

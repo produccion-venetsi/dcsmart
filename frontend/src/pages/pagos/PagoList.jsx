@@ -14,8 +14,17 @@ const TIPO_BADGE = {
   DDJJ: 'badge-red', M: 'badge-muted', NCA: 'badge-amber', NDA: 'badge-amber', STK: 'badge-blue',
 }
 const ESTADO_BADGE = {
-  PENDIENTE: 'badge-amber', APROBADO: 'badge-green', RECHAZADO: 'badge-red', PAGADO: 'badge-blue',
+  CAJA: 'badge-muted', CUENTA_CTE: 'badge-amber', MP_PDP: 'badge-blue', PDP: 'badge-green',
 }
+const ESTADO_OP_LABEL = {
+  CAJA: 'CAJA', CUENTA_CTE: 'CUENTA CTE', MP_PDP: 'MP PDP', PDP: 'PDP',
+}
+const ESTADO_OP_OPTIONS = [
+  { value: 'CAJA',       label: 'CAJA' },
+  { value: 'CUENTA_CTE', label: 'CUENTA CTE' },
+  { value: 'MP_PDP',     label: 'MP PDP' },
+  { value: 'PDP',        label: 'PDP' },
+]
 const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
 
 function IcoPlus() {
@@ -134,7 +143,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
     ['Método',      pago.metodo_pago?.nombre || '—'],
     ['Cashflow',    fmtDate(pago.cashflow)],
     ['Dirección',   pago.ingresa_egreso != null ? (pago.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
-    ['Estado Op.',  pago.estado_op || '—'],
+    ['Estado Op.',  ESTADO_OP_LABEL[pago.estado_op] ?? pago.estado_op ?? '—'],
     ['Pagado',      pago.pagado ? 'Sí' : 'No'],
     ['Fecha Pago',  fmtDate(pago.fecha_pago)],
     ['Período',     fmtMonth(pago.periodo)],
@@ -533,7 +542,7 @@ export default function PagoList() {
                     <span style={lbl}>Estado op.</span>
                     <select className="filter-select" style={{ width: '100%' }} value={draft.estado_op} onChange={e => setDraftField('estado_op', e.target.value)}>
                       <option value="">Todos los estados</option>
-                      {['PENDIENTE','APROBADO','RECHAZADO','PAGADO'].map(s => <option key={s} value={s}>{s}</option>)}
+                      {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -646,7 +655,7 @@ export default function PagoList() {
                     </td>
                     <td style={{ minWidth: 90 }}>
                       {p.estado_op
-                        ? <span className={`badge ${ESTADO_BADGE[p.estado_op] ?? 'badge-muted'}`}>{p.estado_op}</span>
+                        ? <span className={`badge ${ESTADO_BADGE[p.estado_op] ?? 'badge-muted'}`}>{ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op}</span>
                         : <span className="td-muted">—</span>}
                     </td>
                     <td style={{ minWidth: 70, textAlign: 'center' }}>
