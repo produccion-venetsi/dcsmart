@@ -233,6 +233,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
               <input
                 type="text"
                 readOnly
+                style={{ opacity: 0.5, cursor: 'not-allowed' }}
                 value={(() => {
                   const t = tipos.find(x => x.id === newDet.id_tipo)
                   return t ? clasificacionLabel(t.clasificacion, 'Otro') : '— Según el tipo —'
@@ -499,10 +500,9 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
     if (!targetLocalId) { notify('Seleccioná un local', 'error'); return }
     setSaving(true)
     try {
-      await cajasApi.create({ ...form, id_local: targetLocalId })
+      const res = await cajasApi.create({ ...form, id_local: targetLocalId })
       notify('Caja creada', 'success')
-      onCreated()
-      onClose()
+      onCreated(res.data?.id)
     } catch (err) {
       notify(err.response?.data?.error || 'Error al crear', 'error')
     } finally { setSaving(false) }
@@ -763,7 +763,16 @@ export default function CajaList() {
 
       <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
         {panelMode === 'create' && (
-          <CajaCreatePanel activeLocal={activeLocal} locales={locales} onCreated={load} onClose={closePanel} />
+          <CajaCreatePanel
+            activeLocal={activeLocal}
+            locales={locales}
+            onCreated={(newId) => {
+              load()
+              if (newId) { setSelectedId(newId); setPanelMode('detail') }
+              else closePanel()
+            }}
+            onClose={closePanel}
+          />
         )}
         {panelMode === 'detail' && (
           <CajaDetailPanel

@@ -14,6 +14,27 @@ function IcoBack() {
     </svg>
   )
 }
+function IcoUp() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 19V5M5 12l7-7 7 7"/>
+    </svg>
+  )
+}
+function IcoDown() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M19 12l-7 7-7-7"/>
+    </svg>
+  )
+}
+function IcoPaperclip() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+    </svg>
+  )
+}
 
 export default function PagoForm() {
   const { id }        = useParams()
@@ -29,8 +50,9 @@ export default function PagoForm() {
   const [form, setForm] = useState({
     fecha: '', id_proveedor: '', id_rubcat: '', id_tipo: '',
     importe_neto: '', descuento: '', importe: '',
-    id_metodo: '', observaciones: '', pagado: false,
-    estado_op: 'CAJA', ingresa_egreso: true,
+    id_metodo: '', observaciones: '',
+    pagado: false, fecha_pago: '', periodo: '',
+    estado_op: 'CUENTA CTE', ingresa_egreso: true,
     id_local: activeLocal?.id || ''
   })
 
@@ -49,7 +71,7 @@ export default function PagoForm() {
         if (pagoRes) {
           const d = pagoRes.data
           setForm({
-            fecha:          d.fecha ? d.fecha.slice(0, 10) : '',
+            fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
             id_proveedor:   d.id_proveedor   || '',
             id_rubcat:      d.id_rubcat      || '',
             id_tipo:        d.id_tipo        || '',
@@ -59,28 +81,45 @@ export default function PagoForm() {
             id_metodo:      d.id_metodo      || '',
             observaciones:  d.observaciones  || '',
             pagado:         d.pagado,
-            estado_op:      d.estado_op      || 'CAJA',
+            fecha_pago:     d.fecha_pago ? d.fecha_pago.slice(0, 10) : '',
+            periodo:        d.periodo    ? d.periodo.slice(0, 10)    : '',
+            estado_op:      d.estado_op      || 'CUENTA CTE',
             ingresa_egreso: d.ingresa_egreso,
             id_local:       d.id_local       || '',
           })
         }
       })
-      .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
+      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
 
     return () => ctrl.abort()
   }, [id])
 
-  const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
+  // set con efectos encadenados:
+  //  · fecha          → pre-llena periodo si no fue editado manualmente
+  //  · fecha_pago     → deriva pagado automáticamente
+  //  · pagado = false → limpia fecha_pago
+  const set = (field, value) => setForm(f => {
+    const next = { ...f, [field]: value }
+    if (field === 'fecha') next.periodo = value
+    if (field === 'fecha_pago') next.pagado = Boolean(value)
+    if (field === 'pagado' && !value) next.fecha_pago = ''
+    return next
+  })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     try {
+      const payload = {
+        ...form,
+        fecha_pago: form.fecha_pago || null,
+        periodo:    form.periodo    || null,
+      }
       if (isEditing) {
-        await pagosApi.update(id, form)
+        await pagosApi.update(id, payload)
         notify('Pago actualizado', 'success')
       } else {
-        await pagosApi.create(form)
+        await pagosApi.create(payload)
         notify('Pago creado', 'success')
       }
       navigate('/pagos')
@@ -100,13 +139,42 @@ export default function PagoForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
+        {/* ── Toggle Ingreso / Egreso ── */}
+        <div className="form-panel" style={{ padding: '0.875rem 1.25rem' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className={`btn ${form.ingresa_egreso ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1, justifyContent: 'center', gap: 6 }}
+              onClick={() => set('ingresa_egreso', true)}
+            >
+              <IcoUp /> Ingreso
+            </button>
+            <button
+              type="button"
+              className={`btn ${!form.ingresa_egreso ? 'btn-danger' : 'btn-secondary'}`}
+              style={{ flex: 1, justifyContent: 'center', gap: 6 }}
+              onClick={() => set('ingresa_egreso', false)}
+            >
+              <IcoDown /> Egreso
+            </button>
+          </div>
+        </div>
+
+        {/* ── Información del Pago ── */}
         <div className="form-panel">
           <div className="form-panel-title">Información del Pago</div>
           <div className="form-grid">
             <div className="form-group">
-              <label className="form-label">Fecha</label>
+              <label className="form-label">Fecha Factura</label>
               <div className="form-input-wrap">
                 <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Período</label>
+              <div className="form-input-wrap">
+                <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
               </div>
             </div>
             <div className="form-group">
@@ -160,6 +228,7 @@ export default function PagoForm() {
           </div>
         </div>
 
+        {/* ── Montos ── */}
         <div className="form-panel">
           <div className="form-panel-title">Montos</div>
           <div className="form-grid">
@@ -181,20 +250,47 @@ export default function PagoForm() {
                 <input type="number" step="0.01" placeholder="0.00" value={form.importe} onChange={e => set('importe', e.target.value)} />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Fecha de Pago</label>
+              <div className="form-input-wrap">
+                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
+              </div>
+            </div>
           </div>
-
-          <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.25rem' }}>
-            <label className="checkbox-wrap">
-              <input type="checkbox" checked={form.pagado} onChange={e => set('pagado', e.target.checked)} />
-              <span className="checkbox-label">Pagado</span>
-            </label>
-            <label className="checkbox-wrap">
-              <input type="checkbox" checked={form.ingresa_egreso} onChange={e => set('ingresa_egreso', e.target.checked)} />
-              <span className="checkbox-label">Ingreso (desmarcar = egreso)</span>
-            </label>
+          <div style={{ marginTop: '0.5rem' }}>
+            <span className={`badge ${form.pagado ? 'badge-green' : 'badge-muted'}`} style={{ fontSize: 12 }}>
+              {form.pagado ? 'Pagado' : 'Pendiente de pago'}
+            </span>
           </div>
         </div>
 
+        {/* ── Adjuntos (visual, sin carga) ── */}
+        <div className="form-panel">
+          <div className="form-panel-title">Adjuntos</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <IcoPaperclip /> Foto
+              </label>
+              <div className="form-input-wrap">
+                <input type="text" disabled placeholder="Sin archivo adjunto" style={{ opacity: 0.45, cursor: 'not-allowed' }} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <IcoPaperclip /> PDF
+              </label>
+              <div className="form-input-wrap">
+                <input type="text" disabled placeholder="Sin archivo adjunto" style={{ opacity: 0.45, cursor: 'not-allowed' }} />
+              </div>
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--t3)', marginTop: '0.5rem', marginBottom: 0 }}>
+            La carga de archivos estará disponible próximamente.
+          </p>
+        </div>
+
+        {/* ── Notas ── */}
         <div className="form-panel">
           <div className="form-panel-title">Notas</div>
           <div className="form-group">
