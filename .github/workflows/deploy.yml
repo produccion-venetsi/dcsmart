@@ -30,6 +30,8 @@ jobs:
 
   deploy-backend:
     runs-on: ubuntu-latest
+    env:
+      IMAGE: us-central1-docker.pkg.dev/dc-smart-mvp/dcsmart/dcsmart-backend
     steps:
       - uses: actions/checkout@v4
 
@@ -41,19 +43,19 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configurar Docker para GCR
-        run: gcloud auth configure-docker --quiet
+      - name: Configurar Docker para Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Build imagen Docker
-        run: docker build -t gcr.io/dc-smart-mvp/dcsmart-backend:${{ github.sha }} backend/
+        run: docker build -t ${{ env.IMAGE }}:${{ github.sha }} backend/
 
       - name: Push imagen Docker
-        run: docker push gcr.io/dc-smart-mvp/dcsmart-backend:${{ github.sha }}
+        run: docker push ${{ env.IMAGE }}:${{ github.sha }}
 
       - name: Deploy a Cloud Run
         run: |
           gcloud run deploy dcsmart-backend \
-            --image gcr.io/dc-smart-mvp/dcsmart-backend:${{ github.sha }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
             --region us-central1 \
             --platform managed \
             --env-vars-file backend/.env.cloudrun.yaml \
