@@ -617,8 +617,27 @@ export default function CajaList() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelMode, setPanelMode] = useState('create')
   const [selectedId, setSelectedId] = useState(null)
+  const [sortField,  setSortField]  = useState('fecha_inicio')
+  const [sortDir,    setSortDir]    = useState('desc')
 
   const totalPages = Math.ceil(total / 20)
+
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+  const sortedCajas = [...cajas].sort((a, b) => {
+    const va = a[sortField] ?? ''
+    const vb = b[sortField] ?? ''
+    if (va < vb) return sortDir === 'asc' ? -1 : 1
+    if (va > vb) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+  const SortTh = ({ field, children }) => (
+    <th className={`sortable${sortField === field ? ' active' : ''}`} onClick={() => toggleSort(field)}>
+      {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  )
 
   const load = () => {
     setLoading(true)
@@ -680,11 +699,11 @@ export default function CajaList() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Nro Turno</th>
-              <th>Inicio</th>
-              <th>Cierre</th>
-              <th>Cajero</th>
-              <th>Total</th>
+              <SortTh field="nro_turno">Nro Turno</SortTh>
+              <SortTh field="fecha_inicio">Inicio</SortTh>
+              <SortTh field="fecha_cierre">Cierre</SortTh>
+              <SortTh field="cajero">Cajero</SortTh>
+              <SortTh field="total">Total</SortTh>
               <th>Efectivo</th>
               <th>Fiscal</th>
               <th>Comensales</th>
@@ -706,7 +725,7 @@ export default function CajaList() {
               ))
             ) : (
               <>
-                {cajas.map((c) => (
+                {sortedCajas.map((c) => (
                   <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
@@ -757,9 +776,19 @@ export default function CajaList() {
 
       {total > 20 && (
         <div className="pagination">
+          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
           <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-          <span className="pagination-info">Página {page} de {totalPages}</span>
+          <span className="pagination-info">
+            Pág.&nbsp;
+            <input
+              type="number" min={1} max={totalPages} value={page}
+              onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
+              style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+            />
+            &nbsp;de {totalPages}
+          </span>
           <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
         </div>
       )}
 

@@ -280,6 +280,8 @@ export default function PagoList() {
   const [filters,    setFilters]    = useState(FILTER_INIT)
   const [panelOpen,  setPanelOpen]  = useState(false)
   const [selectedPago, setSelectedPago] = useState(null)
+  const [sortField,  setSortField]  = useState('fecha')
+  const [sortDir,    setSortDir]    = useState('desc')
 
   const [rubros,     setRubros]     = useState([])
   const [categorias, setCategorias] = useState([])
@@ -408,6 +410,27 @@ export default function PagoList() {
   const catsForRubro = draft.id_rub
     ? rubcats.filter(rc => rc.id_rub === draft.id_rub).map(rc => rc.categoria).filter(Boolean)
     : categorias
+
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+  const getSortVal = (p, field) => {
+    if (field === 'proveedor') return p.proveedor?.nombre ?? ''
+    return p[field] ?? ''
+  }
+  const sortedPagos = [...pagos].sort((a, b) => {
+    const va = getSortVal(a, sortField)
+    const vb = getSortVal(b, sortField)
+    if (va < vb) return sortDir === 'asc' ? -1 : 1
+    if (va > vb) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+  const SortTh = ({ field, children, minWidth }) => (
+    <th className={`sortable${sortField === field ? ' active' : ''}`} style={minWidth ? { minWidth } : undefined} onClick={() => toggleSort(field)}>
+      {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  )
 
   const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
   const closePanel = () => setPanelOpen(false)
@@ -559,24 +582,24 @@ export default function PagoList() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Nro</th>
-              <th>Fecha</th>
-              <th>Proveedor</th>
-              <th>Rubro / Cat</th>
-              <th>Tipo</th>
+              <SortTh field="nro_ord" minWidth={50}>Nro</SortTh>
+              <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
+              <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
+              <th style={{ minWidth: 160 }}>Rubro / Cat</th>
+              <th style={{ minWidth: 80 }}>Tipo</th>
               <th>PV</th>
               <th>Nro</th>
               <th>Neto</th>
               <th>Descuento</th>
-              <th>Importe</th>
+              <SortTh field="importe" minWidth={90}>Importe</SortTh>
               <th>Método</th>
               <th>Cashflow</th>
               <th>Dirección</th>
               <th>Estado</th>
               <th>Pagado</th>
-              <th>Fecha Pago</th>
+              <SortTh field="fecha_pago" minWidth={90}>Fecha Pago</SortTh>
               <th>Audit</th>
-              <th>Período</th>
+              <SortTh field="periodo" minWidth={80}>Período</SortTh>
               <th>Local</th>
               <th></th>
             </tr>
@@ -592,7 +615,7 @@ export default function PagoList() {
               ))
             ) : (
               <>
-                {pagos.map((p) => (
+                {sortedPagos.map((p) => (
                   <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
                     <td className="td-primary" style={{ minWidth: 50 }}>{p.nro_ord ?? <span className="td-muted">—</span>}</td>
                     <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
@@ -668,9 +691,19 @@ export default function PagoList() {
 
       {total > LIMIT && (
         <div className="pagination">
+          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
           <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-          <span className="pagination-info">Página {page} de {totalPages} — {total} pagos</span>
+          <span className="pagination-info">
+            Pág.&nbsp;
+            <input
+              type="number" min={1} max={totalPages} value={page}
+              onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
+              style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+            />
+            &nbsp;de {totalPages} — {total} pagos
+          </span>
           <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
         </div>
       )}
 
