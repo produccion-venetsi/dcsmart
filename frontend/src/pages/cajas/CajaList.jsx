@@ -237,7 +237,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
                 style={{ opacity: 0.5, cursor: 'not-allowed' }}
                 value={(() => {
                   const t = tipos.find(x => x.id === newDet.id_tipo)
-                  return t ? clasificacionLabel(t.clasificacion, 'Otro') : '— Según el tipo —'
+                  return t ? clasificacionLabel(t.clasificacion, 'Otro') : 'Ver opciones'
                 })()}
               />
             </div>
@@ -246,7 +246,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
             <label className="form-label">Nombre</label>
             <div className="form-input-wrap">
               <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
-                <option value="">Seleccionar nombre…</option>
+                <option value="">Ver opciones</option>
                 {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
               </select>
             </div>
