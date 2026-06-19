@@ -1873,3 +1873,74 @@ tr.row-clickable:hover td {
 }
 .pdp-modal-title { font-size: 16px; font-weight: 700; color: var(--t1); margin: 0 0 1.1rem; }
 .pdp-modal-foot { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.4rem; }
+
+/* ── PDP summary cards ── */
+.pdp-stats {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.pdp-stat-card {
+  flex: 1;
+  min-width: 160px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pdp-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--t3);
+}
+.pdp-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gold-bright);
+  line-height: 1.1;
+}
+.pdp-stat-sub {
+  font-size: 11px;
+  color: var(--t3);
+}
+
+/* ── combobox de proveedor ── */
+.combobox-wrap {
+  position: relative;
+}
+.combobox-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hi);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.combobox-dropdown::-webkit-scrollbar { width: 6px; }
+.combobox-dropdown::-webkit-scrollbar-thumb { background: var(--gold-deep); border-radius: 6px; }
+.combobox-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--t1);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.combobox-option:hover { background: var(--bg-card-hi); }
+.combobox-option.empty { color: var(--t3); cursor: default; font-style: italic; }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
@@ -36,25 +36,49 @@ function IcoPaperclip() {
   )
 }
 
+function padLeft(val, len) {
+  const str = String(val ?? '').replace(/\D/g, '')
+  return str ? str.padStart(len, '0') : ''
+}
+
 export default function PagoForm() {
-  const { id }        = useParams()
-  const navigate      = useNavigate()
-  const activeLocal   = useAppStore((s) => s.activeLocal)
-  const notify        = useUiStore((s) => s.notify)
-  const isEditing     = Boolean(id)
+  const { id }      = useParams()
+  const navigate    = useNavigate()
+  const activeLocal = useAppStore((s) => s.activeLocal)
+  const activeApp   = useAppStore((s) => s.activeApp)
+  const notify      = useUiStore((s) => s.notify)
+  const isEditing   = Boolean(id)
+
+  const locales = activeApp?.locales ?? []
 
   const [proveedores, setProveedores] = useState([])
   const [rubcats,     setRubcats]     = useState([])
   const [metodos,     setMetodos]     = useState([])
   const [loading,     setLoading]     = useState(false)
+
+  // combobox de proveedor
+  const [provSearch, setProvSearch] = useState('')
+  const [provOpen,   setProvOpen]   = useState(false)
+  const provRef = useRef(null)
+
   const [form, setForm] = useState({
     fecha: '', id_proveedor: '', id_rubcat: '', id_tipo: '',
+    pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', observaciones: '',
     pagado: false, fecha_pago: '', periodo: '',
     estado_op: 'CUENTA CTE', ingresa_egreso: true,
     id_local: activeLocal?.id || ''
   })
+
+  // cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    const handler = (e) => {
+      if (provRef.current && !provRef.current.contains(e.target)) setProvOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -70,11 +94,16 @@ export default function PagoForm() {
         setMetodos(mets)
         if (pagoRes) {
           const d = pagoRes.data
+          // pre-llenar label del combobox
+          const prov = provs.data.find(p => p.id === d.id_proveedor)
+          if (prov) setProvSearch(prov.nombre)
           setForm({
             fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
             id_proveedor:   d.id_proveedor   || '',
             id_rubcat:      d.id_rubcat      || '',
             id_tipo:        d.id_tipo        || '',
+            pv:             d.pv != null     ? String(d.pv)           : '',
+            nro:            d.nro != null    ? String(d.nro)          : '',
             importe_neto:   d.importe_neto   || '',
             descuento:      d.descuento      || '',
             importe:        d.importe        || '',
@@ -94,10 +123,7 @@ export default function PagoForm() {
     return () => ctrl.abort()
   }, [id])
 
-  // set con efectos encadenados:
-  //  · fecha          → pre-llena periodo si no fue editado manualmente
-  //  · fecha_pago     → deriva pagado automáticamente
-  //  · pagado = false → limpia fecha_pago
+  // set con efectos encadenados
   const set = (field, value) => setForm(f => {
     const next = { ...f, [field]: value }
     if (field === 'fecha') next.periodo = value
@@ -106,14 +132,41 @@ export default function PagoForm() {
     return next
   })
 
+  // seleccionar proveedor desde el combobox: pre-llena rubcat si el proveedor tiene uno
+  const selectProveedor = (prov) => {
+    setForm(f => ({
+      ...f,
+      id_proveedor: prov.id,
+      id_rubcat: prov.id_rubcat || f.id_rubcat
+    }))
+    setProvSearch(prov.nombre)
+    setProvOpen(false)
+  }
+
+  const clearProveedor = () => {
+    setForm(f => ({ ...f, id_proveedor: '' }))
+    setProvSearch('')
+    setProvOpen(false)
+  }
+
+  const filteredProvs = proveedores.filter(p =>
+    p.nombre.toLowerCase().includes(provSearch.toLowerCase())
+  )
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!activeLocal && !form.id_local) {
+      notify('Seleccioná un local', 'error'); return
+    }
     setLoading(true)
     try {
       const payload = {
         ...form,
+        pv:         form.pv  ? parseInt(form.pv,  10) : null,
+        nro:        form.nro ? parseInt(form.nro, 10) : null,
         fecha_pago: form.fecha_pago || null,
         periodo:    form.periodo    || null,
+        id_local:   activeLocal?.id || form.id_local || null,
       }
       if (isEditing) {
         await pagosApi.update(id, payload)
@@ -165,6 +218,20 @@ export default function PagoForm() {
         <div className="form-panel">
           <div className="form-panel-title">Información del Pago</div>
           <div className="form-grid">
+
+            {/* selector de local — solo cuando no hay local activo */}
+            {!activeLocal && locales.length > 0 && (
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Local *</label>
+                <div className="form-input-wrap">
+                  <select required value={form.id_local} onChange={e => set('id_local', e.target.value)}>
+                    <option value="">Seleccioná un local…</option>
+                    {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div className="form-group">
               <label className="form-label">Fecha Factura</label>
               <div className="form-input-wrap">
@@ -177,15 +244,43 @@ export default function PagoForm() {
                 <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
               </div>
             </div>
-            <div className="form-group">
+
+            {/* combobox de proveedor */}
+            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: '1 / -1' }}>
               <label className="form-label">Proveedor</label>
               <div className="form-input-wrap">
-                <select value={form.id_proveedor} onChange={e => set('id_proveedor', e.target.value)}>
-                  <option value="">Sin proveedor</option>
-                  {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                <input
+                  type="text"
+                  placeholder="Buscar proveedor…"
+                  value={provSearch}
+                  autoComplete="off"
+                  onChange={e => { setProvSearch(e.target.value); setProvOpen(true) }}
+                  onFocus={() => setProvOpen(true)}
+                />
+                {form.id_proveedor && (
+                  <button
+                    type="button"
+                    onClick={clearProveedor}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', color: 'var(--t3)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                    title="Quitar proveedor"
+                  >×</button>
+                )}
               </div>
+              {provOpen && (
+                <div className="combobox-dropdown">
+                  {filteredProvs.length === 0
+                    ? <span className="combobox-option empty">Sin resultados</span>
+                    : filteredProvs.slice(0, 60).map(p => (
+                      <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
+                        {p.nombre}
+                      </button>
+                    ))
+                  }
+                </div>
+              )}
             </div>
+
             <div className="form-group">
               <label className="form-label">Rubro / Categoría</label>
               <div className="form-input-wrap">
@@ -208,6 +303,7 @@ export default function PagoForm() {
                 </select>
               </div>
             </div>
+
             <div className="form-group">
               <label className="form-label">Tipo de Comprobante</label>
               <div className="form-input-wrap">
@@ -225,6 +321,39 @@ export default function PagoForm() {
                 </select>
               </div>
             </div>
+
+            {/* PV y Nro de comprobante */}
+            <div className="form-group">
+              <label className="form-label">Punto de Venta</label>
+              <div className="form-input-wrap">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00000"
+                  maxLength={5}
+                  value={form.pv}
+                  onChange={e => set('pv', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  onBlur={e => { if (e.target.value) set('pv', padLeft(e.target.value, 5)) }}
+                  style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Nro Comprobante</label>
+              <div className="form-input-wrap">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00000000"
+                  maxLength={8}
+                  value={form.nro}
+                  onChange={e => set('nro', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  onBlur={e => { if (e.target.value) set('nro', padLeft(e.target.value, 8)) }}
+                  style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                />
+              </div>
+            </div>
+
           </div>
         </div>
 

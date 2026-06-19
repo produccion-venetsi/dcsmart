@@ -392,6 +392,20 @@ export default function PdpDashboard() {
         </div>
       </div>
 
+      {/* ── tarjetas de resumen ── */}
+      <div className="pdp-stats">
+        <div className="pdp-stat-card">
+          <span className="pdp-stat-label">Total Deuda</span>
+          <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(deuda))}</span>
+          <span className="pdp-stat-sub">{loading ? '' : `${deuda.length} orden${deuda.length !== 1 ? 'es' : ''}`}</span>
+        </div>
+        <div className="pdp-stat-card">
+          <span className="pdp-stat-label">Total en PDP</span>
+          <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(pagar))}</span>
+          <span className="pdp-stat-sub">{loading ? '' : `${pagar.length} orden${pagar.length !== 1 ? 'es' : ''} pendiente${pagar.length !== 1 ? 's' : ''}`}</span>
+        </div>
+      </div>
+
       <div className="pdp-grid">
         <PdpColumn
           title="Deuda"
