@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
@@ -601,6 +602,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 }
 
 export default function CajaList() {
+  const navigate = useNavigate()
   const { activeApp, activeLocal } = useAppStore()
   const locales   = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
@@ -688,7 +690,7 @@ export default function CajaList() {
         </div>
         <div className="page-actions">
           {canCreate && (
-            <button className="btn btn-primary" onClick={openCreate}>
+            <button className="btn btn-primary" onClick={() => navigate('/cajas/nueva')}>
               <IcoPlus /> Nueva Caja
             </button>
           )}
