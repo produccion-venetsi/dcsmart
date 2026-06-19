@@ -6,7 +6,7 @@ on:
       - master
 
 jobs:
-  build-and-deploy:
+  deploy-frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,3 +27,37 @@ jobs:
 
       - name: Deploy a Firebase Hosting
         run: npx firebase-tools@latest deploy --only hosting --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configurar Docker para GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build imagen Docker
+        run: docker build -t gcr.io/dc-smart-mvp/dcsmart-backend:${{ github.sha }} backend/
+
+      - name: Push imagen Docker
+        run: docker push gcr.io/dc-smart-mvp/dcsmart-backend:${{ github.sha }}
+
+      - name: Deploy a Cloud Run
+        run: |
+          gcloud run deploy dcsmart-backend \
+            --image gcr.io/dc-smart-mvp/dcsmart-backend:${{ github.sha }} \
+            --region us-central1 \
+            --platform managed \
+            --env-vars-file backend/.env.cloudrun.yaml \
+            --add-cloudsql-instances dc-smart-mvp:us-central1:dcsmart-mvp-insta \
+            --allow-unauthenticated \
+            --project dc-smart-mvp \
+            --quiet
