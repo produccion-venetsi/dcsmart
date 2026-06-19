@@ -197,6 +197,7 @@ model Proveedor {
   mail_envio    String?
   tag           String?
   id_rubcat     String?
+  plazo         Int?
   activo        Boolean  @default(true)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt

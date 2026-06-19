@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { impuestosApi } from '../../api/impuestos.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
@@ -41,6 +42,29 @@ function padLeft(val, len) {
   return str ? str.padStart(len, '0') : ''
 }
 
+function calcCashflow(fecha, plazo) {
+  if (!fecha || !plazo) return ''
+  const d = new Date(fecha + 'T00:00:00')
+  d.setDate(d.getDate() + Number(plazo))
+  return d.toISOString().slice(0, 10)
+}
+
+function IcoPlus() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  )
+}
+function IcoTrash() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    </svg>
+  )
+}
+
 export default function PagoForm() {
   const { id }      = useParams()
   const navigate    = useNavigate()
@@ -59,13 +83,19 @@ export default function PagoForm() {
   // combobox de proveedor
   const [provSearch, setProvSearch] = useState('')
   const [provOpen,   setProvOpen]   = useState(false)
+  const [provPlazo,  setProvPlazo]  = useState(null)
   const provRef = useRef(null)
+
+  // impuestos pendientes (solo al crear)
+  const [pendingImp, setPendingImp] = useState([])
+  const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
+  const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
 
   const [form, setForm] = useState({
     fecha: '', id_proveedor: '', id_rubcat: '', id_tipo: '',
     pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
-    id_metodo: '', observaciones: '',
+    id_metodo: '', cashflow: '', observaciones: '',
     pagado: false, fecha_pago: '', periodo: '',
     estado_op: 'CUENTA CTE', ingresa_egreso: true,
     id_local: activeLocal?.id || ''
@@ -94,9 +124,11 @@ export default function PagoForm() {
         setMetodos(mets)
         if (pagoRes) {
           const d = pagoRes.data
-          // pre-llenar label del combobox
           const prov = provs.data.find(p => p.id === d.id_proveedor)
-          if (prov) setProvSearch(prov.nombre)
+          if (prov) {
+            setProvSearch(prov.nombre)
+            setProvPlazo(prov.plazo || null)
+          }
           setForm({
             fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
             id_proveedor:   d.id_proveedor   || '',
@@ -108,6 +140,7 @@ export default function PagoForm() {
             descuento:      d.descuento      || '',
             importe:        d.importe        || '',
             id_metodo:      d.id_metodo      || '',
+            cashflow:       d.cashflow   ? d.cashflow.slice(0, 10)   : '',
             observaciones:  d.observaciones  || '',
             pagado:         d.pagado,
             fecha_pago:     d.fecha_pago ? d.fecha_pago.slice(0, 10) : '',
@@ -126,25 +159,32 @@ export default function PagoForm() {
   // set con efectos encadenados
   const set = (field, value) => setForm(f => {
     const next = { ...f, [field]: value }
-    if (field === 'fecha') next.periodo = value
+    if (field === 'fecha') {
+      next.periodo = value
+      next.cashflow = calcCashflow(value, provPlazo)
+    }
     if (field === 'fecha_pago') next.pagado = Boolean(value)
     if (field === 'pagado' && !value) next.fecha_pago = ''
     return next
   })
 
-  // seleccionar proveedor desde el combobox: pre-llena rubcat si el proveedor tiene uno
+  // seleccionar proveedor desde el combobox: pre-llena rubcat y recalcula cashflow si hay plazo
   const selectProveedor = (prov) => {
+    const plazo = prov.plazo || null
+    setProvPlazo(plazo)
     setForm(f => ({
       ...f,
       id_proveedor: prov.id,
-      id_rubcat: prov.id_rubcat || f.id_rubcat
+      id_rubcat:    prov.id_rubcat || f.id_rubcat,
+      cashflow:     calcCashflow(f.fecha, plazo) || f.cashflow
     }))
     setProvSearch(prov.nombre)
     setProvOpen(false)
   }
 
   const clearProveedor = () => {
-    setForm(f => ({ ...f, id_proveedor: '' }))
+    setProvPlazo(null)
+    setForm(f => ({ ...f, id_proveedor: '', cashflow: '' }))
     setProvSearch('')
     setProvOpen(false)
   }
@@ -162,17 +202,26 @@ export default function PagoForm() {
     try {
       const payload = {
         ...form,
-        pv:         form.pv  ? parseInt(form.pv,  10) : null,
-        nro:        form.nro ? parseInt(form.nro, 10) : null,
+        pv:         form.pv       ? parseInt(form.pv,  10) : null,
+        nro:        form.nro      ? parseInt(form.nro, 10) : null,
         fecha_pago: form.fecha_pago || null,
         periodo:    form.periodo    || null,
+        cashflow:   form.cashflow   || null,
         id_local:   activeLocal?.id || form.id_local || null,
       }
       if (isEditing) {
         await pagosApi.update(id, payload)
         notify('Pago actualizado', 'success')
       } else {
-        await pagosApi.create(payload)
+        const res = await pagosApi.create(payload)
+        const newId = res.data?.id
+        if (newId && pendingImp.length > 0) {
+          await Promise.all(
+            pendingImp.map(imp =>
+              impuestosApi.create({ id_pago: newId, tipo: imp.tipo, monto: parseFloat(imp.monto) })
+            )
+          )
+        }
         notify('Pago creado', 'success')
       }
       navigate('/pagos')
@@ -380,6 +429,22 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
+              <label className="form-label">Cashflow</label>
+              <div className="form-input-wrap">
+                <input
+                  type="date"
+                  value={form.cashflow}
+                  onChange={e => set('cashflow', e.target.value)}
+                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
+                />
+              </div>
+              {provPlazo && (
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  Plazo: {provPlazo} días
+                </span>
+              )}
+            </div>
+            <div className="form-group">
               <label className="form-label">Fecha de Pago</label>
               <div className="form-input-wrap">
                 <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
@@ -392,6 +457,87 @@ export default function PagoForm() {
             </span>
           </div>
         </div>
+
+        {/* ── Impuestos (solo al crear) ── */}
+        {!isEditing && (
+          <div className="form-panel">
+            <div className="form-panel-title">Impuestos</div>
+
+            {/* Tabla de impuestos agregados */}
+            {pendingImp.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <table className="data-table" style={{ marginBottom: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Monto</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingImp.map((imp, i) => (
+                      <tr key={i}>
+                        <td><span className="badge badge-blue">{imp.tipo}</span></td>
+                        <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-danger btn-icon"
+                            onClick={() => setPendingImp(prev => prev.filter((_, j) => j !== i))}
+                          >
+                            <IcoTrash />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
+                      <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
+                        ${pendingImp.reduce((acc, i) => acc + Number(i.monto), 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Formulario para agregar un impuesto */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
+                <label className="form-label">Tipo</label>
+                <div className="form-input-wrap">
+                  <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                    {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+                <label className="form-label">Monto</label>
+                <div className="form-input-wrap">
+                  <input
+                    type="number" step="0.01" placeholder="0.00"
+                    value={impForm.monto}
+                    onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ whiteSpace: 'nowrap' }}
+                disabled={!impForm.monto}
+                onClick={() => {
+                  if (!impForm.monto) return
+                  setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
+                  setImpForm(f => ({ ...f, monto: '' }))
+                }}
+              >
+                <IcoPlus /> Agregar
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Adjuntos (visual, sin carga) ── */}
         <div className="form-panel">

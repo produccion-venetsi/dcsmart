@@ -14,7 +14,7 @@ function IcoBack() {
 const EMPTY = {
   nombre: '', razon_social: '', cuit: '', banco: '', cbu: '', alias: '',
   direccion_url: '', detalle_direc: '', telefono: '', mail_contacto: '',
-  mail_envio: '', tag: '', activo: true
+  mail_envio: '', tag: '', plazo: '', activo: true
 }
 
 export default function ProveedorForm() {
@@ -91,6 +91,12 @@ export default function ProveedorForm() {
               <label className="form-label">Tag</label>
               <div className="form-input-wrap">
                 <input type="text" placeholder="Etiqueta" value={form.tag} onChange={e => set('tag', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Plazo de Pago <span style={{ color: 'var(--t3)', fontWeight: 400 }}>(días)</span></label>
+              <div className="form-input-wrap">
+                <input type="number" min="0" step="1" placeholder="Ej: 30" value={form.plazo} onChange={e => set('plazo', e.target.value)} />
               </div>
             </div>
           </div>
