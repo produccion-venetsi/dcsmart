@@ -53,7 +53,9 @@ jobs:
         run: docker push ${{ env.IMAGE }}:${{ github.sha }}
 
       - name: Crear env vars file
-        run: echo "${{ secrets.CLOUDRUN_ENV_YAML }}" > backend/.env.cloudrun.yaml
+        env:
+          CLOUDRUN_ENV_YAML: ${{ secrets.CLOUDRUN_ENV_YAML }}
+        run: printf '%s' "$CLOUDRUN_ENV_YAML" > backend/.env.cloudrun.yaml
 
       - name: Deploy a Cloud Run
         run: |
