@@ -51,7 +51,7 @@ export default async function pagosRoutes(fastify) {
     const {
       id_local, id_proveedor, pagado, estado_op,
       desde, hasta, id_tipo, id_rub, id_cat, id_rubcat,
-      audit, ingresa_egreso, id_metodo,
+      audit, ingresa_egreso, id_metodo, nro_ord,
       page = 1, limit = 50
     } = request.query
     const skip = (Number(page) - 1) * Number(limit)
@@ -75,6 +75,7 @@ export default async function pagosRoutes(fastify) {
       ...rubcatFilter,
       ...auditFilter,
       ...(id_proveedor    ? { id_proveedor }                                : {}),
+      ...(nro_ord         ? { nro_ord: parseInt(nro_ord) }                  : {}),
       ...(id_tipo         ? { id_tipo }                                     : {}),
       ...(id_metodo       ? { id_metodo }                                   : {}),
       ...(pagado          !== undefined ? { pagado:         pagado         === 'true' } : {}),

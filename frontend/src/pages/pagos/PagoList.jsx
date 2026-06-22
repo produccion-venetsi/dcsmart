@@ -293,6 +293,8 @@ export default function PagoList() {
   const [sortDir,    setSortDir]    = useState('desc')
   const [pageSize,   setPageSize]   = useState(20)
 
+  const [search,     setSearch]     = useState('')
+
   const [rubros,     setRubros]     = useState([])
   const [categorias, setCategorias] = useState([])
   const [rubcats,    setRubcats]    = useState([])
@@ -308,9 +310,13 @@ export default function PagoList() {
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [])
 
+  // Strip "OP-" / "op " prefix so the user can type "OP-15" or just "15"
+  const nroOrdNum = search.trim().replace(/^op[-\s]*/i, '')
+
   const buildParams = () => ({
     ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
     page, limit: LIMIT,
+    ...(nroOrdNum !== '' ? { nro_ord: nroOrdNum } : {}),
     ...(filters.pagado         !== '' ? { pagado:         filters.pagado }         : {}),
     ...(filters.estado_op      !== '' ? { estado_op:      filters.estado_op }      : {}),
     ...(filters.desde          !== '' ? { desde:          filters.desde }          : {}),
@@ -340,7 +346,7 @@ export default function PagoList() {
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
   }, [
-    page, activeLocal?.id,
+    page, activeLocal?.id, search,
     filters.pagado, filters.estado_op, filters.desde, filters.hasta,
     filters.id_tipo, filters.id_rub, filters.id_cat,
     filters.audit, filters.ingresa_egreso, filters.id_metodo,
@@ -394,7 +400,7 @@ export default function PagoList() {
   }, [filterOpen])
 
   const applyFilters  = () => { setFilters(draft); setPage(1); setFilterOpen(false) }
-  const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setPage(1) }
+  const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch(''); setPage(1) }
   const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
 
   const cmvRubroId = rubros.find(r => r.nombre?.toUpperCase().includes('CMV'))?.id ?? ''
@@ -468,6 +474,44 @@ export default function PagoList() {
           {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
         <div className="page-actions">
+          {/* ── Buscador OP ── */}
+          <div style={{ position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--t2)', pointerEvents: 'none', fontSize: 13,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar OP…"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              style={{
+                height: 36, paddingLeft: 32, paddingRight: search ? 28 : 12,
+                background: 'var(--bg-input)', border: '1px solid var(--border-input)',
+                borderRadius: 8, color: 'var(--t1)', fontSize: 13, width: 150,
+                outline: 'none',
+              }}
+            />
+            {search && (
+              <button
+                onClick={() => { setSearch(''); setPage(1) }}
+                style={{
+                  position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--t2)', padding: 2, display: 'flex', lineHeight: 1,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            )}
+          </div>
+
           <div style={{ position: 'relative' }} ref={filterRef}>
             <button
               className={`btn ${filterOpen || hasActiveFilters ? 'btn-primary' : 'btn-secondary'}`}
