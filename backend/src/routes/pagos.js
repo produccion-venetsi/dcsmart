@@ -1,3 +1,7 @@
+import { Storage } from '@google-cloud/storage'
+
+const gcs = new Storage({ projectId: process.env.GCS_PROJECT_ID })
+
 // El estado de auditoría de un pago se guarda en la tabla `audits`
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
 
@@ -425,6 +429,46 @@ export default async function pagosRoutes(fastify) {
       }
     })
     return { ok: true, count: result.count }
+  })
+
+  // ── GET /:id/attachment ────────────────────────────────────────────────
+  // Streams a private GCS file (foto or pdf) through the backend.
+  // The client sends its JWT as normal; this avoids exposing gs:// paths.
+  fastify.get('/:id/attachment', { preHandler: viewHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({
+      where:  { id: request.params.id },
+      select: { foto_url: true, pdf_url: true, id_local: true }
+    })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const type   = request.query.type === 'pdf' ? 'pdf' : 'foto'
+    const gsPath = type === 'pdf' ? pago.pdf_url : pago.foto_url
+    if (!gsPath?.startsWith('gs://')) return reply.code(404).send({ error: 'Sin adjunto' })
+
+    const withoutScheme = gsPath.replace('gs://', '')
+    const slashIdx      = withoutScheme.indexOf('/')
+    const bucketName    = withoutScheme.slice(0, slashIdx)
+    const filePath      = withoutScheme.slice(slashIdx + 1)
+
+    const ext         = filePath.split('.').pop().toLowerCase()
+    const contentType = type === 'pdf' ? 'application/pdf'
+                      : ext === 'png'  ? 'image/png'
+                      : 'image/jpeg'
+
+    reply.header('Content-Type', contentType)
+    reply.header('Cache-Control', 'private, max-age=300')
+
+    const stream = gcs.bucket(bucketName).file(filePath).createReadStream({
+      userProject: process.env.GCS_PROJECT_ID,
+    })
+    stream.on('error', (err) => {
+      fastify.log.error({ err, gsPath }, 'GCS stream error')
+      if (!reply.sent) reply.code(502).send({ error: 'No se pudo obtener el archivo' })
+    })
+    return reply.send(stream)
   })
 
   // ── DELETE /:id ────────────────────────────────────────────────────────

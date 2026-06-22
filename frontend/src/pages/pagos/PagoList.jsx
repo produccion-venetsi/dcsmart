@@ -7,6 +7,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import FotoViewer from '../../components/FotoViewer.jsx'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -193,11 +194,10 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
           </div>
         ))}
         {(pago.foto_url || pago.pdf_url) && (
-          <div className="drawer-detail-row">
-            <span className="drawer-detail-key">Adjuntos</span>
-            <span className="drawer-detail-val" style={{ display: 'flex', gap: '0.75rem' }}>
-              {pago.foto_url && <a href={pago.foto_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)', fontSize: 12 }}>Foto <IcoLink /></a>}
-              {pago.pdf_url  && <a href={pago.pdf_url}  target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)', fontSize: 12 }}>PDF <IcoLink /></a>}
+          <div className="drawer-detail-row" style={{ alignItems: 'flex-start' }}>
+            <span className="drawer-detail-key" style={{ paddingTop: 6 }}>Adjuntos</span>
+            <span className="drawer-detail-val">
+              <FotoViewer pagoId={pago.id} fotoUrl={pago.foto_url} pdfUrl={pago.pdf_url} />
             </span>
           </div>
         )}

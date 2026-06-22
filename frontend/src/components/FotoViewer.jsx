@@ -1,0 +1,412 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import client from '../api/client'
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+
+function IcoExpand() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  )
+}
+
+function IcoPdf() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="9" y1="15" x2="15" y2="15" /><line x1="9" y1="11" x2="15" y2="11" />
+    </svg>
+  )
+}
+
+function IcoClose() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  )
+}
+
+// ── Image lightbox with zoom + pan ─────────────────────────────────────────
+
+const MIN_SCALE = 0.25
+const MAX_SCALE = 10
+const ZOOM_STEP = 1.25
+
+function clampScale(s) { return Math.max(MIN_SCALE, Math.min(MAX_SCALE, s)) }
+
+function ImageLightbox({ src, onClose }) {
+  const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const containerRef = useRef(null)
+  const dragOrigin   = useRef(null)   // { startX, startY, originX, originY }
+  const pinchRef     = useRef(null)   // last pinch distance + midpoint
+
+  const reset = useCallback(() => setView({ scale: 1, x: 0, y: 0 }), [])
+
+  // ── Non-passive wheel → zoom toward cursor ───────────────────────────────
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (e) => {
+      e.preventDefault()
+      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
+      setView((prev) => {
+        const ns = clampScale(prev.scale * factor)
+        // Keep the point under the cursor fixed
+        const cx = e.clientX - window.innerWidth  / 2
+        const cy = e.clientY - window.innerHeight / 2
+        const ratio = ns / prev.scale
+        return { scale: ns, x: cx * (1 - ratio) + prev.x * ratio, y: cy * (1 - ratio) + prev.y * ratio }
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === '0')          reset()
+      if (e.key === '+' || e.key === '=') setView(v => ({ ...v, scale: clampScale(v.scale * ZOOM_STEP) }))
+      if (e.key === '-')          setView(v => ({ ...v, scale: clampScale(v.scale / ZOOM_STEP) }))
+      // Arrow keys pan when zoomed
+      const PAN = 40 / (view.scale || 1)
+      if (e.key === 'ArrowLeft')  setView(v => ({ ...v, x: v.x + PAN }))
+      if (e.key === 'ArrowRight') setView(v => ({ ...v, x: v.x - PAN }))
+      if (e.key === 'ArrowUp')    setView(v => ({ ...v, y: v.y + PAN }))
+      if (e.key === 'ArrowDown')  setView(v => ({ ...v, y: v.y - PAN }))
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose, reset, view.scale])
+
+  // ── Mouse drag ────────────────────────────────────────────────────────────
+  const onMouseDown = (e) => {
+    e.preventDefault()
+    setDragging(true)
+    dragOrigin.current = { sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y }
+  }
+  const onMouseMove = useCallback((e) => {
+    if (!dragOrigin.current) return
+    const { sx, sy, ox, oy } = dragOrigin.current
+    setView(v => ({ ...v, x: ox + (e.clientX - sx), y: oy + (e.clientY - sy) }))
+  }, [])
+  const onMouseUp = useCallback(() => { setDragging(false); dragOrigin.current = null }, [])
+
+  // ── Double-click: zoom-in on point / reset ────────────────────────────────
+  const onDblClick = (e) => {
+    if (view.scale > 1.1) {
+      reset()
+    } else {
+      const ns = 2.5
+      const cx = e.clientX - window.innerWidth  / 2
+      const cy = e.clientY - window.innerHeight / 2
+      setView({ scale: ns, x: cx * (1 - ns), y: cy * (1 - ns) })
+    }
+  }
+
+  // ── Touch: single-finger drag + two-finger pinch ──────────────────────────
+  const onTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      dragOrigin.current = { sx: e.touches[0].clientX, sy: e.touches[0].clientY, ox: view.x, oy: view.y }
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      )
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2
+      pinchRef.current = { dist, mx, my }
+    }
+  }
+
+  const onTouchMove = (e) => {
+    e.preventDefault()
+    if (e.touches.length === 1 && dragOrigin.current) {
+      const { sx, sy, ox, oy } = dragOrigin.current
+      setView(v => ({ ...v, x: ox + (e.touches[0].clientX - sx), y: oy + (e.touches[0].clientY - sy) }))
+    } else if (e.touches.length === 2 && pinchRef.current) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      )
+      const factor = dist / pinchRef.current.dist
+      const { mx, my } = pinchRef.current
+      pinchRef.current = { dist, mx, my }
+      setView((prev) => {
+        const ns = clampScale(prev.scale * factor)
+        const cx = mx - window.innerWidth  / 2
+        const cy = my - window.innerHeight / 2
+        const ratio = ns / prev.scale
+        return { scale: ns, x: cx * (1 - ratio) + prev.x * ratio, y: cy * (1 - ratio) + prev.y * ratio }
+      })
+    }
+  }
+
+  const onTouchEnd = () => { dragOrigin.current = null; pinchRef.current = null; setDragging(false) }
+
+  // ── Zoom button helpers ───────────────────────────────────────────────────
+  const zoomIn  = (e) => { e.stopPropagation(); setView(v => ({ ...v, scale: clampScale(v.scale * ZOOM_STEP) })) }
+  const zoomOut = (e) => { e.stopPropagation(); setView(v => ({ ...v, scale: clampScale(v.scale / ZOOM_STEP) })) }
+  const doReset = (e) => { e.stopPropagation(); reset() }
+
+  const btnStyle = {
+    background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+    color: '#fff', borderRadius: 8, cursor: 'pointer', userSelect: 'none',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 36, height: 36, fontSize: 18, padding: 0,
+    transition: 'background 0.15s',
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.92)',
+        overflow: 'hidden',
+        cursor: dragging ? 'grabbing' : view.scale > 1 ? 'grab' : 'zoom-in',
+        userSelect: 'none', touchAction: 'none',
+      }}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* ── Close ── */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose() }}
+        style={{ ...btnStyle, position: 'absolute', top: 16, right: 20, zIndex: 10 }}
+      >
+        <IcoClose />
+      </button>
+
+      {/* ── Image ── */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        pointerEvents: 'none',
+      }}>
+        <img
+          src={src}
+          alt="Foto factura"
+          draggable={false}
+          onDoubleClick={onDblClick}
+          style={{
+            transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+            transformOrigin: 'center center',
+            maxWidth: '90vw', maxHeight: '90vh',
+            borderRadius: view.scale <= 1 ? 12 : 4,
+            boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+            pointerEvents: 'auto',
+            willChange: 'transform',
+          }}
+        />
+      </div>
+
+      {/* ── Zoom controls ── */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', alignItems: 'center', gap: 8, zIndex: 10,
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)',
+          borderRadius: 12, padding: '6px 10px',
+          border: '1px solid rgba(255,255,255,0.12)',
+        }}
+      >
+        <button style={btnStyle} onClick={zoomOut} title="Alejar (-)">−</button>
+
+        <button
+          style={{ ...btnStyle, width: 56, fontSize: 12, fontWeight: 600, letterSpacing: '0.03em' }}
+          onClick={doReset}
+          title="Restablecer (0)"
+        >
+          {Math.round(view.scale * 100)}%
+        </button>
+
+        <button style={btnStyle} onClick={zoomIn} title="Acercar (+)">+</button>
+      </div>
+
+      {/* ── Hint (only at 1×) ── */}
+      {view.scale === 1 && (
+        <div style={{
+          position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
+          fontSize: 11, color: 'rgba(255,255,255,0.4)', pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}>
+          Rueda para hacer zoom · Doble clic para ampliar · Arrastrá para mover
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Simple overlay for PDF ─────────────────────────────────────────────────
+
+function PdfLightbox({ children, onClose }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.88)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        style={{
+          position: 'absolute', top: 16, right: 20,
+          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: 8, color: '#fff', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 38, height: 38, padding: 0,
+        }}
+      >
+        <IcoClose />
+      </button>
+      <div onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
+
+export default function FotoViewer({ pagoId, fotoUrl, pdfUrl }) {
+  const [photoBlob,    setPhotoBlob]    = useState(null)
+  const [pdfBlob,      setPdfBlob]      = useState(null)
+  const [loadingPhoto, setLoadingPhoto] = useState(false)
+  const [loadingPdf,   setLoadingPdf]   = useState(false)
+  const [errorPhoto,   setErrorPhoto]   = useState(false)
+  const [lightbox,     setLightbox]     = useState(null) // 'photo' | 'pdf'
+
+  // Load photo blob on mount
+  useEffect(() => {
+    if (!fotoUrl || !pagoId) return
+    let cancelled = false
+    setLoadingPhoto(true)
+    setErrorPhoto(false)
+    client.get(`/pagos/${pagoId}/attachment?type=foto`, { responseType: 'blob' })
+      .then((res) => { if (!cancelled) setPhotoBlob(URL.createObjectURL(res.data)) })
+      .catch(() => { if (!cancelled) setErrorPhoto(true) })
+      .finally(() => { if (!cancelled) setLoadingPhoto(false) })
+    return () => { cancelled = true }
+  }, [pagoId, fotoUrl])
+
+  // Revoke blob URLs on unmount
+  useEffect(() => () => { photoBlob && URL.revokeObjectURL(photoBlob) }, [photoBlob])
+  useEffect(() => () => { pdfBlob   && URL.revokeObjectURL(pdfBlob)   }, [pdfBlob])
+
+  const openPdf = useCallback(async () => {
+    setLightbox('pdf')
+    if (pdfBlob || loadingPdf) return
+    setLoadingPdf(true)
+    try {
+      const res = await client.get(`/pagos/${pagoId}/attachment?type=pdf`, { responseType: 'blob' })
+      setPdfBlob(URL.createObjectURL(res.data))
+    } catch { /* iframe will show error state */ }
+    finally { setLoadingPdf(false) }
+  }, [pagoId, pdfBlob, loadingPdf])
+
+  if (!fotoUrl && !pdfUrl) return null
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+        {/* ── Photo thumbnail ── */}
+        {fotoUrl && (
+          <div
+            onClick={() => photoBlob && setLightbox('photo')}
+            style={{
+              position: 'relative', width: 120, height: 120,
+              borderRadius: 10, border: '1px solid var(--border-hi)',
+              background: 'var(--bg-elevated)', overflow: 'hidden',
+              cursor: photoBlob ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            {loadingPhoto && <span className="spinner" style={{ width: 22, height: 22, borderWidth: 2 }} />}
+            {photoBlob && (
+              <>
+                <img
+                  src={photoBlob} alt="Foto factura"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <div style={{
+                  position: 'absolute', bottom: 5, right: 5,
+                  background: 'rgba(0,0,0,0.55)', borderRadius: 5, padding: '3px 5px',
+                  color: 'var(--gold-bright)', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11,
+                }}>
+                  <IcoExpand /> Ver
+                </div>
+              </>
+            )}
+            {errorPhoto && (
+              <span style={{ fontSize: 11, color: 'var(--t2)', textAlign: 'center', padding: 8 }}>
+                No disponible
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── PDF button ── */}
+        {pdfUrl && (
+          <button
+            className="btn btn-secondary"
+            onClick={openPdf}
+            disabled={loadingPdf}
+            style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            {loadingPdf
+              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+              : <IcoPdf />
+            }
+            PDF
+          </button>
+        )}
+      </div>
+
+      {/* ── Image lightbox with zoom/pan ── */}
+      {lightbox === 'photo' && photoBlob && (
+        <ImageLightbox src={photoBlob} onClose={() => setLightbox(null)} />
+      )}
+
+      {/* ── PDF lightbox ── */}
+      {lightbox === 'pdf' && (
+        <PdfLightbox onClose={() => setLightbox(null)}>
+          {loadingPdf ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 300, height: 200 }}>
+              <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+            </div>
+          ) : pdfBlob ? (
+            <iframe
+              src={pdfBlob} title="PDF"
+              style={{ width: 'min(840px, 88vw)', height: '88vh', border: 'none', borderRadius: 10, background: '#fff' }}
+            />
+          ) : (
+            <div style={{ color: '#fff', padding: 32 }}>No se pudo cargar el PDF.</div>
+          )}
+        </PdfLightbox>
+      )}
+    </>
+  )
+}
