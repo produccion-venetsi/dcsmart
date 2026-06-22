@@ -1,9 +1,9 @@
-name: Deploy to Firebase Hosting
+name: Deploy to Firebase Hosting (Dev)
 
 on:
   push:
     branches:
-      - master
+      - dev
 
 jobs:
   deploy-frontend:
@@ -25,8 +25,8 @@ jobs:
         run: npm run build
         working-directory: frontend
 
-      - name: Deploy a Firebase Hosting
-        run: npx firebase-tools@latest deploy --only hosting --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
+      - name: Deploy a Firebase Hosting (canal dev)
+        run: npx firebase-tools@latest hosting:channel:deploy dev --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
 
   deploy-backend:
     runs-on: ubuntu-latest

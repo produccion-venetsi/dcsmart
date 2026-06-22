@@ -25,7 +25,8 @@ function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { mi
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 
 export default function Impuestos() {
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
 
   const [impuestos, setImpuestos] = useState([])
   const [total,     setTotal]     = useState(0)
@@ -70,7 +71,7 @@ export default function Impuestos() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar impuesto?')) return
+    if (!(await showConfirm('¿Eliminar impuesto?'))) return
     try { await impuestosApi.remove(id); notify('Eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }

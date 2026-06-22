@@ -2,7 +2,7 @@
 
 Super app para gestión de restaurantes y administración de grupos gastronómicos.
 
-**Última actualización:** 05 de junio de 2025 — sesión de desarrollo activa
+**Última actualización:** 19 de junio de 2026 — sesión de desarrollo activa
 
 ---
 

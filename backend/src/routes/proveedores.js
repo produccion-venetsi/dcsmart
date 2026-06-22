@@ -46,7 +46,7 @@ export default async function proveedoresRoutes(fastify) {
     const {
       nombre, razon_social, cuit, banco, cbu, alias,
       direccion_url, detalle_direc, telefono, mail_contacto,
-      mail_envio, tag, id_rubcat, activo
+      mail_envio, tag, id_rubcat, plazo, activo
     } = request.body
 
     if (!nombre) return reply.code(400).send({ error: 'nombre es requerido' })
@@ -56,6 +56,7 @@ export default async function proveedoresRoutes(fastify) {
         nombre, razon_social, cuit, banco, cbu, alias,
         direccion_url, detalle_direc, telefono, mail_contacto,
         mail_envio, tag, id_rubcat: id_rubcat || null,
+        plazo: plazo != null ? parseInt(plazo) : null,
         activo: activo ?? true
       }
     })
@@ -68,7 +69,7 @@ export default async function proveedoresRoutes(fastify) {
     const {
       nombre, razon_social, cuit, banco, cbu, alias,
       direccion_url, detalle_direc, telefono, mail_contacto,
-      mail_envio, tag, id_rubcat, activo
+      mail_envio, tag, id_rubcat, plazo, activo
     } = request.body
 
     try {
@@ -77,7 +78,9 @@ export default async function proveedoresRoutes(fastify) {
         data: {
           nombre, razon_social, cuit, banco, cbu, alias,
           direccion_url, detalle_direc, telefono, mail_contacto,
-          mail_envio, tag, id_rubcat, activo
+          mail_envio, tag, id_rubcat,
+          plazo: plazo != null ? parseInt(plazo) : null,
+          activo
         }
       })
       return proveedor

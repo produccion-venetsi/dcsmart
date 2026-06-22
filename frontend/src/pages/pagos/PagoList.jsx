@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
+import { rubrosApi, categoriasApi, rubcatApi } from '../../api/rubcat.js'
+import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import FotoViewer from '../../components/FotoViewer.jsx'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -12,8 +15,17 @@ const TIPO_BADGE = {
   DDJJ: 'badge-red', M: 'badge-muted', NCA: 'badge-amber', NDA: 'badge-amber', STK: 'badge-blue',
 }
 const ESTADO_BADGE = {
-  PENDIENTE: 'badge-amber', APROBADO: 'badge-green', RECHAZADO: 'badge-red', PAGADO: 'badge-blue',
+  CAJA: 'badge-muted', CUENTA_CTE: 'badge-amber', MP_PDP: 'badge-blue', PDP: 'badge-green',
 }
+const ESTADO_OP_LABEL = {
+  CAJA: 'CAJA', CUENTA_CTE: 'CUENTA CTE', MP_PDP: 'MP PDP', PDP: 'PDP',
+}
+const ESTADO_OP_OPTIONS = [
+  { value: 'CAJA',       label: 'CAJA' },
+  { value: 'CUENTA_CTE', label: 'CUENTA CTE' },
+  { value: 'MP_PDP',     label: 'MP PDP' },
+  { value: 'PDP',        label: 'PDP' },
+]
 const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
 
 function IcoPlus() {
@@ -67,12 +79,15 @@ function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' }) : '—' }
 function mono(v)     { return v ? <span className="td-mono" style={{ fontSize: 11 }}>{v}</span> : <span className="td-muted">—</span> }
 
-function PagoDetailPanel({ pago, navigate, onDelete }) {
-  const notify = useUiStore((s) => s.notify)
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, canDelete = false }) {
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const [impuestos,   setImpuestos]   = useState([])
   const [loadingImp,  setLoadingImp]  = useState(true)
   const [impForm,     setImpForm]     = useState({ tipo: 'IVA21', monto: '' })
   const [savingImp,   setSavingImp]   = useState(false)
+  const [audited,     setAudited]     = useState(pago.audit)
+  const [auditando,   setAuditando]   = useState(false)
 
   const loadImpuestos = () => {
     setLoadingImp(true)
@@ -83,6 +98,18 @@ function PagoDetailPanel({ pago, navigate, onDelete }) {
   }
 
   useEffect(() => { if (pago) loadImpuestos() }, [pago?.id])
+
+  const handlePanelAudit = async () => {
+    if (audited && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
+    setAuditando(true)
+    try {
+      const { data } = await pagosApi.audit(pago.id)
+      setAudited(data.audit)
+      notify(data.audit ? 'Pago auditado' : 'Auditoría revertida', 'success')
+      onAudit?.(pago.id, data.audit)
+    } catch { notify('Error al auditar', 'error') }
+    finally { setAuditando(false) }
+  }
 
   const handleAddImp = async (e) => {
     e.preventDefault()
@@ -98,7 +125,7 @@ function PagoDetailPanel({ pago, navigate, onDelete }) {
   }
 
   const handleDeleteImp = async (id) => {
-    if (!confirm('¿Eliminar impuesto?')) return
+    if (!(await showConfirm('¿Eliminar impuesto?'))) return
     try { await impuestosApi.remove(id); notify('Eliminado', 'success'); loadImpuestos() }
     catch { notify('Error al eliminar', 'error') }
   }
@@ -110,29 +137,46 @@ function PagoDetailPanel({ pago, navigate, onDelete }) {
     ['Rubro / Cat', pago.rubcat ? `${pago.rubcat.rubro?.nombre} / ${pago.rubcat.categoria?.nombre}` : '—'],
     ['Tipo',        pago.id_tipo || '—'],
     ['PV',          pago.pv ?? '—'],
-    ['Nro Doc',     pago.nro ?? '—'],
+    ['Nro',     pago.nro ?? '—'],
     ['Neto',        fmt$(pago.importe_neto)],
     ['Descuento',   fmt$(pago.descuento)],
     ['Importe',     fmt$(pago.importe)],
     ['Método',      pago.metodo_pago?.nombre || '—'],
     ['Cashflow',    fmtDate(pago.cashflow)],
     ['Dirección',   pago.ingresa_egreso != null ? (pago.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
-    ['Estado Op.',  pago.estado_op || '—'],
+    ['Estado Op.',  ESTADO_OP_LABEL[pago.estado_op] ?? pago.estado_op ?? '—'],
     ['Pagado',      pago.pagado ? 'Sí' : 'No'],
     ['Fecha Pago',  fmtDate(pago.fecha_pago)],
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
+    ['Auditado',    audited ? 'Sí' : 'No'],
   ]
 
   return (
     <div>
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
-          <IcoEdit /> Editar
-        </button>
-        <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
-          <IcoTrash /> Eliminar
-        </button>
+        {canEdit && (
+          <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
+            <IcoEdit /> Editar
+          </button>
+        )}
+        {canEdit && (
+          <button
+            className={`btn ${audited ? 'btn-secondary' : 'btn-primary'}`}
+            onClick={handlePanelAudit}
+            disabled={auditando}
+          >
+            {auditando
+              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+              : audited ? '✓ Auditado' : 'Auditar'
+            }
+          </button>
+        )}
+        {canDelete && (
+          <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
+            <IcoTrash /> Eliminar
+          </button>
+        )}
       </div>
 
       {pago.observaciones && (
@@ -150,11 +194,10 @@ function PagoDetailPanel({ pago, navigate, onDelete }) {
           </div>
         ))}
         {(pago.foto_url || pago.pdf_url) && (
-          <div className="drawer-detail-row">
-            <span className="drawer-detail-key">Adjuntos</span>
-            <span className="drawer-detail-val" style={{ display: 'flex', gap: '0.75rem' }}>
-              {pago.foto_url && <a href={pago.foto_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)', fontSize: 12 }}>Foto <IcoLink /></a>}
-              {pago.pdf_url  && <a href={pago.pdf_url}  target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)', fontSize: 12 }}>PDF <IcoLink /></a>}
+          <div className="drawer-detail-row" style={{ alignItems: 'flex-start' }}>
+            <span className="drawer-detail-key" style={{ paddingTop: 6 }}>Adjuntos</span>
+            <span className="drawer-detail-val">
+              <FotoViewer pagoId={pago.id} fotoUrl={pago.foto_url} pdfUrl={pago.pdf_url} />
             </span>
           </div>
         )}
@@ -223,28 +266,67 @@ function PagoDetailPanel({ pago, navigate, onDelete }) {
   )
 }
 
+const FILTER_INIT = {
+  pagado: '', estado_op: '', desde: '', hasta: '',
+  id_tipo: '', id_rub: '', id_cat: '',
+  audit: '', ingresa_egreso: '', id_metodo: ''
+}
+
 export default function PagoList() {
   const navigate    = useNavigate()
   const activeLocal = useAppStore((s) => s.activeLocal)
+  const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
+  const role        = activeApp?.role
+  const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canDelete   = ['super_admin', 'dcsmart'].includes(role)
 
-  const [pagos,     setPagos]     = useState([])
-  const [total,     setTotal]     = useState(0)
-  const [page,      setPage]      = useState(1)
-  const [loading,   setLoading]   = useState(true)
-  const [filters,   setFilters]   = useState({ pagado: '', estado_op: '', desde: '', hasta: '' })
-  const [panelOpen, setPanelOpen] = useState(false)
+  const [pagos,      setPagos]      = useState([])
+  const [total,      setTotal]      = useState(0)
+  const [page,       setPage]       = useState(1)
+  const [loading,    setLoading]    = useState(true)
+  const [filters,    setFilters]    = useState(FILTER_INIT)
+  const [panelOpen,  setPanelOpen]  = useState(false)
   const [selectedPago, setSelectedPago] = useState(null)
+  const [sortField,  setSortField]  = useState('fecha')
+  const [sortDir,    setSortDir]    = useState('desc')
+  const [pageSize,   setPageSize]   = useState(20)
 
-  const LIMIT = 50
+  const [search,     setSearch]     = useState('')
+
+  const [rubros,     setRubros]     = useState([])
+  const [categorias, setCategorias] = useState([])
+  const [rubcats,    setRubcats]    = useState([])
+  const [metodos,    setMetodos]    = useState([])
+
+  const LIMIT = pageSize
   const totalPages = Math.ceil(total / LIMIT)
 
+  useEffect(() => {
+    rubrosApi.list().then(r => setRubros(r.data || [])).catch(() => {})
+    categoriasApi.list().then(r => setCategorias(r.data || [])).catch(() => {})
+    rubcatApi.list().then(r => setRubcats(r.data || [])).catch(() => {})
+    metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
+  }, [])
+
+  // Strip "OP-" / "op " prefix so the user can type "OP-15" or just "15"
+  const nroOrdNum = search.trim().replace(/^op[-\s]*/i, '')
+
   const buildParams = () => ({
-    id_local: activeLocal?.id, page, limit: LIMIT,
-    ...(filters.pagado    !== '' ? { pagado:    filters.pagado    } : {}),
-    ...(filters.estado_op !== '' ? { estado_op: filters.estado_op } : {}),
-    ...(filters.desde     !== '' ? { desde:     filters.desde     } : {}),
-    ...(filters.hasta     !== '' ? { hasta:     filters.hasta     } : {}),
+    ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
+    page, limit: LIMIT,
+    ...(nroOrdNum !== '' ? { nro_ord: nroOrdNum } : {}),
+    ...(filters.pagado         !== '' ? { pagado:         filters.pagado }         : {}),
+    ...(filters.estado_op      !== '' ? { estado_op:      filters.estado_op }      : {}),
+    ...(filters.desde          !== '' ? { desde:          filters.desde }          : {}),
+    ...(filters.hasta          !== '' ? { hasta:          filters.hasta }           : {}),
+    ...(filters.id_tipo        !== '' ? { id_tipo:        filters.id_tipo }        : {}),
+    ...(filters.id_rub         !== '' ? { id_rub:         filters.id_rub }         : {}),
+    ...(filters.id_cat         !== '' ? { id_cat:         filters.id_cat }         : {}),
+    ...(filters.audit          !== '' ? { audit:          filters.audit }          : {}),
+    ...(filters.ingresa_egreso !== '' ? { ingresa_egreso: filters.ingresa_egreso } : {}),
+    ...(filters.id_metodo      !== '' ? { id_metodo:      filters.id_metodo }      : {}),
   })
 
   const load = () => {
@@ -263,29 +345,126 @@ export default function PagoList() {
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar pagos', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [page, activeLocal?.id, filters.pagado, filters.estado_op, filters.desde, filters.hasta])
+  }, [
+    page, activeLocal?.id, search,
+    filters.pagado, filters.estado_op, filters.desde, filters.hasta,
+    filters.id_tipo, filters.id_rub, filters.id_cat,
+    filters.audit, filters.ingresa_egreso, filters.id_metodo,
+    pageSize
+  ])
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este pago?')) return
+    if (!(await showConfirm('¿Eliminar este pago?'))) return
     try {
       await pagosApi.remove(id)
       notify('Pago eliminado', 'success')
       setPanelOpen(false)
       load()
     }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
+
+  const [auditingId, setAuditingId] = useState(null)
+
+  const patchPagoAudit = (id, audit) =>
+    setPagos(prev => prev.map(p => p.id === id ? { ...p, audit } : p))
 
   const handleAudit = async (id, e) => {
     e.stopPropagation()
-    try { await pagosApi.audit(id); notify('Pago auditado', 'success'); load() }
-    catch { notify('Error al auditar', 'error') }
+    const current = pagos.find(p => p.id === id)
+    if (current?.audit && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
+    setAuditingId(id)
+    try {
+      const { data } = await pagosApi.audit(id)
+      notify(data.audit ? 'Pago auditado' : 'Auditoría revertida', 'success')
+      patchPagoAudit(id, data.audit)
+    } catch { notify('Error al auditar', 'error') }
+    finally { setAuditingId(null) }
   }
 
-  const setFilter = (k, v) => { setFilters(f => ({ ...f, [k]: v })); setPage(1) }
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [draft, setDraft] = useState(FILTER_INIT)
+  const filterRef = useRef(null)
+  const activeFilterCount = Object.values(filters).filter(v => v !== '').length
+  const hasActiveFilters  = activeFilterCount > 0
+
+  const openFilters = () => { setDraft(filters); setFilterOpen(true) }
+
+  useEffect(() => {
+    if (!filterOpen) return
+    const handleClick = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [filterOpen])
+
+  const applyFilters  = () => { setFilters(draft); setPage(1); setFilterOpen(false) }
+  const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch(''); setPage(1) }
+  const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+
+  const cmvRubroId = rubros.find(r => r.nombre?.toUpperCase().includes('CMV'))?.id ?? ''
+  const CHIPS = [
+    { label: 'STK',         filters: { id_tipo: 'STK' } },
+    { label: 'CMV',         filters: { id_rub: cmvRubroId }, disabled: !cmvRubroId },
+    { label: 'No auditado', filters: { audit: 'false' } },
+    { label: 'No pagado',   filters: { pagado: 'false' } },
+    { label: 'Egreso',      filters: { ingresa_egreso: 'false' } },
+  ]
+
+  const isChipActive = (chipFilters) =>
+    Object.entries(chipFilters).every(([k, v]) => v !== '' && draft[k] === v)
+
+  const toggleChip = (chipFilters) => {
+    if (isChipActive(chipFilters)) {
+      const cleared = Object.keys(chipFilters).reduce((acc, k) => ({ ...acc, [k]: '' }), {})
+      setDraft(d => ({ ...d, ...cleared }))
+    } else {
+      setDraft(d => ({ ...d, ...chipFilters }))
+    }
+  }
+
+  const catsForRubro = draft.id_rub
+    ? rubcats.filter(rc => rc.id_rub === draft.id_rub).map(rc => rc.categoria).filter(Boolean)
+    : categorias
+
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+  const getSortVal = (p, field) => {
+    if (field === 'proveedor') return p.proveedor?.nombre ?? ''
+    return p[field] ?? ''
+  }
+  const sortedPagos = [...pagos].sort((a, b) => {
+    const va = getSortVal(a, sortField)
+    const vb = getSortVal(b, sortField)
+    if (va < vb) return sortDir === 'asc' ? -1 : 1
+    if (va > vb) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+  const SortTh = ({ field, children, minWidth }) => (
+    <th className={`sortable${sortField === field ? ' active' : ''}`} style={minWidth ? { minWidth } : undefined} onClick={() => toggleSort(field)}>
+      {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  )
 
   const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
   const closePanel = () => setPanelOpen(false)
+
+  const chipSt = (active) => ({
+    padding: '3px 11px', borderRadius: 20, cursor: 'pointer', fontSize: 11,
+    fontWeight: active ? 700 : 400, whiteSpace: 'nowrap',
+    border: `1px solid ${active ? 'var(--gold-bright)' : 'var(--border)'}`,
+    background: active ? 'rgba(212,175,55,0.15)' : 'transparent',
+    color: active ? 'var(--gold-bright)' : 'var(--t2)',
+  })
+
+  const lbl = {
+    fontSize: 10, color: 'var(--t3)', fontWeight: 600,
+    textTransform: 'uppercase', letterSpacing: '0.05em',
+    marginBottom: 3, display: 'block',
+  }
 
   return (
     <div className="page">
@@ -295,56 +474,187 @@ export default function PagoList() {
           {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
         <div className="page-actions">
+          {/* ── Buscador OP ── */}
+          <div style={{ position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--t2)', pointerEvents: 'none', fontSize: 13,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar OP…"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              style={{
+                height: 36, paddingLeft: 32, paddingRight: search ? 28 : 12,
+                background: 'var(--bg-input)', border: '1px solid var(--border-input)',
+                borderRadius: 8, color: 'var(--t1)', fontSize: 13, width: 150,
+                outline: 'none',
+              }}
+            />
+            {search && (
+              <button
+                onClick={() => { setSearch(''); setPage(1) }}
+                style={{
+                  position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--t2)', padding: 2, display: 'flex', lineHeight: 1,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            )}
+          </div>
+
+          <div style={{ position: 'relative' }} ref={filterRef}>
+            <button
+              className={`btn ${filterOpen || hasActiveFilters ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => filterOpen ? setFilterOpen(false) : openFilters()}
+            >
+              <IcoFilter />
+              Filtros
+              {activeFilterCount > 0 && (
+                <span style={{ marginLeft: 6, background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {filterOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                borderRadius: 12, padding: '1.25rem', width: 520, maxWidth: '90vw',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+              }}>
+                {/* Atajos */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.05em', marginRight: 2 }}>ATAJOS</span>
+                  {CHIPS.filter(c => !c.disabled).map(chip => (
+                    <button key={chip.label} style={chipSt(isChipActive(chip.filters))} onClick={() => toggleChip(chip.filters)}>
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Controles en grilla 2 columnas */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                  <div>
+                    <span style={lbl}>Tipo</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_tipo} onChange={e => setDraftField('id_tipo', e.target.value)}>
+                      <option value="">Todos los tipos</option>
+                      {['A','B','C','CM','INTERCOMPANY','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Método</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_metodo} onChange={e => setDraftField('id_metodo', e.target.value)}>
+                      <option value="">Todos los métodos</option>
+                      {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Rubro</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_rub}
+                      onChange={e => setDraft(d => ({ ...d, id_rub: e.target.value, id_cat: '' }))}>
+                      <option value="">Todos los rubros</option>
+                      {rubros.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Categoría</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_cat} onChange={e => setDraftField('id_cat', e.target.value)}>
+                      <option value="">Todas las cats.</option>
+                      {catsForRubro.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Pagado</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.pagado} onChange={e => setDraftField('pagado', e.target.value)}>
+                      <option value="">Todos</option>
+                      <option value="false">No pagados</option>
+                      <option value="true">Pagados</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Estado op.</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.estado_op} onChange={e => setDraftField('estado_op', e.target.value)}>
+                      <option value="">Todos los estados</option>
+                      {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Audit</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.audit} onChange={e => setDraftField('audit', e.target.value)}>
+                      <option value="">Todos</option>
+                      <option value="false">No auditado</option>
+                      <option value="true">Auditado</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Dirección</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.ingresa_egreso} onChange={e => setDraftField('ingresa_egreso', e.target.value)}>
+                      <option value="">Todos</option>
+                      <option value="true">Ingreso</option>
+                      <option value="false">Egreso</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span style={lbl}>Desde</span>
+                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} onChange={e => setDraftField('desde', e.target.value)} />
+                  </div>
+                  <div>
+                    <span style={lbl}>Hasta</span>
+                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.hasta} onChange={e => setDraftField('hasta', e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+                  <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
+                    Limpiar todo
+                  </button>
+                  <button className="btn btn-sm btn-primary" onClick={applyFilters}>
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <button className="btn btn-primary" onClick={() => navigate('/pagos/nuevo')}>
             <IcoPlus /> Nuevo Pago
           </button>
         </div>
       </div>
 
-      <div className="filter-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--t3)', fontSize: 12, fontWeight: 600 }}>
-          <IcoFilter /> Filtros
-        </div>
-        <select className="filter-select" value={filters.pagado} onChange={e => setFilter('pagado', e.target.value)}>
-          <option value="">Todos</option>
-          <option value="false">No pagados</option>
-          <option value="true">Pagados</option>
-        </select>
-        <select className="filter-select" value={filters.estado_op} onChange={e => setFilter('estado_op', e.target.value)}>
-          <option value="">Todos los estados</option>
-          {['PENDIENTE','APROBADO','RECHAZADO','PAGADO'].map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <input type="date" className="filter-select" value={filters.desde} onChange={e => setFilter('desde', e.target.value)} title="Desde" style={{ width: 140 }} />
-        <input type="date" className="filter-select" value={filters.hasta} onChange={e => setFilter('hasta', e.target.value)} title="Hasta" style={{ width: 140 }} />
-        {(filters.pagado || filters.estado_op || filters.desde || filters.hasta) && (
-          <button className="btn btn-sm btn-secondary" onClick={() => { setFilters({ pagado: '', estado_op: '', desde: '', hasta: '' }); setPage(1) }}>
-            Limpiar
-          </button>
-        )}
-      </div>
-
       <div className="table-wrap" style={{ overflowX: 'auto' }}>
         <table className="data-table">
           <thead>
             <tr>
-              <th>Nro</th>
-              <th>Fecha</th>
-              <th>Proveedor</th>
-              <th>Rubro / Cat</th>
-              <th>Tipo</th>
+              <SortTh field="nro_ord" minWidth={50}>Nro</SortTh>
+              <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
+              <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
+              <th style={{ minWidth: 160 }}>Rubro / Cat</th>
+              <th style={{ minWidth: 80 }}>Tipo</th>
               <th>PV</th>
-              <th>Nro Doc</th>
+              <th>Nro</th>
               <th>Neto</th>
               <th>Descuento</th>
-              <th>Importe</th>
+              <SortTh field="importe" minWidth={90}>Importe</SortTh>
               <th>Método</th>
               <th>Cashflow</th>
               <th>Dirección</th>
               <th>Estado</th>
               <th>Pagado</th>
-              <th>Fecha Pago</th>
+              <SortTh field="fecha_pago" minWidth={90}>Fecha Pago</SortTh>
               <th>Audit</th>
-              <th>Período</th>
+              <SortTh field="periodo" minWidth={80}>Período</SortTh>
               <th>Local</th>
               <th></th>
             </tr>
@@ -360,7 +670,7 @@ export default function PagoList() {
               ))
             ) : (
               <>
-                {pagos.map((p) => (
+                {sortedPagos.map((p) => (
                   <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
                     <td className="td-primary" style={{ minWidth: 50 }}>{p.nro_ord ?? <span className="td-muted">—</span>}</td>
                     <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
@@ -389,7 +699,7 @@ export default function PagoList() {
                     </td>
                     <td style={{ minWidth: 90 }}>
                       {p.estado_op
-                        ? <span className={`badge ${ESTADO_BADGE[p.estado_op] ?? 'badge-muted'}`}>{p.estado_op}</span>
+                        ? <span className={`badge ${ESTADO_BADGE[p.estado_op] ?? 'badge-muted'}`}>{ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op}</span>
                         : <span className="td-muted">—</span>}
                     </td>
                     <td style={{ minWidth: 70, textAlign: 'center' }}>
@@ -397,7 +707,12 @@ export default function PagoList() {
                     </td>
                     <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
                     <td style={{ minWidth: 100 }}>
-                      <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(p.id, e)}>Auditar</button>
+                      {auditingId === p.id
+                        ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2, display: 'inline-block' }} />
+                        : p.audit
+                          ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(p.id, e)} title="Click para revertir">✓ Auditado</span>
+                          : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(p.id, e)}>Auditar</button>
+                      }
                     </td>
                     <td style={{ minWidth: 80 }}>{fmtMonth(p.periodo)}</td>
                     <td style={{ minWidth: 120, fontSize: 12 }}>{p.local?.nombre || <span className="td-muted">—</span>}</td>
@@ -429,11 +744,31 @@ export default function PagoList() {
         </table>
       </div>
 
-      {total > LIMIT && (
+      {total > 0 && (
         <div className="pagination">
-          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-          <span className="pagination-info">Página {page} de {totalPages} — {total} pagos</span>
-          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+          <select
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+            style={{ padding: '3px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+          >
+            {[10, 15, 20].map(n => <option key={n} value={n}>{n} por pág.</option>)}
+          </select>
+          {totalPages > 1 && <>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+            <span className="pagination-info">
+              Pág.&nbsp;
+              <input
+                type="number" min={1} max={totalPages} value={page}
+                onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
+                style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+              />
+              &nbsp;de {totalPages}
+            </span>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
+          </>}
+          <span className="pagination-info" style={{ marginLeft: 'auto' }}>{total} pagos</span>
         </div>
       )}
 
@@ -444,7 +779,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} canEdit={canEdit} canDelete={canDelete} />
         )}
       </DrawerPanel>
     </div>

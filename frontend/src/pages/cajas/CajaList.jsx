@@ -44,14 +44,30 @@ function IcoLink() {
     </svg>
   )
 }
+function IcoEdit() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+function IcoBack() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  )
+}
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 
-function CajaDetailPanel({ cajaId, onRefreshList }) {
-  const notify = useUiStore((s) => s.notify)
+function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) {
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const [caja,       setCaja]      = useState(null)
   const [loading,    setLoading]   = useState(true)
   const [metodos,    setMetodos]   = useState([])
@@ -103,9 +119,9 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   }
 
   const handleDeleteMov = async (movId) => {
-    if (!confirm('¿Eliminar movimiento?')) return
+    if (!(await showConfirm('¿Eliminar movimiento?'))) return
     try { await movimientosApi.remove(movId); notify('Eliminado', 'success'); load() }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
   const handleAddDet = async (e) => {
@@ -126,9 +142,9 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
   }
 
   const handleDeleteDet = async (detId) => {
-    if (!confirm('¿Eliminar detalle?')) return
+    if (!(await showConfirm('¿Eliminar detalle?'))) return
     try { await detallesApi.remove(detId); notify('Eliminado', 'success'); load() }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
@@ -153,6 +169,14 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
 
   return (
     <div>
+      {canEdit && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+          <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IcoEdit /> Editar
+          </button>
+        </div>
+      )}
+
       {caja.observaciones && (
         <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
           {caja.observaciones}
@@ -186,9 +210,11 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
                 <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
                 <td className="td-number">{fmt$2(d.monto)}</td>
                 <td>
-                  <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
-                    <IcoTrash />
-                  </button>
+                  {canDelete && (
+                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                      <IcoTrash />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -199,8 +225,8 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         </table>
       </div>
 
-      <div className="drawer-section-title">Agregar Detalle</div>
-      <form onSubmit={handleAddDet}>
+      {canEdit && <div className="drawer-section-title">Agregar Detalle</div>}
+      {canEdit && <form onSubmit={handleAddDet}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Clasificación</label>
@@ -208,9 +234,10 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
               <input
                 type="text"
                 readOnly
+                style={{ opacity: 0.5, cursor: 'not-allowed' }}
                 value={(() => {
                   const t = tipos.find(x => x.id === newDet.id_tipo)
-                  return t ? clasificacionLabel(t.clasificacion, 'Otro') : '— Según el tipo —'
+                  return t ? clasificacionLabel(t.clasificacion, 'Otro') : 'Seleccioná un nombre'
                 })()}
               />
             </div>
@@ -219,7 +246,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
             <label className="form-label">Nombre</label>
             <div className="form-input-wrap">
               <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
-                <option value="">— Seleccionar —</option>
+                <option value="">Ver opciones</option>
                 {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
               </select>
             </div>
@@ -240,7 +267,7 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginTop: '0.75rem', marginBottom: '1.5rem' }}>
           {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
         </button>
-      </form>
+      </form>}
 
       {/* ── MOVIMIENTOS ──────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -262,9 +289,11 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
                 <td className="td-number">{fmt$2(m.monto)}</td>
                 <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
                 <td>
-                  <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                    <IcoTrash />
-                  </button>
+                  {canDelete && (
+                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                      <IcoTrash />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -275,8 +304,8 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         </table>
       </div>
 
-      <div className="drawer-section-title">Agregar Movimiento</div>
-      <form onSubmit={handleAddMov}>
+      {canEdit && <div className="drawer-section-title">Agregar Movimiento</div>}
+      {canEdit && <form onSubmit={handleAddMov}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
@@ -314,8 +343,146 @@ function CajaDetailPanel({ cajaId, onRefreshList }) {
         <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
         </button>
-      </form>
+      </form>}
     </div>
+  )
+}
+
+function CajaEditPanel({ cajaId, onSaved, onBack }) {
+  const notify  = useUiStore((s) => s.notify)
+  const [form,   setForm]   = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!cajaId) return
+    cajasApi.get(cajaId).then(({ data }) => {
+      const toLocal = (d) => d ? new Date(d).toISOString().slice(0, 16) : ''
+      setForm({
+        nro_turno:    data.nro_turno    ?? '',
+        fecha_inicio: toLocal(data.fecha_inicio),
+        fecha_cierre: toLocal(data.fecha_cierre),
+        cajero:       data.cajero       ?? '',
+        total:        data.total        != null ? String(data.total)        : '',
+        efectivo:     data.efectivo     != null ? String(data.efectivo)     : '',
+        fiscal:       data.fiscal       != null ? String(data.fiscal)       : '',
+        comensales:   data.comensales   != null ? String(data.comensales)   : '',
+        tickets:      data.tickets      != null ? String(data.tickets)      : '',
+        observaciones: data.observaciones ?? '',
+        foto_url:     data.foto_url     ?? '',
+      })
+    }).catch(() => notify('Error al cargar caja', 'error'))
+  }, [cajaId])
+
+  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await cajasApi.update(cajaId, {
+        nro_turno:    form.nro_turno    || null,
+        fecha_cierre: form.fecha_cierre || null,
+        cajero:       form.cajero       || null,
+        total:        form.total        !== '' ? parseFloat(form.total)      : null,
+        efectivo:     form.efectivo     !== '' ? parseFloat(form.efectivo)   : null,
+        fiscal:       form.fiscal       !== '' ? parseFloat(form.fiscal)     : null,
+        comensales:   form.comensales   !== '' ? parseInt(form.comensales)   : null,
+        tickets:      form.tickets      !== '' ? parseInt(form.tickets)      : null,
+        observaciones: form.observaciones || null,
+        foto_url:     form.foto_url     || null,
+      })
+      notify('Caja actualizada', 'success')
+      onSaved()
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al guardar', 'error')
+    } finally { setSaving(false) }
+  }
+
+  if (!form) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.25rem' }}>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <IcoBack /> Volver al detalle
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fecha Inicio</label>
+          <div className="form-input-wrap">
+            <input type="datetime-local" value={form.fecha_inicio} readOnly style={{ opacity: 0.6, cursor: 'not-allowed' }} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fecha Cierre</label>
+          <div className="form-input-wrap">
+            <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Nro Turno</label>
+          <div className="form-input-wrap">
+            <input type="number" min="1" step="1" placeholder="1" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Cajero</label>
+          <div className="form-input-wrap">
+            <input placeholder="Nombre del cajero" value={form.cajero} onChange={e => setF('cajero', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Total</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={form.total} onChange={e => setF('total', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Efectivo</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={form.efectivo} onChange={e => setF('efectivo', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Fiscal</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={form.fiscal} onChange={e => setF('fiscal', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Comensales</label>
+          <div className="form-input-wrap">
+            <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Tickets</label>
+          <div className="form-input-wrap">
+            <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">URL Foto</label>
+          <div className="form-input-wrap">
+            <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <label className="form-label">Observaciones</label>
+          <div className="form-input-wrap form-textarea-wrap">
+            <textarea rows={2} value={form.observaciones} onChange={e => setF('observaciones', e.target.value)} placeholder="Notas opcionales..." />
+          </div>
+        </div>
+      </div>
+      <div className="form-actions" style={{ marginTop: '1.5rem' }}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : 'Guardar cambios'}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={onBack}>Cancelar</button>
+      </div>
+    </form>
   )
 }
 
@@ -334,10 +501,9 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
     if (!targetLocalId) { notify('Seleccioná un local', 'error'); return }
     setSaving(true)
     try {
-      await cajasApi.create({ ...form, id_local: targetLocalId })
+      const res = await cajasApi.create({ ...form, id_local: targetLocalId })
       notify('Caja creada', 'success')
-      onCreated()
-      onClose()
+      onCreated(res.data?.id)
     } catch (err) {
       notify(err.response?.data?.error || 'Error al crear', 'error')
     } finally { setSaving(false) }
@@ -346,7 +512,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   return (
     <form onSubmit={handleCreate}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-        {!activeLocal && locales.length > 0 && (
+        {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
             <label className="form-label">Local *</label>
             <div className="form-input-wrap">
@@ -436,22 +602,47 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
 export default function CajaList() {
   const { activeApp, activeLocal } = useAppStore()
-  const locales = activeApp?.locales ?? []
-  const notify  = useUiStore((s) => s.notify)
+  const locales   = activeApp?.locales ?? []
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
+  const role        = activeApp?.role
+  const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canDelete = ['super_admin', 'dcsmart', 'admin'].includes(role)
 
   const [cajas,     setCajas]     = useState([])
   const [total,     setTotal]     = useState(0)
   const [page,      setPage]      = useState(1)
+  const [pageSize,  setPageSize]  = useState(20)
   const [loading,   setLoading]   = useState(true)
   const [panelOpen, setPanelOpen] = useState(false)
   const [panelMode, setPanelMode] = useState('create')
   const [selectedId, setSelectedId] = useState(null)
+  const [sortField,  setSortField]  = useState('fecha_inicio')
+  const [sortDir,    setSortDir]    = useState('desc')
 
-  const totalPages = Math.ceil(total / 20)
+  const totalPages = Math.ceil(total / pageSize)
+
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+  const sortedCajas = [...cajas].sort((a, b) => {
+    const va = a[sortField] ?? ''
+    const vb = b[sortField] ?? ''
+    if (va < vb) return sortDir === 'asc' ? -1 : 1
+    if (va > vb) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+  const SortTh = ({ field, children }) => (
+    <th className={`sortable${sortField === field ? ' active' : ''}`} onClick={() => toggleSort(field)}>
+      {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  )
 
   const load = () => {
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, page, limit: 20 })
+    cajasApi.list({ id_local: activeLocal?.id, page, limit: pageSize })
       .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
       .catch(() => notify('Error al cargar cajas', 'error'))
       .finally(() => setLoading(false))
@@ -460,29 +651,34 @@ export default function CajaList() {
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, page, limit: 20 }, ctrl.signal)
+    cajasApi.list({ id_local: activeLocal?.id, page, limit: pageSize }, ctrl.signal)
       .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [page, activeLocal?.id])
+  }, [page, pageSize, activeLocal?.id])
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Eliminar esta caja?')) return
+    if (!(await showConfirm('¿Eliminar esta caja?'))) return
     try { await cajasApi.remove(id); notify('Caja eliminada', 'success'); load() }
-    catch { notify('Error al eliminar', 'error') }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
   const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
   const openDetail = (id) => { setSelectedId(id); setPanelMode('detail'); setPanelOpen(true) }
+  const openEdit   = (id) => { setSelectedId(id); setPanelMode('edit');   setPanelOpen(true) }
+  const backToDetail = ()  => { setPanelMode('detail') }
   const closePanel = () => setPanelOpen(false)
+
+  const selectedCaja = cajas.find(c => c.id === selectedId)
+  const selectedLabel = selectedCaja?.nro_turno ? `TRN ${selectedCaja.nro_turno}` : 'Detalle de Caja'
 
   const drawerTitle = panelMode === 'create'
     ? 'Nueva Caja'
-    : cajas.find(c => c.id === selectedId)?.nro_turno
-        ? `TRN ${cajas.find(c => c.id === selectedId).nro_turno}`
-        : 'Detalle de Caja'
+    : panelMode === 'edit'
+      ? `Editar — ${selectedLabel}`
+      : selectedLabel
 
   return (
     <div className="page">
@@ -492,113 +688,150 @@ export default function CajaList() {
           {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={openCreate}>
-            <IcoPlus /> Nueva Caja
-          </button>
+          {canCreate && (
+            <button className="btn btn-primary" onClick={openCreate}>
+              <IcoPlus /> Nueva Caja
+            </button>
+          )}
         </div>
       </div>
 
-      {!activeLocal && (
-        <div className="table-wrap">
-          <div className="table-empty">
-            <IcoCaja />
-            <p>Seleccioná un local desde el Dashboard<br/>para ver sus cajas.</p>
-          </div>
+      <div className="table-wrap" style={{ overflowX: 'auto' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <SortTh field="nro_turno">Nro Turno</SortTh>
+              <SortTh field="fecha_inicio">Inicio</SortTh>
+              <SortTh field="fecha_cierre">Cierre</SortTh>
+              <SortTh field="cajero">Cajero</SortTh>
+              <SortTh field="total">Total</SortTh>
+              <th>Efectivo</th>
+              <th>Fiscal</th>
+              <th>Comensales</th>
+              <th>Tickets</th>
+              <th>Origen</th>
+              <th>Foto</th>
+              <th>Local</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 7 }, (_, i) => (
+                <tr key={i} className="skel-row">
+                  {Array.from({ length: 13 }, (_, j) => (
+                    <td key={j}><span className="skel" style={{ width: `${48 + (j * 11 + i * 9) % 44}%` }} /></td>
+                  ))}
+                </tr>
+              ))
+            ) : (
+              <>
+                {sortedCajas.map((c) => (
+                  <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
+                    <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
+                    <td>{fmtDate(c.fecha_inicio)}</td>
+                    <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
+                    <td>{c.cajero || <span className="td-muted">—</span>}</td>
+                    <td className="td-number">{fmt$(c.total)}</td>
+                    <td className="td-number">{fmt$(c.efectivo)}</td>
+                    <td className="td-number">{fmt$(c.fiscal)}</td>
+                    <td className="td-muted" style={{ textAlign: 'right' }}>{c.comensales ?? '—'}</td>
+                    <td className="td-muted" style={{ textAlign: 'right' }}>{c.tickets ?? '—'}</td>
+                    <td>
+                      {c.origin && c.origin !== 'DCSMART'
+                        ? <span className="badge badge-muted">{c.origin}</span>
+                        : <span className="td-muted">—</span>}
+                    </td>
+                    <td>
+                      {c.foto_url
+                        ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
+                        : <span className="td-muted">—</span>}
+                    </td>
+                    <td className="td-muted">{c.local?.nombre ?? '—'}</td>
+                    <td>
+                      <div className="td-actions">
+                        {canDelete && (
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
+                            <IcoTrash />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {cajas.length === 0 && (
+                  <tr>
+                    <td colSpan={13}>
+                      <div className="table-empty">
+                        <IcoCaja />
+                        <p>No hay cajas registradas{activeLocal ? ' para este local' : ''}.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {total > 0 && (
+        <div className="pagination">
+          <select
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+            style={{ padding: '3px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+          >
+            {[10, 15, 20].map(n => <option key={n} value={n}>{n} por pág.</option>)}
+          </select>
+          {totalPages > 1 && <>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
+            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
+            <span className="pagination-info">
+              Pág.&nbsp;
+              <input
+                type="number" min={1} max={totalPages} value={page}
+                onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
+                style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
+              />
+              &nbsp;de {totalPages}
+            </span>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
+          </>}
+          <span className="pagination-info" style={{ marginLeft: 'auto' }}>{total} cajas</span>
         </div>
       )}
 
-      {activeLocal && (
-        <>
-          <div className="table-wrap" style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Nro Turno</th>
-                  <th>Inicio</th>
-                  <th>Cierre</th>
-                  <th>Cajero</th>
-                  <th>Total</th>
-                  <th>Efectivo</th>
-                  <th>Fiscal</th>
-                  <th>Comensales</th>
-                  <th>Tickets</th>
-                  <th>Origen</th>
-                  <th>Foto</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 7 }, (_, i) => (
-                    <tr key={i} className="skel-row">
-                      {Array.from({ length: 12 }, (_, j) => (
-                        <td key={j}><span className="skel" style={{ width: `${48 + (j * 11 + i * 9) % 44}%` }} /></td>
-                      ))}
-                    </tr>
-                  ))
-                ) : (
-                  <>
-                    {cajas.map((c) => (
-                      <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
-                        <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
-                        <td>{fmtDate(c.fecha_inicio)}</td>
-                        <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
-                        <td>{c.cajero || <span className="td-muted">—</span>}</td>
-                        <td className="td-number">{fmt$(c.total)}</td>
-                        <td className="td-number">{fmt$(c.efectivo)}</td>
-                        <td className="td-number">{fmt$(c.fiscal)}</td>
-                        <td className="td-muted" style={{ textAlign: 'right' }}>{c.comensales ?? '—'}</td>
-                        <td className="td-muted" style={{ textAlign: 'right' }}>{c.tickets ?? '—'}</td>
-                        <td>
-                          {c.origin && c.origin !== 'DCSMART'
-                            ? <span className="badge badge-muted">{c.origin}</span>
-                            : <span className="td-muted">—</span>}
-                        </td>
-                        <td>
-                          {c.foto_url
-                            ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
-                            : <span className="td-muted">—</span>}
-                        </td>
-                        <td>
-                          <div className="td-actions">
-                            <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
-                              <IcoTrash />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {cajas.length === 0 && (
-                      <tr>
-                        <td colSpan={12}>
-                          <div className="table-empty">
-                            <IcoCaja />
-                            <p>No hay cajas registradas para este local.</p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {total > 20 && (
-            <div className="pagination">
-              <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-              <span className="pagination-info">Página {page} de {totalPages}</span>
-              <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
-            </div>
-          )}
-        </>
-      )}
-
       <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
-        {panelMode === 'create'
-          ? <CajaCreatePanel activeLocal={activeLocal} locales={locales} onCreated={load} onClose={closePanel} />
-          : <CajaDetailPanel cajaId={selectedId} onRefreshList={load} />
-        }
+        {panelMode === 'create' && (
+          <CajaCreatePanel
+            activeLocal={activeLocal}
+            locales={locales}
+            onCreated={(newId) => {
+              load()
+              if (newId) { setSelectedId(newId); setPanelMode('detail') }
+              else closePanel()
+            }}
+            onClose={closePanel}
+          />
+        )}
+        {panelMode === 'detail' && (
+          <CajaDetailPanel
+            cajaId={selectedId}
+            onRefreshList={load}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            onEdit={() => openEdit(selectedId)}
+          />
+        )}
+        {panelMode === 'edit' && (
+          <CajaEditPanel
+            cajaId={selectedId}
+            onSaved={() => { load(); backToDetail() }}
+            onBack={backToDetail}
+          />
+        )}
       </DrawerPanel>
     </div>
   )

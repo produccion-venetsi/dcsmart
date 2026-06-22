@@ -31,7 +31,8 @@ function NombreSection({ title, items, onSave, onDelete }) {
   const [form,    setForm]    = useState('')
   const [editing, setEditing] = useState(null)
   const [saving,  setSaving]  = useState(false)
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -94,7 +95,8 @@ function NombreSection({ title, items, onSave, onDelete }) {
 const RC_EMPTY = { id_rub: '', id_cat: '', cuenta: '', tipo: '', costo: '', clasificacion: '' }
 
 export default function RubCat() {
-  const notify = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
 
   const [rubros,     setRubros]     = useState([])
   const [categorias, setCategorias] = useState([])
@@ -124,7 +126,7 @@ export default function RubCat() {
     load()
   }
   const delRubro = async (id) => {
-    if (!confirm('¿Eliminar rubro?')) return
+    if (!(await showConfirm('¿Eliminar rubro?'))) return
     try { await rubrosApi.remove(id); notify('Eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }
@@ -134,7 +136,7 @@ export default function RubCat() {
     load()
   }
   const delCat = async (id) => {
-    if (!confirm('¿Eliminar categoría?')) return
+    if (!(await showConfirm('¿Eliminar categoría?'))) return
     try { await categoriasApi.remove(id); notify('Eliminada', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }
@@ -164,7 +166,7 @@ export default function RubCat() {
 
   const delRc = async (id, e) => {
     e.stopPropagation()
-    if (!confirm('¿Eliminar RubCat?')) return
+    if (!(await showConfirm('¿Eliminar RubCat?'))) return
     try { await rubcatApi.remove(id); notify('Eliminado', 'success'); load() }
     catch { notify('Error al eliminar', 'error') }
   }

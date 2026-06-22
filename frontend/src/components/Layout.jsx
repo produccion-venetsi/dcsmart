@@ -20,8 +20,38 @@ function NotifIcon({ type }) {
   )
 }
 
+function ConfirmModal() {
+  const confirmModal   = useUiStore((s) => s.confirmModal)
+  const dismissConfirm = useUiStore((s) => s.dismissConfirm)
+
+  if (!confirmModal) return null
+
+  return (
+    <div className="confirm-backdrop" onMouseDown={() => dismissConfirm(false)}>
+      <div className="confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <p className="confirm-message">{confirmModal.message}</p>
+        <div className="confirm-foot">
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => dismissConfirm(false)}
+            autoFocus
+          >
+            Cancelar
+          </button>
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => dismissConfirm(true)}
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Layout() {
-  const notifications = useUiStore((s) => s.notifications)
+  const notifications    = useUiStore((s) => s.notifications)
   const removeNotification = useUiStore((s) => s.removeNotification)
 
   return (
@@ -46,6 +76,8 @@ export default function Layout() {
           </div>
         ))}
       </div>
+
+      <ConfirmModal />
     </div>
   )
 }

@@ -36,6 +36,15 @@ function IcoPagos() {
     </svg>
   )
 }
+function IcoPdp() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="16 4 16 9 21 9"/>
+      <path d="M8 13h6"/><path d="M8 17h4"/>
+    </svg>
+  )
+}
 function IcoProveedor() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -125,21 +134,24 @@ function initials(nombre) {
   return nombre.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('')
 }
 
+// `roles`: qué roles ven cada ítem. Si se omite, lo ven todos.
+const ALL = ['super_admin', 'dcsmart', 'admin', 'cajero']
+
 const NAV_MAIN = [
-  { to: '/dashboard',   label: 'Dashboard',   Icon: IcoDashboard },
-  { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja },
-  { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos },
-  { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor },
+  { to: '/dashboard',   label: 'Dashboard',   Icon: IcoDashboard, roles: ALL },
+  { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja,      roles: ALL },
+  { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
+  { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
 ]
 
 const NAV_ADMIN = [
-  { to: '/admin/apps',          label: 'Apps',           Icon: IcoApps },
-  { to: '/admin/locales',       label: 'Locales',        Icon: IcoLocales },
-  { to: '/admin/users',         label: 'Usuarios',       Icon: IcoUsers },
-  { to: '/admin/roles',         label: 'Roles',          Icon: IcoRoles },
-  { to: '/admin/rubcat',        label: 'Rubros/Cats',    Icon: IcoRubCat },
-  { to: '/admin/metodos-pago',  label: 'Métodos Pago',   Icon: IcoMetodos },
-  { to: '/admin/detalle-tipos', label: 'Tipos Detalle',  Icon: IcoTag },
+  { to: '/admin/locales',       label: 'Locales',       Icon: IcoLocales, roles: ['super_admin'] },
+  { to: '/admin/users',         label: 'Usuarios',      Icon: IcoUsers,   roles: ['super_admin'] },
+  { to: '/admin/roles',         label: 'Roles',         Icon: IcoRoles,   roles: ['super_admin'] },
+  { to: '/admin/rubcat',        label: 'Rubros/Cats',   Icon: IcoRubCat,  roles: ['super_admin'] },
+  { to: '/admin/metodos-pago',  label: 'Métodos Pago',  Icon: IcoMetodos, roles: ['super_admin', 'dcsmart'] },
+  { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
 ]
 
 export default function Sidebar() {
@@ -167,6 +179,12 @@ export default function Sidebar() {
   const multiLocal = locales.length > 1
   const appName    = activeApp?.app?.nombre ?? activeApp?.nombre ?? 'DCSmart'
 
+  const role       = activeApp?.role
+  const isGlobal   = role === 'super_admin' || role === 'dcsmart'
+  const visibleFor = (item) => !item.roles || item.roles.includes(role)
+  const mainItems  = NAV_MAIN.filter(visibleFor)
+  const adminItems = NAV_ADMIN.filter(visibleFor)
+
   return (
     <aside className="sidebar">
       {/* Brand */}
@@ -177,14 +195,26 @@ export default function Sidebar() {
       {/* App / Local context */}
       {activeApp && (
         <div className="sidebar-context">
-          <div className="sidebar-app-name">{appName}</div>
+          {isGlobal ? (
+            <div style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: role === 'super_admin' ? 'var(--gold, #C9B086)' : '#a78bfa',
+              marginBottom: 4, opacity: 0.9,
+            }}>
+              {role === 'super_admin' ? '● Super Admin' : '● DCSmart'} — Acceso global
+            </div>
+          ) : null}
+          <div className="sidebar-app-name" style={isGlobal ? { fontSize: 12, color: 'var(--t2)', fontWeight: 500 } : {}}>
+            {isGlobal ? `Viendo: ${appName}` : appName}
+          </div>
           {multiLocal ? (
             <select
               className="sidebar-local-select"
               value={activeLocal?.id ?? ''}
               onChange={(e) => {
-                const l = locales.find(x => x.id === e.target.value)
-                if (l) setActiveLocal(l)
+                const l = locales.find(x => x.id === e.target.value) ?? null
+                setActiveLocal(l)
               }}
             >
               <option value="">Todos los locales</option>
@@ -199,14 +229,14 @@ export default function Sidebar() {
             </div>
           ) : null}
           <button className="sidebar-change-link" onClick={handleChangeApp}>
-            Cambiar grupo
+            {isGlobal ? 'Cambiar vista' : 'Cambiar grupo'}
           </button>
         </div>
       )}
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {NAV_MAIN.map(({ to, label, Icon }) => (
+        {mainItems.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -217,18 +247,21 @@ export default function Sidebar() {
           </NavLink>
         ))}
 
-        <div className="nav-section-label">Admin</div>
-
-        {NAV_ADMIN.map(({ to, label, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-          >
-            <Icon />
-            {label}
-          </NavLink>
-        ))}
+        {adminItems.length > 0 && (
+          <>
+            <div className="nav-section-label">Admin</div>
+            {adminItems.map(({ to, label, Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+              >
+                <Icon />
+                {label}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* User footer */}

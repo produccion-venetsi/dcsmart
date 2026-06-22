@@ -65,8 +65,15 @@ export default async function authRoutes(fastify) {
       path: '/'
     })
 
-    const { password_hash, ...safeUser } = user
-    return { user: safeUser, token }
+    const fullUser = await fastify.db.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true, email: true, nombre: true, avatar_url: true,
+        activo: true, created_at: true,
+        user_app_roles: { include: { app: true, role: true } }
+      }
+    })
+    return { user: fullUser, token }
   })
 
   // POST /api/auth/google
@@ -118,8 +125,15 @@ export default async function authRoutes(fastify) {
       path: '/'
     })
 
-    const { password_hash, ...safeUser } = user
-    return { user: safeUser, token }
+    const fullUser = await fastify.db.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true, email: true, nombre: true, avatar_url: true,
+        activo: true, created_at: true,
+        user_app_roles: { include: { app: true, role: true } }
+      }
+    })
+    return { user: fullUser, token }
   })
 
   // GET /api/auth/me
@@ -152,9 +166,10 @@ export default async function authRoutes(fastify) {
       }
     })
 
-    // super_admin: si tiene algún rol super_admin asignado, ve todos los grupos
+    // super_admin / dcsmart: acceso a TODAS las apps y a todos sus locales.
     const isSuperAdmin = userRoles.some(r => r.role.nombre === 'super_admin')
-    if (isSuperAdmin) {
+    const isDcsmart    = !isSuperAdmin && userRoles.some(r => r.role.nombre === 'dcsmart')
+    if (isSuperAdmin || isDcsmart) {
       const allApps = await fastify.db.app.findMany({
         where: { activo: true },
         include: { locales: { where: { activo: true }, orderBy: { nombre: 'asc' } } },
@@ -162,7 +177,7 @@ export default async function authRoutes(fastify) {
       })
       return allApps.map(a => ({
         app:     { id: a.id, nombre: a.nombre, slug: a.slug },
-        role:    'super_admin',
+        role:    isSuperAdmin ? 'super_admin' : 'dcsmart',
         locales: a.locales.map(l => ({ id: l.id, nombre: l.nombre }))
       }))
     }
@@ -180,14 +195,27 @@ export default async function authRoutes(fastify) {
       accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
     }
 
-    return userRoles.map(r => ({
-      app: { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
-      role: r.role.nombre,
-      // Sin registros en user_local_access → todos los locales de la app
-      locales: accessByApp[r.id_app]?.length > 0
-        ? accessByApp[r.id_app]
-        : r.app.locales.map(l => ({ id: l.id, nombre: l.nombre }))
-    }))
+    // admin / cajero: locales asignados en user_local_access.
+    // Excepción: admin sin filas explícitas = acceso a TODOS los locales activos de la app.
+    const result = []
+    for (const r of userRoles) {
+      const assigned = accessByApp[r.id_app] ?? []
+      let locales = assigned
+      if (r.role.nombre === 'admin' && assigned.length === 0) {
+        const allLocales = await fastify.db.local.findMany({
+          where: { id_app: r.id_app, activo: true },
+          select: { id: true, nombre: true },
+          orderBy: { nombre: 'asc' }
+        })
+        locales = allLocales
+      }
+      result.push({
+        app:    { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
+        role:   r.role.nombre,
+        locales
+      })
+    }
+    return result
   })
 
   // POST /api/auth/logout

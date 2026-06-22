@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { impuestosApi } from '../../api/impuestos.js'
 import { useNavigate, useParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
@@ -14,25 +15,107 @@ function IcoBack() {
     </svg>
   )
 }
+function IcoUp() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 19V5M5 12l7-7 7 7"/>
+    </svg>
+  )
+}
+function IcoDown() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M19 12l-7 7-7-7"/>
+    </svg>
+  )
+}
+function IcoPaperclip() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+    </svg>
+  )
+}
+
+function padLeft(val, len) {
+  const str = String(val ?? '').replace(/\D/g, '')
+  return str ? str.padStart(len, '0') : ''
+}
+
+function calcCashflow(fecha, plazo) {
+  if (!fecha || !plazo) return ''
+  const d = new Date(fecha + 'T00:00:00')
+  d.setDate(d.getDate() + Number(plazo))
+  return d.toISOString().slice(0, 10)
+}
+
+function IcoPlus() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  )
+}
+function IcoTrash() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/>
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    </svg>
+  )
+}
 
 export default function PagoForm() {
-  const { id }        = useParams()
-  const navigate      = useNavigate()
-  const activeLocal   = useAppStore((s) => s.activeLocal)
-  const notify        = useUiStore((s) => s.notify)
-  const isEditing     = Boolean(id)
+  const { id }      = useParams()
+  const navigate    = useNavigate()
+  const activeLocal = useAppStore((s) => s.activeLocal)
+  const activeApp   = useAppStore((s) => s.activeApp)
+  const notify      = useUiStore((s) => s.notify)
+  const isEditing   = Boolean(id)
+
+  const locales = activeApp?.locales ?? []
 
   const [proveedores, setProveedores] = useState([])
   const [rubcats,     setRubcats]     = useState([])
   const [metodos,     setMetodos]     = useState([])
   const [loading,     setLoading]     = useState(false)
+
+  // combobox de proveedor
+  const [provSearch, setProvSearch] = useState('')
+  const [provOpen,   setProvOpen]   = useState(false)
+  const [provPlazo,  setProvPlazo]  = useState(null)
+  const provRef = useRef(null)
+
+  // impuestos pendientes (solo al crear)
+  const [pendingImp, setPendingImp] = useState([])
+  const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
+  const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
+
+  const ESTADO_OP_OPTIONS = [
+    { value: 'CAJA',       label: 'CAJA' },
+    { value: 'CUENTA_CTE', label: 'CUENTA CTE' },
+    { value: 'MP_PDP',     label: 'MP PDP' },
+    { value: 'PDP',        label: 'PDP' },
+  ]
+
   const [form, setForm] = useState({
     fecha: '', id_proveedor: '', id_rubcat: '', id_tipo: '',
+    pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
-    id_metodo: '', observaciones: '', pagado: false,
-    estado_op: 'CAJA', ingresa_egreso: true,
+    id_metodo: '', cashflow: '', observaciones: '',
+    pagado: false, fecha_pago: '', periodo: '',
+    estado_op: 'CUENTA_CTE', ingresa_egreso: true,
     id_local: activeLocal?.id || ''
   })
+
+  // cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    const handler = (e) => {
+      if (provRef.current && !provRef.current.contains(e.target)) setProvOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -48,39 +131,104 @@ export default function PagoForm() {
         setMetodos(mets)
         if (pagoRes) {
           const d = pagoRes.data
+          const prov = provs.data.find(p => p.id === d.id_proveedor)
+          if (prov) {
+            setProvSearch(prov.nombre)
+            setProvPlazo(prov.plazo || null)
+          }
           setForm({
-            fecha:          d.fecha ? d.fecha.slice(0, 10) : '',
+            fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
             id_proveedor:   d.id_proveedor   || '',
             id_rubcat:      d.id_rubcat      || '',
             id_tipo:        d.id_tipo        || '',
+            pv:             d.pv != null     ? String(d.pv)           : '',
+            nro:            d.nro != null    ? String(d.nro)          : '',
             importe_neto:   d.importe_neto   || '',
             descuento:      d.descuento      || '',
             importe:        d.importe        || '',
             id_metodo:      d.id_metodo      || '',
+            cashflow:       d.cashflow   ? d.cashflow.slice(0, 10)   : '',
             observaciones:  d.observaciones  || '',
             pagado:         d.pagado,
-            estado_op:      d.estado_op      || 'CAJA',
+            fecha_pago:     d.fecha_pago ? d.fecha_pago.slice(0, 10) : '',
+            periodo:        d.periodo    ? d.periodo.slice(0, 10)    : '',
+            estado_op:      d.estado_op      || 'CUENTA CTE',
             ingresa_egreso: d.ingresa_egreso,
             id_local:       d.id_local       || '',
           })
         }
       })
-      .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
+      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
 
     return () => ctrl.abort()
   }, [id])
 
-  const set = (field, value) => setForm(f => ({ ...f, [field]: value }))
+  // set con efectos encadenados
+  const set = (field, value) => setForm(f => {
+    const next = { ...f, [field]: value }
+    if (field === 'fecha') {
+      next.periodo = value
+      next.cashflow = calcCashflow(value, provPlazo)
+    }
+    if (field === 'fecha_pago') next.pagado = Boolean(value)
+    if (field === 'pagado' && !value) next.fecha_pago = ''
+    return next
+  })
+
+  // seleccionar proveedor desde el combobox: pre-llena rubcat y recalcula cashflow si hay plazo
+  const selectProveedor = (prov) => {
+    const plazo = prov.plazo || null
+    setProvPlazo(plazo)
+    setForm(f => ({
+      ...f,
+      id_proveedor: prov.id,
+      id_rubcat:    prov.id_rubcat || f.id_rubcat,
+      cashflow:     calcCashflow(f.fecha, plazo) || f.cashflow
+    }))
+    setProvSearch(prov.nombre)
+    setProvOpen(false)
+  }
+
+  const clearProveedor = () => {
+    setProvPlazo(null)
+    setForm(f => ({ ...f, id_proveedor: '', cashflow: '' }))
+    setProvSearch('')
+    setProvOpen(false)
+  }
+
+  const filteredProvs = proveedores.filter(p =>
+    p.nombre.toLowerCase().includes(provSearch.toLowerCase())
+  )
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!activeLocal && !form.id_local) {
+      notify('Seleccioná un local', 'error'); return
+    }
     setLoading(true)
     try {
+      const payload = {
+        ...form,
+        pv:         form.pv       ? parseInt(form.pv,  10) : null,
+        nro:        form.nro      ? parseInt(form.nro, 10) : null,
+        fecha_pago: form.fecha_pago || null,
+        periodo:    form.periodo    || null,
+        cashflow:   form.cashflow   || null,
+        id_local:   activeLocal?.id || form.id_local || null,
+      }
       if (isEditing) {
-        await pagosApi.update(id, form)
+        await pagosApi.update(id, payload)
         notify('Pago actualizado', 'success')
       } else {
-        await pagosApi.create(form)
+        const res = await pagosApi.create(payload)
+        const newId = res.data?.id
+        if (newId && pendingImp.length > 0) {
+          await Promise.all(
+            pendingImp.map(imp =>
+              impuestosApi.create({ id_pago: newId, tipo: imp.tipo, monto: parseFloat(imp.monto) })
+            )
+          )
+        }
         notify('Pago creado', 'success')
       }
       navigate('/pagos')
@@ -100,24 +248,95 @@ export default function PagoForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
+        {/* ── Toggle Ingreso / Egreso ── */}
+        <div className="form-panel" style={{ padding: '0.875rem 1.25rem' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className={`btn ${form.ingresa_egreso ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1, justifyContent: 'center', gap: 6 }}
+              onClick={() => set('ingresa_egreso', true)}
+            >
+              <IcoUp /> Ingreso
+            </button>
+            <button
+              type="button"
+              className={`btn ${!form.ingresa_egreso ? 'btn-danger' : 'btn-secondary'}`}
+              style={{ flex: 1, justifyContent: 'center', gap: 6 }}
+              onClick={() => set('ingresa_egreso', false)}
+            >
+              <IcoDown /> Egreso
+            </button>
+          </div>
+        </div>
+
+        {/* ── Información del Pago ── */}
         <div className="form-panel">
           <div className="form-panel-title">Información del Pago</div>
           <div className="form-grid">
+
+            {/* selector de local — solo cuando no hay local activo */}
+            {!activeLocal && locales.length > 0 && (
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Local *</label>
+                <div className="form-input-wrap">
+                  <select required value={form.id_local} onChange={e => set('id_local', e.target.value)}>
+                    <option value="">Seleccioná un local…</option>
+                    {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div className="form-group">
-              <label className="form-label">Fecha</label>
+              <label className="form-label">Fecha Factura</label>
               <div className="form-input-wrap">
                 <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} />
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Proveedor</label>
+              <label className="form-label">Período</label>
               <div className="form-input-wrap">
-                <select value={form.id_proveedor} onChange={e => set('id_proveedor', e.target.value)}>
-                  <option value="">Sin proveedor</option>
-                  {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
               </div>
             </div>
+
+            {/* combobox de proveedor */}
+            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">Proveedor</label>
+              <div className="form-input-wrap">
+                <input
+                  type="text"
+                  placeholder="Buscar proveedor…"
+                  value={provSearch}
+                  autoComplete="off"
+                  onChange={e => { setProvSearch(e.target.value); setProvOpen(true) }}
+                  onFocus={() => setProvOpen(true)}
+                />
+                {form.id_proveedor && (
+                  <button
+                    type="button"
+                    onClick={clearProveedor}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', color: 'var(--t3)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                    title="Quitar proveedor"
+                  >×</button>
+                )}
+              </div>
+              {provOpen && (
+                <div className="combobox-dropdown">
+                  {filteredProvs.length === 0
+                    ? <span className="combobox-option empty">Sin resultados</span>
+                    : filteredProvs.slice(0, 60).map(p => (
+                      <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
+                        {p.nombre}
+                      </button>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+
             <div className="form-group">
               <label className="form-label">Rubro / Categoría</label>
               <div className="form-input-wrap">
@@ -140,6 +359,7 @@ export default function PagoForm() {
                 </select>
               </div>
             </div>
+
             <div className="form-group">
               <label className="form-label">Tipo de Comprobante</label>
               <div className="form-input-wrap">
@@ -153,13 +373,47 @@ export default function PagoForm() {
               <label className="form-label">Estado</label>
               <div className="form-input-wrap">
                 <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
-                  {['CAJA','CUENTA CTE','MP PDP','PDP'].map(s => <option key={s}>{s}</option>)}
+                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             </div>
+
+            {/* PV y Nro de comprobante */}
+            <div className="form-group">
+              <label className="form-label">Punto de Venta</label>
+              <div className="form-input-wrap">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00000"
+                  maxLength={5}
+                  value={form.pv}
+                  onChange={e => set('pv', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  onBlur={e => { if (e.target.value) set('pv', padLeft(e.target.value, 5)) }}
+                  style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Nro Comprobante</label>
+              <div className="form-input-wrap">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00000000"
+                  maxLength={8}
+                  value={form.nro}
+                  onChange={e => set('nro', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  onBlur={e => { if (e.target.value) set('nro', padLeft(e.target.value, 8)) }}
+                  style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                />
+              </div>
+            </div>
+
           </div>
         </div>
 
+        {/* ── Montos ── */}
         <div className="form-panel">
           <div className="form-panel-title">Montos</div>
           <div className="form-grid">
@@ -181,20 +435,144 @@ export default function PagoForm() {
                 <input type="number" step="0.01" placeholder="0.00" value={form.importe} onChange={e => set('importe', e.target.value)} />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Cashflow</label>
+              <div className="form-input-wrap">
+                <input
+                  type="date"
+                  value={form.cashflow}
+                  onChange={e => set('cashflow', e.target.value)}
+                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
+                />
+              </div>
+              {provPlazo && (
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  Plazo: {provPlazo} días
+                </span>
+              )}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Fecha de Pago</label>
+              <div className="form-input-wrap">
+                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
+              </div>
+            </div>
           </div>
-
-          <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.25rem' }}>
-            <label className="checkbox-wrap">
-              <input type="checkbox" checked={form.pagado} onChange={e => set('pagado', e.target.checked)} />
-              <span className="checkbox-label">Pagado</span>
-            </label>
-            <label className="checkbox-wrap">
-              <input type="checkbox" checked={form.ingresa_egreso} onChange={e => set('ingresa_egreso', e.target.checked)} />
-              <span className="checkbox-label">Ingreso (desmarcar = egreso)</span>
-            </label>
+          <div style={{ marginTop: '0.5rem' }}>
+            <span className={`badge ${form.pagado ? 'badge-green' : 'badge-muted'}`} style={{ fontSize: 12 }}>
+              {form.pagado ? 'Pagado' : 'Pendiente de pago'}
+            </span>
           </div>
         </div>
 
+        {/* ── Impuestos (solo al crear) ── */}
+        {!isEditing && (
+          <div className="form-panel">
+            <div className="form-panel-title">Impuestos</div>
+
+            {/* Tabla de impuestos agregados */}
+            {pendingImp.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <table className="data-table" style={{ marginBottom: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Monto</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingImp.map((imp, i) => (
+                      <tr key={i}>
+                        <td><span className="badge badge-blue">{imp.tipo}</span></td>
+                        <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-danger btn-icon"
+                            onClick={() => setPendingImp(prev => prev.filter((_, j) => j !== i))}
+                          >
+                            <IcoTrash />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
+                      <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
+                        ${pendingImp.reduce((acc, i) => acc + Number(i.monto), 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Formulario para agregar un impuesto */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
+                <label className="form-label">Tipo</label>
+                <div className="form-input-wrap">
+                  <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                    {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+                <label className="form-label">Monto</label>
+                <div className="form-input-wrap">
+                  <input
+                    type="number" step="0.01" placeholder="0.00"
+                    value={impForm.monto}
+                    onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ whiteSpace: 'nowrap' }}
+                disabled={!impForm.monto}
+                onClick={() => {
+                  if (!impForm.monto) return
+                  setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
+                  setImpForm(f => ({ ...f, monto: '' }))
+                }}
+              >
+                <IcoPlus /> Agregar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Adjuntos (visual, sin carga) ── */}
+        <div className="form-panel">
+          <div className="form-panel-title">Adjuntos</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <IcoPaperclip /> Foto
+              </label>
+              <div className="form-input-wrap">
+                <input type="text" disabled placeholder="Sin archivo adjunto" style={{ opacity: 0.45, cursor: 'not-allowed' }} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <IcoPaperclip /> PDF
+              </label>
+              <div className="form-input-wrap">
+                <input type="text" disabled placeholder="Sin archivo adjunto" style={{ opacity: 0.45, cursor: 'not-allowed' }} />
+              </div>
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--t3)', marginTop: '0.5rem', marginBottom: 0 }}>
+            La carga de archivos estará disponible próximamente.
+          </p>
+        </div>
+
+        {/* ── Notas ── */}
         <div className="form-panel">
           <div className="form-panel-title">Notas</div>
           <div className="form-group">
