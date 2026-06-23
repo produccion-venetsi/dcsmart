@@ -268,12 +268,12 @@ export default async function pagosRoutes(fastify) {
 
     const pago = await fastify.db.pago.create({
       data: {
-        nro_ord:        nro_ord        ? parseInt(nro_ord)        : null,
-        fecha:          fecha          ? new Date(fecha)          : null,
+        nro_ord:        nro_ord        ? (parseInt(nro_ord) || null) : null,
+        fecha:          fecha          ? new Date(fecha)            : null,
         id_proveedor:   id_proveedor   || null,
         id_rubcat:      id_rubcat      || null,
         id_tipo:        id_tipo        || null,
-        pv:             pv             ? parseInt(pv)             : null,
+        pv:             pv             ? (parseInt(pv) || null)    : null,
         nro:            nro            ? BigInt(nro)              : null,
         importe_neto:   importe_neto   ? parseFloat(importe_neto) : null,
         descuento:      descuento      ? parseFloat(descuento)    : null,
@@ -329,12 +329,12 @@ export default async function pagosRoutes(fastify) {
     const pago = await fastify.db.pago.update({
       where: { id: request.params.id },
       data: {
-        nro_ord:        nro_ord        !== undefined ? parseInt(nro_ord)          : undefined,
+        nro_ord:        nro_ord        !== undefined ? (parseInt(nro_ord) || null) : undefined,
         fecha:          fecha                       ? new Date(fecha)             : undefined,
         id_proveedor:   id_proveedor   !== undefined ? id_proveedor               : undefined,
         id_rubcat:      id_rubcat      !== undefined ? id_rubcat                  : undefined,
         id_tipo:        id_tipo        !== undefined ? id_tipo                    : undefined,
-        pv:             pv             !== undefined ? parseInt(pv)               : undefined,
+        pv:             pv             !== undefined ? (parseInt(pv) || null)     : undefined,
         nro:            nro            !== undefined ? (nro ? BigInt(nro) : null) : undefined,
         importe_neto:   importe_neto   !== undefined ? parseFloat(importe_neto)   : undefined,
         descuento:      descuento      !== undefined ? parseFloat(descuento)      : undefined,
