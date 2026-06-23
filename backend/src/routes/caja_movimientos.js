@@ -1,3 +1,5 @@
+const TIPOS_MOVIMIENTO = ['INICIAL', 'INGRESO', 'GASTO', 'COBRO', 'RETIRO', 'VACIADO']
+
 export default async function cajaMoveRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja_movimientos', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja_movimientos', 'create')]
@@ -41,6 +43,9 @@ export default async function cajaMoveRoutes(fastify) {
     if (!tipo || monto === undefined || !id_caja) {
       return reply.code(400).send({ error: 'tipo, monto e id_caja son requeridos' })
     }
+    if (!TIPOS_MOVIMIENTO.includes(tipo)) {
+      return reply.code(400).send({ error: `tipo inválido. Use: ${TIPOS_MOVIMIENTO.join(', ')}` })
+    }
 
     const caja = await fastify.db.caja.findUnique({
       where: { id: id_caja },
@@ -78,6 +83,9 @@ export default async function cajaMoveRoutes(fastify) {
     }
 
     const { tipo, id_metodo, monto, cantidad } = request.body
+    if (tipo !== undefined && !TIPOS_MOVIMIENTO.includes(tipo)) {
+      return reply.code(400).send({ error: `tipo inválido. Use: ${TIPOS_MOVIMIENTO.join(', ')}` })
+    }
     const mov = await fastify.db.cajaMovimiento.update({
       where: { id: request.params.id },
       data: {

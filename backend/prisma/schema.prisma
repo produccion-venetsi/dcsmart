@@ -286,9 +286,20 @@ enum Origin {
   @@map("origin")
 }
 
+enum TipoMovimiento {
+  INICIAL
+  INGRESO
+  GASTO
+  COBRO
+  RETIRO
+  VACIADO
+
+  @@map("tipo_movimiento")
+}
+
 model CajaMovimiento {
-  id        String  @id @default(uuid())
-  tipo      String
+  id        String         @id @default(uuid())
+  tipo      TipoMovimiento
   id_metodo String?
   monto     Decimal @db.Decimal(12, 2)
   id_caja   String
