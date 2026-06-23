@@ -18,23 +18,29 @@ dcsmart/
 ├── backend/
 │   ├── package.json
 │   ├── prisma/
-│   │   └── schema.prisma  ← esquema completo de la DB
+│   │   ├── schema.prisma  ← esquema completo de la DB (fuente autoritativa)
+│   │   └── seed.js        ← seed de roles, módulos, métodos de pago, usuarios de prueba
 │   └── src/
 │       ├── server.js          ← entry point Fastify
 │       ├── plugins/
 │       │   ├── db.js          ← conexión Prisma
-│       │   ├── auth.js        ← JWT + Google OAuth
-│       │   └── cors.js
+│       │   ├── permissions.js ← middleware can() y requireSuperAdmin
+│       │   └── appContext.js  ← middleware X-App-Id, rol efectivo, locales permitidos
 │       └── routes/
 │           ├── auth.js
 │           ├── apps.js
 │           ├── locales.js
 │           ├── users.js
+│           ├── roles.js
 │           ├── caja.js
 │           ├── caja_movimientos.js
+│           ├── caja_detalles.js
+│           ├── detalle_tipos.js
 │           ├── pagos.js
 │           ├── proveedores.js
-│           └── rubcat.js
+│           ├── rubcat.js
+│           ├── metodos_pago.js
+│           └── impuestos.js
 └── frontend/
     ├── package.json
     ├── vite.config.js
@@ -43,8 +49,8 @@ dcsmart/
     └── src/
         ├── main.jsx
         ├── App.jsx
-        ├── sw.js              ← service worker
         ├── api/               ← llamadas al backend
+        ├── lib/               ← utilidades (clasificaciones, etc.)
         ├── components/
         ├── pages/
         └── store/             ← estado global (Zustand)
@@ -85,367 +91,25 @@ npm install -D vite-plugin-pwa
 
 Archivo: `backend/prisma/schema.prisma`
 
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-// ─────────────────────────────────────────
-// ESTRUCTURA ORGANIZACIONAL
-// ─────────────────────────────────────────
-
-model App {
-  id          String   @id @default(uuid())
-  nombre      String
-  slug        String   @unique
-  activo      Boolean  @default(true)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-
-  locales       Local[]
-  user_app_roles UserAppRole[]
-
-  @@map("apps")
-}
-
-model Local {
-  id          String   @id @default(uuid())
-  nombre      String
-  direccion   String?
-  telefono    String?
-  activo      Boolean  @default(true)
-  id_app      String
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-
-  app           App           @relation(fields: [id_app], references: [id])
-  cajas         Caja[]
-  pagos         Pago[]
-  user_app_roles UserAppRole[]
-
-  @@map("locales")
-}
-
-// ─────────────────────────────────────────
-// USUARIOS, ROLES Y PERMISOS
-// ─────────────────────────────────────────
-
-model User {
-  id             String   @id @default(uuid())
-  email          String   @unique
-  nombre         String
-  password_hash  String?  // null si solo usa Google OAuth
-  google_id      String?  @unique
-  avatar_url     String?
-  activo         Boolean  @default(true)
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
-
-  user_app_roles    UserAppRole[]
-  user_permissions  UserPermission[]
-  cajas_creadas     Caja[]           @relation("CajaCreatedBy")
-  pagos_creados     Pago[]           @relation("PagoCreatedBy")
-  pagos_auditados   Pago[]           @relation("PagoAuditBy")
-
-  @@map("users")
-}
-
-// Roles base del sistema
-model Role {
-  id          String  @id @default(uuid())
-  nombre      String  @unique // super_admin | admin | cajero
-  descripcion String?
-
-  user_app_roles   UserAppRole[]
-  role_permissions RolePermission[]
-
-  @@map("roles")
-}
-
-// Módulos del sistema (caja, pagos, proveedores, etc.)
-model Module {
-  id          String  @id @default(uuid())
-  nombre      String  @unique // caja | pagos | proveedores | rubros | usuarios
-  descripcion String?
-  activo      Boolean @default(true)
-
-  role_permissions RolePermission[]
-  user_permissions UserPermission[]
-
-  @@map("modules")
-}
-
-// Permisos por defecto de cada rol en cada módulo
-model RolePermission {
-  id        String @id @default(uuid())
-  id_role   String
-  id_module String
-  can_view   Boolean @default(false)
-  can_create Boolean @default(false)
-  can_edit   Boolean @default(false)
-  can_delete Boolean @default(false)
-
-  role   Role   @relation(fields: [id_role], references: [id])
-  module Module @relation(fields: [id_module], references: [id])
-
-  @@unique([id_role, id_module])
-  @@map("role_permissions")
-}
-
-// Asignación de usuario a app, con rol y acceso opcional a local específico
-// Si id_local es null, tiene acceso a todos los locales de la app
-model UserAppRole {
-  id       String  @id @default(uuid())
-  id_user  String
-  id_app   String
-  id_role  String
-  id_local String? // null = acceso a todos los locales de la app
-
-  user  User  @relation(fields: [id_user], references: [id])
-  app   App   @relation(fields: [id_app], references: [id])
-  role  Role  @relation(fields: [id_role], references: [id])
-  local Local? @relation(fields: [id_local], references: [id])
-
-  @@unique([id_user, id_app])
-  @@map("user_app_roles")
-}
-
-// Overrides de permisos por usuario (sobreescribe los del rol)
-model UserPermission {
-  id        String  @id @default(uuid())
-  id_user   String
-  id_module String
-  can_view   Boolean @default(false)
-  can_create Boolean @default(false)
-  can_edit   Boolean @default(false)
-  can_delete Boolean @default(false)
-
-  user   User   @relation(fields: [id_user], references: [id])
-  module Module @relation(fields: [id_module], references: [id])
-
-  @@unique([id_user, id_module])
-  @@map("user_permissions")
-}
-
-// ─────────────────────────────────────────
-// TABLAS GLOBALES (compartidas entre grupos)
-// ─────────────────────────────────────────
-
-model Rubro {
-  id     String @id @default(uuid())
-  nombre String @unique
-
-  rubcats RubCat[]
-
-  @@map("rubros")
-}
-
-model Categoria {
-  id     String @id @default(uuid())
-  nombre String @unique
-
-  rubcats RubCat[]
-
-  @@map("categorias")
-}
-
-model RubCat {
-  id             String  @id @default(uuid())
-  id_cat         String
-  id_rub         String
-  cuenta         String?
-  tipo           String?
-  costo          String?
-  clasificacion  String?
-
-  categoria  Categoria    @relation(fields: [id_cat], references: [id])
-  rubro      Rubro        @relation(fields: [id_rub], references: [id])
-  pagos      Pago[]
-  proveedores Proveedor[]
-
-  @@unique([id_cat, id_rub])
-  @@map("rubcat")
-}
-
-model Proveedor {
-  id             String   @id @default(uuid())
-  nombre         String
-  razon_social   String?
-  cuit           String?
-  banco          String?
-  cbu            String?
-  alias          String?
-  direccion_url  String?
-  detalle_direc  String?
-  telefono       String?
-  mail_contacto  String?
-  mail_envio     String?
-  tag            String?
-  id_rubcat      String?
-  activo         Boolean  @default(true)
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
-
-  rubcat  RubCat? @relation(fields: [id_rubcat], references: [id])
-  pagos   Pago[]
-
-  @@map("proveedores")
-}
-
-model MetodoPago {
-  id     String @id @default(uuid())
-  nombre String @unique
-  activo Boolean @default(true)
-
-  caja_movimientos CajaMovimiento[]
-  pagos            Pago[]
-
-  @@map("metodos_pago")
-}
-
-// ─────────────────────────────────────────
-// TABLAS OPERATIVAS
-// ─────────────────────────────────────────
-
-model Caja {
-  id            String    @id @default(uuid())
-  nro_turno     String?
-  fecha_inicio  DateTime
-  fecha_cierre  DateTime?
-  id_local      String
-  cajero        String?
-  total         Decimal?  @db.Decimal(12, 2)
-  efectivo      Decimal?  @db.Decimal(12, 2)
-  fiscal        Decimal?  @db.Decimal(12, 2)
-  comensales    Int?
-  tickets       Int?
-  observaciones String?
-  foto_url      String?
-  origin        Origin    @default(DCSMART)
-  created_by    String?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
-
-  local      Local            @relation(fields: [id_local], references: [id])
-  creador    User?            @relation("CajaCreatedBy", fields: [created_by], references: [id])
-  movimientos CajaMovimiento[]
-
-  @@map("cajas")
-}
-
-enum Origin {
-  DCSMART
-  TAPTAP
-  FFUDO
-
-  @@map("origin")
-}
-
-model CajaMovimiento {
-  id          String  @id @default(uuid())
-  tipo        String
-  id_metodo   String?
-  monto       Decimal @db.Decimal(12, 2)
-  id_caja     String
-  cantidad    Int?
-
-  caja        Caja        @relation(fields: [id_caja], references: [id])
-  metodo_pago MetodoPago? @relation(fields: [id_metodo], references: [id])
-
-  @@map("caja_movimientos")
-}
-
-model Pago {
-  id            String    @id @default(uuid())
-  nro_ord       Int?
-  fecha         DateTime?
-  id_proveedor  String?
-  id_rubcat     String?
-  id_tipo       TipoPago?
-  pv            Int?
-  nro           Int?
-  importe_neto  Decimal?  @db.Decimal(12, 2)
-  descuento     Decimal?  @db.Decimal(12, 2)
-  importe       Decimal?  @db.Decimal(12, 2)
-  id_metodo     String?
-  cashflow      DateTime?
-  observaciones String?
-  audit         Boolean   @default(false)
-  user_audit    String?
-  audit_date    DateTime?
-  pagado        Boolean   @default(false)
-  fecha_pago    DateTime?
-  estado_op     EstadoOp?
-  foto_url      String?
-  pdf_url       String?
-  periodo       DateTime?
-  ingresa_egreso Boolean  @default(true) // true = ingreso, false = egreso
-  id_local      String?
-  created_by    String?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
-
-  // Relaciones futuras (nullable por ahora)
-  id_pdp      String?
-  id_eventos  String?
-  id_cheque   String?
-  id_ctacte   String?
-
-  proveedor   Proveedor?  @relation(fields: [id_proveedor], references: [id])
-  rubcat      RubCat?     @relation(fields: [id_rubcat], references: [id])
-  metodo_pago MetodoPago? @relation(fields: [id_metodo], references: [id])
-  local       Local?      @relation(fields: [id_local], references: [id])
-  creador     User?       @relation("PagoCreatedBy", fields: [created_by], references: [id])
-  auditor     User?       @relation("PagoAuditBy", fields: [user_audit], references: [id])
-  impuestos   Impuesto[]
-
-  @@map("pagos")
-}
-
-enum TipoPago {
-  A
-  B
-  C
-  CM
-  INTERCOMPANY
-
-  @@map("tipo_pago")
-}
-
-enum EstadoOp {
-  PENDIENTE
-  APROBADO
-  RECHAZADO
-  PAGADO
-
-  @@map("estado_op")
-}
-
-model Impuesto {
-  id       String      @id @default(uuid())
-  id_pago  String
-  tipo     TipoImpuesto
-  monto    Decimal     @db.Decimal(12, 2)
-
-  pago Pago @relation(fields: [id_pago], references: [id])
-
-  @@map("impuestos")
-}
-
-enum TipoImpuesto {
-  IVA21
-  IVA10
-  RETENCION
-  PERCEPCION
-
-  @@map("tipo_impuesto")
-}
-```
+Ver archivo autoritativo: `backend/prisma/schema.prisma`
+
+Resumen de modelos:
+- **Estructura:** App, Local
+- **Auth/Permisos:** User, Role, Module, UserAppRole, UserLocalAccess, RolePermission, UserPermission
+- **Globales:** Rubro, Categoria, RubCat, Proveedor, MetodoPago
+- **Caja:** Caja, CajaMovimiento, DetalleTipo, CajaDetalle
+- **Pagos:** Pago, Impuesto, Audit
+
+Enums:
+- `Origin`: DCSMART, TAPTAP, FFUDO
+- `TipoMovimiento`: INICIAL, INGRESO, GASTO, COBRO, RETIRO, VACIADO
+- `TipoPago`: A, B, C, CM, DC_1, DC_2, DDJJ, M, NCA, NDA, STK
+- `EstadoOp`: CAJA, CUENTA_CTE, MP_PDP, PDP
+- `TipoImpuesto`: IVA21, IVA27, IVA10, RETENCION, PERCEPCION
+
+Roles: super_admin (global), dcsmart (global), admin (scoped a app), cajero (scoped a app+local)
+
+Auditoría de pagos: se gestiona en la tabla `audits` (genérica), no como columna del pago.
 
 ---
 

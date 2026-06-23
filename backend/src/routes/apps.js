@@ -50,8 +50,13 @@ export default async function appsRoutes(fastify) {
   fastify.delete('/:id', {
     preHandler: [fastify.authenticate, fastify.can('apps', 'delete')]
   }, async (request, reply) => {
+    const id = request.params.id
+    const deps = await fastify.db.local.count({ where: { id_app: id } })
+    if (deps > 0) {
+      return reply.code(409).send({ error: `No se puede eliminar: la app tiene ${deps} local(es) asociado(s)` })
+    }
     try {
-      await fastify.db.app.delete({ where: { id: request.params.id } })
+      await fastify.db.app.delete({ where: { id } })
       return reply.code(204).send()
     } catch (err) {
       if (err.code === 'P2025') return reply.code(404).send({ error: 'App no encontrada' })

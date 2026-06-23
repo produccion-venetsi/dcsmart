@@ -243,6 +243,7 @@ model Caja {
   movimientos CajaMovimiento[]
   detalles    CajaDetalle[]
 
+  @@index([id_local, fecha_inicio])
   @@map("cajas")
 }
 
@@ -286,9 +287,20 @@ enum Origin {
   @@map("origin")
 }
 
+enum TipoMovimiento {
+  INICIAL
+  INGRESO
+  GASTO
+  COBRO
+  RETIRO
+  VACIADO
+
+  @@map("tipo_movimiento")
+}
+
 model CajaMovimiento {
-  id        String  @id @default(uuid())
-  tipo      String
+  id        String         @id @default(uuid())
+  tipo      TipoMovimiento
   id_metodo String?
   monto     Decimal @db.Decimal(12, 2)
   id_caja   String
@@ -339,6 +351,9 @@ model Pago {
   creador     User?       @relation("PagoCreatedBy", fields: [created_by], references: [id])
   impuestos   Impuesto[]
 
+  @@index([id_local, fecha])
+  @@index([pagado])
+  @@index([estado_op])
   @@map("pagos")
 }
 

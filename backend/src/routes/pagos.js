@@ -25,11 +25,17 @@ async function getAuditedSet(fastify, pagoIds) {
 // Construye el filtro Prisma { id: { in/notIn } } para auditados/no-auditados.
 // Si `audit` es undefined, no filtra (devuelve {}). Ante un error de la tabla
 // `audits`, devolvemos {} (sin filtrar) para no romper la consulta de pagos.
-async function buildAuditFilter(fastify, audit) {
+async function buildAuditFilter(fastify, audit, allowedLocalIds) {
   if (audit === undefined) return {}
   try {
+    const pagosInScope = await fastify.db.pago.findMany({
+      where: { id_local: { in: allowedLocalIds } },
+      select: { id: true }
+    })
+    const pagoIds = pagosInScope.map(p => p.id)
+    if (!pagoIds.length) return audit === 'true' ? { id: { in: [] } } : {}
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos' },
+      where: { tabla: 'pagos', id_registro: { in: pagoIds } },
       select: { id_registro: true }
     })
     const auditedIds = [...new Set(rows.map(r => r.id_registro))]
@@ -68,7 +74,7 @@ export default async function pagosRoutes(fastify) {
 
     // El estado "auditado" no es una columna de pagos: vive en la tabla `audits`.
     // Para filtrar, traemos los ids de pagos que tienen registro de auditoría.
-    const auditFilter = await buildAuditFilter(fastify, audit)
+    const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
 
     const where = {
       ...localFilter,
@@ -130,7 +136,7 @@ export default async function pagosRoutes(fastify) {
       ? { rubcat: { ...(id_rub ? { id_rub } : {}), ...(id_cat ? { id_cat } : {}) } }
       : id_rubcat ? { id_rubcat } : {}
 
-    const auditFilter = await buildAuditFilter(fastify, audit)
+    const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
 
     const where = {
       ...localFilter,
@@ -268,12 +274,12 @@ export default async function pagosRoutes(fastify) {
 
     const pago = await fastify.db.pago.create({
       data: {
-        nro_ord:        nro_ord        ? parseInt(nro_ord)        : null,
-        fecha:          fecha          ? new Date(fecha)          : null,
+        nro_ord:        nro_ord        ? (parseInt(nro_ord) || null) : null,
+        fecha:          fecha          ? new Date(fecha)            : null,
         id_proveedor:   id_proveedor   || null,
         id_rubcat:      id_rubcat      || null,
         id_tipo:        id_tipo        || null,
-        pv:             pv             ? parseInt(pv)             : null,
+        pv:             pv             ? (parseInt(pv) || null)    : null,
         nro:            nro            ? BigInt(nro)              : null,
         importe_neto:   importe_neto   ? parseFloat(importe_neto) : null,
         descuento:      descuento      ? parseFloat(descuento)    : null,
@@ -329,12 +335,12 @@ export default async function pagosRoutes(fastify) {
     const pago = await fastify.db.pago.update({
       where: { id: request.params.id },
       data: {
-        nro_ord:        nro_ord        !== undefined ? parseInt(nro_ord)          : undefined,
+        nro_ord:        nro_ord        !== undefined ? (parseInt(nro_ord) || null) : undefined,
         fecha:          fecha                       ? new Date(fecha)             : undefined,
         id_proveedor:   id_proveedor   !== undefined ? id_proveedor               : undefined,
         id_rubcat:      id_rubcat      !== undefined ? id_rubcat                  : undefined,
         id_tipo:        id_tipo        !== undefined ? id_tipo                    : undefined,
-        pv:             pv             !== undefined ? parseInt(pv)               : undefined,
+        pv:             pv             !== undefined ? (parseInt(pv) || null)     : undefined,
         nro:            nro            !== undefined ? (nro ? BigInt(nro) : null) : undefined,
         importe_neto:   importe_neto   !== undefined ? parseFloat(importe_neto)   : undefined,
         descuento:      descuento      !== undefined ? parseFloat(descuento)      : undefined,
@@ -387,7 +393,7 @@ export default async function pagosRoutes(fastify) {
         tabla:       'pagos',
         tipo:        'auditoria_pago',
         aprobado:    true,
-        id_user:     request.user.email,
+        id_user:     request.user.id,
         fecha:       new Date()
       }
     })
