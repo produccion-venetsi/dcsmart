@@ -271,7 +271,7 @@ const FILTER_INIT = {
 
 // ─── Scroll virtual ─────────────────────────────────────────────────────────
 
-const ROW_HEIGHT = 44
+const ROW_HEIGHT = 32
 const OVERSCAN = 20
 const COL_COUNT = 20
 
@@ -521,10 +521,6 @@ export default function PagoList() {
     <div className="page">
       <style>{`
         .vt-scroll { max-height: calc(100vh - 180px); overflow: auto; }
-        .vt-scroll thead th {
-          position: sticky; top: 0; z-index: 3;
-          background: var(--surface, #1a1a2e);
-        }
         .vt-spacer td { padding: 0 !important; border: none !important; }
       `}</style>
 
