@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
@@ -12,6 +12,7 @@ import FotoViewer from '../../components/FotoViewer.jsx'
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
   'DC (1)': 'badge-purple', 'DC (2)': 'badge-purple',
+  DC_1: 'badge-purple', DC_2: 'badge-purple',
   DDJJ: 'badge-red', M: 'badge-muted', NCA: 'badge-amber', NDA: 'badge-amber', STK: 'badge-blue',
 }
 const ESTADO_BADGE = {
@@ -26,7 +27,10 @@ const ESTADO_OP_OPTIONS = [
   { value: 'MP_PDP',     label: 'MP PDP' },
   { value: 'PDP',        label: 'PDP' },
 ]
-const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
+const TIPO_PAGO_OPTIONS = [
+  'A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'
+]
+const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
 
 function IcoPlus() {
   return (
@@ -58,14 +62,6 @@ function IcoFilter() {
     </svg>
   )
 }
-function IcoLink() {
-  return (
-    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-    </svg>
-  )
-}
 function IcoPagoEmpty() {
   return (
     <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
@@ -77,7 +73,8 @@ function IcoPagoEmpty() {
 function fmt$(n)     { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' }) : '—' }
-function mono(v)     { return v ? <span className="td-mono" style={{ fontSize: 11 }}>{v}</span> : <span className="td-muted">—</span> }
+function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
+function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 
 function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, canDelete = false }) {
   const notify      = useUiStore((s) => s.notify)
@@ -131,13 +128,13 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
   }
 
   const infoRows = [
-    ['Nro Orden',   pago.nro_ord ?? '—'],
+    ['OP',          pago.nro_ord != null ? `OP-${pago.nro_ord}` : '—'],
     ['Fecha',       fmtDate(pago.fecha)],
     ['Proveedor',   pago.proveedor?.nombre || '—'],
     ['Rubro / Cat', pago.rubcat ? `${pago.rubcat.rubro?.nombre} / ${pago.rubcat.categoria?.nombre}` : '—'],
     ['Tipo',        pago.id_tipo || '—'],
-    ['PV',          pago.pv ?? '—'],
-    ['Nro',     pago.nro ?? '—'],
+    ['PV',          fmtPV(pago.pv)],
+    ['Nro',         fmtNro(pago.nro)],
     ['Neto',        fmt$(pago.importe_neto)],
     ['Descuento',   fmt$(pago.descuento)],
     ['Importe',     fmt$(pago.importe)],
@@ -266,11 +263,21 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
   )
 }
 
+// ─── Filtros ────────────────────────────────────────────────────────────────
+
 const FILTER_INIT = {
   pagado: '', estado_op: '', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
   audit: '', ingresa_egreso: '', id_metodo: ''
 }
+
+// ─── Scroll virtual ─────────────────────────────────────────────────────────
+
+const ROW_HEIGHT = 32
+const OVERSCAN = 20
+const COL_COUNT = 20
+
+// ─── Componente principal ───────────────────────────────────────────────────
 
 export default function PagoList() {
   const navigate    = useNavigate()
@@ -282,27 +289,25 @@ export default function PagoList() {
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
 
-  const [pagos,      setPagos]      = useState([])
-  const [total,      setTotal]      = useState(0)
-  const [page,       setPage]       = useState(1)
-  const [loading,    setLoading]    = useState(true)
-  const [filters,    setFilters]    = useState(FILTER_INIT)
-  const [panelOpen,  setPanelOpen]  = useState(false)
+  const [pagos,        setPagos]        = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [filters,      setFilters]      = useState(FILTER_INIT)
+  const [panelOpen,    setPanelOpen]    = useState(false)
   const [selectedPago, setSelectedPago] = useState(null)
-  const [sortField,  setSortField]  = useState('fecha')
-  const [sortDir,    setSortDir]    = useState('desc')
-  const [pageSize,   setPageSize]   = useState(20)
-
-  const [search,     setSearch]     = useState('')
+  const [sortField,    setSortField]    = useState('fecha')
+  const [sortDir,      setSortDir]      = useState('desc')
+  const [search,       setSearch]       = useState('')
+  const [auditingId,   setAuditingId]   = useState(null)
 
   const [rubros,     setRubros]     = useState([])
   const [categorias, setCategorias] = useState([])
   const [rubcats,    setRubcats]    = useState([])
   const [metodos,    setMetodos]    = useState([])
 
-  const LIMIT = pageSize
-  const totalPages = Math.ceil(total / LIMIT)
+  const scrollRef = useRef(null)
+  const [scrollTop, setScrollTop] = useState(0)
 
+  // ── Carga de datos de referencia ──────────────────────────────────────────
   useEffect(() => {
     rubrosApi.list().then(r => setRubros(r.data || [])).catch(() => {})
     categoriasApi.list().then(r => setCategorias(r.data || [])).catch(() => {})
@@ -310,61 +315,116 @@ export default function PagoList() {
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [])
 
-  // Strip "OP-" / "op " prefix so the user can type "OP-15" or just "15"
-  const nroOrdNum = search.trim().replace(/^op[-\s]*/i, '')
-
-  const buildParams = () => ({
-    ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
-    page, limit: LIMIT,
-    ...(nroOrdNum !== '' ? { nro_ord: nroOrdNum } : {}),
-    ...(filters.pagado         !== '' ? { pagado:         filters.pagado }         : {}),
-    ...(filters.estado_op      !== '' ? { estado_op:      filters.estado_op }      : {}),
-    ...(filters.desde          !== '' ? { desde:          filters.desde }          : {}),
-    ...(filters.hasta          !== '' ? { hasta:          filters.hasta }           : {}),
-    ...(filters.id_tipo        !== '' ? { id_tipo:        filters.id_tipo }        : {}),
-    ...(filters.id_rub         !== '' ? { id_rub:         filters.id_rub }         : {}),
-    ...(filters.id_cat         !== '' ? { id_cat:         filters.id_cat }         : {}),
-    ...(filters.audit          !== '' ? { audit:          filters.audit }          : {}),
-    ...(filters.ingresa_egreso !== '' ? { ingresa_egreso: filters.ingresa_egreso } : {}),
-    ...(filters.id_metodo      !== '' ? { id_metodo:      filters.id_metodo }      : {}),
-  })
-
-  const load = () => {
+  // ── Carga de TODOS los pagos ──────────────────────────────────────────────
+  const load = useCallback(() => {
     setLoading(true)
-    pagosApi.list(buildParams())
-      .then(({ data }) => { setPagos(data.data); setTotal(data.total) })
+    pagosApi.list({
+      ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
+      limit: 0
+    })
+      .then(({ data }) => setPagos(data.data))
       .catch(() => notify('Error al cargar pagos', 'error'))
       .finally(() => setLoading(false))
-  }
+  }, [activeLocal?.id])
 
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    pagosApi.list(buildParams(), ctrl.signal)
-      .then(({ data }) => { setPagos(data.data); setTotal(data.total) })
+    pagosApi.list({
+      ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
+      limit: 0
+    }, ctrl.signal)
+      .then(({ data }) => setPagos(data.data))
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar pagos', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [
-    page, activeLocal?.id, search,
-    filters.pagado, filters.estado_op, filters.desde, filters.hasta,
-    filters.id_tipo, filters.id_rub, filters.id_cat,
-    filters.audit, filters.ingresa_egreso, filters.id_metodo,
-    pageSize
-  ])
+  }, [activeLocal?.id])
 
+  // ── Filtrado client-side ──────────────────────────────────────────────────
+  const nroOrdNum = search.trim().replace(/^op[-\s]*/i, '')
+
+  const filteredPagos = useMemo(() => {
+    let result = pagos
+
+    if (nroOrdNum !== '') {
+      const num = parseInt(nroOrdNum)
+      if (!isNaN(num)) result = result.filter(p => p.nro_ord === num)
+    }
+    if (filters.pagado !== '')
+      result = result.filter(p => p.pagado === (filters.pagado === 'true'))
+    if (filters.estado_op !== '')
+      result = result.filter(p => p.estado_op === filters.estado_op)
+    if (filters.desde) {
+      const d = new Date(filters.desde)
+      result = result.filter(p => p.fecha && new Date(p.fecha) >= d)
+    }
+    if (filters.hasta) {
+      const d = new Date(filters.hasta + 'T23:59:59.999')
+      result = result.filter(p => p.fecha && new Date(p.fecha) <= d)
+    }
+    if (filters.id_tipo !== '')
+      result = result.filter(p => p.id_tipo === filters.id_tipo)
+    if (filters.id_rub !== '')
+      result = result.filter(p => p.rubcat?.id_rub === filters.id_rub)
+    if (filters.id_cat !== '')
+      result = result.filter(p => p.rubcat?.id_cat === filters.id_cat)
+    if (filters.audit !== '')
+      result = result.filter(p => p.audit === (filters.audit === 'true'))
+    if (filters.ingresa_egreso !== '')
+      result = result.filter(p => p.ingresa_egreso === (filters.ingresa_egreso === 'true'))
+    if (filters.id_metodo !== '')
+      result = result.filter(p => p.id_metodo === filters.id_metodo)
+
+    return result
+  }, [pagos, nroOrdNum, filters])
+
+  // ── Ordenamiento client-side ──────────────────────────────────────────────
+  const getSortVal = (p, field) => {
+    if (field === 'proveedor') return p.proveedor?.nombre ?? ''
+    return p[field] ?? ''
+  }
+
+  const sortedPagos = useMemo(() => {
+    return [...filteredPagos].sort((a, b) => {
+      const va = getSortVal(a, sortField)
+      const vb = getSortVal(b, sortField)
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [filteredPagos, sortField, sortDir])
+
+  // ── Scroll virtual ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onScroll = () => setScrollTop(el.scrollTop)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [filters, search, sortField, sortDir])
+
+  const viewportH = scrollRef.current?.clientHeight ?? 800
+  const startIdx  = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIdx    = Math.min(sortedPagos.length, Math.ceil((scrollTop + viewportH) / ROW_HEIGHT) + OVERSCAN)
+  const topPad    = startIdx * ROW_HEIGHT
+  const bottomPad = Math.max(0, (sortedPagos.length - endIdx) * ROW_HEIGHT)
+  const visiblePagos = sortedPagos.slice(startIdx, endIdx)
+
+  // ── Acciones ──────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
     if (!(await showConfirm('¿Eliminar este pago?'))) return
     try {
       await pagosApi.remove(id)
       notify('Pago eliminado', 'success')
       setPanelOpen(false)
-      load()
+      setPagos(prev => prev.filter(p => p.id !== id))
     }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
-
-  const [auditingId, setAuditingId] = useState(null)
 
   const patchPagoAudit = (id, audit) =>
     setPagos(prev => prev.map(p => p.id === id ? { ...p, audit } : p))
@@ -382,6 +442,15 @@ export default function PagoList() {
     finally { setAuditingId(null) }
   }
 
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+
+  const openDetail  = (p) => { setSelectedPago(p); setPanelOpen(true) }
+  const closePanel  = () => setPanelOpen(false)
+
+  // ── Filtros ───────────────────────────────────────────────────────────────
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
   const filterRef = useRef(null)
@@ -399,8 +468,8 @@ export default function PagoList() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [filterOpen])
 
-  const applyFilters  = () => { setFilters(draft); setPage(1); setFilterOpen(false) }
-  const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch(''); setPage(1) }
+  const applyFilters  = () => { setFilters(draft); setFilterOpen(false) }
+  const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch('') }
   const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
 
   const cmvRubroId = rubros.find(r => r.nombre?.toUpperCase().includes('CMV'))?.id ?? ''
@@ -428,29 +497,12 @@ export default function PagoList() {
     ? rubcats.filter(rc => rc.id_rub === draft.id_rub).map(rc => rc.categoria).filter(Boolean)
     : categorias
 
-  const toggleSort = (field) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('asc') }
-  }
-  const getSortVal = (p, field) => {
-    if (field === 'proveedor') return p.proveedor?.nombre ?? ''
-    return p[field] ?? ''
-  }
-  const sortedPagos = [...pagos].sort((a, b) => {
-    const va = getSortVal(a, sortField)
-    const vb = getSortVal(b, sortField)
-    if (va < vb) return sortDir === 'asc' ? -1 : 1
-    if (va > vb) return sortDir === 'asc' ? 1 : -1
-    return 0
-  })
+  // ── Estilos ───────────────────────────────────────────────────────────────
   const SortTh = ({ field, children, minWidth }) => (
     <th className={`sortable${sortField === field ? ' active' : ''}`} style={minWidth ? { minWidth } : undefined} onClick={() => toggleSort(field)}>
       {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
   )
-
-  const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
-  const closePanel = () => setPanelOpen(false)
 
   const chipSt = (active) => ({
     padding: '3px 11px', borderRadius: 20, cursor: 'pointer', fontSize: 11,
@@ -466,15 +518,21 @@ export default function PagoList() {
     marginBottom: 3, display: 'block',
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page">
+      <style>{`
+        .vt-scroll { max-height: calc(100vh - 180px); overflow: auto; }
+        .vt-spacer td { padding: 0 !important; border: none !important; }
+      `}</style>
+
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Pagos</h1>
           {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
         <div className="page-actions">
-          {/* ── Buscador OP ── */}
+          {/* Buscador OP */}
           <div style={{ position: 'relative' }}>
             <span style={{
               position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
@@ -488,7 +546,7 @@ export default function PagoList() {
               type="text"
               placeholder="Buscar OP…"
               value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              onChange={e => setSearch(e.target.value)}
               style={{
                 height: 36, paddingLeft: 32, paddingRight: search ? 28 : 12,
                 background: 'var(--bg-input)', border: '1px solid var(--border-input)',
@@ -498,7 +556,7 @@ export default function PagoList() {
             />
             {search && (
               <button
-                onClick={() => { setSearch(''); setPage(1) }}
+                onClick={() => setSearch('')}
                 style={{
                   position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -543,13 +601,12 @@ export default function PagoList() {
                   ))}
                 </div>
 
-                {/* Controles en grilla 2 columnas */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                   <div>
                     <span style={lbl}>Tipo</span>
                     <select className="filter-select" style={{ width: '100%' }} value={draft.id_tipo} onChange={e => setDraftField('id_tipo', e.target.value)}>
                       <option value="">Todos los tipos</option>
-                      {['A','B','C','CM','INTERCOMPANY','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                      {TIPO_PAGO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
@@ -615,7 +672,6 @@ export default function PagoList() {
                   </div>
                 </div>
 
-                {/* Footer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
                   <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
                     Limpiar todo
@@ -633,11 +689,12 @@ export default function PagoList() {
         </div>
       </div>
 
-      <div className="table-wrap" style={{ overflowX: 'auto' }}>
+      {/* ── Tabla virtualizada ── */}
+      <div ref={scrollRef} className="vt-scroll table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <SortTh field="nro_ord" minWidth={50}>Nro</SortTh>
+              <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
               <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
               <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
               <th style={{ minWidth: 160 }}>Rubro / Cat</th>
@@ -661,18 +718,28 @@ export default function PagoList() {
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: 8 }, (_, i) => (
+              Array.from({ length: 12 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 20 }, (_, j) => (
+                  {Array.from({ length: COL_COUNT }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${45 + (j * 7 + i * 11) % 50}%` }} /></td>
                   ))}
                 </tr>
               ))
+            ) : sortedPagos.length === 0 ? (
+              <tr>
+                <td colSpan={COL_COUNT}>
+                  <div className="table-empty">
+                    <IcoPagoEmpty />
+                    <p>{pagos.length === 0 ? 'No hay pagos registrados.' : 'No hay pagos que coincidan con los filtros.'}</p>
+                  </div>
+                </td>
+              </tr>
             ) : (
               <>
-                {sortedPagos.map((p) => (
+                {topPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: topPad }} /></tr>}
+                {visiblePagos.map((p) => (
                   <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
-                    <td className="td-primary" style={{ minWidth: 50 }}>{p.nro_ord ?? <span className="td-muted">—</span>}</td>
+                    <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
                     <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                     <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
                     <td style={{ minWidth: 160, fontSize: 12 }}>
@@ -685,8 +752,8 @@ export default function PagoList() {
                         ? <span className={`badge ${TIPO_BADGE[p.id_tipo] ?? 'badge-muted'}`}>{p.id_tipo}</span>
                         : <span className="td-muted">—</span>}
                     </td>
-                    <td className="td-muted" style={{ textAlign: 'right', minWidth: 50 }}>{p.pv ?? '—'}</td>
-                    <td className="td-mono"  style={{ minWidth: 70, fontSize: 11 }}>{p.nro ?? <span className="td-muted">—</span>}</td>
+                    <td className="td-mono" style={{ textAlign: 'right', minWidth: 60 }}>{fmtPV(p.pv)}</td>
+                    <td className="td-mono" style={{ minWidth: 80 }}>{fmtNro(p.nro)}</td>
                     <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
                     <td className="td-number" style={{ minWidth: 90 }}>{fmt$(p.descuento)}</td>
                     <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
@@ -728,54 +795,29 @@ export default function PagoList() {
                     </td>
                   </tr>
                 ))}
-                {pagos.length === 0 && (
-                  <tr>
-                    <td colSpan={20}>
-                      <div className="table-empty">
-                        <IcoPagoEmpty />
-                        <p>No hay pagos registrados.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
+                {bottomPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: bottomPad }} /></tr>}
               </>
             )}
           </tbody>
         </table>
       </div>
 
-      {total > 0 && (
+      {/* ── Footer con conteo ── */}
+      {!loading && pagos.length > 0 && (
         <div className="pagination">
-          <select
-            value={pageSize}
-            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-            style={{ padding: '3px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-          >
-            {[10, 15, 20].map(n => <option key={n} value={n}>{n} por pág.</option>)}
-          </select>
-          {totalPages > 1 && <>
-            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
-            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-            <span className="pagination-info">
-              Pág.&nbsp;
-              <input
-                type="number" min={1} max={totalPages} value={page}
-                onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
-                style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-              />
-              &nbsp;de {totalPages}
-            </span>
-            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
-            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
-          </>}
-          <span className="pagination-info" style={{ marginLeft: 'auto' }}>{total} pagos</span>
+          <span className="pagination-info">
+            {filteredPagos.length === pagos.length
+              ? `${pagos.length} pagos`
+              : `${filteredPagos.length} de ${pagos.length} pagos`
+            }
+          </span>
         </div>
       )}
 
       <DrawerPanel
         open={panelOpen}
         onClose={closePanel}
-        title={selectedPago ? `Pago #${selectedPago.nro_ord ?? selectedPago.id?.slice(0, 8)}` : 'Detalle de Pago'}
+        title={selectedPago ? `OP-${selectedPago.nro_ord ?? selectedPago.id?.slice(0, 8)}` : 'Detalle de Pago'}
         width={580}
       >
         {selectedPago && (

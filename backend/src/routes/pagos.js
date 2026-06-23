@@ -60,7 +60,9 @@ export default async function pagosRoutes(fastify) {
       audit, ingresa_egreso, id_metodo, nro_ord,
       page = 1, limit = 50
     } = request.query
-    const skip = (Number(page) - 1) * Number(limit)
+    const limitNum = Number(limit)
+    const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
+    const take = limitNum > 0 ? limitNum : undefined
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
@@ -107,7 +109,7 @@ export default async function pagosRoutes(fastify) {
         },
         orderBy: { fecha: 'desc' },
         skip,
-        take: Number(limit)
+        take
       }),
       fastify.db.pago.count({ where })
     ])
@@ -268,14 +270,28 @@ export default async function pagosRoutes(fastify) {
       periodo, ingresa_egreso, id_local, impuestos
     } = request.body
 
-    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+    if (!fecha) return reply.code(400).send({ error: 'fecha es requerida' })
+    if (!importe && importe !== 0) return reply.code(400).send({ error: 'importe es requerido' })
+    if (!id_local) return reply.code(400).send({ error: 'id_local es requerido' })
+
+    if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    let finalNroOrd = nro_ord ? (parseInt(nro_ord) || null) : null
+    if (!finalNroOrd) {
+      const last = await fastify.db.pago.findFirst({
+        where: { id_local },
+        orderBy: { nro_ord: 'desc' },
+        select: { nro_ord: true }
+      })
+      finalNroOrd = (last?.nro_ord ?? 0) + 1
     }
 
     const pago = await fastify.db.pago.create({
       data: {
-        nro_ord:        nro_ord        ? (parseInt(nro_ord) || null) : null,
-        fecha:          fecha          ? new Date(fecha)            : null,
+        nro_ord:        finalNroOrd,
+        fecha:          new Date(fecha),
         id_proveedor:   id_proveedor   || null,
         id_rubcat:      id_rubcat      || null,
         id_tipo:        id_tipo        || null,
