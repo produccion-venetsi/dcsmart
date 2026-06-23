@@ -89,7 +89,7 @@ export default function PagoForm() {
   // impuestos pendientes (solo al crear)
   const [pendingImp, setPendingImp] = useState([])
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
-  const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
+  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
 
   const ESTADO_OP_OPTIONS = [
     { value: 'CAJA',       label: 'CAJA' },
@@ -202,9 +202,9 @@ export default function PagoForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!activeLocal && !form.id_local) {
-      notify('Seleccioná un local', 'error'); return
-    }
+    if (!activeLocal && !form.id_local) { notify('Seleccioná un local', 'error'); return }
+    if (!form.fecha)   { notify('La fecha es obligatoria', 'error'); return }
+    if (!form.importe) { notify('El importe es obligatorio', 'error'); return }
     setLoading(true)
     try {
       const payload = {
@@ -249,23 +249,53 @@ export default function PagoForm() {
 
       <form onSubmit={handleSubmit}>
         {/* ── Toggle Ingreso / Egreso ── */}
-        <div className="form-panel" style={{ padding: '0.875rem 1.25rem' }}>
+        <div style={{
+          padding: '1rem 1.25rem',
+          borderRadius: 12,
+          marginBottom: '1rem',
+          background: form.ingresa_egreso
+            ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))'
+            : 'linear-gradient(135deg, rgba(239,68,68,0.18), rgba(239,68,68,0.06))',
+          border: `2px solid ${form.ingresa_egreso ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{
+              fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em',
+              color: form.ingresa_egreso ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              {form.ingresa_egreso ? <><IcoUp /> INGRESO</> : <><IcoDown /> EGRESO</>}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+              {form.ingresa_egreso ? 'Entra plata al local' : 'Sale plata del local'}
+            </span>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="button"
-              className={`btn ${form.ingresa_egreso ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ flex: 1, justifyContent: 'center', gap: 6 }}
               onClick={() => set('ingresa_egreso', true)}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, textAlign: 'center',
+                border: form.ingresa_egreso ? '2px solid var(--green, #22c55e)' : '1px solid var(--border)',
+                background: form.ingresa_egreso ? 'rgba(34,197,94,0.2)' : 'transparent',
+                color: form.ingresa_egreso ? 'var(--green, #22c55e)' : 'var(--t3)',
+              }}
             >
-              <IcoUp /> Ingreso
+              Ingreso
             </button>
             <button
               type="button"
-              className={`btn ${!form.ingresa_egreso ? 'btn-danger' : 'btn-secondary'}`}
-              style={{ flex: 1, justifyContent: 'center', gap: 6 }}
               onClick={() => set('ingresa_egreso', false)}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, textAlign: 'center',
+                border: !form.ingresa_egreso ? '2px solid var(--red, #ef4444)' : '1px solid var(--border)',
+                background: !form.ingresa_egreso ? 'rgba(239,68,68,0.2)' : 'transparent',
+                color: !form.ingresa_egreso ? 'var(--red, #ef4444)' : 'var(--t3)',
+              }}
             >
-              <IcoDown /> Egreso
+              Egreso
             </button>
           </div>
         </div>
@@ -289,9 +319,9 @@ export default function PagoForm() {
             )}
 
             <div className="form-group">
-              <label className="form-label">Fecha Factura</label>
+              <label className="form-label">Fecha Factura *</label>
               <div className="form-input-wrap">
-                <input type="date" value={form.fecha} onChange={e => set('fecha', e.target.value)} />
+                <input type="date" required value={form.fecha} onChange={e => set('fecha', e.target.value)} />
               </div>
             </div>
             <div className="form-group">
@@ -365,7 +395,7 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
                   <option value="">—</option>
-                  {['A','B','C','CM','DC (1)','DC (2)','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t}>{t}</option>)}
+                  {['A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
             </div>
@@ -430,9 +460,9 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Importe Total</label>
+              <label className="form-label">Importe Total *</label>
               <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={form.importe} onChange={e => set('importe', e.target.value)} />
+                <input type="number" step="0.01" placeholder="0.00" required value={form.importe} onChange={e => set('importe', e.target.value)} />
               </div>
             </div>
             <div className="form-group">

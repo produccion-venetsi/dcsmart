@@ -73,6 +73,8 @@ function IcoPagoEmpty() {
 function fmt$(n)     { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' }) : '—' }
+function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
+function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 
 function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, canDelete = false }) {
   const notify      = useUiStore((s) => s.notify)
@@ -126,13 +128,13 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
   }
 
   const infoRows = [
-    ['Nro Orden',   pago.nro_ord ?? '—'],
+    ['OP',          pago.nro_ord != null ? `OP-${pago.nro_ord}` : '—'],
     ['Fecha',       fmtDate(pago.fecha)],
     ['Proveedor',   pago.proveedor?.nombre || '—'],
     ['Rubro / Cat', pago.rubcat ? `${pago.rubcat.rubro?.nombre} / ${pago.rubcat.categoria?.nombre}` : '—'],
     ['Tipo',        pago.id_tipo || '—'],
-    ['PV',          pago.pv ?? '—'],
-    ['Nro',         pago.nro ?? '—'],
+    ['PV',          fmtPV(pago.pv)],
+    ['Nro',         fmtNro(pago.nro)],
     ['Neto',        fmt$(pago.importe_neto)],
     ['Descuento',   fmt$(pago.descuento)],
     ['Importe',     fmt$(pago.importe)],
@@ -692,7 +694,7 @@ export default function PagoList() {
         <table className="data-table">
           <thead>
             <tr>
-              <SortTh field="nro_ord" minWidth={50}>Nro</SortTh>
+              <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
               <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
               <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
               <th style={{ minWidth: 160 }}>Rubro / Cat</th>
@@ -737,7 +739,7 @@ export default function PagoList() {
                 {topPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: topPad }} /></tr>}
                 {visiblePagos.map((p) => (
                   <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
-                    <td className="td-primary" style={{ minWidth: 50 }}>{p.nro_ord ?? <span className="td-muted">—</span>}</td>
+                    <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
                     <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                     <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
                     <td style={{ minWidth: 160, fontSize: 12 }}>
@@ -750,8 +752,8 @@ export default function PagoList() {
                         ? <span className={`badge ${TIPO_BADGE[p.id_tipo] ?? 'badge-muted'}`}>{p.id_tipo}</span>
                         : <span className="td-muted">—</span>}
                     </td>
-                    <td className="td-muted" style={{ textAlign: 'right', minWidth: 50 }}>{p.pv ?? '—'}</td>
-                    <td className="td-mono"  style={{ minWidth: 70, fontSize: 11 }}>{p.nro ?? <span className="td-muted">—</span>}</td>
+                    <td className="td-mono" style={{ textAlign: 'right', minWidth: 60 }}>{fmtPV(p.pv)}</td>
+                    <td className="td-mono" style={{ minWidth: 80 }}>{fmtNro(p.nro)}</td>
                     <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
                     <td className="td-number" style={{ minWidth: 90 }}>{fmt$(p.descuento)}</td>
                     <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
@@ -815,7 +817,7 @@ export default function PagoList() {
       <DrawerPanel
         open={panelOpen}
         onClose={closePanel}
-        title={selectedPago ? `Pago #${selectedPago.nro_ord ?? selectedPago.id?.slice(0, 8)}` : 'Detalle de Pago'}
+        title={selectedPago ? `OP-${selectedPago.nro_ord ?? selectedPago.id?.slice(0, 8)}` : 'Detalle de Pago'}
         width={580}
       >
         {selectedPago && (
