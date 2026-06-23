@@ -243,6 +243,7 @@ model Caja {
   movimientos CajaMovimiento[]
   detalles    CajaDetalle[]
 
+  @@index([id_local, fecha_inicio])
   @@map("cajas")
 }
 
@@ -350,6 +351,9 @@ model Pago {
   creador     User?       @relation("PagoCreatedBy", fields: [created_by], references: [id])
   impuestos   Impuesto[]
 
+  @@index([id_local, fecha])
+  @@index([pagado])
+  @@index([estado_op])
   @@map("pagos")
 }
 
