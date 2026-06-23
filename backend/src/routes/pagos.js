@@ -387,7 +387,7 @@ export default async function pagosRoutes(fastify) {
         tabla:       'pagos',
         tipo:        'auditoria_pago',
         aprobado:    true,
-        id_user:     request.user.email,
+        id_user:     request.user.id,
         fecha:       new Date()
       }
     })
