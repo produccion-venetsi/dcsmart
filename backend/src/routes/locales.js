@@ -65,8 +65,16 @@ export default async function localesRoutes(fastify) {
   fastify.delete('/:id', {
     preHandler: [fastify.authenticate, fastify.can('locales', 'delete')]
   }, async (request, reply) => {
+    const id = request.params.id
+    const [cajas, pagos] = await Promise.all([
+      fastify.db.caja.count({ where: { id_local: id } }),
+      fastify.db.pago.count({ where: { id_local: id } })
+    ])
+    if (cajas > 0 || pagos > 0) {
+      return reply.code(409).send({ error: `No se puede eliminar: el local tiene ${cajas} caja(s) y ${pagos} pago(s)` })
+    }
     try {
-      await fastify.db.local.delete({ where: { id: request.params.id } })
+      await fastify.db.local.delete({ where: { id } })
       return reply.code(204).send()
     } catch (err) {
       if (err.code === 'P2025') return reply.code(404).send({ error: 'Local no encontrado' })
