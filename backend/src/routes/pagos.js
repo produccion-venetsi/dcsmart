@@ -60,7 +60,9 @@ export default async function pagosRoutes(fastify) {
       audit, ingresa_egreso, id_metodo, nro_ord,
       page = 1, limit = 50
     } = request.query
-    const skip = (Number(page) - 1) * Number(limit)
+    const limitNum = Number(limit)
+    const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
+    const take = limitNum > 0 ? limitNum : undefined
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
@@ -107,7 +109,7 @@ export default async function pagosRoutes(fastify) {
         },
         orderBy: { fecha: 'desc' },
         skip,
-        take: Number(limit)
+        take
       }),
       fastify.db.pago.count({ where })
     ])
