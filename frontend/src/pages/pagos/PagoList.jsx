@@ -518,9 +518,9 @@ export default function PagoList() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="page" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div className="page">
       <style>{`
-        .vt-scroll { flex: 1; overflow: auto; min-height: 0; }
+        .vt-scroll { max-height: calc(100vh - 180px); overflow: auto; }
         .vt-scroll thead th {
           position: sticky; top: 0; z-index: 3;
           background: var(--surface, #1a1a2e);
@@ -806,7 +806,7 @@ export default function PagoList() {
 
       {/* ── Footer con conteo ── */}
       {!loading && pagos.length > 0 && (
-        <div className="pagination" style={{ flexShrink: 0 }}>
+        <div className="pagination">
           <span className="pagination-info">
             {filteredPagos.length === pagos.length
               ? `${pagos.length} pagos`
