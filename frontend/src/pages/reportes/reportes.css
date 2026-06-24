@@ -37,6 +37,37 @@
   color: var(--t1);
   margin-top: 2px;
 }
+/* ── tabs ── */
+.rep-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+}
+.rep-tab {
+  height: 34px;
+  padding: 0 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--t3);
+  border: none;
+  transition: all .18s ease;
+}
+.rep-tab.active {
+  background: var(--glass);
+  color: var(--gold-bright);
+  border: 1px solid var(--glass-border);
+}
+.rep-tab:hover:not(.active) {
+  color: var(--t2);
+}
+
 /* ── filter bar ── */
 .rep-filters {
   display: flex;
