@@ -53,6 +53,16 @@ function IcoProveedor() {
     </svg>
   )
 }
+function IcoReportes() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10"/>
+      <line x1="12" y1="20" x2="12" y2="4"/>
+      <line x1="6" y1="20" x2="6" y2="14"/>
+      <line x1="2" y1="20" x2="22" y2="20"/>
+    </svg>
+  )
+}
 function IcoApps() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -143,6 +153,7 @@ const NAV_MAIN = [
   { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
   { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/reportes',    label: 'Reportes',    Icon: IcoReportes,  roles: ['super_admin', 'dcsmart', 'admin'] },
 ]
 
 const NAV_ADMIN = [

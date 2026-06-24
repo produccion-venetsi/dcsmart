@@ -14,6 +14,7 @@ const PagoForm      = lazy(() => import('./pages/pagos/PagoForm.jsx'))
 const PdpDashboard  = lazy(() => import('./pages/pdp/PdpDashboard.jsx'))
 const ProveedorList = lazy(() => import('./pages/proveedores/ProveedorList.jsx'))
 const ProveedorForm = lazy(() => import('./pages/proveedores/ProveedorForm.jsx'))
+const Reportes      = lazy(() => import('./pages/reportes/Reportes.jsx'))
 const Users         = lazy(() => import('./pages/admin/Users.jsx'))
 const Apps          = lazy(() => import('./pages/admin/Apps.jsx'))
 const Locales       = lazy(() => import('./pages/admin/Locales.jsx'))
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="proveedores"                element={<Guard roles={OPERATIVE}><ProveedorList /></Guard>} />
           <Route path="proveedores/nuevo"          element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
           <Route path="proveedores/:id/editar"     element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
+          <Route path="reportes"                    element={<Guard roles={OPERATIVE}><Reportes /></Guard>} />
           <Route path="admin/users"                element={<Guard roles={SUPER}><Users /></Guard>} />
           <Route path="admin/apps"                 element={<Guard roles={ADMIN_PANEL}><Apps /></Guard>} />
           <Route path="admin/locales"              element={<Guard roles={ADMIN_PANEL}><Locales /></Guard>} />
