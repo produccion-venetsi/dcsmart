@@ -268,7 +268,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
 const FILTER_INIT = {
   pagado: '', estado_op: '', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
-  audit: '', ingresa_egreso: '', id_metodo: ''
+  audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: ''
 }
 
 // ─── Scroll virtual ─────────────────────────────────────────────────────────
@@ -374,6 +374,8 @@ export default function PagoList() {
       result = result.filter(p => p.ingresa_egreso === (filters.ingresa_egreso === 'true'))
     if (filters.id_metodo !== '')
       result = result.filter(p => p.id_metodo === filters.id_metodo)
+    if (filters.cmv_quick === 'true')
+      result = result.filter(p => p.rubcat?.rubro?.nombre?.toUpperCase().startsWith('CMV'))
 
     return result
   }, [pagos, nroOrdNum, filters])
@@ -472,10 +474,10 @@ export default function PagoList() {
   const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch('') }
   const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
 
-  const cmvRubroId = rubros.find(r => r.nombre?.toUpperCase().includes('CMV'))?.id ?? ''
+  const hasCmvRubros = rubros.some(r => r.nombre?.toUpperCase().startsWith('CMV'))
   const CHIPS = [
     { label: 'STK',         filters: { id_tipo: 'STK' } },
-    { label: 'CMV',         filters: { id_rub: cmvRubroId }, disabled: !cmvRubroId },
+    { label: 'CMV',         filters: { cmv_quick: 'true' }, disabled: !hasCmvRubros },
     { label: 'No auditado', filters: { audit: 'false' } },
     { label: 'No pagado',   filters: { pagado: 'false' } },
     { label: 'Egreso',      filters: { ingresa_egreso: 'false' } },

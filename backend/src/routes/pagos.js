@@ -281,7 +281,7 @@ export default async function pagosRoutes(fastify) {
     let finalNroOrd = nro_ord ? (parseInt(nro_ord) || null) : null
     if (!finalNroOrd) {
       const last = await fastify.db.pago.findFirst({
-        where: { id_local },
+        where: { id_local, nro_ord: { not: null } },
         orderBy: { nro_ord: 'desc' },
         select: { nro_ord: true }
       })

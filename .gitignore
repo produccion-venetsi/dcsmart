@@ -27,3 +27,8 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Archivos temporales / no versionados
+old-pdp-app/
+*.csv
+.superpowers/
