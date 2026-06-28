@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { impuestosApi } from '../../api/impuestos.js'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { rubcatApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 
@@ -66,19 +67,28 @@ function IcoTrash() {
 }
 
 export default function PagoForm() {
-  const { id }      = useParams()
-  const navigate    = useNavigate()
-  const activeLocal = useAppStore((s) => s.activeLocal)
-  const activeApp   = useAppStore((s) => s.activeApp)
-  const notify      = useUiStore((s) => s.notify)
-  const isEditing   = Boolean(id)
+  const { id }          = useParams()
+  const navigate        = useNavigate()
+  const [searchParams]  = useSearchParams()
+  const modoRapido      = searchParams.get('modo') === 'rapido'
+  const activeLocal     = useAppStore((s) => s.activeLocal)
+  const activeApp       = useAppStore((s) => s.activeApp)
+  const notify          = useUiStore((s) => s.notify)
+  const isEditing       = Boolean(id)
 
   const locales = activeApp?.locales ?? []
 
-  const [proveedores, setProveedores] = useState([])
-  const [rubcats,     setRubcats]     = useState([])
-  const [metodos,     setMetodos]     = useState([])
-  const [loading,     setLoading]     = useState(false)
+  const hoy = new Date().toISOString().slice(0, 10)
+
+  const [proveedores,     setProveedores]     = useState([])
+  const [rubcats,         setRubcats]         = useState([])
+  const [metodos,         setMetodos]         = useState([])
+  const [loading,         setLoading]         = useState(false)
+  const [localProveedor,  setLocalProveedor]  = useState(null)
+  const [fotoFile,        setFotoFile]        = useState(null)
+  const [pdfFile,         setPdfFile]         = useState(null)
+  const [uploadingFoto,   setUploadingFoto]   = useState(false)
+  const [uploadingPdf,    setUploadingPdf]    = useState(false)
 
   // combobox de proveedor
   const [provSearch, setProvSearch] = useState('')
@@ -98,15 +108,18 @@ export default function PagoForm() {
     { value: 'PDP',        label: 'PDP' },
   ]
 
-  const [form, setForm] = useState({
-    fecha: '', id_proveedor: '', id_rubcat: '', id_tipo: '',
+  const [form, setForm] = useState(() => ({
+    fecha: modoRapido ? hoy : '',
+    id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? 'STK' : '',
     pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
-    pagado: false, fecha_pago: '', periodo: '',
+    pagado: modoRapido, fecha_pago: modoRapido ? hoy : '', periodo: modoRapido ? hoy : '',
     estado_op: 'CUENTA_CTE', ingresa_egreso: true,
-    id_local: activeLocal?.id || ''
-  })
+    periodico: false,
+    id_local: activeLocal?.id || '',
+    foto_url: '', pdf_url: '',
+  }))
 
   // cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -123,9 +136,10 @@ export default function PagoForm() {
     const rubcatReq = rubcatApi.list()
     const metReq    = metodosApi.list()
     const pagoReq   = isEditing ? pagosApi.get(id, ctrl.signal) : Promise.resolve(null)
+    const localReq  = (!isEditing && modoRapido && activeLocal) ? localesApi.get(activeLocal.id) : Promise.resolve(null)
 
-    Promise.all([provReq, rubcatReq, metReq, pagoReq])
-      .then(([{ data: provs }, { data: rubs }, { data: mets }, pagoRes]) => {
+    Promise.all([provReq, rubcatReq, metReq, pagoReq, localReq])
+      .then(([{ data: provs }, { data: rubs }, { data: mets }, pagoRes, localRes]) => {
         setProveedores(provs.data)
         setRubcats(rubs)
         setMetodos(mets)
@@ -154,8 +168,23 @@ export default function PagoForm() {
             periodo:        d.periodo    ? d.periodo.slice(0, 10)    : '',
             estado_op:      d.estado_op      || 'CUENTA CTE',
             ingresa_egreso: d.ingresa_egreso,
+            periodico:      d.periodico      ?? false,
             id_local:       d.id_local       || '',
+            foto_url:       d.foto_url       || '',
+            pdf_url:        d.pdf_url        || '',
           })
+        } else if (localRes?.data?.id_proveedor) {
+          const prov = provs.data.find(p => p.id === localRes.data.id_proveedor)
+          if (prov) {
+            setProvSearch(prov.nombre)
+            setProvPlazo(prov.plazo || null)
+            setForm(f => ({
+              ...f,
+              id_proveedor: prov.id,
+              id_rubcat:    prov.id_rubcat || f.id_rubcat,
+              cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
+            }))
+          }
         }
       })
       .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
@@ -200,6 +229,13 @@ export default function PagoForm() {
     p.nombre.toLowerCase().includes(provSearch.toLowerCase())
   )
 
+  const visibleRubcats = useMemo(() => {
+    if (modoRapido && form.id_tipo === 'STK') {
+      return rubcats.filter(rc => rc.rubro?.nombre?.toUpperCase().startsWith('CMV'))
+    }
+    return rubcats
+  }, [rubcats, modoRapido, form.id_tipo])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!activeLocal && !form.id_local) { notify('Seleccioná un local', 'error'); return }
@@ -207,8 +243,32 @@ export default function PagoForm() {
     if (!form.importe) { notify('El importe es obligatorio', 'error'); return }
     setLoading(true)
     try {
+      let foto_url = form.foto_url
+      let pdf_url  = form.pdf_url
+
+      if (fotoFile) {
+        setUploadingFoto(true)
+        const fd = new FormData()
+        fd.append('file', fotoFile)
+        fd.append('tipo', 'foto')
+        const r = await pagosApi.upload(fd)
+        foto_url = r.data.url
+        setUploadingFoto(false)
+      }
+      if (pdfFile) {
+        setUploadingPdf(true)
+        const fd = new FormData()
+        fd.append('file', pdfFile)
+        fd.append('tipo', 'pdf')
+        const r = await pagosApi.upload(fd)
+        pdf_url = r.data.url
+        setUploadingPdf(false)
+      }
+
       const payload = {
         ...form,
+        foto_url,
+        pdf_url,
         pv:         form.pv       ? parseInt(form.pv,  10) : null,
         nro:        form.nro      ? parseInt(form.nro, 10) : null,
         fecha_pago: form.fecha_pago || null,
@@ -234,6 +294,8 @@ export default function PagoForm() {
       navigate('/pagos')
     } catch (err) {
       notify(err.response?.data?.error || 'Error al guardar', 'error')
+      setUploadingFoto(false)
+      setUploadingPdf(false)
     } finally { setLoading(false) }
   }
 
@@ -372,7 +434,7 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <select value={form.id_rubcat} onChange={e => set('id_rubcat', e.target.value)}>
                   <option value="">Sin clasificar</option>
-                  {rubcats.map(rc => (
+                  {visibleRubcats.map(rc => (
                     <option key={rc.id} value={rc.id}>
                       {rc.rubro?.nombre} / {rc.categoria?.nombre}
                     </option>
@@ -406,6 +468,18 @@ export default function PagoForm() {
                   {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={form.periodico}
+                  onChange={e => set('periodico', e.target.checked)}
+                  style={{ width: 15, height: 15, cursor: 'pointer' }}
+                />
+                <span className="form-label" style={{ margin: 0 }}>Pago periódico (recurrente)</span>
+              </label>
             </div>
 
             {/* PV y Nro de comprobante */}
@@ -576,7 +650,7 @@ export default function PagoForm() {
           </div>
         )}
 
-        {/* ── Adjuntos (visual, sin carga) ── */}
+        {/* ── Adjuntos ── */}
         <div className="form-panel">
           <div className="form-panel-title">Adjuntos</div>
           <div className="form-grid">
@@ -584,22 +658,55 @@ export default function PagoForm() {
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <IcoPaperclip /> Foto
               </label>
-              <div className="form-input-wrap">
-                <input type="text" disabled placeholder="Sin archivo adjunto" style={{ opacity: 0.45, cursor: 'not-allowed' }} />
-              </div>
+              {form.foto_url ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {form.foto_url.split('/').pop()}
+                  </span>
+                  <button type="button" className="btn btn-sm btn-danger btn-icon"
+                    onClick={() => { set('foto_url', ''); setFotoFile(null) }}>
+                    <IcoTrash />
+                  </button>
+                </div>
+              ) : (
+                <div className="form-input-wrap">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => setFotoFile(e.target.files[0] || null)}
+                    style={{ padding: '4px 0' }}
+                  />
+                </div>
+              )}
+              {uploadingFoto && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo foto...</span>}
             </div>
             <div className="form-group">
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <IcoPaperclip /> PDF
               </label>
-              <div className="form-input-wrap">
-                <input type="text" disabled placeholder="Sin archivo adjunto" style={{ opacity: 0.45, cursor: 'not-allowed' }} />
-              </div>
+              {form.pdf_url ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {form.pdf_url.split('/').pop()}
+                  </span>
+                  <button type="button" className="btn btn-sm btn-danger btn-icon"
+                    onClick={() => { set('pdf_url', ''); setPdfFile(null) }}>
+                    <IcoTrash />
+                  </button>
+                </div>
+              ) : (
+                <div className="form-input-wrap">
+                  <input
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={e => setPdfFile(e.target.files[0] || null)}
+                    style={{ padding: '4px 0' }}
+                  />
+                </div>
+              )}
+              {uploadingPdf && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo PDF...</span>}
             </div>
           </div>
-          <p style={{ fontSize: 11, color: 'var(--t3)', marginTop: '0.5rem', marginBottom: 0 }}>
-            La carga de archivos estará disponible próximamente.
-          </p>
         </div>
 
         {/* ── Notas ── */}

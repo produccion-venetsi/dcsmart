@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage'
+import multipart from '@fastify/multipart'
 
 const gcs = new Storage({ projectId: process.env.GCS_PROJECT_ID })
 
@@ -47,6 +48,8 @@ async function buildAuditFilter(fastify, audit, allowedLocalIds) {
 }
 
 export default async function pagosRoutes(fastify) {
+  await fastify.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } })
+
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'create')]
   const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'edit')]
@@ -267,7 +270,7 @@ export default async function pagosRoutes(fastify) {
       nro_ord, fecha, id_proveedor, id_rubcat, id_tipo, pv, nro,
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
-      periodo, ingresa_egreso, id_local, impuestos
+      periodo, ingresa_egreso, periodico, id_local, impuestos
     } = request.body
 
     if (!fecha) return reply.code(400).send({ error: 'fecha es requerida' })
@@ -309,6 +312,7 @@ export default async function pagosRoutes(fastify) {
         foto_url, pdf_url,
         periodo:        periodo        ? new Date(periodo)        : null,
         ingresa_egreso: ingresa_egreso ?? true,
+        periodico:      periodico      ?? false,
         id_local:       id_local       || null,
         created_by:     request.user.id,
         ...(impuestos && impuestos.length > 0 ? {
@@ -341,7 +345,7 @@ export default async function pagosRoutes(fastify) {
       nro_ord, fecha, id_proveedor, id_rubcat, id_tipo, pv, nro,
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
-      periodo, ingresa_egreso, id_local
+      periodo, ingresa_egreso, periodico, id_local
     } = request.body
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
@@ -370,6 +374,7 @@ export default async function pagosRoutes(fastify) {
         foto_url, pdf_url,
         periodo:        periodo                     ? new Date(periodo)           : undefined,
         ingresa_egreso,
+        periodico:      periodico      !== undefined ? periodico                  : undefined,
         id_local:       id_local       !== undefined ? id_local                  : undefined,
       }
     })
@@ -494,6 +499,68 @@ export default async function pagosRoutes(fastify) {
     return reply.send(stream)
   })
 
+  // ── PATCH /:id/periodico ───────────────────────────────────────────────────
+  fastify.patch('/:id/periodico', { preHandler: editHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true, periodico: true }
+    })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    const updated = await fastify.db.pago.update({
+      where: { id: request.params.id },
+      data: { periodico: !pago.periodico },
+      select: { periodico: true }
+    })
+    return { ok: true, periodico: updated.periodico }
+  })
+
+  // ── POST /upload ───────────────────────────────────────────────────────────
+  fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
+    const data = await request.file()
+    if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
+    const bucket = process.env.GCS_BUCKET_NAME
+    if (!bucket) return reply.code(500).send({ error: 'GCS_BUCKET_NAME no configurado' })
+    const ext      = data.filename.split('.').pop().toLowerCase()
+    const type     = ext === 'pdf' ? 'pdf' : 'foto'
+    const filename = `pagos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const file     = gcs.bucket(bucket).file(filename)
+    await new Promise((resolve, reject) => {
+      const stream = file.createWriteStream({ metadata: { contentType: data.mimetype } })
+      data.file.pipe(stream).on('error', reject).on('finish', resolve)
+    })
+    return { ok: true, type, url: `gs://${bucket}/${filename}` }
+  })
+
+  // ── GET /:id/multimoneda ───────────────────────────────────────────────────
+  fastify.get('/:id/multimoneda', { preHandler: viewHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({ where: { id: request.params.id }, select: { id_local: true } })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    return fastify.db.multiMoneda.findMany({ where: { id_pago: request.params.id } })
+  })
+
+  // ── POST /:id/multimoneda ──────────────────────────────────────────────────
+  fastify.post('/:id/multimoneda', { preHandler: editHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({ where: { id: request.params.id }, select: { id_local: true } })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    const { tipo, tdc, monto } = request.body
+    const row = await fastify.db.multiMoneda.create({
+      data: { id_pago: request.params.id, tipo, tdc: parseFloat(tdc), monto: parseFloat(monto) }
+    })
+    return reply.code(201).send(row)
+  })
+
+  // ── DELETE /:id/multimoneda/:mmId ─────────────────────────────────────────
+  fastify.delete('/:id/multimoneda/:mmId', { preHandler: editHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({ where: { id: request.params.id }, select: { id_local: true } })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    await fastify.db.multiMoneda.delete({ where: { id: request.params.mmId } })
+    return reply.code(204).send()
+  })
+
   // ── DELETE /:id ────────────────────────────────────────────────────────
   fastify.delete('/:id', { preHandler: deleteHandler }, async (request, reply) => {
     const existing = await fastify.db.pago.findUnique({
@@ -508,6 +575,7 @@ export default async function pagosRoutes(fastify) {
 
     // Eliminar registros dependientes antes que el pago (FK constraints)
     await fastify.db.impuesto.deleteMany({ where: { id_pago: request.params.id } })
+    await fastify.db.multiMoneda.deleteMany({ where: { id_pago: request.params.id } })
     await fastify.db.audit.deleteMany({ where: { tabla: 'pagos', id_registro: request.params.id } })
     await fastify.db.pago.delete({ where: { id: request.params.id } })
     return reply.code(204).send()

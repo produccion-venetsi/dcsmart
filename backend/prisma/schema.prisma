@@ -25,16 +25,18 @@ model App {
 }
 
 model Local {
-  id         String   @id @default(uuid())
-  nombre     String
-  direccion  String?
-  telefono   String?
-  activo     Boolean  @default(true)
-  id_app     String
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id             String   @id @default(uuid())
+  nombre         String
+  direccion      String?
+  telefono       String?
+  activo         Boolean  @default(true)
+  id_app         String
+  id_proveedor   String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
   app           App               @relation(fields: [id_app], references: [id])
+  proveedor     Proveedor?        @relation(fields: [id_proveedor], references: [id])
   cajas         Caja[]
   pagos         Pago[]
   local_access  UserLocalAccess[]
@@ -202,8 +204,9 @@ model Proveedor {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  rubcat RubCat? @relation(fields: [id_rubcat], references: [id])
-  pagos  Pago[]
+  rubcat   RubCat? @relation(fields: [id_rubcat], references: [id])
+  pagos    Pago[]
+  locales  Local[]
 
   @@map("proveedores")
 }
@@ -334,6 +337,7 @@ model Pago {
   pdf_url        String?
   periodo        DateTime?
   ingresa_egreso Boolean   @default(true)
+  periodico      Boolean   @default(false)
   id_local       String?
   created_by     String?
   created_at     DateTime  @default(now())
@@ -344,12 +348,13 @@ model Pago {
   id_cheque  String?
   id_ctacte  String?
 
-  proveedor   Proveedor?  @relation(fields: [id_proveedor], references: [id])
-  rubcat      RubCat?     @relation(fields: [id_rubcat], references: [id])
-  metodo_pago MetodoPago? @relation(fields: [id_metodo], references: [id])
-  local       Local?      @relation(fields: [id_local], references: [id])
-  creador     User?       @relation("PagoCreatedBy", fields: [created_by], references: [id])
+  proveedor   Proveedor?    @relation(fields: [id_proveedor], references: [id])
+  rubcat      RubCat?       @relation(fields: [id_rubcat], references: [id])
+  metodo_pago MetodoPago?   @relation(fields: [id_metodo], references: [id])
+  local       Local?        @relation(fields: [id_local], references: [id])
+  creador     User?         @relation("PagoCreatedBy", fields: [created_by], references: [id])
   impuestos   Impuesto[]
+  multimoneda MultiMoneda[]
 
   @@index([id_local, fecha])
   @@index([pagado])
@@ -391,6 +396,18 @@ model Impuesto {
   pago Pago @relation(fields: [id_pago], references: [id])
 
   @@map("impuestos")
+}
+
+model MultiMoneda {
+  id      String  @id @default(uuid())
+  id_pago String
+  tipo    String
+  tdc     Decimal @db.Decimal(12, 4)
+  monto   Decimal @db.Decimal(12, 2)
+
+  pago Pago @relation(fields: [id_pago], references: [id])
+
+  @@map("multimoneda")
 }
 
 enum TipoImpuesto {

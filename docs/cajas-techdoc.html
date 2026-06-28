@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DCSmart — Módulo de Cajas · Doc Técnico</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f1117;
+    --surface:   #161b27;
+    --surface2:  #1e2535;
+    --border:    rgba(255,255,255,0.08);
+    --t1:        #f0f4ff;
+    --t2:        #9ba8c0;
+    --t3:        #5a6580;
+    --gold:      #f0c040;
+    --blue:      #4f8ef7;
+    --green:     #3ecf8e;
+    --red:       #ff5a5a;
+    --purple:    #a78bfa;
+    --orange:    #fb923c;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--t1);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── Layout ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  nav {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    width: 240px; flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem 0;
+  }
+  nav .nav-logo {
+    padding: 0 1.25rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+  }
+  nav .nav-logo span { font-weight: 800; font-size: 13px; letter-spacing: 0.08em; color: var(--gold); text-transform: uppercase; }
+  nav .nav-logo sub { display: block; font-size: 10px; color: var(--t3); font-weight: 400; letter-spacing: 0; text-transform: none; margin-top: 1px; }
+
+  nav ul { list-style: none; padding: 0 0.75rem; }
+  nav ul li a {
+    display: block; padding: 0.4rem 0.625rem; border-radius: 6px;
+    color: var(--t2); text-decoration: none; font-size: 12.5px;
+    transition: background 0.15s, color 0.15s;
+  }
+  nav ul li a:hover { background: rgba(255,255,255,0.06); color: var(--t1); }
+  nav ul .nav-section {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--t3);
+    padding: 1rem 0.625rem 0.35rem;
+  }
+
+  main { flex: 1; padding: 3rem 4rem; max-width: 960px; }
+
+  /* ── Typography ── */
+  h1 { font-size: 26px; font-weight: 800; color: var(--t1); margin-bottom: 0.35rem; }
+  h2 { font-size: 18px; font-weight: 700; color: var(--t1); margin: 2.5rem 0 0.75rem; padding-top: 2.5rem; border-top: 1px solid var(--border); }
+  h2:first-of-type { border-top: none; padding-top: 0; margin-top: 1.5rem; }
+  h3 { font-size: 13.5px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.06em; margin: 1.75rem 0 0.6rem; }
+  h4 { font-size: 13px; font-weight: 600; color: var(--t1); margin: 1.25rem 0 0.4rem; }
+  p { color: var(--t2); margin-bottom: 0.75rem; }
+  strong { color: var(--t1); font-weight: 600; }
+  .lead { font-size: 15px; color: var(--t2); margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; }
+
+  /* ── Badges / Pills ── */
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  }
+  .badge-gold   { background: rgba(240,192,64,.15); color: var(--gold); }
+  .badge-blue   { background: rgba(79,142,247,.15); color: var(--blue); }
+  .badge-green  { background: rgba(62,207,142,.15); color: var(--green); }
+  .badge-red    { background: rgba(255,90,90,.15);  color: var(--red); }
+  .badge-purple { background: rgba(167,139,250,.15);color: var(--purple); }
+  .badge-orange { background: rgba(251,146,60,.15); color: var(--orange); }
+  .badge-muted  { background: rgba(255,255,255,0.07); color: var(--t3); }
+
+  /* ── Method pill (HTTP verb) ── */
+  .method { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 4px; }
+  .method-get    { background: rgba(62,207,142,.15); color: var(--green); }
+  .method-post   { background: rgba(79,142,247,.15); color: var(--blue); }
+  .method-put    { background: rgba(240,192,64,.15); color: var(--gold); }
+  .method-delete { background: rgba(255,90,90,.15);  color: var(--red); }
+  .method-patch  { background: rgba(167,139,250,.15);color: var(--purple); }
+
+  /* ── Tables ── */
+  .tbl { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 13px; }
+  .tbl th { background: var(--surface2); color: var(--t2); font-weight: 600; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .tbl td { padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--t2); vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl td strong { color: var(--t1); }
+  .tbl td code { font-size: 11.5px; }
+
+  /* ── Code blocks ── */
+  pre, code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  code {
+    background: rgba(255,255,255,0.07); color: var(--gold);
+    padding: 1px 5px; border-radius: 4px; font-size: 12px;
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.7;
+    margin: 0.75rem 0 1.25rem;
+    color: var(--t2);
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .kw  { color: #79b8ff; }
+  .str { color: #9ecbff; }
+  .cm  { color: var(--t3); font-style: italic; }
+  .fn  { color: var(--gold); }
+  .ty  { color: #b392f0; }
+  .op  { color: var(--t2); }
+  .val { color: var(--green); }
+  .fld { color: #ffab70; }
+
+  /* ── Callouts ── */
+  .callout {
+    border-radius: 10px; padding: 0.9rem 1.1rem; margin: 1rem 0;
+    font-size: 13px; border-left: 3px solid;
+  }
+  .callout-info   { background: rgba(79,142,247,.08);  border-color: var(--blue);   color: #8ab4ff; }
+  .callout-warn   { background: rgba(240,192,64,.08);  border-color: var(--gold);   color: var(--gold); }
+  .callout-ok     { background: rgba(62,207,142,.08);  border-color: var(--green);  color: var(--green); }
+  .callout-danger { background: rgba(255,90,90,.08);   border-color: var(--red);    color: var(--red); }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.25rem;
+    margin: 0.75rem 0;
+  }
+  .card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--t3); margin-bottom: 0.5rem; }
+
+  /* ── Field table ── */
+  .fields { display: flex; flex-direction: column; gap: 0; margin: 0.75rem 0 1.25rem; }
+  .field-row {
+    display: grid; grid-template-columns: 150px 90px 1fr;
+    gap: 0; padding: 7px 12px; border-bottom: 1px solid var(--border);
+    font-size: 12.5px; align-items: center;
+  }
+  .field-row:first-child { border-top: 1px solid var(--border); background: var(--surface2); }
+  .field-row:first-child span { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--t3); }
+  .field-name { color: var(--gold); font-weight: 600; font-family: monospace; font-size: 12px; }
+  .field-type { color: var(--purple); font-family: monospace; font-size: 11.5px; }
+  .field-desc { color: var(--t2); }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1rem 1.25rem; margin: 0.75rem 0;
+    font-size: 12.5px;
+  }
+  .flow-step {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 14px; color: var(--t1); white-space: nowrap;
+  }
+  .flow-step.highlight { border-color: var(--gold); color: var(--gold); }
+  .flow-arrow { color: var(--t3); font-size: 16px; }
+
+  /* ── Endpoint rows ── */
+  .endpoint {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 0.85rem 1.1rem; margin: 0.5rem 0;
+    display: flex; flex-direction: column; gap: 0.35rem;
+  }
+  .endpoint-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .endpoint-path { font-family: monospace; font-size: 13px; color: var(--t1); font-weight: 600; }
+  .endpoint-auth { font-size: 10.5px; color: var(--t3); margin-left: auto; display: flex; gap: 0.4rem; }
+  .endpoint-desc { font-size: 12.5px; color: var(--t2); padding-left: 2px; }
+  .endpoint-params { font-size: 11.5px; color: var(--t3); padding-left: 2px; }
+
+  /* ── Section anchor fix ── */
+  section { scroll-margin-top: 1.5rem; }
+
+  /* ── Header meta ── */
+  .doc-meta { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .doc-meta span { font-size: 11.5px; color: var(--t3); background: var(--surface); border: 1px solid var(--border); padding: 3px 10px; border-radius: 20px; }
+  .doc-meta span strong { color: var(--t2); }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-logo">
+    <span>DCSmart</span>
+    <sub>Doc Técnico · Módulo Cajas</sub>
+  </div>
+  <ul>
+    <li class="nav-section">Introducción</li>
+    <li><a href="#overview">Qué es una Caja</a></li>
+    <li><a href="#aislamiento">Aislamiento multi-tenant</a></li>
+
+    <li class="nav-section">Modelo de datos</li>
+    <li><a href="#model-caja">Caja</a></li>
+    <li><a href="#model-movimiento">CajaMovimiento</a></li>
+    <li><a href="#model-detalle">CajaDetalle</a></li>
+    <li><a href="#model-detalle-tipo">DetalleTipo</a></li>
+    <li><a href="#model-metodo">MetodoPago</a></li>
+    <li><a href="#relaciones">Relaciones</a></li>
+
+    <li class="nav-section">API REST</li>
+    <li><a href="#api-cajas">Cajas</a></li>
+    <li><a href="#api-movimientos">Movimientos</a></li>
+    <li><a href="#api-detalles">Detalles</a></li>
+    <li><a href="#api-detalle-tipos">Gestión DetalleTipo</a></li>
+
+    <li class="nav-section">Frontend</li>
+    <li><a href="#fe-lista">Vista lista</a></li>
+    <li><a href="#fe-crear">Crear caja</a></li>
+    <li><a href="#fe-detalle">Panel de detalle</a></li>
+    <li><a href="#fe-estado">Estado React</a></li>
+
+    <li class="nav-section">Flujos</li>
+    <li><a href="#flujo-caja">Ciclo de una caja</a></li>
+    <li><a href="#flujo-movimiento">Agregar movimiento</a></li>
+    <li><a href="#flujo-detalle">Agregar detalle</a></li>
+    <li><a href="#flujo-permisos">Control de acceso</a></li>
+  </ul>
+</nav>
+
+<!-- ── MAIN ── -->
+<main>
+  <h1>Módulo de Cajas</h1>
+  <div class="doc-meta">
+    <span><strong>Versión</strong> 2026-06-12</span>
+    <span><strong>Branch</strong> feat/app-local-isolation</span>
+    <span><strong>Stack</strong> Fastify 4 · Prisma 5 · React 19</span>
+  </div>
+  <p class="lead">
+    El módulo de Cajas registra los turnos operativos de cada local gastronómico.
+    Cada caja agrupa tres tipos de información: los <strong>datos generales del turno</strong>
+    (totales, cajero, fechas), los <strong>movimientos de caja</strong> (ingresos y egresos de
+    dinero con método de pago) y los <strong>detalles</strong> (desglose por canal o concepto
+    contable, sin atarse a un único método de pago). El acceso está estrictamente aislado
+    por grupo (App) y local.
+  </p>
+
+  <!-- ── INTRODUCCIÓN ── -->
+  <section id="overview">
+    <h2>Qué es una Caja</h2>
+    <p>
+      Una <strong>Caja</strong> representa un turno de apertura y cierre de operaciones en
+      un local. Es la unidad de registro diario: cada turno tiene un número identificador
+      (<code>nro_turno</code>), un responsable (<code>cajero</code>), fechas de inicio y
+      cierre, y los totales monetarios consolidados del turno.
+    </p>
+    <p>
+      Los totales del encabezado (<code>total</code>, <code>efectivo</code>, <code>fiscal</code>)
+      son valores que el operador ingresa manualmente al cerrar el turno. No se calculan
+      automáticamente a partir de los movimientos — los movimientos y detalles son registros
+      complementarios de trazabilidad, no la fuente de verdad del total.
+    </p>
+
+    <div class="callout callout-info">
+      <strong>Origen externo:</strong> el campo <code>origin</code> (DCSMART / TAPTAP / FFUDO)
+      indica si la caja fue creada desde este sistema o importada desde otro software de punto
+      de venta. Las cajas de origen externo pueden llegar por integración y tienen los mismos
+      campos que las nativas.
+    </div>
+
+    <h3>Estructura jerárquica</h3>
+    <div class="flow">
+      <div class="flow-step">App (Grupo)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">Local</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step highlight">Caja (turno)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">CajaMovimiento</div>
+    </div>
+    <div class="flow">
+      <div class="flow-step" style="opacity:0;pointer-events:none">App</div>
+      <div class="flow-arrow" style="opacity:0">→</div>
+      <div class="flow-step" style="opacity:0;pointer-events:none">Local</div>
+      <div class="flow-arrow" style="opacity:0">→</div>
+      <div class="flow-step highlight">Caja (turno)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">CajaDetalle</div>
+    </div>
+  </section>
+
+  <section id="aislamiento">
+    <h2>Aislamiento multi-tenant</h2>
+    <p>
+      Todas las rutas del módulo de cajas están protegidas por el middleware
+      <code>appContext</code>. Este middleware requiere que cada request incluya el header
+      <code>X-App-Id</code> con el UUID del grupo activo. A partir de ese header, resuelve
+      qué locales puede ver el usuario (<code>allowedLocalIds</code>) y rechaza con 403 si
+      intenta acceder a datos de otro grupo.
+    </p>
+
+    <h4>Cómo se resuelven los locales permitidos</h4>
+    <pre><code><span class="cm">// plugins/appContext.js</span>
+<span class="kw">if</span> (rol === <span class="str">'super_admin'</span>) {
+  <span class="cm">// Todos los locales activos del grupo seleccionado</span>
+  request.allowedLocalIds = locales.map(l => l.id)
+} <span class="kw">else</span> {
+  <span class="kw">const</span> accesos = <span class="kw">await</span> <span class="fn">findMany</span>({ id_user, id_app })
+  <span class="kw">if</span> (accesos.length > <span class="val">0</span>) {
+    <span class="cm">// Solo los locales asignados explícitamente (UserLocalAccess)</span>
+    request.allowedLocalIds = accesos.map(a => a.id_local)
+  } <span class="kw">else</span> {
+    <span class="cm">// Sin restricción → todos los locales del grupo</span>
+    request.allowedLocalIds = todosLosLocales.map(l => l.id)
+  }
+}</code></pre>
+
+    <p>Todos los queries de cajas aplican el filtro:</p>
+    <pre><code>where: { id_local: { in: request.allowedLocalIds } }</code></pre>
+
+    <div class="callout callout-warn">
+      El header <code>X-App-Id</code> es <strong>obligatorio</strong> en todas las rutas de cajas.
+      El frontend lo inyecta automáticamente en cada request Axios a través del interceptor
+      de <code>api/client.js</code> leyendo <code>activeApp.app.id</code> del store persistido.
+    </div>
+  </section>
+
+  <!-- ── MODELO DE DATOS ── -->
+  <section id="model-caja">
+    <h2>Modelo de datos</h2>
+    <h3>Caja</h3>
+    <p>Tabla: <code>cajas</code></p>
+
+    <div class="fields">
+      <div class="field-row"><span>Campo</span><span>Tipo</span><span>Descripción</span></div>
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUID PK</span><span class="field-desc">Identificador único</span></div>
+      <div class="field-row"><span class="field-name">nro_turno</span><span class="field-type">String?</span><span class="field-desc">Número de turno almacenado como string numérico ("1", "2"…). Se muestra en UI como "TRN 1"</span></div>
+      <div class="field-row"><span class="field-name">fecha_inicio</span><span class="field-type">DateTime</span><span class="field-desc">Apertura del turno. <strong>Requerido.</strong></span></div>
+      <div class="field-row"><span class="field-name">fecha_cierre</span><span class="field-type">DateTime?</span><span class="field-desc">Cierre del turno. Null si el turno sigue abierto</span></div>
+      <div class="field-row"><span class="field-name">id_local</span><span class="field-type">UUID FK</span><span class="field-desc">Local al que pertenece. <strong>Requerido.</strong> Determina el aislamiento</span></div>
+      <div class="field-row"><span class="field-name">cajero</span><span class="field-type">String?</span><span class="field-desc">Nombre libre del operador de caja</span></div>
+      <div class="field-row"><span class="field-name">total</span><span class="field-type">Decimal(12,2)?</span><span class="field-desc">Total recaudado en el turno (ingresado manualmente)</span></div>
+      <div class="field-row"><span class="field-name">efectivo</span><span class="field-type">Decimal(12,2)?</span><span class="field-desc">Porción en efectivo del total</span></div>
+      <div class="field-row"><span class="field-name">fiscal</span><span class="field-type">Decimal(12,2)?</span><span class="field-desc">Total con comprobante fiscal</span></div>
+      <div class="field-row"><span class="field-name">comensales</span><span class="field-type">Int?</span><span class="field-desc">Cantidad de comensales atendidos</span></div>
+      <div class="field-row"><span class="field-name">tickets</span><span class="field-type">Int?</span><span class="field-desc">Cantidad de comandas/tickets emitidos</span></div>
+      <div class="field-row"><span class="field-name">observaciones</span><span class="field-type">String?</span><span class="field-desc">Notas libres del operador</span></div>
+      <div class="field-row"><span class="field-name">foto_url</span><span class="field-type">String?</span><span class="field-desc">URL externa a foto del cierre de caja</span></div>
+      <div class="field-row"><span class="field-name">origin</span><span class="field-type">Enum</span><span class="field-desc"><code>DCSMART</code> (default) · <code>TAPTAP</code> · <code>FFUDO</code></span></div>
+      <div class="field-row"><span class="field-name">created_by</span><span class="field-type">UUID FK?</span><span class="field-desc">Usuario que creó el registro</span></div>
+      <div class="field-row"><span class="field-name">created_at</span><span class="field-type">DateTime</span><span class="field-desc">Timestamp de creación (UTC, auto)</span></div>
+      <div class="field-row"><span class="field-name">updated_at</span><span class="field-type">DateTime</span><span class="field-desc">Timestamp de última modificación (auto)</span></div>
+    </div>
+
+    <p><strong>Relaciones:</strong> <code>local</code> → Local · <code>creador</code> → User · <code>movimientos</code> → CajaMovimiento[] · <code>detalles</code> → CajaDetalle[]</p>
+  </section>
+
+  <section id="model-movimiento">
+    <h3>CajaMovimiento</h3>
+    <p>Tabla: <code>caja_movimientos</code> — registra entradas y salidas de dinero con método de pago.</p>
+
+    <div class="fields">
+      <div class="field-row"><span>Campo</span><span>Tipo</span><span>Descripción</span></div>
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUID PK</span><span class="field-desc">Identificador único</span></div>
+      <div class="field-row"><span class="field-name">tipo</span><span class="field-type">String</span><span class="field-desc">
+        <span class="badge badge-green">INGRESO</span>
+        <span class="badge badge-red">EGRESO</span>
+        <span class="badge badge-blue">APERTURA</span>
+        <span class="badge badge-muted">CIERRE</span>
+      </span></div>
+      <div class="field-row"><span class="field-name">id_metodo</span><span class="field-type">UUID FK?</span><span class="field-desc">Método de pago asociado (Efectivo, Tarjeta, MP…)</span></div>
+      <div class="field-row"><span class="field-name">monto</span><span class="field-type">Decimal(12,2)</span><span class="field-desc">Monto del movimiento. <strong>Requerido.</strong></span></div>
+      <div class="field-row"><span class="field-name">id_caja</span><span class="field-type">UUID FK</span><span class="field-desc">Caja a la que pertenece. <strong>Requerido.</strong></span></div>
+      <div class="field-row"><span class="field-name">cantidad</span><span class="field-type">Int?</span><span class="field-desc">Cantidad de operaciones (ej: N transacciones con tarjeta)</span></div>
+    </div>
+
+    <p><strong>Relaciones:</strong> <code>caja</code> → Caja · <code>metodo_pago</code> → MetodoPago</p>
+
+    <div class="callout callout-info">
+      Los movimientos son la <strong>trazabilidad operativa</strong> del turno: cada cobro
+      por método, cada retiro de efectivo, la apertura con fondo de caja, etc. Un turno
+      puede tener múltiples movimientos con distintos métodos.
+    </div>
+  </section>
+
+  <section id="model-detalle">
+    <h3>CajaDetalle</h3>
+    <p>Tabla: <code>caja_detalles</code> — desglose conceptual/contable del turno, sin atarse a un único método de pago.</p>
+
+    <div class="fields">
+      <div class="field-row"><span>Campo</span><span>Tipo</span><span>Descripción</span></div>
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUID PK</span><span class="field-desc">Identificador único</span></div>
+      <div class="field-row"><span class="field-name">id_caja</span><span class="field-type">UUID FK</span><span class="field-desc">Caja a la que pertenece. <strong>Requerido.</strong></span></div>
+      <div class="field-row"><span class="field-name">tipo</span><span class="field-type">String?</span><span class="field-desc">
+        Categoría del detalle:
+        <span class="badge badge-blue">CANAL</span>
+        <span class="badge badge-gold">CALCULO</span>
+        <span class="badge badge-muted">OTROS</span>
+      </span></div>
+      <div class="field-row"><span class="field-name">id_tipo</span><span class="field-type">UUID FK?</span><span class="field-desc">Referencia a <code>DetalleTipo</code> (Total Digitales, MP QR, etc.)</span></div>
+      <div class="field-row"><span class="field-name">nombre</span><span class="field-type">String?</span><span class="field-desc">Nombre libre (campo de texto alternativo a id_tipo)</span></div>
+      <div class="field-row"><span class="field-name">monto</span><span class="field-type">Decimal(12,2)</span><span class="field-desc">Monto del concepto. <strong>Requerido.</strong></span></div>
+      <div class="field-row"><span class="field-name">observaciones</span><span class="field-type">String?</span><span class="field-desc">Nota adicional</span></div>
+      <div class="field-row"><span class="field-name">created_at</span><span class="field-type">DateTime</span><span class="field-desc">Timestamp de creación (auto)</span></div>
+    </div>
+
+    <p><strong>Relaciones:</strong> <code>caja</code> → Caja · <code>detalle_tipo</code> → DetalleTipo</p>
+
+    <div class="callout callout-warn">
+      <strong>Diferencia clave con CajaMovimiento:</strong> un detalle como "Total Digitales"
+      puede englobar tarjetas + QR + transferencias juntos. No se liga a un método de pago
+      específico. Sirve para conciliación contable por canal o concepto.
+    </div>
+  </section>
+
+  <section id="model-detalle-tipo">
+    <h3>DetalleTipo</h3>
+    <p>Tabla: <code>detalle_tipos</code> — catálogo de conceptos reutilizables para los detalles.</p>
+
+    <div class="fields">
+      <div class="field-row"><span>Campo</span><span>Tipo</span><span>Descripción</span></div>
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUID PK</span><span class="field-desc">Identificador único</span></div>
+      <div class="field-row"><span class="field-name">id_app</span><span class="field-type">UUID FK</span><span class="field-desc">Grupo al que pertenece. <strong>Requerido.</strong></span></div>
+      <div class="field-row"><span class="field-name">id_local</span><span class="field-type">UUID FK?</span><span class="field-desc"><code>null</code> = visible a todos los locales del grupo · UUID = exclusivo de un local</span></div>
+      <div class="field-row"><span class="field-name">nombre</span><span class="field-type">String</span><span class="field-desc">Etiqueta del tipo (ej: "Total Digitales", "MP QR")</span></div>
+      <div class="field-row"><span class="field-name">activo</span><span class="field-type">Boolean</span><span class="field-desc">Soft-delete: false oculta el tipo del selector</span></div>
+    </div>
+
+    <p><strong>Unique:</strong> <code>[nombre, id_app]</code> — el mismo nombre no se repite dentro de un grupo.</p>
+    <p><strong>Tipos default (seed):</strong> Total Digitales · MP Total · MP QR → todos con <code>id_local: null</code></p>
+
+    <h4>Resolución de tipos al cargar el selector</h4>
+    <pre><code><span class="cm">// GET /api/caja-detalles/tipos?id_local=xxx</span>
+where: {
+  id_app: request.activeAppId,
+  activo: <span class="val">true</span>,
+  OR: [
+    { id_local: <span class="val">null</span> },            <span class="cm">// tipos del grupo (todos los locales)</span>
+    { id_local: id_local_query }  <span class="cm">// tipos específicos de este local</span>
+  ]
+}</code></pre>
+  </section>
+
+  <section id="model-metodo">
+    <h3>MetodoPago</h3>
+    <p>Tabla: <code>metodos_pago</code> — catálogo global compartido entre todos los grupos.</p>
+
+    <div class="fields">
+      <div class="field-row"><span>Campo</span><span>Tipo</span><span>Descripción</span></div>
+      <div class="field-row"><span class="field-name">id</span><span class="field-type">UUID PK</span><span class="field-desc"></span></div>
+      <div class="field-row"><span class="field-name">nombre</span><span class="field-type">String unique</span><span class="field-desc">Efectivo · Tarjeta débito · Tarjeta crédito · Transferencia · Mercado Pago · Cheque</span></div>
+      <div class="field-row"><span class="field-name">activo</span><span class="field-type">Boolean</span><span class="field-desc">Soft-delete</span></div>
+    </div>
+
+    <p>Usado por <code>CajaMovimiento.id_metodo</code>. <strong>No</strong> usado por <code>CajaDetalle</code> (un detalle puede representar varios métodos a la vez).</p>
+  </section>
+
+  <section id="relaciones">
+    <h3>Diagrama de relaciones</h3>
+    <pre><code>App ─────────────────────────────────────────────┐
+ │                                                │
+ ├─ Local ──────────────────────┐                 │
+ │    │                         │                 │
+ │    └─ Caja ──────────────────┼──── id_local    │
+ │          │                   │                 │
+ │          ├─ CajaMovimiento   │                 │
+ │          │       └─ MetodoPago (global)         │
+ │          │                   │                 │
+ │          └─ CajaDetalle      │                 │
+ │                  └─ DetalleTipo ───────────────┤
+ │                       ├─ id_app ───────────────┘
+ │                       └─ id_local? (opcional)──┘
+ └─ (otros modelos)</code></pre>
+  </section>
+
+  <!-- ── API REST ── -->
+  <section id="api-cajas">
+    <h2>API REST — Cajas</h2>
+    <p>Prefijo: <code>/api/cajas</code> · Todos los endpoints requieren <code>Authorization: Bearer &lt;token&gt;</code> + <code>X-App-Id: &lt;uuid&gt;</code></p>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/</span>
+        <div class="endpoint-auth"><span class="badge badge-muted">view</span></div>
+      </div>
+      <div class="endpoint-desc">Lista paginada de cajas del grupo activo. Filtrada por <code>allowedLocalIds</code>.</div>
+      <div class="endpoint-params">Query: <code>id_local</code> · <code>desde</code> · <code>hasta</code> · <code>page</code> (def. 1) · <code>limit</code> (def. 50)</div>
+      <div class="endpoint-params">Respuesta: <code>{ data: Caja[], total, page, limit }</code> — incluye <code>local</code> y <code>creador</code></div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/stats</span>
+        <div class="endpoint-auth"><span class="badge badge-muted">view</span></div>
+      </div>
+      <div class="endpoint-desc">Agregados del período para el Dashboard.</div>
+      <div class="endpoint-params">Query: <code>id_local</code> · <code>desde</code> · <code>hasta</code></div>
+      <div class="endpoint-params">Respuesta: <code>{ total_recaudado, count_turnos, total_efectivo, total_tickets, total_comensales }</code></div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/:id</span>
+        <div class="endpoint-auth"><span class="badge badge-muted">view</span></div>
+      </div>
+      <div class="endpoint-desc">Detalle completo de una caja. Valida que <code>id_local</code> esté en <code>allowedLocalIds</code>.</div>
+      <div class="endpoint-params">Incluye: <code>local</code> · <code>creador</code> · <code>movimientos</code> (con <code>metodo_pago</code>) · <code>detalles</code> (con <code>detalle_tipo</code>)</div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/</span>
+        <div class="endpoint-auth"><span class="badge badge-blue">create</span></div>
+      </div>
+      <div class="endpoint-desc">Crea una nueva caja. Setea <code>created_by</code> desde el JWT.</div>
+      <div class="endpoint-params"><strong>Requeridos:</strong> <code>fecha_inicio</code> · <code>id_local</code></div>
+      <div class="endpoint-params"><strong>Opcionales:</strong> <code>nro_turno</code> · <code>fecha_cierre</code> · <code>cajero</code> · <code>total</code> · <code>efectivo</code> · <code>fiscal</code> · <code>comensales</code> · <code>tickets</code> · <code>observaciones</code> · <code>foto_url</code> · <code>origin</code></div>
+      <div class="endpoint-params">Retorna: <code>201 Caja</code></div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-put">PUT</span>
+        <span class="endpoint-path">/:id</span>
+        <div class="endpoint-auth"><span class="badge badge-gold">edit</span></div>
+      </div>
+      <div class="endpoint-desc">Actualiza campos de una caja. No cambia <code>id_local</code> ni <code>created_by</code>.</div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-delete">DELETE</span>
+        <span class="endpoint-path">/:id</span>
+        <div class="endpoint-auth"><span class="badge badge-red">delete</span></div>
+      </div>
+      <div class="endpoint-desc">Hard delete. Valida acceso al local antes de eliminar.</div>
+    </div>
+  </section>
+
+  <section id="api-movimientos">
+    <h2>API REST — Movimientos</h2>
+    <p>Prefijo: <code>/api/caja-movimientos</code> · Requiere <code>X-App-Id</code></p>
+    <p>El acceso al local se valida vía la caja padre: <code>caja.id_local ∈ allowedLocalIds</code>.</p>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/</span>
+        <div class="endpoint-auth"><span class="badge badge-muted">view</span></div>
+      </div>
+      <div class="endpoint-params">Query: <code>id_caja</code> (opcional) · Filtra cajas por <code>allowedLocalIds</code> · Incluye <code>metodo_pago</code></div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/</span>
+        <div class="endpoint-auth"><span class="badge badge-blue">create</span></div>
+      </div>
+      <div class="endpoint-params"><strong>Requeridos:</strong> <code>tipo</code> · <code>monto</code> · <code>id_caja</code></div>
+      <div class="endpoint-params"><strong>Opcionales:</strong> <code>id_metodo</code> · <code>cantidad</code></div>
+      <div class="endpoint-params">Valores de <code>tipo</code>: <code>INGRESO</code> · <code>EGRESO</code> · <code>APERTURA</code> · <code>CIERRE</code></div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-put">PUT</span>
+        <span class="endpoint-path">/:id</span>
+      </div>
+      <div class="endpoint-params">Edita tipo, monto, id_metodo, cantidad de un movimiento.</div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-delete">DELETE</span>
+        <span class="endpoint-path">/:id</span>
+      </div>
+      <div class="endpoint-params">Hard delete. Valida acceso vía caja padre.</div>
+    </div>
+  </section>
+
+  <section id="api-detalles">
+    <h2>API REST — Detalles</h2>
+    <p>Prefijo: <code>/api/caja-detalles</code> · Requiere <code>X-App-Id</code></p>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/tipos</span>
+        <div class="endpoint-auth"><span class="badge badge-muted">view</span></div>
+      </div>
+      <div class="endpoint-desc">Lista DetalleTipos disponibles para el selector del formulario.</div>
+      <div class="endpoint-params">Query: <code>id_local</code> (opcional) → retorna tipos app-wide (id_local null) + tipos del local específico</div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/</span>
+        <div class="endpoint-auth"><span class="badge badge-muted">view</span></div>
+      </div>
+      <div class="endpoint-params">Query: <code>id_caja</code> · Incluye <code>detalle_tipo</code></div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/</span>
+        <div class="endpoint-auth"><span class="badge badge-blue">create</span></div>
+      </div>
+      <div class="endpoint-params"><strong>Requeridos:</strong> <code>id_caja</code> · <code>monto</code></div>
+      <div class="endpoint-params"><strong>Opcionales:</strong> <code>tipo</code> (CANAL/CALCULO/OTROS) · <code>id_tipo</code> · <code>nombre</code> · <code>observaciones</code></div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-delete">DELETE</span>
+        <span class="endpoint-path">/:id</span>
+      </div>
+      <div class="endpoint-params">Hard delete. Valida acceso vía caja padre.</div>
+    </div>
+  </section>
+
+  <section id="api-detalle-tipos">
+    <h2>API REST — Gestión de DetalleTipos</h2>
+    <p>Prefijo: <code>/api/detalle-tipos</code> · Requiere <code>X-App-Id</code></p>
+    <p>Administración del catálogo de tipos de detalle (panel admin → "Tipos Detalle").</p>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/</span>
+      </div>
+      <div class="endpoint-params">Lista todos los tipos del grupo activo (incluye tipos de todos los locales). Incluye relación <code>local</code>.</div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/</span>
+      </div>
+      <div class="endpoint-params"><strong>Requerido:</strong> <code>nombre</code></div>
+      <div class="endpoint-params"><strong>Opcional:</strong> <code>id_local</code> — si se omite, el tipo aplica a todos los locales del grupo</div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-put">PUT</span>
+        <span class="endpoint-path">/:id</span>
+      </div>
+      <div class="endpoint-params">Edita <code>nombre</code> y/o <code>activo</code>. No cambia el scope (id_app / id_local).</div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-delete">DELETE</span>
+        <span class="endpoint-path">/:id</span>
+      </div>
+      <div class="endpoint-params">
+        Hard delete si no tiene detalles asociados.<br/>
+        Soft delete (<code>activo: false</code>) si tiene detalles — preserva la integridad referencial.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FRONTEND ── -->
+  <section id="fe-lista">
+    <h2>Frontend — Vista lista</h2>
+    <p>Página: <code>src/pages/cajas/CajaList.jsx</code></p>
+
+    <p>
+      La página principal de cajas requiere que el usuario tenga un <strong>local activo</strong>
+      seleccionado en el sidebar. Si <code>activeLocal</code> es <code>null</code>, muestra
+      un estado vacío con instrucción para seleccionar local. Si hay local activo, carga la
+      lista paginada (20 por página) con <code>AbortController</code> para cancelar requests
+      en vuelo si el usuario cambia de local.
+    </p>
+
+    <h4>Columnas de la tabla</h4>
+    <table class="tbl">
+      <thead><tr><th>Columna</th><th>Campo</th><th>Formato</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Nro Turno</strong></td><td><code>nro_turno</code></td><td>"TRN 1" · "—" si null</td></tr>
+        <tr><td><strong>Inicio</strong></td><td><code>fecha_inicio</code></td><td>Fecha local es-AR</td></tr>
+        <tr><td><strong>Cierre</strong></td><td><code>fecha_cierre</code></td><td>Fecha local es-AR · "—" si null</td></tr>
+        <tr><td><strong>Cajero</strong></td><td><code>cajero</code></td><td>Texto libre</td></tr>
+        <tr><td><strong>Total</strong></td><td><code>total</code></td><td>$XX.XXX</td></tr>
+        <tr><td><strong>Efectivo</strong></td><td><code>efectivo</code></td><td>$XX.XXX</td></tr>
+        <tr><td><strong>Fiscal</strong></td><td><code>fiscal</code></td><td>$XX.XXX</td></tr>
+        <tr><td><strong>Comensales</strong></td><td><code>comensales</code></td><td>Número entero</td></tr>
+        <tr><td><strong>Tickets</strong></td><td><code>tickets</code></td><td>Número entero</td></tr>
+        <tr><td><strong>Origen</strong></td><td><code>origin</code></td><td>Badge si ≠ DCSMART</td></tr>
+        <tr><td><strong>Foto</strong></td><td><code>foto_url</code></td><td>Ícono link externo</td></tr>
+      </tbody>
+    </table>
+
+    <p>Click en cualquier fila abre el <strong>DrawerPanel</strong> con el detalle completo.</p>
+  </section>
+
+  <section id="fe-crear">
+    <h3>Crear Caja</h3>
+    <p>
+      El botón "+ Nueva Caja" abre el <code>CajaCreatePanel</code> dentro del DrawerPanel (width 560px).
+      Si el usuario tiene "Todos los locales" activo (<code>activeLocal === null</code>) y hay
+      más de un local disponible, se muestra un <code>&lt;select&gt;</code> obligatorio para
+      elegir el local destino.
+    </p>
+
+    <h4>Campos del formulario de creación</h4>
+    <table class="tbl">
+      <thead><tr><th>Campo</th><th>Tipo input</th><th>Req.</th><th>Notas</th></tr></thead>
+      <tbody>
+        <tr><td><code>Local</code></td><td>select</td><td>Condicional</td><td>Solo visible si activeLocal es null</td></tr>
+        <tr><td><code>Fecha Inicio</code></td><td>datetime-local</td><td>✓</td><td></td></tr>
+        <tr><td><code>Fecha Cierre</code></td><td>datetime-local</td><td></td><td>Opcional, puede dejarse vacío</td></tr>
+        <tr><td><code>Nro Turno</code></td><td>number (min 1)</td><td></td><td></td></tr>
+        <tr><td><code>Cajero</code></td><td>text</td><td></td><td></td></tr>
+        <tr><td><code>Total</code></td><td>number decimal</td><td></td><td></td></tr>
+        <tr><td><code>Efectivo</code></td><td>number decimal</td><td></td><td></td></tr>
+        <tr><td><code>Fiscal</code></td><td>number decimal</td><td></td><td></td></tr>
+        <tr><td><code>Comensales</code></td><td>number entero</td><td></td><td></td></tr>
+        <tr><td><code>Tickets</code></td><td>number entero</td><td></td><td></td></tr>
+        <tr><td><code>URL Foto</code></td><td>url</td><td></td><td></td></tr>
+        <tr><td><code>Observaciones</code></td><td>textarea</td><td></td><td>Ocupa todo el ancho</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="fe-detalle">
+    <h3>Panel de detalle</h3>
+    <p>
+      Al hacer click en una caja de la tabla, el <code>CajaDetailPanel</code> carga
+      los datos completos vía <code>GET /cajas/:id</code> (que ya incluye movimientos y
+      detalles en una sola llamada). El panel tiene tres secciones:
+    </p>
+
+    <h4>1 · Datos del turno</h4>
+    <p>Tabla de clave-valor con todos los campos del encabezado (turno, local, fechas, cajero, totales, origen).</p>
+
+    <h4>2 · Detalles</h4>
+    <p>
+      Tabla con columnas Tipo / Nombre / Monto / (eliminar).<br/>
+      Total en el header de sección.<br/>
+      Formulario de alta inline con:
+    </p>
+    <table class="tbl">
+      <thead><tr><th>Campo</th><th>Input</th><th>Fuente de datos</th></tr></thead>
+      <tbody>
+        <tr><td><code>Tipo</code></td><td>select</td><td>Opciones fijas: Canal · Cálculo · Otros</td></tr>
+        <tr><td><code>Nombre</code></td><td>select</td><td><code>GET /caja-detalles/tipos?id_local=&lt;id_local de la caja&gt;</code></td></tr>
+        <tr><td><code>Monto</code></td><td>number decimal</td><td>—</td></tr>
+        <tr><td><code>Observaciones</code></td><td>text</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <h4>3 · Movimientos</h4>
+    <p>
+      Tabla con columnas Tipo (badge verde/rojo) / Método / Monto / Cantidad / (eliminar).<br/>
+      Total en el header de sección.<br/>
+      Formulario de alta inline con:
+    </p>
+    <table class="tbl">
+      <thead><tr><th>Campo</th><th>Input</th><th>Fuente de datos</th></tr></thead>
+      <tbody>
+        <tr><td><code>Tipo</code></td><td>select</td><td>INGRESO · EGRESO · APERTURA · CIERRE</td></tr>
+        <tr><td><code>Método</code></td><td>select</td><td><code>GET /metodos-pago</code> (cargado al montar)</td></tr>
+        <tr><td><code>Monto</code></td><td>number decimal</td><td>—</td></tr>
+        <tr><td><code>Cantidad</code></td><td>number entero</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      Después de cada alta o eliminación (tanto en detalles como en movimientos), se llama a
+      <code>cajasApi.get(cajaId)</code> para refrescar todo el panel en una sola llamada,
+      actualizando los totales mostrados.
+    </div>
+  </section>
+
+  <section id="fe-estado">
+    <h3>Estado React</h3>
+
+    <h4>CajaDetailPanel — estado local</h4>
+    <pre><code><span class="kw">const</span> [caja,      setCaja]      = <span class="fn">useState</span>(<span class="val">null</span>)      <span class="cm">// datos completos del backend</span>
+<span class="kw">const</span> [loading,   setLoading]   = <span class="fn">useState</span>(<span class="val">true</span>)
+<span class="kw">const</span> [metodos,   setMetodos]   = <span class="fn">useState</span>([])        <span class="cm">// MetodoPago[] para movimientos</span>
+<span class="kw">const</span> [tipos,     setTipos]     = <span class="fn">useState</span>([])        <span class="cm">// DetalleTipo[] para detalles</span>
+<span class="kw">const</span> [newMov,    setNewMov]    = <span class="fn">useState</span>({...})    <span class="cm">// form movimiento</span>
+<span class="kw">const</span> [newDet,    setNewDet]    = <span class="fn">useState</span>({...})    <span class="cm">// form detalle</span>
+<span class="kw">const</span> [saving,    setSaving]    = <span class="fn">useState</span>(<span class="val">false</span>)
+<span class="kw">const</span> [savingDet, setSavingDet] = <span class="fn">useState</span>(<span class="val">false</span>)</code></pre>
+
+    <h4>Secuencia de carga</h4>
+    <div class="flow" style="flex-direction:column; align-items:flex-start; gap:0.4rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <div class="flow-step">useEffect [cajaId]</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><code>cajasApi.get(cajaId)</code></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">setCaja</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <div class="flow-step">useEffect [cajaId]</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><code>metodosApi.list()</code></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">setMetodos</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem">
+        <div class="flow-step highlight">useEffect [caja.id_local]</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><code>detallesApi.tipos(id_local)</code></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">setTipos</div>
+      </div>
+    </div>
+    <p style="margin-top:0.5rem">Los tipos de detalle se cargan <strong>reactivamente</strong>: esperan a que <code>caja</code> esté cargado para conocer el <code>id_local</code> y pedir los tipos correctos.</p>
+
+    <h4>Stores globales usados</h4>
+    <table class="tbl">
+      <thead><tr><th>Store</th><th>Campo</th><th>Uso</th></tr></thead>
+      <tbody>
+        <tr><td><code>appStore</code></td><td><code>activeApp</code></td><td>ID del grupo → header X-App-Id (vía interceptor Axios)</td></tr>
+        <tr><td><code>appStore</code></td><td><code>activeLocal</code></td><td>Filtrar lista de cajas y pre-seleccionar local en form</td></tr>
+        <tr><td><code>uiStore</code></td><td><code>notify()</code></td><td>Toast de éxito/error después de cada operación</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── FLUJOS ── -->
+  <section id="flujo-caja">
+    <h2>Flujos de operación</h2>
+    <h3>Ciclo de vida de una caja</h3>
+
+    <div class="card">
+      <div class="card-title">1 · Apertura de turno</div>
+      <p>El cajero hace click en "+ Nueva Caja", completa fecha_inicio y opcionalmente nro_turno y cajero. El backend crea la caja con <code>fecha_cierre: null</code>, lo que indica turno abierto.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">2 · Registro durante el turno</div>
+      <p>Desde el DrawerPanel de detalle, el operador agrega <strong>Movimientos</strong> (INGRESO/EGRESO/APERTURA por método) y <strong>Detalles</strong> (Total Digitales, MP QR, etc.).</p>
+    </div>
+    <div class="card">
+      <div class="card-title">3 · Cierre del turno</div>
+      <p>El cajero edita la caja (<code>PUT /:id</code>) completando <code>fecha_cierre</code>, <code>total</code>, <code>efectivo</code>, <code>fiscal</code>, <code>comensales</code> y <code>tickets</code>. Los totales son manuales — el sistema no los calcula desde movimientos.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">4 · Consulta posterior</div>
+      <p>La caja queda visible en la lista y puede abrirse para ver el historial completo de movimientos y detalles. Los stats del Dashboard agregan los campos <code>total</code> y <code>efectivo</code> de todas las cajas del período.</p>
+    </div>
+  </section>
+
+  <section id="flujo-movimiento">
+    <h3>Flujo: agregar movimiento</h3>
+    <div class="flow">
+      <div class="flow-step">Usuario completa form</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step highlight">POST /caja-movimientos</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">Validar id_caja ∈ allowedLocales</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">INSERT caja_movimientos</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">201 + reload panel</div>
+    </div>
+    <pre><code><span class="cm">// Payload</span>
+{
+  <span class="fld">tipo</span>:      <span class="str">"INGRESO"</span>,          <span class="cm">// INGRESO | EGRESO | APERTURA | CIERRE</span>
+  <span class="fld">id_metodo</span>: <span class="str">"uuid-metodo"</span>,     <span class="cm">// opcional</span>
+  <span class="fld">monto</span>:     <span class="val">15000.00</span>,
+  <span class="fld">id_caja</span>:   <span class="str">"uuid-caja"</span>,
+  <span class="fld">cantidad</span>:  <span class="val">12</span>                 <span class="cm">// opcional (ej: 12 transacciones con tarjeta)</span>
+}</code></pre>
+  </section>
+
+  <section id="flujo-detalle">
+    <h3>Flujo: agregar detalle</h3>
+    <div class="flow">
+      <div class="flow-step">Usuario elige Tipo + Nombre</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step highlight">POST /caja-detalles</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">Validar id_caja ∈ allowedLocales</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">INSERT caja_detalles</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">201 + reload panel</div>
+    </div>
+    <pre><code><span class="cm">// Payload</span>
+{
+  <span class="fld">id_caja</span>:       <span class="str">"uuid-caja"</span>,
+  <span class="fld">tipo</span>:          <span class="str">"CANAL"</span>,           <span class="cm">// CANAL | CALCULO | OTROS (opcional)</span>
+  <span class="fld">id_tipo</span>:       <span class="str">"uuid-detalle-tipo"</span>, <span class="cm">// ref a "Total Digitales", "MP QR", etc.</span>
+  <span class="fld">monto</span>:         <span class="val">45000.00</span>,
+  <span class="fld">observaciones</span>: <span class="str">"Incluye QR + POS"</span>  <span class="cm">// opcional</span>
+}</code></pre>
+
+    <div class="callout callout-ok">
+      El selector "Nombre" muestra los <code>DetalleTipo</code> cuyo <code>id_local</code> es
+      <code>null</code> (app-wide) más los específicos del local de la caja.
+      La llamada es <code>GET /caja-detalles/tipos?id_local=&lt;caja.id_local&gt;</code>.
+    </div>
+  </section>
+
+  <section id="flujo-permisos">
+    <h3>Control de acceso en cada operación</h3>
+
+    <table class="tbl">
+      <thead>
+        <tr><th>Operación</th><th>Permiso requerido</th><th>Validación adicional</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Listar cajas</td><td><code>caja.view</code></td><td><code>id_local ∈ allowedLocalIds</code></td></tr>
+        <tr><td>Ver detalle</td><td><code>caja.view</code></td><td><code>caja.id_local ∈ allowedLocalIds</code></td></tr>
+        <tr><td>Crear caja</td><td><code>caja.create</code></td><td><code>id_local ∈ allowedLocalIds</code></td></tr>
+        <tr><td>Editar caja</td><td><code>caja.edit</code></td><td><code>caja.id_local ∈ allowedLocalIds</code></td></tr>
+        <tr><td>Eliminar caja</td><td><code>caja.delete</code></td><td><code>caja.id_local ∈ allowedLocalIds</code></td></tr>
+        <tr><td>Agregar movimiento</td><td><code>caja_movimientos.create</code></td><td>Caja padre valida local</td></tr>
+        <tr><td>Eliminar movimiento</td><td><code>caja_movimientos.delete</code></td><td>Caja padre valida local</td></tr>
+        <tr><td>Agregar detalle</td><td><code>caja.create</code></td><td>Caja padre valida local</td></tr>
+        <tr><td>Eliminar detalle</td><td><code>caja.delete</code></td><td>Caja padre valida local</td></tr>
+        <tr><td>Gestionar DetalleTipos</td><td><code>caja.create/edit/delete</code></td><td><code>id_app === activeAppId</code></td></tr>
+      </tbody>
+    </table>
+
+    <h4>Matriz de permisos por rol</h4>
+    <table class="tbl">
+      <thead>
+        <tr><th>Módulo</th><th>super_admin</th><th>admin</th><th>cajero</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>caja</code></td>
+          <td><span class="badge badge-green">V C E D</span></td>
+          <td><span class="badge badge-blue">V C E D</span></td>
+          <td><span class="badge badge-muted">V C</span></td>
+        </tr>
+        <tr>
+          <td><code>caja_movimientos</code></td>
+          <td><span class="badge badge-green">V C E D</span></td>
+          <td><span class="badge badge-blue">V C E D</span></td>
+          <td><span class="badge badge-muted">V C</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--t3)">V=ver · C=crear · E=editar · D=eliminar</p>
+
+    <div class="callout callout-danger">
+      Un cajero <strong>no puede editar ni eliminar</strong> cajas o movimientos. Solo puede
+      crearlos y verlos. Si necesita corregir un error, debe pedir a un admin que lo haga.
+    </div>
+  </section>
+
+  <div style="height:4rem"></div>
+</main>
+
+</div>
+</body>
+</html>

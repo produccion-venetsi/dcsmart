@@ -4,6 +4,7 @@ import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
 import { rubrosApi, categoriasApi, rubcatApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { proveedoresApi } from '../../api/proveedores.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
@@ -69,6 +70,27 @@ function IcoPagoEmpty() {
     </svg>
   )
 }
+function IcoPlane() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+  )
+}
+function IcoDollar() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  )
+}
+function IcoRepeat() {
+  return (
+    <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+    </svg>
+  )
+}
 
 function fmt$(n)     { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
@@ -76,7 +98,7 @@ function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year
 function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
 function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, canDelete = false }) {
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const [impuestos,   setImpuestos]   = useState([])
@@ -85,6 +107,16 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
   const [savingImp,   setSavingImp]   = useState(false)
   const [audited,     setAudited]     = useState(pago.audit)
   const [auditando,   setAuditando]   = useState(false)
+  const [periodico,   setPeriodico]   = useState(pago.periodico ?? false)
+  const [toggling,    setToggling]    = useState(false)
+  const [multimoneda, setMultimoneda] = useState([])
+  const [loadingMM,   setLoadingMM]   = useState(true)
+  const [mmForm,      setMmForm]      = useState({ tipo: 'USD', tdc: '', monto: '' })
+  const [savingMM,    setSavingMM]    = useState(false)
+  const [pagarOpen,   setPagarOpen]   = useState(false)
+  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: new Date().toISOString().slice(0, 10), id_metodo: '' })
+  const [pagando,     setPagando]     = useState(false)
+  const [mandando,    setMandando]    = useState(false)
 
   const loadImpuestos = () => {
     setLoadingImp(true)
@@ -94,7 +126,69 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
       .finally(() => setLoadingImp(false))
   }
 
-  useEffect(() => { if (pago) loadImpuestos() }, [pago?.id])
+  const loadMM = () => {
+    setLoadingMM(true)
+    pagosApi.listMM(pago.id)
+      .then(({ data }) => setMultimoneda(data))
+      .catch(() => {})
+      .finally(() => setLoadingMM(false))
+  }
+
+  useEffect(() => { if (pago) { loadImpuestos(); loadMM() } }, [pago?.id])
+
+  const handleTogglePeriodico = async () => {
+    setToggling(true)
+    try {
+      const { data } = await pagosApi.periodico(pago.id)
+      setPeriodico(data.periodico)
+      onPatch?.(pago.id, { periodico: data.periodico })
+      notify(data.periodico ? 'Marcado como periódico' : 'Periódico desactivado', 'success')
+    } catch { notify('Error', 'error') }
+    finally { setToggling(false) }
+  }
+
+  const handleMandarPdp = async () => {
+    if (!(await showConfirm('¿Mandar esta orden a PDP?'))) return
+    setMandando(true)
+    try {
+      await pagosApi.mandarPdp([pago.id])
+      notify('Orden enviada a PDP', 'success')
+      onPatch?.(pago.id, { estado_op: 'PDP' })
+    } catch { notify('Error al mandar a PDP', 'error') }
+    finally { setMandando(false) }
+  }
+
+  const handlePagar = async (e) => {
+    e.preventDefault()
+    if (!pagarForm.id_metodo) return notify('Seleccioná un método de pago', 'error')
+    setPagando(true)
+    try {
+      await pagosApi.pagar([pago.id], { fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+      notify('Pago registrado', 'success')
+      setPagarOpen(false)
+      onPatch?.(pago.id, { pagado: true, fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+    } catch { notify('Error al pagar', 'error') }
+    finally { setPagando(false) }
+  }
+
+  const handleAddMM = async (e) => {
+    e.preventDefault()
+    if (!mmForm.tdc || !mmForm.monto) return
+    setSavingMM(true)
+    try {
+      await pagosApi.createMM(pago.id, { tipo: mmForm.tipo, tdc: parseFloat(mmForm.tdc), monto: parseFloat(mmForm.monto) })
+      notify('Registro multimoneda agregado', 'success')
+      setMmForm({ tipo: 'USD', tdc: '', monto: '' })
+      loadMM()
+    } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
+    finally { setSavingMM(false) }
+  }
+
+  const handleDeleteMM = async (mmId) => {
+    if (!(await showConfirm('¿Eliminar registro?'))) return
+    try { await pagosApi.deleteMM(pago.id, mmId); notify('Eliminado', 'success'); loadMM() }
+    catch { notify('Error', 'error') }
+  }
 
   const handlePanelAudit = async () => {
     if (audited && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
@@ -147,11 +241,12 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
     ['Auditado',    audited ? 'Sí' : 'No'],
+    ['Periódico',   periodico ? 'Sí' : 'No'],
   ]
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
         {canEdit && (
           <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
             <IcoEdit /> Editar
@@ -169,12 +264,66 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
             }
           </button>
         )}
+        {canEdit && pago.estado_op !== 'PDP' && (
+          <button className="btn btn-secondary" onClick={handleMandarPdp} disabled={mandando} title="Mandar a PDP">
+            {mandando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlane />}
+            {' '}PDP
+          </button>
+        )}
+        {canEdit && !pago.pagado && (
+          <button className="btn btn-secondary" onClick={() => setPagarOpen(true)} title="Registrar pago">
+            <IcoDollar /> Pagar
+          </button>
+        )}
+        {canEdit && (
+          <button
+            className={`btn ${periodico ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={handleTogglePeriodico}
+            disabled={toggling}
+            title="Marcar como periódico"
+          >
+            {toggling ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoRepeat />}
+            {' '}{periodico ? 'Periódico' : 'Periódico'}
+          </button>
+        )}
         {canDelete && (
           <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
             <IcoTrash /> Eliminar
           </button>
         )}
       </div>
+
+      {/* Modal Pagar */}
+      {pagarOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setPagarOpen(false)}>
+          <form onSubmit={handlePagar} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: '1.5rem', width: 340, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Registrar pago</div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Fecha de pago</label>
+              <div className="form-input-wrap">
+                <input type="date" value={pagarForm.fecha_pago} onChange={e => setPagarForm(f => ({ ...f, fecha_pago: e.target.value }))} required />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Forma de pago *</label>
+              <div className="form-input-wrap">
+                <select value={pagarForm.id_metodo} onChange={e => setPagarForm(f => ({ ...f, id_metodo: e.target.value }))} required>
+                  <option value="">Seleccioná método</option>
+                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setPagarOpen(false)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={pagando}>
+                {pagando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : 'Confirmar'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {pago.observaciones && (
         <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
@@ -259,6 +408,63 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
           {savingImp ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />}
         </button>
       </form>
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Multimoneda</div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Moneda</th><th>TDC</th><th>Monto</th><th></th></tr>
+          </thead>
+          <tbody>
+            {loadingMM ? (
+              Array.from({ length: 2 }, (_, i) => (
+                <tr key={i} className="skel-row">{Array.from({ length: 4 }, (_, j) => <td key={j}><span className="skel" /></td>)}</tr>
+              ))
+            ) : (
+              <>
+                {multimoneda.map(mm => (
+                  <tr key={mm.id}>
+                    <td><span className="badge badge-amber">{mm.tipo}</span></td>
+                    <td className="td-mono">{Number(mm.tdc).toFixed(4)}</td>
+                    <td className="td-number">{Number(mm.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                    <td>
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMM(mm.id)}><IcoTrash /></button>
+                    </td>
+                  </tr>
+                ))}
+                {multimoneda.length === 0 && (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin registros</td></tr>
+                )}
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <form onSubmit={handleAddMM} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="form-group" style={{ margin: 0, flex: '0 0 70px' }}>
+          <label className="form-label">Moneda</label>
+          <div className="form-input-wrap">
+            <select value={mmForm.tipo} onChange={e => setMmForm(f => ({ ...f, tipo: e.target.value }))}>
+              {['USD', 'EUR', 'BRL', 'UYU', 'BTC', 'OTRO'].map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+          <label className="form-label">TDC *</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.0001" required placeholder="1000.00" value={mmForm.tdc} onChange={e => setMmForm(f => ({ ...f, tdc: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+          <label className="form-label">Monto *</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" required placeholder="0.00" value={mmForm.monto} onChange={e => setMmForm(f => ({ ...f, monto: e.target.value }))} />
+          </div>
+        </div>
+        <button type="submit" className="btn btn-primary" disabled={savingMM || !mmForm.tdc || !mmForm.monto}>
+          {savingMM ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />}
+        </button>
+      </form>
     </div>
   )
 }
@@ -268,7 +474,9 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
 const FILTER_INIT = {
   pagado: '', estado_op: '', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
-  audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: ''
+  audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
+  id_proveedores: [],
+  id_rubcats: [],
 }
 
 // ─── Scroll virtual ─────────────────────────────────────────────────────────
@@ -299,10 +507,11 @@ export default function PagoList() {
   const [search,       setSearch]       = useState('')
   const [auditingId,   setAuditingId]   = useState(null)
 
-  const [rubros,     setRubros]     = useState([])
-  const [categorias, setCategorias] = useState([])
-  const [rubcats,    setRubcats]    = useState([])
-  const [metodos,    setMetodos]    = useState([])
+  const [rubros,      setRubros]      = useState([])
+  const [categorias,  setCategorias]  = useState([])
+  const [rubcats,     setRubcats]     = useState([])
+  const [metodos,     setMetodos]     = useState([])
+  const [proveedores, setProveedores] = useState([])
 
   const scrollRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -313,6 +522,7 @@ export default function PagoList() {
     categoriasApi.list().then(r => setCategorias(r.data || [])).catch(() => {})
     rubcatApi.list().then(r => setRubcats(r.data || [])).catch(() => {})
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
+    proveedoresApi.list({ activo: 'true', limit: 500 }).then(r => setProveedores(r.data?.data || [])).catch(() => {})
   }, [])
 
   // ── Carga de TODOS los pagos ──────────────────────────────────────────────
@@ -376,6 +586,10 @@ export default function PagoList() {
       result = result.filter(p => p.id_metodo === filters.id_metodo)
     if (filters.cmv_quick === 'true')
       result = result.filter(p => p.rubcat?.rubro?.nombre?.toUpperCase().startsWith('CMV'))
+    if (filters.id_proveedores.length > 0)
+      result = result.filter(p => filters.id_proveedores.includes(p.id_proveedor))
+    if (filters.id_rubcats.length > 0)
+      result = result.filter(p => filters.id_rubcats.includes(p.id_rubcat))
 
     return result
   }, [pagos, nroOrdNum, filters])
@@ -431,6 +645,9 @@ export default function PagoList() {
   const patchPagoAudit = (id, audit) =>
     setPagos(prev => prev.map(p => p.id === id ? { ...p, audit } : p))
 
+  const patchPago = (id, fields) =>
+    setPagos(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p))
+
   const handleAudit = async (id, e) => {
     e.stopPropagation()
     const current = pagos.find(p => p.id === id)
@@ -456,7 +673,7 @@ export default function PagoList() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
   const filterRef = useRef(null)
-  const activeFilterCount = Object.values(filters).filter(v => v !== '').length
+  const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== '').length
   const hasActiveFilters  = activeFilterCount > 0
 
   const openFilters = () => { setDraft(filters); setFilterOpen(true) }
@@ -473,6 +690,17 @@ export default function PagoList() {
   const applyFilters  = () => { setFilters(draft); setFilterOpen(false) }
   const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch('') }
   const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+  const toggleDraftArr = (k, v) => setDraft(d => {
+    const arr = d[k] || []
+    return { ...d, [k]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] }
+  })
+
+  const [provSearch, setProvSearch] = useState('')
+  const filteredProvs = useMemo(() =>
+    provSearch.trim()
+      ? proveedores.filter(p => (p.nombre || '').toLowerCase().includes(provSearch.toLowerCase()))
+      : proveedores
+  , [proveedores, provSearch])
 
   const hasCmvRubros = rubros.some(r => r.nombre?.toUpperCase().startsWith('CMV'))
   const CHIPS = [
@@ -674,6 +902,42 @@ export default function PagoList() {
                   </div>
                 </div>
 
+                {/* Multi-select proveedores */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <span style={lbl}>Proveedores {draft.id_proveedores.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_proveedores.length})</span>}</span>
+                  <input
+                    type="text"
+                    placeholder="Buscar proveedor…"
+                    value={provSearch}
+                    onChange={e => setProvSearch(e.target.value)}
+                    style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+                  />
+                  <div style={{ maxHeight: 110, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+                    {filteredProvs.slice(0, 80).map(p => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
+                        <input type="checkbox" checked={draft.id_proveedores.includes(p.id)} onChange={() => toggleDraftArr('id_proveedores', p.id)} />
+                        {p.nombre}
+                      </label>
+                    ))}
+                    {filteredProvs.length === 0 && <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Sin resultados</div>}
+                  </div>
+                </div>
+
+                {/* Multi-select rubcats */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <span style={lbl}>Rubros/Cat (múltiple) {draft.id_rubcats.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_rubcats.length})</span>}</span>
+                  <div style={{ maxHeight: 110, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+                    {rubcats.slice(0, 200).map(rc => (
+                      <label key={rc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
+                        <input type="checkbox" checked={draft.id_rubcats.includes(rc.id)} onChange={() => toggleDraftArr('id_rubcats', rc.id)} />
+                        <span style={{ color: 'var(--t2)' }}>{rc.rubro?.nombre}</span>
+                        <span style={{ color: 'var(--t3)' }}>/</span>
+                        <span>{rc.categoria?.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
                   <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
                     Limpiar todo
@@ -685,6 +949,9 @@ export default function PagoList() {
               </div>
             )}
           </div>
+          <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido')} title="Carga rápida">
+            <IcoPlane /> Carga rápida
+          </button>
           <button className="btn btn-primary" onClick={() => navigate('/pagos/nuevo')}>
             <IcoPlus /> Nuevo Pago
           </button>
@@ -823,7 +1090,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} canEdit={canEdit} canDelete={canDelete} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} />
         )}
       </DrawerPanel>
     </div>
