@@ -1,6 +1,5 @@
 import { Storage } from '@google-cloud/storage'
-
-const gcs = new Storage({ projectId: process.env.GCS_PROJECT_ID })
+import multipart from '@fastify/multipart'
 
 // El estado de auditoría de un pago se guarda en la tabla `audits`
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
@@ -47,6 +46,9 @@ async function buildAuditFilter(fastify, audit, allowedLocalIds) {
 }
 
 export default async function pagosRoutes(fastify) {
+  await fastify.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } })
+  const gcs = new Storage()
+
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'create')]
   const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'edit')]
@@ -55,14 +57,12 @@ export default async function pagosRoutes(fastify) {
   // ── GET / ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
     const {
-      id_local, id_proveedor, pagado, estado_op,
-      desde, hasta, id_tipo, id_rub, id_cat, id_rubcat,
-      audit, ingresa_egreso, id_metodo, nro_ord,
+      id_local, id_proveedor, id_proveedores, pagado, estado_op,
+      desde, hasta, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick,
+      sort_field = 'fecha', sort_dir = 'desc',
       page = 1, limit = 50
     } = request.query
-    const limitNum = Number(limit)
-    const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
-    const take = limitNum > 0 ? limitNum : undefined
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
@@ -70,25 +70,38 @@ export default async function pagosRoutes(fastify) {
 
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
 
-    const rubcatFilter = (id_rub || id_cat)
-      ? { rubcat: { ...(id_rub ? { id_rub } : {}), ...(id_cat ? { id_cat } : {}) } }
-      : id_rubcat ? { id_rubcat } : {}
+    // Rubcat: cmv_quick > id_rubcats (multi) > id_rub/id_cat > id_rubcat
+    const rubcatIdsArr = id_rubcats ? id_rubcats.split(',').filter(Boolean) : []
+    let rubcatFilter = {}
+    if (cmv_quick === 'true') {
+      rubcatFilter = { rubcat: { rubro: { nombre: { startsWith: 'CMV', mode: 'insensitive' } } } }
+    } else if (rubcatIdsArr.length > 0) {
+      rubcatFilter = { id_rubcat: { in: rubcatIdsArr } }
+    } else if (id_rub || id_cat) {
+      rubcatFilter = { rubcat: { ...(id_rub ? { id_rub } : {}), ...(id_cat ? { id_cat } : {}) } }
+    } else if (id_rubcat) {
+      rubcatFilter = { id_rubcat }
+    }
 
-    // El estado "auditado" no es una columna de pagos: vive en la tabla `audits`.
-    // Para filtrar, traemos los ids de pagos que tienen registro de auditoría.
+    // Proveedor: multi > single
+    const provIdsArr = id_proveedores ? id_proveedores.split(',').filter(Boolean) : []
+    const proveedorFilter = provIdsArr.length > 0
+      ? { id_proveedor: { in: provIdsArr } }
+      : id_proveedor ? { id_proveedor } : {}
+
     const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
 
     const where = {
       ...localFilter,
       ...rubcatFilter,
       ...auditFilter,
-      ...(id_proveedor    ? { id_proveedor }                                : {}),
-      ...(nro_ord         ? { nro_ord: parseInt(nro_ord) }                  : {}),
-      ...(id_tipo         ? { id_tipo }                                     : {}),
-      ...(id_metodo       ? { id_metodo }                                   : {}),
-      ...(pagado          !== undefined ? { pagado:         pagado         === 'true' } : {}),
-      ...(ingresa_egreso  !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
-      ...(estado_op       ? { estado_op }                                   : {}),
+      ...proveedorFilter,
+      ...(nro_ord        ? { nro_ord: parseInt(nro_ord) }                  : {}),
+      ...(id_tipo        ? { id_tipo }                                      : {}),
+      ...(id_metodo      ? { id_metodo }                                    : {}),
+      ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
+      ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
+      ...(estado_op      ? { estado_op }                                    : {}),
       ...(desde || hasta ? {
         fecha: {
           ...(desde ? { gte: new Date(desde) } : {}),
@@ -96,6 +109,17 @@ export default async function pagosRoutes(fastify) {
         }
       } : {})
     }
+
+    const VALID_SORT = ['fecha', 'importe', 'fecha_pago', 'periodo', 'nro_ord']
+    const orderField = VALID_SORT.includes(sort_field) ? sort_field : 'fecha'
+    const orderDir   = sort_dir === 'asc' ? 'asc' : 'desc'
+    const orderBy    = sort_field === 'proveedor'
+      ? { proveedor: { nombre: orderDir } }
+      : { [orderField]: orderDir }
+
+    const limitNum = Number(limit)
+    const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
+    const take = limitNum > 0 ? limitNum : undefined
 
     const [pagos, total] = await Promise.all([
       fastify.db.pago.findMany({
@@ -107,14 +131,13 @@ export default async function pagosRoutes(fastify) {
           local:       { select: { id: true, nombre: true } },
           creador:     { select: { id: true, nombre: true } }
         },
-        orderBy: { fecha: 'desc' },
+        orderBy,
         skip,
         take
       }),
       fastify.db.pago.count({ where })
     ])
 
-    // Marcar cada pago con audit:true/false según exista registro en `audits`.
     const auditedSet = await getAuditedSet(fastify, pagos.map(p => p.id))
     const data = pagos.map(p => ({ ...p, audit: auditedSet.has(p.id) }))
 
@@ -267,7 +290,7 @@ export default async function pagosRoutes(fastify) {
       nro_ord, fecha, id_proveedor, id_rubcat, id_tipo, pv, nro,
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
-      periodo, ingresa_egreso, id_local, impuestos
+      periodo, ingresa_egreso, periodico, id_local, impuestos
     } = request.body
 
     if (!fecha) return reply.code(400).send({ error: 'fecha es requerida' })
@@ -281,7 +304,7 @@ export default async function pagosRoutes(fastify) {
     let finalNroOrd = nro_ord ? (parseInt(nro_ord) || null) : null
     if (!finalNroOrd) {
       const last = await fastify.db.pago.findFirst({
-        where: { id_local },
+        where: { id_local, nro_ord: { not: null } },
         orderBy: { nro_ord: 'desc' },
         select: { nro_ord: true }
       })
@@ -309,6 +332,7 @@ export default async function pagosRoutes(fastify) {
         foto_url, pdf_url,
         periodo:        periodo        ? new Date(periodo)        : null,
         ingresa_egreso: ingresa_egreso ?? true,
+        periodico:      periodico      ?? false,
         id_local:       id_local       || null,
         created_by:     request.user.id,
         ...(impuestos && impuestos.length > 0 ? {
@@ -341,7 +365,7 @@ export default async function pagosRoutes(fastify) {
       nro_ord, fecha, id_proveedor, id_rubcat, id_tipo, pv, nro,
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
-      periodo, ingresa_egreso, id_local
+      periodo, ingresa_egreso, periodico, id_local
     } = request.body
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
@@ -370,6 +394,7 @@ export default async function pagosRoutes(fastify) {
         foto_url, pdf_url,
         periodo:        periodo                     ? new Date(periodo)           : undefined,
         ingresa_egreso,
+        periodico:      periodico      !== undefined ? periodico                  : undefined,
         id_local:       id_local       !== undefined ? id_local                  : undefined,
       }
     })
@@ -428,6 +453,20 @@ export default async function pagosRoutes(fastify) {
     const result = await fastify.db.pago.updateMany({
       where: { id: { in: ids }, id_local: { in: request.allowedLocalIds } },
       data: { estado_op: 'PDP' }
+    })
+    return { ok: true, count: result.count }
+  })
+
+  // ── POST /revertir-pdp ────────────────────────────────────────────────
+  // Revierte pagos de PDP → CUENTA_CTE (inverso de mandar-pdp).
+  fastify.post('/revertir-pdp', { preHandler: editHandler }, async (request, reply) => {
+    const { ids } = request.body
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return reply.code(400).send({ error: 'Sin pagos seleccionados' })
+    }
+    const result = await fastify.db.pago.updateMany({
+      where: { id: { in: ids }, id_local: { in: request.allowedLocalIds }, estado_op: 'PDP' },
+      data: { estado_op: 'CUENTA_CTE', pagado: false, fecha_pago: null, id_metodo: null }
     })
     return { ok: true, count: result.count }
   })
@@ -494,6 +533,91 @@ export default async function pagosRoutes(fastify) {
     return reply.send(stream)
   })
 
+  // ── PATCH /:id/periodico ───────────────────────────────────────────────────
+  fastify.patch('/:id/periodico', { preHandler: editHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true, periodico: true }
+    })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    const updated = await fastify.db.pago.update({
+      where: { id: request.params.id },
+      data: { periodico: !pago.periodico },
+      select: { periodico: true }
+    })
+    return { ok: true, periodico: updated.periodico }
+  })
+
+  // ── POST /upload ───────────────────────────────────────────────────────────
+  fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
+    const { id_local } = request.query
+    const data = await request.file()
+    if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
+    const bucket = process.env.GCS_BUCKET_NAME
+    if (!bucket) return reply.code(500).send({ error: 'GCS_BUCKET_NAME no configurado' })
+
+    let folder = 'general'
+    if (id_local) {
+      const local = await fastify.db.local.findUnique({ where: { id: id_local }, select: { nombre: true } })
+      if (local?.nombre) folder = local.nombre
+    }
+
+    const ext      = data.filename.split('.').pop().toLowerCase()
+    const type     = ext === 'pdf' ? 'pdf' : 'foto'
+    const filename = `${folder}/facturas/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const file     = gcs.bucket(bucket).file(filename)
+    await new Promise((resolve, reject) => {
+      const stream = file.createWriteStream({ metadata: { contentType: data.mimetype } })
+      data.file.pipe(stream).on('error', reject).on('finish', resolve)
+    })
+    return { ok: true, type, url: `gs://${bucket}/${filename}` }
+  })
+
+  // ── GET /:id/multimoneda ───────────────────────────────────────────────────
+  fastify.get('/:id/multimoneda', { preHandler: viewHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({ where: { id: request.params.id }, select: { id_local: true } })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    return fastify.db.multiMoneda.findMany({ where: { id_pago: request.params.id } })
+  })
+
+  // ── POST /:id/multimoneda (upsert — un registro por pago) ─────────────────
+  fastify.post('/:id/multimoneda', { preHandler: editHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({ where: { id: request.params.id }, select: { id_local: true } })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    const { tipo, tdc, monto } = request.body
+    const row = await fastify.db.multiMoneda.upsert({
+      where: { id_pago: request.params.id },
+      create: { id_pago: request.params.id, tipo, tdc: parseFloat(tdc), monto: parseFloat(monto) },
+      update: { tipo, tdc: parseFloat(tdc), monto: parseFloat(monto), fecha: new Date() }
+    })
+    return reply.code(201).send(row)
+  })
+
+  // ── PUT /:id/multimoneda/:mmId ─────────────────────────────────────────────
+  fastify.put('/:id/multimoneda/:mmId', { preHandler: editHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({ where: { id: request.params.id }, select: { id_local: true } })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    const { tipo, tdc, monto } = request.body
+    const row = await fastify.db.multiMoneda.update({
+      where: { id: request.params.mmId },
+      data: { ...(tipo != null ? { tipo } : {}), ...(tdc != null ? { tdc: parseFloat(tdc) } : {}), ...(monto != null ? { monto: parseFloat(monto) } : {}) }
+    })
+    return row
+  })
+
+  // ── DELETE /:id/multimoneda/:mmId ─────────────────────────────────────────
+  fastify.delete('/:id/multimoneda/:mmId', { preHandler: editHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({ where: { id: request.params.id }, select: { id_local: true } })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) return reply.code(403).send({ error: 'Sin acceso' })
+    await fastify.db.multiMoneda.delete({ where: { id: request.params.mmId } })
+    return reply.code(204).send()
+  })
+
   // ── DELETE /:id ────────────────────────────────────────────────────────
   fastify.delete('/:id', { preHandler: deleteHandler }, async (request, reply) => {
     const existing = await fastify.db.pago.findUnique({
@@ -508,6 +632,7 @@ export default async function pagosRoutes(fastify) {
 
     // Eliminar registros dependientes antes que el pago (FK constraints)
     await fastify.db.impuesto.deleteMany({ where: { id_pago: request.params.id } })
+    await fastify.db.multiMoneda.deleteMany({ where: { id_pago: request.params.id } })
     await fastify.db.audit.deleteMany({ where: { tabla: 'pagos', id_registro: request.params.id } })
     await fastify.db.pago.delete({ where: { id: request.params.id } })
     return reply.code(204).send()
