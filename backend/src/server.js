@@ -29,7 +29,17 @@ BigInt.prototype.toJSON = function () { return this.toString() }
 const app = Fastify({ logger: true })
 
 await app.register(cors, {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, cb) => {
+    const allowed = [
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:5173',
+    ]
+    if (!origin || allowed.includes(origin) || /\.web\.app$/.test(origin)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Not allowed by CORS'))
+    }
+  },
   credentials: true
 })
 
