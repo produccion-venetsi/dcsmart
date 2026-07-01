@@ -18,8 +18,8 @@ function IcoPlus() {
   )
 }
 
-const TIPOS = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
-const TIPO_BADGE = { IVA21: 'badge-blue', IVA10: 'badge-blue', RETENCION: 'badge-amber', PERCEPCION: 'badge-amber' }
+const TIPOS = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
+const TIPO_BADGE = { IVA21: 'badge-blue', IVA27: 'badge-blue', IVA10: 'badge-blue', RETENCION: 'badge-amber', PERCEPCION: 'badge-amber' }
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }

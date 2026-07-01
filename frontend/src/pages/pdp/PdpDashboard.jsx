@@ -5,6 +5,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import FotoViewer from '../../components/FotoViewer.jsx'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -54,6 +55,13 @@ function IcoChevron() {
   return (
     <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="9 6 15 12 9 18" />
+    </svg>
+  )
+}
+function IcoUndo() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" />
     </svg>
   )
 }
@@ -149,17 +157,18 @@ function PagoDetailPdp({ pago, navigate }) {
         <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
           Editar pago
         </button>
-        {pago.foto_url && (
-          <a className="btn btn-secondary" href={pago.foto_url} target="_blank" rel="noreferrer">Ver foto</a>
-        )}
-        {pago.pdf_url && (
-          <a className="btn btn-secondary" href={pago.pdf_url} target="_blank" rel="noreferrer">Ver PDF</a>
-        )}
       </div>
 
       {pago.observaciones && (
         <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
           {pago.observaciones}
+        </div>
+      )}
+
+      {(pago.foto_url || pago.pdf_url) && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <div className="drawer-section-title">Adjuntos</div>
+          <FotoViewer pagoId={pago.id} fotoUrl={pago.foto_url} pdfUrl={pago.pdf_url} />
         </div>
       )}
 
@@ -180,7 +189,9 @@ function PagoDetailPdp({ pago, navigate }) {
 function PdpColumn({
   title, loading, groups, total, emptyText, onRowClick,
   selectable = false, selected, onToggleOne, onToggleGroup,
-  actionLabel, actionIcon, onAction, working,
+  actionLabel, actionIcon, onAction,
+  secondaryActionLabel, secondaryActionIcon, onSecondaryAction,
+  working,
 }) {
   const [collapsed, setCollapsed] = useState(() => new Set())
 
@@ -225,13 +236,24 @@ function PdpColumn({
               ? <><strong>{selCount}</strong> sel · <strong>{fmt$(selTotal)}</strong></>
               : 'Sin selección'}
           </span>
-          <button
-            className="btn btn-sm btn-primary"
-            onClick={onAction}
-            disabled={selCount === 0 || working}
-          >
-            {actionIcon} {actionLabel}
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {onSecondaryAction && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={onSecondaryAction}
+                disabled={selCount === 0 || working}
+              >
+                {secondaryActionIcon} {secondaryActionLabel}
+              </button>
+            )}
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={onAction}
+              disabled={selCount === 0 || working}
+            >
+              {actionIcon} {actionLabel}
+            </button>
+          </div>
         </div>
       )}
 
@@ -368,6 +390,18 @@ export default function PdpDashboard() {
     finally { setWorking(false) }
   }
 
+  const handleRevertir = async () => {
+    const ids = [...selPagar]
+    if (!ids.length) return
+    setWorking(true)
+    try {
+      const { data } = await pagosApi.revertirPdp(ids)
+      notify(`${data.count} orden${data.count !== 1 ? 'es' : ''} revertida${data.count !== 1 ? 's' : ''} a deuda`, 'success')
+      load()
+    } catch { notify('Error al revertir', 'error') }
+    finally { setWorking(false) }
+  }
+
   const handlePagar = async ({ fecha_pago, id_metodo }) => {
     const ids = [...selPagar]
     if (!ids.length) return
@@ -435,6 +469,9 @@ export default function PdpDashboard() {
           selected={selPagar}
           onToggleOne={toggleSet(setSelPagar)}
           onToggleGroup={toggleGroupSet(setSelPagar)}
+          secondaryActionLabel="Revertir"
+          secondaryActionIcon={<IcoUndo />}
+          onSecondaryAction={handleRevertir}
           actionLabel="Pagar"
           actionIcon={<IcoMoney />}
           onAction={() => setPagarOpen(true)}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import client from '../api/client'
 
 // ── Icons ──────────────────────────────────────────────────────────────────
@@ -289,15 +290,89 @@ function PdfLightbox({ children, onClose }) {
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export default function FotoViewer({ pagoId, fotoUrl, pdfUrl }) {
+// ── Panel lateral (portal a la izquierda del drawer) ──────────────────────
+
+function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWidth, onClose }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  // Contenedor invisible que ocupa el espacio a la izquierda del drawer,
+  // sin backdrop — el drawer sigue visible e interactuable detrás.
+  return createPortal(
+    <div style={{
+      position: 'fixed', top: 0, left: 0, bottom: 0,
+      right: drawerWidth,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      pointerEvents: 'none',
+      zIndex: 1012,
+    }}>
+      <div style={{
+        pointerEvents: 'auto',
+        width: type === 'pdf' ? 'min(680px, 90%)' : 'min(520px, 90%)',
+        height: type === 'pdf' ? '85vh' : 'auto',
+        maxHeight: '90vh',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderRadius: 14,
+        display: 'flex', flexDirection: 'column',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+        }}>
+          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)' }}>
+            {type === 'pdf' ? 'PDF' : 'Foto'}
+          </span>
+          <button className="drawer-close" onClick={onClose} type="button">
+            <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          {type === 'photo' && (
+            <>
+              {photoBlob
+                ? <img src={photoBlob} alt="Foto factura" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+                : errorPhoto
+                  ? <span style={{ color: 'var(--t2)', fontSize: 13 }}>No disponible</span>
+                  : <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+              }
+            </>
+          )}
+          {type === 'pdf' && (
+            <>
+              {loadingPdf
+                ? <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+                : pdfBlob
+                  ? <iframe src={pdfBlob} title="PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
+                  : <span style={{ color: 'var(--t2)', fontSize: 13 }}>No se pudo cargar el PDF.</span>
+              }
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
+
+export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560 }) {
   const [photoBlob,    setPhotoBlob]    = useState(null)
   const [pdfBlob,      setPdfBlob]      = useState(null)
   const [loadingPhoto, setLoadingPhoto] = useState(false)
   const [loadingPdf,   setLoadingPdf]   = useState(false)
   const [errorPhoto,   setErrorPhoto]   = useState(false)
-  const [lightbox,     setLightbox]     = useState(null) // 'photo' | 'pdf'
+  const [panel,        setPanel]        = useState(null) // null | 'photo' | 'pdf'
 
-  // Load photo blob on mount
   useEffect(() => {
     if (!fotoUrl || !pagoId) return
     let cancelled = false
@@ -310,18 +385,20 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl }) {
     return () => { cancelled = true }
   }, [pagoId, fotoUrl])
 
-  // Revoke blob URLs on unmount
   useEffect(() => () => { photoBlob && URL.revokeObjectURL(photoBlob) }, [photoBlob])
   useEffect(() => () => { pdfBlob   && URL.revokeObjectURL(pdfBlob)   }, [pdfBlob])
 
+  // Cerrar panel al desmontar
+  useEffect(() => () => setPanel(null), [])
+
   const openPdf = useCallback(async () => {
-    setLightbox('pdf')
+    setPanel('pdf')
     if (pdfBlob || loadingPdf) return
     setLoadingPdf(true)
     try {
       const res = await client.get(`/pagos/${pagoId}/attachment?type=pdf`, { responseType: 'blob' })
       setPdfBlob(URL.createObjectURL(res.data))
-    } catch { /* iframe will show error state */ }
+    } catch {}
     finally { setLoadingPdf(false) }
   }, [pagoId, pdfBlob, loadingPdf])
 
@@ -329,83 +406,44 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl }) {
 
   return (
     <>
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-
-        {/* ── Photo thumbnail ── */}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {fotoUrl && (
-          <div
-            onClick={() => photoBlob && setLightbox('photo')}
-            style={{
-              position: 'relative', width: 120, height: 120,
-              borderRadius: 10, border: '1px solid var(--border-hi)',
-              background: 'var(--bg-elevated)', overflow: 'hidden',
-              cursor: photoBlob ? 'pointer' : 'default',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}
+          <button
+            className={`btn btn-sm ${panel === 'photo' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setPanel(panel === 'photo' ? null : 'photo')}
+            disabled={!photoBlob && loadingPhoto}
+            style={{ display: 'flex', alignItems: 'center', gap: 5 }}
           >
-            {loadingPhoto && <span className="spinner" style={{ width: 22, height: 22, borderWidth: 2 }} />}
-            {photoBlob && (
-              <>
-                <img
-                  src={photoBlob} alt="Foto factura"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-                <div style={{
-                  position: 'absolute', bottom: 5, right: 5,
-                  background: 'rgba(0,0,0,0.55)', borderRadius: 5, padding: '3px 5px',
-                  color: 'var(--gold-bright)', display: 'flex', alignItems: 'center', gap: 3, fontSize: 11,
-                }}>
-                  <IcoExpand /> Ver
-                </div>
-              </>
-            )}
-            {errorPhoto && (
-              <span style={{ fontSize: 11, color: 'var(--t2)', textAlign: 'center', padding: 8 }}>
-                No disponible
-              </span>
-            )}
-          </div>
+            {loadingPhoto
+              ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+              : <IcoExpand />}
+            Foto
+          </button>
         )}
-
-        {/* ── PDF button ── */}
         {pdfUrl && (
           <button
-            className="btn btn-secondary"
-            onClick={openPdf}
-            disabled={loadingPdf}
-            style={{ alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: 6 }}
+            className={`btn btn-sm ${panel === 'pdf' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => panel === 'pdf' ? setPanel(null) : openPdf()}
+            style={{ display: 'flex', alignItems: 'center', gap: 5 }}
           >
             {loadingPdf
-              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-              : <IcoPdf />
-            }
+              ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+              : <IcoPdf />}
             PDF
           </button>
         )}
       </div>
 
-      {/* ── Image lightbox with zoom/pan ── */}
-      {lightbox === 'photo' && photoBlob && (
-        <ImageLightbox src={photoBlob} onClose={() => setLightbox(null)} />
-      )}
-
-      {/* ── PDF lightbox ── */}
-      {lightbox === 'pdf' && (
-        <PdfLightbox onClose={() => setLightbox(null)}>
-          {loadingPdf ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 300, height: 200 }}>
-              <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
-            </div>
-          ) : pdfBlob ? (
-            <iframe
-              src={pdfBlob} title="PDF"
-              style={{ width: 'min(840px, 88vw)', height: '88vh', border: 'none', borderRadius: 10, background: '#fff' }}
-            />
-          ) : (
-            <div style={{ color: '#fff', padding: 32 }}>No se pudo cargar el PDF.</div>
-          )}
-        </PdfLightbox>
+      {panel && (
+        <MediaPanel
+          type={panel}
+          photoBlob={photoBlob}
+          pdfBlob={pdfBlob}
+          loadingPdf={loadingPdf}
+          errorPhoto={errorPhoto}
+          drawerWidth={drawerWidth}
+          onClose={() => setPanel(null)}
+        />
       )}
     </>
   )

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
 import { rubrosApi, categoriasApi, rubcatApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { proveedoresApi } from '../../api/proveedores.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
@@ -12,6 +13,7 @@ import FotoViewer from '../../components/FotoViewer.jsx'
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
   'DC (1)': 'badge-purple', 'DC (2)': 'badge-purple',
+  DC_1: 'badge-purple', DC_2: 'badge-purple',
   DDJJ: 'badge-red', M: 'badge-muted', NCA: 'badge-amber', NDA: 'badge-amber', STK: 'badge-blue',
 }
 const ESTADO_BADGE = {
@@ -26,7 +28,10 @@ const ESTADO_OP_OPTIONS = [
   { value: 'MP_PDP',     label: 'MP PDP' },
   { value: 'PDP',        label: 'PDP' },
 ]
-const TIPOS_IMP = ['IVA21', 'IVA10', 'RETENCION', 'PERCEPCION']
+const TIPO_PAGO_OPTIONS = [
+  'A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'
+]
+const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
 
 function IcoPlus() {
   return (
@@ -58,14 +63,6 @@ function IcoFilter() {
     </svg>
   )
 }
-function IcoLink() {
-  return (
-    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-    </svg>
-  )
-}
 function IcoPagoEmpty() {
   return (
     <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
@@ -73,21 +70,55 @@ function IcoPagoEmpty() {
     </svg>
   )
 }
+function IcoPlane() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+  )
+}
+function IcoDollar() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  )
+}
+function IcoRepeat() {
+  return (
+    <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+    </svg>
+  )
+}
 
 function fmt$(n)     { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' }) : '—' }
-function mono(v)     { return v ? <span className="td-mono" style={{ fontSize: 11 }}>{v}</span> : <span className="td-muted">—</span> }
+function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
+function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, canDelete = false }) {
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
-  const [impuestos,   setImpuestos]   = useState([])
-  const [loadingImp,  setLoadingImp]  = useState(true)
-  const [impForm,     setImpForm]     = useState({ tipo: 'IVA21', monto: '' })
-  const [savingImp,   setSavingImp]   = useState(false)
+  const [impuestos,    setImpuestos]    = useState([])
+  const [loadingImp,   setLoadingImp]   = useState(true)
+  const [impForm,      setImpForm]      = useState({ tipo: 'IVA21', monto: '' })
+  const [savingImp,    setSavingImp]    = useState(false)
+  const [editingImpId, setEditingImpId] = useState(null)
+  const [editImpForm,  setEditImpForm]  = useState({ tipo: 'IVA21', monto: '' })
   const [audited,     setAudited]     = useState(pago.audit)
   const [auditando,   setAuditando]   = useState(false)
+  const [periodico,   setPeriodico]   = useState(pago.periodico ?? false)
+  const [toggling,    setToggling]    = useState(false)
+  const [multimoneda, setMultimoneda] = useState([])
+  const [loadingMM,   setLoadingMM]   = useState(true)
+  const [mmForm,      setMmForm]      = useState({ tipo: 'USD', tdc: '', monto: '' })
+  const [savingMM,    setSavingMM]    = useState(false)
+  const [pagarOpen,   setPagarOpen]   = useState(false)
+  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: new Date().toISOString().slice(0, 10), id_metodo: '' })
+  const [pagando,     setPagando]     = useState(false)
+  const [mandando,    setMandando]    = useState(false)
 
   const loadImpuestos = () => {
     setLoadingImp(true)
@@ -97,7 +128,93 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
       .finally(() => setLoadingImp(false))
   }
 
-  useEffect(() => { if (pago) loadImpuestos() }, [pago?.id])
+  const loadMM = () => {
+    setLoadingMM(true)
+    pagosApi.listMM(pago.id)
+      .then(({ data }) => setMultimoneda(data))
+      .catch(() => {})
+      .finally(() => setLoadingMM(false))
+  }
+
+  useEffect(() => { if (pago) { loadImpuestos(); loadMM() } }, [pago?.id])
+
+  const handleTogglePeriodico = async () => {
+    setToggling(true)
+    try {
+      const { data } = await pagosApi.periodico(pago.id)
+      setPeriodico(data.periodico)
+      onPatch?.(pago.id, { periodico: data.periodico })
+      notify(data.periodico ? 'Marcado como periódico' : 'Periódico desactivado', 'success')
+    } catch { notify('Error', 'error') }
+    finally { setToggling(false) }
+  }
+
+  const handleMandarPdp = async () => {
+    if (!(await showConfirm('¿Mandar esta orden a PDP?'))) return
+    setMandando(true)
+    try {
+      await pagosApi.mandarPdp([pago.id])
+      notify('Orden enviada a PDP', 'success')
+      onPatch?.(pago.id, { estado_op: 'PDP' })
+    } catch { notify('Error al mandar a PDP', 'error') }
+    finally { setMandando(false) }
+  }
+
+  const handleRevertirPdp = async () => {
+    if (!(await showConfirm('¿Revertir esta orden a deuda (Cuenta Corriente)?'))) return
+    setMandando(true)
+    try {
+      await pagosApi.revertirPdp([pago.id])
+      notify('Orden revertida a Cuenta Corriente', 'success')
+      onPatch?.(pago.id, { estado_op: 'CUENTA_CTE', pagado: false, fecha_pago: null, id_metodo: null })
+    } catch { notify('Error al revertir', 'error') }
+    finally { setMandando(false) }
+  }
+
+  const handlePagar = async (e) => {
+    e.preventDefault()
+    if (!pagarForm.id_metodo) return notify('Seleccioná un método de pago', 'error')
+    setPagando(true)
+    try {
+      await pagosApi.pagar([pago.id], { fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+      notify('Pago registrado', 'success')
+      setPagarOpen(false)
+      onPatch?.(pago.id, { pagado: true, fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+    } catch { notify('Error al pagar', 'error') }
+    finally { setPagando(false) }
+  }
+
+  const recalcNeto = async (updatedList) => {
+    const neto = updatedList.reduce((acc, m) => acc + parseFloat(m.tdc) * parseFloat(m.monto), 0)
+    await pagosApi.update(pago.id, { importe_neto: neto > 0 ? neto : null })
+    onPatch?.(pago.id, { importe_neto: neto > 0 ? neto : null })
+  }
+
+  const handleAddMM = async (e) => {
+    e.preventDefault()
+    if (!mmForm.tdc || !mmForm.monto) return
+    setSavingMM(true)
+    try {
+      const { data: newMM } = await pagosApi.createMM(pago.id, { tipo: mmForm.tipo, tdc: parseFloat(mmForm.tdc), monto: parseFloat(mmForm.monto) })
+      const updatedList = [...multimoneda, newMM]
+      setMultimoneda(updatedList)
+      await recalcNeto(updatedList)
+      notify('Registro multimoneda agregado', 'success')
+      setMmForm({ tipo: 'USD', tdc: '', monto: '' })
+    } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
+    finally { setSavingMM(false) }
+  }
+
+  const handleDeleteMM = async (mmId) => {
+    if (!(await showConfirm('¿Eliminar registro?'))) return
+    try {
+      await pagosApi.deleteMM(pago.id, mmId)
+      const updatedList = multimoneda.filter(m => m.id !== mmId)
+      setMultimoneda(updatedList)
+      await recalcNeto(updatedList)
+      notify('Eliminado', 'success')
+    } catch { notify('Error', 'error') }
+  }
 
   const handlePanelAudit = async () => {
     if (audited && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
@@ -130,14 +247,54 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
     catch { notify('Error al eliminar', 'error') }
   }
 
+  const handleEditImp = (imp) => {
+    setEditingImpId(imp.id)
+    setEditImpForm({ tipo: imp.tipo, monto: String(imp.monto) })
+  }
+
+  const handleSaveImp = async (id) => {
+    if (!editImpForm.monto) return
+    try {
+      await impuestosApi.update(id, { tipo: editImpForm.tipo, monto: parseFloat(editImpForm.monto) })
+      setImpuestos(prev => prev.map(i => i.id === id ? { ...i, tipo: editImpForm.tipo, monto: editImpForm.monto } : i))
+      setEditingImpId(null)
+      notify('Impuesto actualizado', 'success')
+    } catch { notify('Error al actualizar', 'error') }
+  }
+
+  const handleEditMM = () => {
+    const mm = multimoneda[0]
+    if (!mm) return
+    setMmForm({ tipo: mm.tipo, tdc: String(mm.tdc), monto: String(mm.monto) })
+    setSavingMM('editing')
+  }
+
+  const handleSaveMM = async (e) => {
+    e?.preventDefault()
+    if (!mmForm.tdc || !mmForm.monto) return
+    setSavingMM(true)
+    try {
+      const mm = multimoneda[0]
+      const { data: updated } = mm
+        ? await pagosApi.updateMM(pago.id, mm.id, { tipo: mmForm.tipo, tdc: parseFloat(mmForm.tdc), monto: parseFloat(mmForm.monto) })
+        : await pagosApi.createMM(pago.id, { tipo: mmForm.tipo, tdc: parseFloat(mmForm.tdc), monto: parseFloat(mmForm.monto) })
+      const updatedList = [updated]
+      setMultimoneda(updatedList)
+      await recalcNeto(updatedList)
+      setMmForm({ tipo: 'USD', tdc: '', monto: '' })
+      notify(mm ? 'Multimoneda actualizado' : 'Multimoneda agregado', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
+    finally { setSavingMM(false) }
+  }
+
   const infoRows = [
-    ['Nro Orden',   pago.nro_ord ?? '—'],
+    ['OP',          pago.nro_ord != null ? `OP-${pago.nro_ord}` : '—'],
     ['Fecha',       fmtDate(pago.fecha)],
     ['Proveedor',   pago.proveedor?.nombre || '—'],
     ['Rubro / Cat', pago.rubcat ? `${pago.rubcat.rubro?.nombre} / ${pago.rubcat.categoria?.nombre}` : '—'],
     ['Tipo',        pago.id_tipo || '—'],
-    ['PV',          pago.pv ?? '—'],
-    ['Nro',     pago.nro ?? '—'],
+    ['PV',          fmtPV(pago.pv)],
+    ['Nro',         fmtNro(pago.nro)],
     ['Neto',        fmt$(pago.importe_neto)],
     ['Descuento',   fmt$(pago.descuento)],
     ['Importe',     fmt$(pago.importe)],
@@ -150,11 +307,12 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
     ['Auditado',    audited ? 'Sí' : 'No'],
+    ['Periódico',   periodico ? 'Sí' : 'No'],
   ]
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
         {canEdit && (
           <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
             <IcoEdit /> Editar
@@ -172,6 +330,34 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
             }
           </button>
         )}
+        {canEdit && pago.estado_op !== 'PDP' && (
+          <button className="btn btn-secondary" onClick={handleMandarPdp} disabled={mandando} title="Mandar a PDP">
+            {mandando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlane />}
+            {' '}PDP
+          </button>
+        )}
+        {canEdit && pago.estado_op === 'PDP' && (
+          <button className="btn btn-secondary" onClick={handleRevertirPdp} disabled={mandando} title="Revertir a deuda">
+            {mandando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : '↩'}
+            {' '}Deuda
+          </button>
+        )}
+        {canEdit && !pago.pagado && (
+          <button className="btn btn-secondary" onClick={() => setPagarOpen(true)} title="Registrar pago">
+            <IcoDollar /> Pagar
+          </button>
+        )}
+        {canEdit && (
+          <button
+            className={`btn ${periodico ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={handleTogglePeriodico}
+            disabled={toggling}
+            title="Marcar como periódico"
+          >
+            {toggling ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoRepeat />}
+            {' '}{periodico ? 'Periódico' : 'Periódico'}
+          </button>
+        )}
         {canDelete && (
           <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
             <IcoTrash /> Eliminar
@@ -179,9 +365,48 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
         )}
       </div>
 
+      {/* Modal Pagar */}
+      {pagarOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setPagarOpen(false)}>
+          <form onSubmit={handlePagar} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: '1.5rem', width: 340, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Registrar pago</div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Fecha de pago</label>
+              <div className="form-input-wrap">
+                <input type="date" value={pagarForm.fecha_pago} onChange={e => setPagarForm(f => ({ ...f, fecha_pago: e.target.value }))} required />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Forma de pago *</label>
+              <div className="form-input-wrap">
+                <select value={pagarForm.id_metodo} onChange={e => setPagarForm(f => ({ ...f, id_metodo: e.target.value }))} required>
+                  <option value="">Seleccioná método</option>
+                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setPagarOpen(false)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={pagando}>
+                {pagando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : 'Confirmar'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {pago.observaciones && (
         <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
           {pago.observaciones}
+        </div>
+      )}
+
+      {(pago.foto_url || pago.pdf_url) && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <div className="drawer-section-title">Adjuntos</div>
+          <FotoViewer pagoId={pago.id} fotoUrl={pago.foto_url} pdfUrl={pago.pdf_url} />
         </div>
       )}
 
@@ -193,14 +418,6 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
             <span className="drawer-detail-val">{v}</span>
           </div>
         ))}
-        {(pago.foto_url || pago.pdf_url) && (
-          <div className="drawer-detail-row" style={{ alignItems: 'flex-start' }}>
-            <span className="drawer-detail-key" style={{ paddingTop: 6 }}>Adjuntos</span>
-            <span className="drawer-detail-val">
-              <FotoViewer pagoId={pago.id} fotoUrl={pago.foto_url} pdfUrl={pago.pdf_url} />
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="drawer-section-title">Impuestos</div>
@@ -226,13 +443,35 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
               <>
                 {impuestos.map((imp) => (
                   <tr key={imp.id}>
-                    <td><span className="badge badge-blue">{imp.tipo}</span></td>
-                    <td className="td-number">{fmt$(imp.monto)}</td>
-                    <td>
-                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteImp(imp.id)}>
-                        <IcoTrash />
-                      </button>
-                    </td>
+                    {editingImpId === imp.id ? (
+                      <>
+                        <td>
+                          <div className="form-input-wrap" style={{ margin: 0 }}>
+                            <select value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                              {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                            </select>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="form-input-wrap" style={{ margin: 0 }}>
+                            <input type="number" step="0.01" value={editImpForm.monto} onChange={e => setEditImpForm(f => ({ ...f, monto: e.target.value }))} style={{ width: 90 }} />
+                          </div>
+                        </td>
+                        <td style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-sm btn-primary" onClick={() => handleSaveImp(imp.id)}>✓</button>
+                          <button className="btn btn-sm btn-secondary" onClick={() => setEditingImpId(null)}>✕</button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td><span className="badge badge-blue">{imp.tipo}</span></td>
+                        <td className="td-number">{fmt$(imp.monto)}</td>
+                        <td style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditImp(imp)}><IcoEdit /></button>
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteImp(imp.id)}><IcoTrash /></button>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
                 {impuestos.length === 0 && (
@@ -262,15 +501,69 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, canEdit = false, c
           {savingImp ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />}
         </button>
       </form>
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Multimoneda</div>
+      {loadingMM ? (
+        <div className="skel" style={{ height: 36, borderRadius: 8, marginBottom: '1rem' }} />
+      ) : multimoneda[0] && savingMM !== 'editing' ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, marginBottom: '1rem' }}>
+          <span className="badge badge-amber">{multimoneda[0].tipo}</span>
+          <span className="td-mono" style={{ fontSize: 12 }}>TDC {Number(multimoneda[0].tdc).toFixed(4)}</span>
+          <span className="td-number" style={{ flex: 1, fontSize: 13 }}>{Number(multimoneda[0].monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+          <span style={{ fontSize: 11, color: 'var(--t3)' }}>{multimoneda[0].fecha ? new Date(multimoneda[0].fecha).toLocaleDateString('es-AR') : ''}</span>
+          <button className="btn btn-sm btn-secondary btn-icon" onClick={handleEditMM}><IcoEdit /></button>
+          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMM(multimoneda[0].id)}><IcoTrash /></button>
+        </div>
+      ) : (
+        <form onSubmit={handleSaveMM} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <div className="form-group" style={{ margin: 0, flex: '0 0 70px' }}>
+            <label className="form-label">Moneda</label>
+            <div className="form-input-wrap">
+              <select value={mmForm.tipo} onChange={e => setMmForm(f => ({ ...f, tipo: e.target.value }))}>
+                {['USD', 'EUR', 'BRL', 'UYU', 'BTC', 'OTRO'].map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0, flex: 1 }}>
+            <label className="form-label">TDC *</label>
+            <div className="form-input-wrap">
+              <input type="number" step="0.0001" required placeholder="1000.00" value={mmForm.tdc} onChange={e => setMmForm(f => ({ ...f, tdc: e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0, flex: 1 }}>
+            <label className="form-label">Monto *</label>
+            <div className="form-input-wrap">
+              <input type="number" step="0.01" required placeholder="0.00" value={mmForm.monto} onChange={e => setMmForm(f => ({ ...f, monto: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button type="submit" className="btn btn-primary" disabled={savingMM === true || !mmForm.tdc || !mmForm.monto}>
+              {savingMM === true ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />}
+            </button>
+            {savingMM === 'editing' && (
+              <button type="button" className="btn btn-secondary" onClick={() => setSavingMM(false)}>✕</button>
+            )}
+          </div>
+        </form>
+      )}
     </div>
   )
 }
 
+// ─── Filtros ────────────────────────────────────────────────────────────────
+
 const FILTER_INIT = {
   pagado: '', estado_op: '', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
-  audit: '', ingresa_egreso: '', id_metodo: ''
+  audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
+  id_proveedores: [],
+  id_rubcats: [],
 }
+
+const COL_COUNT = 20
+const LIMIT     = 100
+
+// ─── Componente principal ───────────────────────────────────────────────────
 
 export default function PagoList() {
   const navigate    = useNavigate()
@@ -282,27 +575,29 @@ export default function PagoList() {
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
 
-  const [pagos,      setPagos]      = useState([])
-  const [total,      setTotal]      = useState(0)
-  const [page,       setPage]       = useState(1)
-  const [loading,    setLoading]    = useState(true)
-  const [filters,    setFilters]    = useState(FILTER_INIT)
-  const [panelOpen,  setPanelOpen]  = useState(false)
-  const [selectedPago, setSelectedPago] = useState(null)
-  const [sortField,  setSortField]  = useState('fecha')
-  const [sortDir,    setSortDir]    = useState('desc')
-  const [pageSize,   setPageSize]   = useState(20)
+  const [pagos,           setPagos]           = useState([])
+  const [total,           setTotal]           = useState(0)
+  const [loading,         setLoading]         = useState(true)
+  const [page,            setPage]            = useState(1)
+  const [filters,         setFilters]         = useState(FILTER_INIT)
+  const [panelOpen,       setPanelOpen]       = useState(false)
+  const [selectedPago,    setSelectedPago]    = useState(null)
+  const [sortField,       setSortField]       = useState('fecha')
+  const [sortDir,         setSortDir]         = useState('desc')
+  const [search,          setSearch]          = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [auditingId,      setAuditingId]      = useState(null)
 
-  const [search,     setSearch]     = useState('')
+  const [rubros,      setRubros]      = useState([])
+  const [categorias,  setCategorias]  = useState([])
+  const [rubcats,     setRubcats]     = useState([])
+  const [metodos,     setMetodos]     = useState([])
+  const [provSearchResults, setProvSearchResults] = useState([])
+  const [provSearchLoading, setProvSearchLoading] = useState(false)
 
-  const [rubros,     setRubros]     = useState([])
-  const [categorias, setCategorias] = useState([])
-  const [rubcats,    setRubcats]    = useState([])
-  const [metodos,    setMetodos]    = useState([])
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT))
 
-  const LIMIT = pageSize
-  const totalPages = Math.ceil(total / LIMIT)
-
+  // ── Datos de referencia ───────────────────────────────────────────────────
   useEffect(() => {
     rubrosApi.list().then(r => setRubros(r.data || [])).catch(() => {})
     categoriasApi.list().then(r => setCategorias(r.data || [])).catch(() => {})
@@ -310,64 +605,88 @@ export default function PagoList() {
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [])
 
-  // Strip "OP-" / "op " prefix so the user can type "OP-15" or just "15"
-  const nroOrdNum = search.trim().replace(/^op[-\s]*/i, '')
+  // ── Debounce búsqueda ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
 
-  const buildParams = () => ({
-    ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
-    page, limit: LIMIT,
-    ...(nroOrdNum !== '' ? { nro_ord: nroOrdNum } : {}),
-    ...(filters.pagado         !== '' ? { pagado:         filters.pagado }         : {}),
-    ...(filters.estado_op      !== '' ? { estado_op:      filters.estado_op }      : {}),
-    ...(filters.desde          !== '' ? { desde:          filters.desde }          : {}),
-    ...(filters.hasta          !== '' ? { hasta:          filters.hasta }           : {}),
-    ...(filters.id_tipo        !== '' ? { id_tipo:        filters.id_tipo }        : {}),
-    ...(filters.id_rub         !== '' ? { id_rub:         filters.id_rub }         : {}),
-    ...(filters.id_cat         !== '' ? { id_cat:         filters.id_cat }         : {}),
-    ...(filters.audit          !== '' ? { audit:          filters.audit }          : {}),
-    ...(filters.ingresa_egreso !== '' ? { ingresa_egreso: filters.ingresa_egreso } : {}),
-    ...(filters.id_metodo      !== '' ? { id_metodo:      filters.id_metodo }      : {}),
-  })
+  // ── Parámetros de query ───────────────────────────────────────────────────
+  const buildParams = useCallback((pageNum) => {
+    const nroStr = debouncedSearch.trim().replace(/^op[-\s]*/i, '')
+    const nroNum = parseInt(nroStr)
+    return {
+      ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
+      page: pageNum,
+      limit: LIMIT,
+      sort_field: sortField,
+      sort_dir:   sortDir,
+      ...(!isNaN(nroNum) && nroStr ? { nro_ord: nroNum } : {}),
+      ...(filters.pagado         !== '' ? { pagado:          filters.pagado }         : {}),
+      ...(filters.estado_op            ? { estado_op:        filters.estado_op }       : {}),
+      ...(filters.desde                ? { desde:            filters.desde }           : {}),
+      ...(filters.hasta                ? { hasta:            filters.hasta }           : {}),
+      ...(filters.id_tipo              ? { id_tipo:          filters.id_tipo }         : {}),
+      ...(filters.id_rub               ? { id_rub:           filters.id_rub }          : {}),
+      ...(filters.id_cat               ? { id_cat:           filters.id_cat }          : {}),
+      ...(filters.audit          !== '' ? { audit:            filters.audit }           : {}),
+      ...(filters.ingresa_egreso !== '' ? { ingresa_egreso:   filters.ingresa_egreso } : {}),
+      ...(filters.id_metodo            ? { id_metodo:        filters.id_metodo }       : {}),
+      ...(filters.cmv_quick === 'true' ? { cmv_quick: 'true' }                        : {}),
+      ...(filters.id_proveedores.length > 0 ? { id_proveedores: filters.id_proveedores.map(p => p.id).join(',') } : {}),
+      ...(filters.id_rubcats.length    > 0 ? { id_rubcats:    filters.id_rubcats.join(',') }    : {}),
+    }
+  }, [activeLocal?.id, sortField, sortDir, debouncedSearch, filters])
 
-  const load = () => {
-    setLoading(true)
-    pagosApi.list(buildParams())
-      .then(({ data }) => { setPagos(data.data); setTotal(data.total) })
-      .catch(() => notify('Error al cargar pagos', 'error'))
-      .finally(() => setLoading(false))
-  }
+  // ── Volver a página 1 cuando cambian filtros / sort / búsqueda ────────────
+  useEffect(() => { setPage(1) }, [buildParams])
 
+  // ── Carga de la página actual (reemplaza, no acumula) ──────────────────────
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    pagosApi.list(buildParams(), ctrl.signal)
-      .then(({ data }) => { setPagos(data.data); setTotal(data.total) })
+    pagosApi.list(buildParams(page), ctrl.signal)
+      .then(({ data }) => {
+        setPagos(data.data)
+        setTotal(data.total)
+      })
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar pagos', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [
-    page, activeLocal?.id, search,
-    filters.pagado, filters.estado_op, filters.desde, filters.hasta,
-    filters.id_tipo, filters.id_rub, filters.id_cat,
-    filters.audit, filters.ingresa_egreso, filters.id_metodo,
-    pageSize
-  ])
+  }, [buildParams, page])
 
+  // ── Navegación de páginas ──────────────────────────────────────────────────
+  const goToPage = (p) => {
+    const next = Math.min(Math.max(1, p), totalPages)
+    if (next !== page) {
+      setPage(next)
+      document.querySelector('.app-main')?.scrollTo({ top: 0 })
+      window.scrollTo({ top: 0 })
+    }
+  }
+
+  // ── Acciones ──────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
     if (!(await showConfirm('¿Eliminar este pago?'))) return
     try {
       await pagosApi.remove(id)
       notify('Pago eliminado', 'success')
       setPanelOpen(false)
-      load()
+      setPagos(prev => prev.filter(p => p.id !== id))
+      setTotal(t => t - 1)
     }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
-  const [auditingId, setAuditingId] = useState(null)
-
-  const patchPagoAudit = (id, audit) =>
+  const patchPagoAudit = (id, audit) => {
     setPagos(prev => prev.map(p => p.id === id ? { ...p, audit } : p))
+    setSelectedPago(prev => prev?.id === id ? { ...prev, audit } : prev)
+  }
+
+  const patchPago = (id, fields) => {
+    setPagos(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p))
+    setSelectedPago(prev => prev?.id === id ? { ...prev, ...fields } : prev)
+  }
 
   const handleAudit = async (id, e) => {
     e.stopPropagation()
@@ -382,10 +701,19 @@ export default function PagoList() {
     finally { setAuditingId(null) }
   }
 
+  const toggleSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+
+  const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
+  const closePanel = () => setPanelOpen(false)
+
+  // ── Filtros ───────────────────────────────────────────────────────────────
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
   const filterRef = useRef(null)
-  const activeFilterCount = Object.values(filters).filter(v => v !== '').length
+  const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== '').length
   const hasActiveFilters  = activeFilterCount > 0
 
   const openFilters = () => { setDraft(filters); setFilterOpen(true) }
@@ -399,14 +727,39 @@ export default function PagoList() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [filterOpen])
 
-  const applyFilters  = () => { setFilters(draft); setPage(1); setFilterOpen(false) }
-  const clearFilters  = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch(''); setPage(1) }
-  const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+  const applyFilters   = () => { setFilters(draft); setFilterOpen(false) }
+  const clearFilters   = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch('') }
+  const setDraftField  = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+  const toggleDraftArr = (k, v) => setDraft(d => {
+    const arr = d[k] || []
+    return { ...d, [k]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] }
+  })
 
-  const cmvRubroId = rubros.find(r => r.nombre?.toUpperCase().includes('CMV'))?.id ?? ''
+  const [provSearch,    setProvSearch]    = useState('')
+  const [rubcatSearch,  setRubcatSearch]  = useState('')
+
+  useEffect(() => {
+    if (provSearch.trim().length < 2) { setProvSearchResults([]); return }
+    setProvSearchLoading(true)
+    const t = setTimeout(() => {
+      proveedoresApi.list({ search: provSearch.trim(), activo: 'true', limit: 30 })
+        .then(r => setProvSearchResults(r.data?.data || []))
+        .catch(() => setProvSearchResults([]))
+        .finally(() => setProvSearchLoading(false))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [provSearch])
+
+  const toggleDraftProv = (p) => setDraft(d => {
+    const arr = d.id_proveedores || []
+    const exists = arr.some(x => x.id === p.id)
+    return { ...d, id_proveedores: exists ? arr.filter(x => x.id !== p.id) : [...arr, { id: p.id, nombre: p.nombre }] }
+  })
+
+  const hasCmvRubros = rubros.some(r => r.nombre?.toUpperCase().startsWith('CMV'))
   const CHIPS = [
     { label: 'STK',         filters: { id_tipo: 'STK' } },
-    { label: 'CMV',         filters: { id_rub: cmvRubroId }, disabled: !cmvRubroId },
+    { label: 'CMV',         filters: { cmv_quick: 'true' }, disabled: !hasCmvRubros },
     { label: 'No auditado', filters: { audit: 'false' } },
     { label: 'No pagado',   filters: { pagado: 'false' } },
     { label: 'Egreso',      filters: { ingresa_egreso: 'false' } },
@@ -428,29 +781,12 @@ export default function PagoList() {
     ? rubcats.filter(rc => rc.id_rub === draft.id_rub).map(rc => rc.categoria).filter(Boolean)
     : categorias
 
-  const toggleSort = (field) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('asc') }
-  }
-  const getSortVal = (p, field) => {
-    if (field === 'proveedor') return p.proveedor?.nombre ?? ''
-    return p[field] ?? ''
-  }
-  const sortedPagos = [...pagos].sort((a, b) => {
-    const va = getSortVal(a, sortField)
-    const vb = getSortVal(b, sortField)
-    if (va < vb) return sortDir === 'asc' ? -1 : 1
-    if (va > vb) return sortDir === 'asc' ? 1 : -1
-    return 0
-  })
+  // ── Estilos ───────────────────────────────────────────────────────────────
   const SortTh = ({ field, children, minWidth }) => (
     <th className={`sortable${sortField === field ? ' active' : ''}`} style={minWidth ? { minWidth } : undefined} onClick={() => toggleSort(field)}>
       {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
     </th>
   )
-
-  const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
-  const closePanel = () => setPanelOpen(false)
 
   const chipSt = (active) => ({
     padding: '3px 11px', borderRadius: 20, cursor: 'pointer', fontSize: 11,
@@ -466,6 +802,7 @@ export default function PagoList() {
     marginBottom: 3, display: 'block',
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page">
       <div className="page-head">
@@ -474,7 +811,7 @@ export default function PagoList() {
           {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
         <div className="page-actions">
-          {/* ── Buscador OP ── */}
+          {/* Buscador OP */}
           <div style={{ position: 'relative' }}>
             <span style={{
               position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
@@ -488,7 +825,7 @@ export default function PagoList() {
               type="text"
               placeholder="Buscar OP…"
               value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              onChange={e => setSearch(e.target.value)}
               style={{
                 height: 36, paddingLeft: 32, paddingRight: search ? 28 : 12,
                 background: 'var(--bg-input)', border: '1px solid var(--border-input)',
@@ -498,7 +835,7 @@ export default function PagoList() {
             />
             {search && (
               <button
-                onClick={() => { setSearch(''); setPage(1) }}
+                onClick={() => setSearch('')}
                 style={{
                   position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -543,13 +880,12 @@ export default function PagoList() {
                   ))}
                 </div>
 
-                {/* Controles en grilla 2 columnas */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
                   <div>
                     <span style={lbl}>Tipo</span>
                     <select className="filter-select" style={{ width: '100%' }} value={draft.id_tipo} onChange={e => setDraftField('id_tipo', e.target.value)}>
                       <option value="">Todos los tipos</option>
-                      {['A','B','C','CM','INTERCOMPANY','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                      {TIPO_PAGO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
@@ -615,7 +951,65 @@ export default function PagoList() {
                   </div>
                 </div>
 
-                {/* Footer */}
+                {/* Multi-select proveedores */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <span style={lbl}>Proveedores {draft.id_proveedores.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_proveedores.length})</span>}</span>
+                  <input
+                    type="text"
+                    placeholder="Escribí para buscar…"
+                    value={provSearch}
+                    onChange={e => setProvSearch(e.target.value)}
+                    style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+                  />
+                  <div style={{ maxHeight: 110, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+                    {provSearch.trim().length >= 2 ? (
+                      provSearchLoading
+                        ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Buscando…</div>
+                        : provSearchResults.length === 0
+                          ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Sin resultados</div>
+                          : provSearchResults.map(p => (
+                              <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
+                                <input type="checkbox" checked={draft.id_proveedores.some(x => x.id === p.id)} onChange={() => toggleDraftProv(p)} />
+                                {p.nombre}
+                              </label>
+                            ))
+                    ) : draft.id_proveedores.length === 0
+                      ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Escribí al menos 2 letras para buscar</div>
+                      : draft.id_proveedores.map(p => (
+                          <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
+                            <input type="checkbox" checked onChange={() => toggleDraftProv(p)} />
+                            {p.nombre}
+                          </label>
+                        ))
+                    }
+                  </div>
+                </div>
+
+                {/* Multi-select rubcats */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <span style={lbl}>Rubros/Cat (múltiple) {draft.id_rubcats.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_rubcats.length})</span>}</span>
+                  <input
+                    type="text"
+                    placeholder="Buscar rubro/cat…"
+                    value={rubcatSearch}
+                    onChange={e => setRubcatSearch(e.target.value)}
+                    style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+                  />
+                  <div style={{ maxHeight: 110, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+                    {rubcats
+                      .filter(rc => !rubcatSearch.trim() || `${rc.rubro?.nombre} ${rc.categoria?.nombre}`.toLowerCase().includes(rubcatSearch.toLowerCase()))
+                      .map(rc => (
+                        <label key={rc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
+                          <input type="checkbox" checked={draft.id_rubcats.includes(rc.id)} onChange={() => toggleDraftArr('id_rubcats', rc.id)} />
+                          <span style={{ color: 'var(--t2)' }}>{rc.rubro?.nombre}</span>
+                          <span style={{ color: 'var(--t3)' }}>/</span>
+                          <span>{rc.categoria?.nombre}</span>
+                        </label>
+                      ))
+                    }
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
                   <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
                     Limpiar todo
@@ -627,17 +1021,21 @@ export default function PagoList() {
               </div>
             )}
           </div>
+          <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido')} title="Carga rápida">
+            <IcoPlane /> Carga rápida
+          </button>
           <button className="btn btn-primary" onClick={() => navigate('/pagos/nuevo')}>
             <IcoPlus /> Nuevo Pago
           </button>
         </div>
       </div>
 
-      <div className="table-wrap" style={{ overflowX: 'auto' }}>
+      {/* ── Tabla ── */}
+      <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
-              <SortTh field="nro_ord" minWidth={50}>Nro</SortTh>
+              <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
               <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
               <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
               <th style={{ minWidth: 160 }}>Rubro / Cat</th>
@@ -661,125 +1059,112 @@ export default function PagoList() {
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: 8 }, (_, i) => (
+              Array.from({ length: 12 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 20 }, (_, j) => (
+                  {Array.from({ length: COL_COUNT }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${45 + (j * 7 + i * 11) % 50}%` }} /></td>
                   ))}
                 </tr>
               ))
+            ) : pagos.length === 0 ? (
+              <tr>
+                <td colSpan={COL_COUNT}>
+                  <div className="table-empty">
+                    <IcoPagoEmpty />
+                    <p>No hay pagos que coincidan con los filtros.</p>
+                  </div>
+                </td>
+              </tr>
             ) : (
-              <>
-                {sortedPagos.map((p) => (
-                  <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
-                    <td className="td-primary" style={{ minWidth: 50 }}>{p.nro_ord ?? <span className="td-muted">—</span>}</td>
-                    <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
-                    <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
-                    <td style={{ minWidth: 160, fontSize: 12 }}>
-                      {p.rubcat
-                        ? <span>{p.rubcat.rubro?.nombre}<span className="td-muted"> / {p.rubcat.categoria?.nombre}</span></span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                    <td style={{ minWidth: 80 }}>
-                      {p.id_tipo
-                        ? <span className={`badge ${TIPO_BADGE[p.id_tipo] ?? 'badge-muted'}`}>{p.id_tipo}</span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                    <td className="td-muted" style={{ textAlign: 'right', minWidth: 50 }}>{p.pv ?? '—'}</td>
-                    <td className="td-mono"  style={{ minWidth: 70, fontSize: 11 }}>{p.nro ?? <span className="td-muted">—</span>}</td>
-                    <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
-                    <td className="td-number" style={{ minWidth: 90 }}>{fmt$(p.descuento)}</td>
-                    <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
-                    <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
-                    <td style={{ minWidth: 90 }}>{fmtDate(p.cashflow)}</td>
-                    <td style={{ minWidth: 90 }}>
-                      {p.ingresa_egreso != null
-                        ? <span className={`badge ${p.ingresa_egreso ? 'badge-green' : 'badge-red'}`}>{p.ingresa_egreso ? 'Ingreso' : 'Egreso'}</span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                    <td style={{ minWidth: 90 }}>
-                      {p.estado_op
-                        ? <span className={`badge ${ESTADO_BADGE[p.estado_op] ?? 'badge-muted'}`}>{ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op}</span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                    <td style={{ minWidth: 70, textAlign: 'center' }}>
-                      <span className={p.pagado ? 'bool-yes' : 'bool-no'}>{p.pagado ? '✓' : '✗'}</span>
-                    </td>
-                    <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
-                    <td style={{ minWidth: 100 }}>
-                      {auditingId === p.id
-                        ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2, display: 'inline-block' }} />
-                        : p.audit
-                          ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(p.id, e)} title="Click para revertir">✓ Auditado</span>
-                          : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(p.id, e)}>Auditar</button>
-                      }
-                    </td>
-                    <td style={{ minWidth: 80 }}>{fmtMonth(p.periodo)}</td>
-                    <td style={{ minWidth: 120, fontSize: 12 }}>{p.local?.nombre || <span className="td-muted">—</span>}</td>
-                    <td style={{ minWidth: 50 }}>
-                      <div className="td-actions">
-                        <button className="btn btn-sm btn-secondary btn-icon" onClick={(e) => { e.stopPropagation(); navigate(`/pagos/${p.id}/editar`) }}>
-                          <IcoEdit />
-                        </button>
-                        <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(p.id) }}>
-                          <IcoTrash />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {pagos.length === 0 && (
-                  <tr>
-                    <td colSpan={20}>
-                      <div className="table-empty">
-                        <IcoPagoEmpty />
-                        <p>No hay pagos registrados.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
+              pagos.map((p) => (
+                <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
+                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
+                  <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
+                  <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
+                  <td style={{ minWidth: 160, fontSize: 12 }}>
+                    {p.rubcat
+                      ? <span>{p.rubcat.rubro?.nombre}<span className="td-muted"> / {p.rubcat.categoria?.nombre}</span></span>
+                      : <span className="td-muted">—</span>}
+                  </td>
+                  <td style={{ minWidth: 80 }}>
+                    {p.id_tipo
+                      ? <span className={`badge ${TIPO_BADGE[p.id_tipo] ?? 'badge-muted'}`}>{p.id_tipo}</span>
+                      : <span className="td-muted">—</span>}
+                  </td>
+                  <td className="td-mono" style={{ textAlign: 'right', minWidth: 60 }}>{fmtPV(p.pv)}</td>
+                  <td className="td-mono" style={{ minWidth: 80 }}>{fmtNro(p.nro)}</td>
+                  <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
+                  <td className="td-number" style={{ minWidth: 90 }}>{fmt$(p.descuento)}</td>
+                  <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
+                  <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
+                  <td style={{ minWidth: 90 }}>{fmtDate(p.cashflow)}</td>
+                  <td style={{ minWidth: 90 }}>
+                    {p.ingresa_egreso != null
+                      ? <span className={`badge ${p.ingresa_egreso ? 'badge-green' : 'badge-red'}`}>{p.ingresa_egreso ? 'Ingreso' : 'Egreso'}</span>
+                      : <span className="td-muted">—</span>}
+                  </td>
+                  <td style={{ minWidth: 90 }}>
+                    {p.estado_op
+                      ? <span className={`badge ${ESTADO_BADGE[p.estado_op] ?? 'badge-muted'}`}>{ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op}</span>
+                      : <span className="td-muted">—</span>}
+                  </td>
+                  <td style={{ minWidth: 70, textAlign: 'center' }}>
+                    <span className={p.pagado ? 'bool-yes' : 'bool-no'}>{p.pagado ? '✓' : '✗'}</span>
+                  </td>
+                  <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
+                  <td style={{ minWidth: 100 }}>
+                    {auditingId === p.id
+                      ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2, display: 'inline-block' }} />
+                      : p.audit
+                        ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(p.id, e)} title="Click para revertir">✓ Auditado</span>
+                        : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(p.id, e)}>Auditar</button>
+                    }
+                  </td>
+                  <td style={{ minWidth: 80 }}>{fmtMonth(p.periodo)}</td>
+                  <td style={{ minWidth: 120, fontSize: 12 }}>{p.local?.nombre || <span className="td-muted">—</span>}</td>
+                  <td style={{ minWidth: 50 }}>
+                    <div className="td-actions">
+                      <button className="btn btn-sm btn-secondary btn-icon" onClick={(e) => { e.stopPropagation(); navigate(`/pagos/${p.id}/editar`) }}>
+                        <IcoEdit />
+                      </button>
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(p.id) }}>
+                        <IcoTrash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
       </div>
 
-      {total > 0 && (
-        <div className="pagination">
-          <select
-            value={pageSize}
-            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-            style={{ padding: '3px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-          >
-            {[10, 15, 20].map(n => <option key={n} value={n}>{n} por pág.</option>)}
-          </select>
-          {totalPages > 1 && <>
-            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
-            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-            <span className="pagination-info">
-              Pág.&nbsp;
-              <input
-                type="number" min={1} max={totalPages} value={page}
-                onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
-                style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-              />
-              &nbsp;de {totalPages}
+      {/* ── Paginación ── */}
+      {!loading && total > 0 && (
+        <div className="pagination" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <span className="pagination-info">
+            {`${(page - 1) * LIMIT + 1}–${Math.min(page * LIMIT, total)} de ${total} pagos`}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(1)} disabled={page <= 1} title="Primera página">«</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(page - 1)} disabled={page <= 1}>‹ Anterior</button>
+            <span style={{ fontSize: 13, color: 'var(--t2)', padding: '0 0.5rem', whiteSpace: 'nowrap' }}>
+              Página {page} de {totalPages}
             </span>
-            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
-            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
-          </>}
-          <span className="pagination-info" style={{ marginLeft: 'auto' }}>{total} pagos</span>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(page + 1)} disabled={page >= totalPages}>Siguiente ›</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(totalPages)} disabled={page >= totalPages} title="Última página">»</button>
+          </div>
         </div>
       )}
 
       <DrawerPanel
         open={panelOpen}
         onClose={closePanel}
-        title={selectedPago ? `Pago #${selectedPago.nro_ord ?? selectedPago.id?.slice(0, 8)}` : 'Detalle de Pago'}
+        title={selectedPago ? `OP-${selectedPago.nro_ord ?? selectedPago.id?.slice(0, 8)}` : 'Detalle de Pago'}
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} canEdit={canEdit} canDelete={canDelete} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} />
         )}
       </DrawerPanel>
     </div>

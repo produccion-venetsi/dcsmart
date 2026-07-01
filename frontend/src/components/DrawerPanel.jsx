@@ -17,15 +17,18 @@ export default function DrawerPanel({ open, onClose, title, children, width = 54
   const [mounted, setMounted] = useState(open)
 
   useEffect(() => {
+    const main = document.querySelector('.app-main')
     if (open) {
       setMounted(true)
       document.body.style.overflow = 'hidden'
-      const main = document.querySelector('.app-main')
       if (main) main.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = ''
+        if (main) main.style.overflow = ''
+      }
     } else {
       const t = setTimeout(() => setMounted(false), 320)
       document.body.style.overflow = ''
-      const main = document.querySelector('.app-main')
       if (main) main.style.overflow = ''
       return () => clearTimeout(t)
     }

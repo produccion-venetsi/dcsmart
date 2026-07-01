@@ -49,7 +49,7 @@ export default async function proveedoresRoutes(fastify) {
       mail_envio, tag, id_rubcat, plazo, activo
     } = request.body
 
-    if (!nombre) return reply.code(400).send({ error: 'nombre es requerido' })
+    if (!nombre && !razon_social) return reply.code(400).send({ error: 'nombre o razon_social es requerido' })
 
     const proveedor = await fastify.db.proveedor.create({
       data: {

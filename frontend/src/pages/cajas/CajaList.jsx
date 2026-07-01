@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
@@ -193,10 +193,22 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
         ))}
       </div>
 
+      {caja.foto_url && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div className="drawer-section-title">Foto</div>
+          <a href={caja.foto_url} target="_blank" rel="noreferrer">
+            <img
+              src={caja.foto_url}
+              alt="Foto caja"
+              style={{ width: 180, height: 180, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border-hi)', display: 'block' }}
+            />
+          </a>
+        </div>
+      )}
+
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
-        <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalDet)}</span>
       </div>
       <div className="table-wrap" style={{ marginBottom: '1rem' }}>
         <table className="data-table">
@@ -600,9 +612,13 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   )
 }
 
+const ROW_HEIGHT = 32
+const OVERSCAN = 20
+const COL_COUNT = 13
+
 export default function CajaList() {
   const { activeApp, activeLocal } = useAppStore()
-  const locales   = activeApp?.locales ?? []
+  const locales     = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const role        = activeApp?.role
@@ -610,58 +626,78 @@ export default function CajaList() {
   const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete = ['super_admin', 'dcsmart', 'admin'].includes(role)
 
-  const [cajas,     setCajas]     = useState([])
-  const [total,     setTotal]     = useState(0)
-  const [page,      setPage]      = useState(1)
-  const [pageSize,  setPageSize]  = useState(20)
-  const [loading,   setLoading]   = useState(true)
-  const [panelOpen, setPanelOpen] = useState(false)
-  const [panelMode, setPanelMode] = useState('create')
+  const [cajas,      setCajas]      = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [panelOpen,  setPanelOpen]  = useState(false)
+  const [panelMode,  setPanelMode]  = useState('create')
   const [selectedId, setSelectedId] = useState(null)
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
 
-  const totalPages = Math.ceil(total / pageSize)
+  const scrollRef = useRef(null)
+  const [scrollTop, setScrollTop] = useState(0)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    cajasApi.list({ id_local: activeLocal?.id, limit: 0 })
+      .then(({ data }) => setCajas(data.data))
+      .catch(() => notify('Error al cargar cajas', 'error'))
+      .finally(() => setLoading(false))
+  }, [activeLocal?.id])
+
+  useEffect(() => {
+    const ctrl = new AbortController()
+    setLoading(true)
+    cajasApi.list({ id_local: activeLocal?.id, limit: 0 }, ctrl.signal)
+      .then(({ data }) => setCajas(data.data))
+      .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
+    return () => ctrl.abort()
+  }, [activeLocal?.id])
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
   }
-  const sortedCajas = [...cajas].sort((a, b) => {
-    const va = a[sortField] ?? ''
-    const vb = b[sortField] ?? ''
-    if (va < vb) return sortDir === 'asc' ? -1 : 1
-    if (va > vb) return sortDir === 'asc' ? 1 : -1
-    return 0
-  })
-  const SortTh = ({ field, children }) => (
-    <th className={`sortable${sortField === field ? ' active' : ''}`} onClick={() => toggleSort(field)}>
-      {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
-    </th>
-  )
 
-  const load = () => {
-    setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, page, limit: pageSize })
-      .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
-      .catch(() => notify('Error al cargar cajas', 'error'))
-      .finally(() => setLoading(false))
-  }
+  const sortedCajas = useMemo(() => {
+    return [...cajas].sort((a, b) => {
+      const va = a[sortField] ?? ''
+      const vb = b[sortField] ?? ''
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [cajas, sortField, sortDir])
+
+  // Scroll virtual
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onScroll = () => setScrollTop(el.scrollTop)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
 
   useEffect(() => {
-    const ctrl = new AbortController()
-    setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, page, limit: pageSize }, ctrl.signal)
-      .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
-      .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
-      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
-    return () => ctrl.abort()
-  }, [page, pageSize, activeLocal?.id])
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [sortField, sortDir])
+
+  const viewportH = scrollRef.current?.clientHeight ?? 800
+  const startIdx  = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIdx    = Math.min(sortedCajas.length, Math.ceil((scrollTop + viewportH) / ROW_HEIGHT) + OVERSCAN)
+  const topPad    = startIdx * ROW_HEIGHT
+  const bottomPad = Math.max(0, (sortedCajas.length - endIdx) * ROW_HEIGHT)
+  const visibleCajas = sortedCajas.slice(startIdx, endIdx)
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
     if (!(await showConfirm('¿Eliminar esta caja?'))) return
-    try { await cajasApi.remove(id); notify('Caja eliminada', 'success'); load() }
+    try {
+      await cajasApi.remove(id)
+      notify('Caja eliminada', 'success')
+      setCajas(prev => prev.filter(c => c.id !== id))
+    }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
@@ -680,8 +716,19 @@ export default function CajaList() {
       ? `Editar — ${selectedLabel}`
       : selectedLabel
 
+  const SortTh = ({ field, children }) => (
+    <th className={`sortable${sortField === field ? ' active' : ''}`} onClick={() => toggleSort(field)}>
+      {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+    </th>
+  )
+
   return (
     <div className="page">
+      <style>{`
+        .vt-scroll-cajas { max-height: calc(100vh - 180px); overflow: auto; }
+        .vt-spacer td { padding: 0 !important; border: none !important; }
+      `}</style>
+
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Cajas</h1>
@@ -696,7 +743,7 @@ export default function CajaList() {
         </div>
       </div>
 
-      <div className="table-wrap" style={{ overflowX: 'auto' }}>
+      <div ref={scrollRef} className="vt-scroll-cajas table-wrap">
         <table className="data-table">
           <thead>
             <tr>
@@ -717,16 +764,26 @@ export default function CajaList() {
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: 7 }, (_, i) => (
+              Array.from({ length: 10 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 13 }, (_, j) => (
+                  {Array.from({ length: COL_COUNT }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${48 + (j * 11 + i * 9) % 44}%` }} /></td>
                   ))}
                 </tr>
               ))
+            ) : sortedCajas.length === 0 ? (
+              <tr>
+                <td colSpan={COL_COUNT}>
+                  <div className="table-empty">
+                    <IcoCaja />
+                    <p>No hay cajas registradas{activeLocal ? ' para este local' : ''}.</p>
+                  </div>
+                </td>
+              </tr>
             ) : (
               <>
-                {sortedCajas.map((c) => (
+                {topPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: topPad }} /></tr>}
+                {visibleCajas.map((c) => (
                   <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
@@ -759,47 +816,16 @@ export default function CajaList() {
                     </td>
                   </tr>
                 ))}
-                {cajas.length === 0 && (
-                  <tr>
-                    <td colSpan={13}>
-                      <div className="table-empty">
-                        <IcoCaja />
-                        <p>No hay cajas registradas{activeLocal ? ' para este local' : ''}.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
+                {bottomPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: bottomPad }} /></tr>}
               </>
             )}
           </tbody>
         </table>
       </div>
 
-      {total > 0 && (
+      {!loading && cajas.length > 0 && (
         <div className="pagination">
-          <select
-            value={pageSize}
-            onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-            style={{ padding: '3px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-          >
-            {[10, 15, 20].map(n => <option key={n} value={n}>{n} por pág.</option>)}
-          </select>
-          {totalPages > 1 && <>
-            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(1)} title="Primera página">«</button>
-            <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-            <span className="pagination-info">
-              Pág.&nbsp;
-              <input
-                type="number" min={1} max={totalPages} value={page}
-                onChange={e => { const v = parseInt(e.target.value); if (v >= 1 && v <= totalPages) setPage(v) }}
-                style={{ width: 44, textAlign: 'center', padding: '2px 4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, color: 'inherit', fontSize: 12 }}
-              />
-              &nbsp;de {totalPages}
-            </span>
-            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
-            <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Última página">»</button>
-          </>}
-          <span className="pagination-info" style={{ marginLeft: 'auto' }}>{total} cajas</span>
+          <span className="pagination-info">{cajas.length} cajas</span>
         </div>
       )}
 

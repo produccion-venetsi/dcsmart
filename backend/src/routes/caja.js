@@ -7,7 +7,9 @@ export default async function cajaRoutes(fastify) {
   // ── GET / ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, desde, hasta, page = 1, limit = 50 } = request.query
-    const skip = (Number(page) - 1) * Number(limit)
+    const limitNum = Number(limit)
+    const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
+    const take = limitNum > 0 ? limitNum : undefined
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
@@ -34,7 +36,7 @@ export default async function cajaRoutes(fastify) {
         },
         orderBy: { fecha_inicio: 'desc' },
         skip,
-        take: Number(limit)
+        take
       }),
       fastify.db.caja.count({ where })
     ])

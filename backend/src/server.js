@@ -21,6 +21,7 @@ import rubcatRoutes from './routes/rubcat.js'
 import metodosRoutes from './routes/metodos_pago.js'
 import rolesRoutes from './routes/roles.js'
 import impuestosRoutes from './routes/impuestos.js'
+import reportesRoutes from './routes/reportes.js'
 
 // Serializar BigInt como string en JSON (para columnas como pagos.nro con IDs de MP)
 BigInt.prototype.toJSON = function () { return this.toString() }
@@ -64,6 +65,7 @@ await app.register(rubcatRoutes,    { prefix: '/api/rubcat' })
 await app.register(metodosRoutes,  { prefix: '/api/metodos-pago' })
 await app.register(rolesRoutes,    { prefix: '/api/roles' })
 await app.register(impuestosRoutes,{ prefix: '/api/impuestos' })
+await app.register(reportesRoutes, { prefix: '/api/reportes' })
 
 app.get('/health', async () => ({ status: 'ok' }))
 
