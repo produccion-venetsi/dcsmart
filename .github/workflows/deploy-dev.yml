@@ -24,6 +24,8 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: frontend
+        env:
+          VITE_GIT_SHA: ${{ github.sha }}
 
       - name: Deploy a Firebase Hosting (canal dev)
         run: npx firebase-tools@latest hosting:channel:deploy dev --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
