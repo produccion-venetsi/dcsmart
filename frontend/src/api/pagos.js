@@ -11,9 +11,11 @@ export const pagosApi = {
   audit:      (id)             => client.patch(`/pagos/${id}/audit`),
   periodico:  (id)             => client.patch(`/pagos/${id}/periodico`),
   mandarPdp:  (ids)            => client.post('/pagos/mandar-pdp',          { ids }),
+  revertirPdp:(ids)            => client.post('/pagos/revertir-pdp',        { ids }),
   pagar:      (ids, data)      => client.post('/pagos/pagar',               { ids, ...data }),
-  upload:     (formData)       => client.post('/pagos/upload',              formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  upload:     (formData, idLocal) => client.post(`/pagos/upload${idLocal ? `?id_local=${idLocal}` : ''}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   listMM:     (id)             => client.get(`/pagos/${id}/multimoneda`),
   createMM:   (id, data)       => client.post(`/pagos/${id}/multimoneda`,   data),
+  updateMM:   (id, mmId, data) => client.put(`/pagos/${id}/multimoneda/${mmId}`, data),
   deleteMM:   (id, mmId)       => client.delete(`/pagos/${id}/multimoneda/${mmId}`),
 }

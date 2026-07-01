@@ -399,14 +399,16 @@ model Impuesto {
 }
 
 model MultiMoneda {
-  id      String  @id @default(uuid())
+  id      String   @id @default(uuid())
   id_pago String
   tipo    String
-  tdc     Decimal @db.Decimal(12, 4)
-  monto   Decimal @db.Decimal(12, 2)
+  tdc     Decimal  @db.Decimal(12, 4)
+  monto   Decimal  @db.Decimal(12, 2)
+  fecha   DateTime @default(now())
 
   pago Pago @relation(fields: [id_pago], references: [id])
 
+  @@unique([id_pago])
   @@map("multimoneda")
 }
 

@@ -101,6 +101,20 @@ export default function PagoForm() {
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
   const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
 
+  // multimoneda (solo al crear — un único registro por pago)
+  const [mmForm,  setMmForm]  = useState({ tipo: 'USD', tdc: '', monto: '' })
+  const TIPOS_MM = ['USD', 'EUR', 'BRL', 'UYU', 'BTC', 'OTRO']
+
+  const onMmChange = (field, value) => {
+    const next = { ...mmForm, [field]: value }
+    setMmForm(next)
+    if (next.tdc && next.monto) {
+      set('importe_neto', (parseFloat(next.tdc) * parseFloat(next.monto)).toFixed(2))
+    } else {
+      set('importe_neto', '')
+    }
+  }
+
   const ESTADO_OP_OPTIONS = [
     { value: 'CAJA',       label: 'CAJA' },
     { value: 'CUENTA_CTE', label: 'CUENTA CTE' },
@@ -246,12 +260,12 @@ export default function PagoForm() {
       let foto_url = form.foto_url
       let pdf_url  = form.pdf_url
 
+      const localId = activeLocal?.id || form.id_local
       if (fotoFile) {
         setUploadingFoto(true)
         const fd = new FormData()
         fd.append('file', fotoFile)
-        fd.append('tipo', 'foto')
-        const r = await pagosApi.upload(fd)
+        const r = await pagosApi.upload(fd, localId)
         foto_url = r.data.url
         setUploadingFoto(false)
       }
@@ -259,8 +273,7 @@ export default function PagoForm() {
         setUploadingPdf(true)
         const fd = new FormData()
         fd.append('file', pdfFile)
-        fd.append('tipo', 'pdf')
-        const r = await pagosApi.upload(fd)
+        const r = await pagosApi.upload(fd, localId)
         pdf_url = r.data.url
         setUploadingPdf(false)
       }
@@ -288,6 +301,9 @@ export default function PagoForm() {
               impuestosApi.create({ id_pago: newId, tipo: imp.tipo, monto: parseFloat(imp.monto) })
             )
           )
+        }
+        if (newId && mmForm.tdc && mmForm.monto) {
+          await pagosApi.createMM(newId, { tipo: mmForm.tipo, tdc: parseFloat(mmForm.tdc), monto: parseFloat(mmForm.monto) })
         }
         notify('Pago creado', 'success')
       }
@@ -646,6 +662,40 @@ export default function PagoForm() {
               >
                 <IcoPlus /> Agregar
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Multimoneda (solo al crear) ── */}
+        {!isEditing && (
+          <div className="form-panel">
+            <div className="form-panel-title">Multimoneda</div>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ margin: 0, flex: '0 0 80px' }}>
+                <label className="form-label">Moneda</label>
+                <div className="form-input-wrap">
+                  <select value={mmForm.tipo} onChange={e => onMmChange('tipo', e.target.value)}>
+                    {TIPOS_MM.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+                <label className="form-label">TDC</label>
+                <div className="form-input-wrap">
+                  <input type="number" step="0.0001" placeholder="1000.00" value={mmForm.tdc} onChange={e => onMmChange('tdc', e.target.value)} />
+                </div>
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+                <label className="form-label">Monto</label>
+                <div className="form-input-wrap">
+                  <input type="number" step="0.01" placeholder="0.00" value={mmForm.monto} onChange={e => onMmChange('monto', e.target.value)} />
+                </div>
+              </div>
+              {mmForm.tdc && mmForm.monto && (
+                <div style={{ fontSize: 12, color: 'var(--gold-bright)', fontWeight: 700, alignSelf: 'center', whiteSpace: 'nowrap' }}>
+                  = ${(parseFloat(mmForm.tdc) * parseFloat(mmForm.monto)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                </div>
+              )}
             </div>
           </div>
         )}

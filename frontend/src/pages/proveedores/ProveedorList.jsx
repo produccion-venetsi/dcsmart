@@ -56,7 +56,7 @@ export default function ProveedorList() {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
 
-  const LIMIT = 50
+  const LIMIT = 100
 
   const [proveedores,  setProveedores]  = useState([])
   const [search,       setSearch]       = useState('')

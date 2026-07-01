@@ -36,6 +36,22 @@ export default async function impuestosRoutes(fastify) {
     return reply.code(201).send(imp)
   })
 
+  fastify.put('/:id', {
+    preHandler: [fastify.authenticate, fastify.can('pagos', 'edit')]
+  }, async (request, reply) => {
+    const { tipo, monto } = request.body
+    try {
+      const imp = await fastify.db.impuesto.update({
+        where: { id: request.params.id },
+        data: { ...(tipo != null ? { tipo } : {}), ...(monto != null ? { monto: parseFloat(monto) } : {}) }
+      })
+      return imp
+    } catch (err) {
+      if (err.code === 'P2025') return reply.code(404).send({ error: 'Impuesto no encontrado' })
+      throw err
+    }
+  })
+
   fastify.delete('/:id', {
     preHandler: [fastify.authenticate, fastify.can('pagos', 'delete')]
   }, async (request, reply) => {

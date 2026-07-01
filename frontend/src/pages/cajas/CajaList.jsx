@@ -193,6 +193,19 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
         ))}
       </div>
 
+      {caja.foto_url && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div className="drawer-section-title">Foto</div>
+          <a href={caja.foto_url} target="_blank" rel="noreferrer">
+            <img
+              src={caja.foto_url}
+              alt="Foto caja"
+              style={{ width: 180, height: 180, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border-hi)', display: 'block' }}
+            />
+          </a>
+        </div>
+      )}
+
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
