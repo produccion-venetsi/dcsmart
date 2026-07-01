@@ -29,7 +29,13 @@ jobs:
           VITE_API_URL: ${{ secrets.BACKEND_URL }}/api
 
       - name: Deploy a Firebase Hosting (canal dev)
-        run: npx firebase-tools@latest hosting:channel:deploy dev --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
+        run: |
+          for i in 1 2 3 4 5; do
+            npx firebase-tools@latest hosting:channel:deploy dev --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }} && exit 0
+            echo "Intento $i falló (posible inconsistencia del backend de Firebase), reintentando en 15s..."
+            sleep 15
+          done
+          exit 1
 
   deploy-backend:
     runs-on: ubuntu-latest
