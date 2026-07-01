@@ -27,8 +27,13 @@ jobs:
         env:
           VITE_GIT_SHA: ${{ github.sha }}
 
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
       - name: Deploy a Firebase Hosting
-        run: npx firebase-tools@latest deploy --only hosting --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
+        run: npx firebase-tools@latest deploy --only hosting --project dc-smart-mvp
 
   deploy-backend:
     runs-on: ubuntu-latest
