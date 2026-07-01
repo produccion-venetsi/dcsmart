@@ -9,6 +9,15 @@ Este archivo guía a Claude Code en la construcción completa del proyecto DCSma
 - **ORM**: Prisma
 - **Auth**: Google OAuth + Email/Password con JWT
 
+## Deploy y CI/CD
+
+- **Branches**: `DEV-XX` desde `dev` → PR a `dev` → (cuando se decide hacer un release) merge de `dev` a `master`. **Verificar siempre el base branch de un PR antes de mergear** (`gh pr view <N> --json baseRefName`); hubo un caso donde un PR terminó apuntando a `master` por error.
+- **`master` = producción real.** No pushear ni mergear ahí sin confirmación explícita del usuario.
+- **Un solo backend en Cloud Run**: tanto `.github/workflows/deploy-dev.yml` (branch `dev`) como `deploy.yml` (branch `master`) despliegan al **mismo** servicio `dcsmart-backend` en Cloud Run, proyecto `dc-smart-mvp`. No hay backend separado para dev — un push a `dev` redeploya el backend de producción también. Solo el frontend tiene canales separados (Firebase Hosting: canal `dev` preview vs canal `live`).
+- **Firebase Hosting CI usa cuenta de servicio**, no `--token` (deprecado y con bug real: causaba 400 "is the current active version" al liberar versiones en canales preview). Autenticación vía `google-github-actions/auth@v2` + `GOOGLE_APPLICATION_CREDENTIALS`, con la cuenta `github-actions-deploy@dc-smart-mvp.iam.gserviceaccount.com` (tiene rol `roles/firebasehosting.admin`).
+- **Canales preview cambian de URL** al recrearse (sufijo aleatorio tipo `dev-telejp8n`). Por eso: (1) el backend acepta CORS de cualquier `*.web.app` vía regex, no un origen fijo; (2) el build de `dev` inyecta `VITE_API_URL` apuntando directo al backend de Cloud Run, porque el rewrite `/api/**` de `firebase.json` solo funciona en el canal `live`, no en canales preview.
+- **`prisma db push` pendiente** — el modelo `MultiMoneda` (agregado en DEV-05) existe en `schema.prisma` pero puede no estar aplicado en la base real. Verificar antes de asumir que las rutas `fastify.db.multiMoneda.*` funcionan en producción.
+
 ## Estructura del proyecto
 
 ```
