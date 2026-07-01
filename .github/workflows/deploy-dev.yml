@@ -26,6 +26,7 @@ jobs:
         working-directory: frontend
         env:
           VITE_GIT_SHA: ${{ github.sha }}
+          VITE_API_URL: ${{ secrets.BACKEND_URL }}/api
 
       - name: Deploy a Firebase Hosting (canal dev)
         run: |
