@@ -28,7 +28,9 @@ jobs:
           VITE_GIT_SHA: ${{ github.sha }}
 
       - name: Deploy a Firebase Hosting (canal dev)
-        run: npx firebase-tools@latest hosting:channel:deploy dev --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
+        run: |
+          npx firebase-tools@latest hosting:channel:delete dev --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }} --force 2>/dev/null || true
+          npx firebase-tools@latest hosting:channel:deploy dev --expires 30d --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
 
   deploy-backend:
     runs-on: ubuntu-latest
