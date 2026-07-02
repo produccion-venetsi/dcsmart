@@ -121,6 +121,14 @@ function IcoImpuestos() {
     </svg>
   )
 }
+function IcoAuditorias() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  )
+}
 function IcoTag() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -163,6 +171,7 @@ const NAV_ADMIN = [
   { to: '/admin/rubcat',        label: 'Rubros/Cats',   Icon: IcoRubCat,  roles: ['super_admin'] },
   { to: '/admin/metodos-pago',  label: 'Métodos Pago',  Icon: IcoMetodos, roles: ['super_admin', 'dcsmart'] },
   { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
+  { to: '/auditorias',          label: 'Auditorías',    Icon: IcoAuditorias, roles: ['super_admin'] },
 ]
 
 export default function Sidebar() {
