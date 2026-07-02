@@ -3,15 +3,16 @@ import multipart from '@fastify/multipart'
 
 // El estado de auditoría de un pago se guarda en la tabla `audits`
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
+// Cada auditar/desauditar inserta una fila nueva (historial append-only);
+// el estado actual es la fila con vigente=true de ese id_registro.
 
-// Devuelve un Set con los ids de pago que están auditados, de entre los ids dados.
-// Si la tabla `audits` no existiera / fallara la consulta, degradamos a "ninguno
-// auditado" para no romper el listado de pagos.
+// Devuelve un Set con los ids de pago que están auditados (vigente y con
+// accion='auditado'), de entre los ids dados.
 async function getAuditedSet(fastify, pagoIds) {
   if (!pagoIds.length) return new Set()
   try {
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: { in: pagoIds } },
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     return new Set(rows.map(r => r.id_registro))
@@ -34,7 +35,7 @@ async function buildAuditFilter(fastify, audit, allowedLocalIds) {
     const pagoIds = pagosInScope.map(p => p.id)
     if (!pagoIds.length) return audit === 'true' ? { id: { in: [] } } : {}
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: { in: pagoIds } },
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     const auditedIds = [...new Set(rows.map(r => r.id_registro))]
@@ -270,17 +271,17 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    // Estado de auditoría desde la tabla `audits` (último registro si existe).
+    // Estado de auditoría desde la tabla `audits` (fila vigente, si existe).
     const auditRow = await fastify.db.audit.findFirst({
-      where: { tabla: 'pagos', id_registro: pago.id },
-      orderBy: { fecha: 'desc' }
+      where: { tabla: 'pagos', id_registro: pago.id, vigente: true },
+      include: { user: { select: { id: true, nombre: true } } }
     })
 
     return {
       ...pago,
-      audit:      !!auditRow,
-      audit_by:   auditRow?.id_user ?? null,
-      audit_date: auditRow?.fecha   ?? null,
+      audit:      auditRow?.accion === 'auditado',
+      audit_by:   auditRow?.user?.nombre ?? null,
+      audit_date: auditRow?.fecha ?? null,
     }
   })
 
@@ -402,8 +403,9 @@ export default async function pagosRoutes(fastify) {
   })
 
   // ── PATCH /:id/audit ───────────────────────────────────────────────────
-  // Alterna el estado de auditoría. Auditar = crear fila en `audits`.
-  // Des-auditar = borrar las filas de auditoría de ese pago.
+  // Alterna el estado de auditoría creando una fila nueva en `audits`
+  // (historial append-only). Nunca se borra: la fila anterior se marca
+  // vigente=false y se inserta una nueva vigente=true con la acción inversa.
   fastify.patch('/:id/audit', { preHandler: editHandler }, async (request, reply) => {
     const pago = await fastify.db.pago.findUnique({
       where: { id: request.params.id },
@@ -415,30 +417,57 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    const existing = await fastify.db.audit.findFirst({
-      where: { tabla: 'pagos', id_registro: request.params.id }
+    const { observaciones } = request.body ?? {}
+
+    const nextAccion = await fastify.db.$transaction(async (tx) => {
+      const current = await tx.audit.findFirst({
+        where: { tabla: 'pagos', id_registro: request.params.id, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'pagos', id_registro: request.params.id, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accion = current?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'pagos',
+          tipo:          'auditoria_pago',
+          accion,
+          aprobado:      accion === 'auditado',
+          vigente:       true,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accion === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      return accion
     })
 
-    if (existing) {
-      // Ya auditado → revertir (borrar todas las filas de auditoría del pago).
-      await fastify.db.audit.deleteMany({
-        where: { tabla: 'pagos', id_registro: request.params.id }
-      })
-      return { ok: true, audit: false }
+    return { ok: true, audit: nextAccion === 'auditado' }
+  })
+
+  // ── GET /:id/audit-history ─────────────────────────────────────────────
+  // Historial completo de eventos de auditoría de un pago, más reciente primero.
+  fastify.get('/:id/audit-history', { preHandler: viewHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    // No auditado → crear registro de auditoría.
-    await fastify.db.audit.create({
-      data: {
-        id_registro: request.params.id,
-        tabla:       'pagos',
-        tipo:        'auditoria_pago',
-        aprobado:    true,
-        id_user:     request.user.id,
-        fecha:       new Date()
-      }
+    return fastify.db.audit.findMany({
+      where: { tabla: 'pagos', id_registro: request.params.id },
+      orderBy: { fecha: 'desc' },
+      include: { user: { select: { id: true, nombre: true } } }
     })
-    return { ok: true, audit: true }
   })
 
   // ── POST /mandar-pdp ───────────────────────────────────────────────────
@@ -633,7 +662,6 @@ export default async function pagosRoutes(fastify) {
     // Eliminar registros dependientes antes que el pago (FK constraints)
     await fastify.db.impuesto.deleteMany({ where: { id_pago: request.params.id } })
     await fastify.db.multiMoneda.deleteMany({ where: { id_pago: request.params.id } })
-    await fastify.db.audit.deleteMany({ where: { tabla: 'pagos', id_registro: request.params.id } })
     await fastify.db.pago.delete({ where: { id: request.params.id } })
     return reply.code(204).send()
   })
