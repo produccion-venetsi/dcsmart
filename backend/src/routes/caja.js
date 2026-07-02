@@ -1,3 +1,42 @@
+// El estado de auditoría de una caja se guarda en la tabla `audits`
+// (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
+// Ver backend/src/routes/pagos.js para la explicación del historial append-only.
+
+async function getAuditedCajaSet(fastify, cajaIds) {
+  if (!cajaIds.length) return new Set()
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'cajas', id_registro: { in: cajaIds }, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    return new Set(rows.map(r => r.id_registro))
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedCajaSet)')
+    return new Set()
+  }
+}
+
+async function buildCajaAuditFilter(fastify, audit, allowedLocalIds) {
+  if (audit === undefined) return {}
+  try {
+    const cajasInScope = await fastify.db.caja.findMany({
+      where: { id_local: { in: allowedLocalIds } },
+      select: { id: true }
+    })
+    const cajaIds = cajasInScope.map(c => c.id)
+    if (!cajaIds.length) return audit === 'true' ? { id: { in: [] } } : {}
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'cajas', id_registro: { in: cajaIds }, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    const auditedIds = [...new Set(rows.map(r => r.id_registro))]
+    return audit === 'true' ? { id: { in: auditedIds } } : { id: { notIn: auditedIds } }
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (buildCajaAuditFilter)')
+    return {}
+  }
+}
+
 export default async function cajaRoutes(fastify) {
   const viewHandler    = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
   const createHandler  = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
@@ -6,7 +45,7 @@ export default async function cajaRoutes(fastify) {
 
   // ── GET / ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta, page = 1, limit = 50 } = request.query
+    const { id_local, desde, hasta, audit, page = 1, limit = 50 } = request.query
     const limitNum = Number(limit)
     const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
     const take = limitNum > 0 ? limitNum : undefined
@@ -16,9 +55,11 @@ export default async function cajaRoutes(fastify) {
     }
 
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
+    const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
 
     const where = {
       ...localFilter,
+      ...auditFilter,
       ...(desde || hasta ? {
         fecha_inicio: {
           ...(desde ? { gte: new Date(desde) } : {}),
@@ -41,7 +82,10 @@ export default async function cajaRoutes(fastify) {
       fastify.db.caja.count({ where })
     ])
 
-    return { data: cajas, total, page: Number(page), limit: Number(limit) }
+    const auditedSet = await getAuditedCajaSet(fastify, cajas.map(c => c.id))
+    const data = cajas.map(c => ({ ...c, audit: auditedSet.has(c.id) }))
+
+    return { data, total, page: Number(page), limit: Number(limit) }
   })
 
   // ── GET /stats ─────────────────────────────────────────────────────────
@@ -101,7 +145,17 @@ export default async function cajaRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    return caja
+    const auditRow = await fastify.db.audit.findFirst({
+      where: { tabla: 'cajas', id_registro: caja.id, vigente: true },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
+
+    return {
+      ...caja,
+      audit:      auditRow?.accion === 'auditado',
+      audit_by:   auditRow?.user?.nombre ?? null,
+      audit_date: auditRow?.fecha ?? null,
+    }
   })
 
   // ── POST / ────────────────────────────────────────────────────────────
@@ -170,6 +224,71 @@ export default async function cajaRoutes(fastify) {
       }
     })
     return caja
+  })
+
+  // ── PATCH /:id/audit ───────────────────────────────────────────────────
+  // Mismo mecanismo de historial append-only que pagos (ver pagos.js).
+  fastify.patch('/:id/audit', { preHandler: editHandler }, async (request, reply) => {
+    const caja = await fastify.db.caja.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
+
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { observaciones } = request.body ?? {}
+
+    const nextAccion = await fastify.db.$transaction(async (tx) => {
+      const current = await tx.audit.findFirst({
+        where: { tabla: 'cajas', id_registro: request.params.id, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'cajas', id_registro: request.params.id, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accion = current?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'cajas',
+          tipo:          'auditoria_caja',
+          accion,
+          aprobado:      accion === 'auditado',
+          vigente:       true,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accion === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      return accion
+    })
+
+    return { ok: true, audit: nextAccion === 'auditado' }
+  })
+
+  // ── GET /:id/audit-history ─────────────────────────────────────────────
+  fastify.get('/:id/audit-history', { preHandler: viewHandler }, async (request, reply) => {
+    const caja = await fastify.db.caja.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    return fastify.db.audit.findMany({
+      where: { tabla: 'cajas', id_registro: request.params.id },
+      orderBy: { fecha: 'desc' },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
   })
 
   // ── DELETE /:id ────────────────────────────────────────────────────────
