@@ -42,11 +42,15 @@ export default function CajaDetail() {
   const navigate = useNavigate()
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+  const showPrompt  = useUiStore((s) => s.showPrompt)
 
   const [caja,    setCaja]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [newMov,  setNewMov]  = useState({ tipo: 'INGRESO', monto: '', id_metodo: '' })
   const [saving,  setSaving]  = useState(false)
+  const [auditando, setAuditando] = useState(false)
+  const [auditHistory, setAuditHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(true)
 
   const load = () => {
     setLoading(true)
@@ -56,7 +60,15 @@ export default function CajaDetail() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(load, [id])
+  const loadAuditHistory = () => {
+    setLoadingHistory(true)
+    cajasApi.auditHistory(id)
+      .then(({ data }) => setAuditHistory(data))
+      .catch(() => {})
+      .finally(() => setLoadingHistory(false))
+  }
+
+  useEffect(() => { load(); loadAuditHistory() }, [id])
 
   const handleAddMovimiento = async (e) => {
     e.preventDefault()
@@ -79,6 +91,25 @@ export default function CajaDetail() {
     } catch { notify('Error al eliminar', 'error') }
   }
 
+  const handleAudit = async () => {
+    let observaciones
+    if (caja.audit) {
+      observaciones = await showPrompt(
+        'Esta caja ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditando(true)
+    try {
+      const { data } = await cajasApi.audit(id, caja.audit ? { observaciones } : undefined)
+      notify(data.audit ? 'Caja auditada' : 'Auditoría revertida', 'success')
+      setCaja(prev => ({ ...prev, audit: data.audit }))
+      loadAuditHistory()
+    } catch { notify('Error al auditar', 'error') }
+    finally { setAuditando(false) }
+  }
+
   if (loading) return <div className="page-loading"><div className="spinner" /></div>
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
@@ -95,6 +126,7 @@ export default function CajaDetail() {
     ['Comensales',   caja.comensales ?? '—'],
     ['Tickets',      caja.tickets ?? '—'],
     ['Origen',       caja.origin ?? '—'],
+    ['Auditado',     caja.audit ? 'Sí' : 'No'],
   ]
 
   return (
@@ -109,6 +141,18 @@ export default function CajaDetail() {
             {caja.nro_turno ? `Turno ${caja.nro_turno}` : `Caja #${caja.id.slice(0, 8)}`}
           </h1>
           <p className="page-sub">{caja.local?.nombre} · {new Date(caja.fecha_inicio).toLocaleDateString('es-AR')}</p>
+        </div>
+        <div className="page-actions">
+          <button
+            className={`btn ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
+            onClick={handleAudit}
+            disabled={auditando}
+          >
+            {auditando
+              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+              : caja.audit ? '✓ Auditado' : 'Auditar'
+            }
+          </button>
         </div>
       </div>
 
@@ -211,6 +255,37 @@ export default function CajaDetail() {
             </div>
           </form>
         </div>
+      </div>
+
+      <div className="table-wrap" style={{ marginTop: '1.25rem' }}>
+        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+          <span className="card-title" style={{ margin: 0 }}>Historial de auditoría</span>
+        </div>
+        <table className="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+          </thead>
+          <tbody>
+            {loadingHistory ? (
+              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+            ) : auditHistory.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+            ) : (
+              auditHistory.map((ev) => (
+                <tr key={ev.id}>
+                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td>{ev.user?.nombre ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
+                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
+                    </span>
+                  </td>
+                  <td className="td-muted">{ev.observaciones || '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )
