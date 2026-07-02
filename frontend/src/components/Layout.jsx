@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar.jsx'
 import { useUiStore } from '../store/uiStore.js'
@@ -50,6 +51,41 @@ function ConfirmModal() {
   )
 }
 
+function PromptModal() {
+  const promptModal   = useUiStore((s) => s.promptModal)
+  const resolvePrompt = useUiStore((s) => s.resolvePrompt)
+  const [value, setValue] = useState('')
+
+  useEffect(() => { setValue('') }, [promptModal])
+
+  if (!promptModal) return null
+
+  return (
+    <div className="confirm-backdrop" onMouseDown={() => resolvePrompt(null)}>
+      <div className="confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <p className="confirm-message">{promptModal.message}</p>
+        <div className="form-input-wrap" style={{ margin: '0.75rem 0' }}>
+          <textarea
+            rows={2}
+            autoFocus
+            placeholder={promptModal.placeholder}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </div>
+        <div className="confirm-foot">
+          <button className="btn btn-secondary btn-sm" onClick={() => resolvePrompt(null)}>
+            Cancelar
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={() => resolvePrompt(value)}>
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Layout() {
   const notifications    = useUiStore((s) => s.notifications)
   const removeNotification = useUiStore((s) => s.removeNotification)
@@ -78,6 +114,7 @@ export default function Layout() {
       </div>
 
       <ConfirmModal />
+      <PromptModal />
     </div>
   )
 }
