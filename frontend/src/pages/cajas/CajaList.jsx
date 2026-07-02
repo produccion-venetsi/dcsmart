@@ -914,12 +914,15 @@ export default function CajaList() {
                     </td>
                     <td className="td-muted">{c.local?.nombre ?? '—'}</td>
                     <td>
-                      {auditingId === c.id
-                        ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                        : c.audit
-                          ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(c.id, e)} title="Click para revertir">✓ Auditado</span>
-                          : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(c.id, e)}>Auditar</button>
-                      }
+                      {canEdit ? (
+                        auditingId === c.id
+                          ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                          : c.audit
+                            ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(c.id, e)} title="Click para revertir">✓ Auditado</span>
+                            : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(c.id, e)}>Auditar</button>
+                      ) : (
+                        <span className="td-muted">{c.audit ? 'Sí' : 'No'}</span>
+                      )}
                     </td>
                     <td>
                       <div className="td-actions">
