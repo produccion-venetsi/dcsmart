@@ -101,14 +101,17 @@ function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   const [impuestos,    setImpuestos]    = useState([])
   const [loadingImp,   setLoadingImp]   = useState(true)
   const [impForm,      setImpForm]      = useState({ tipo: 'IVA21', monto: '' })
   const [savingImp,    setSavingImp]    = useState(false)
   const [editingImpId, setEditingImpId] = useState(null)
   const [editImpForm,  setEditImpForm]  = useState({ tipo: 'IVA21', monto: '' })
-  const [audited,     setAudited]     = useState(pago.audit)
-  const [auditando,   setAuditando]   = useState(false)
+  const [audited,      setAudited]      = useState(pago.audit)
+  const [auditando,    setAuditando]    = useState(false)
+  const [auditHistory, setAuditHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(true)
   const [periodico,   setPeriodico]   = useState(pago.periodico ?? false)
   const [toggling,    setToggling]    = useState(false)
   const [multimoneda, setMultimoneda] = useState([])
@@ -136,7 +139,15 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       .finally(() => setLoadingMM(false))
   }
 
-  useEffect(() => { if (pago) { loadImpuestos(); loadMM() } }, [pago?.id])
+  const loadAuditHistory = () => {
+    setLoadingHistory(true)
+    pagosApi.auditHistory(pago.id)
+      .then(({ data }) => setAuditHistory(data))
+      .catch(() => {})
+      .finally(() => setLoadingHistory(false))
+  }
+
+  useEffect(() => { if (pago) { loadImpuestos(); loadMM(); loadAuditHistory() } }, [pago?.id])
 
   const handleTogglePeriodico = async () => {
     setToggling(true)
@@ -217,13 +228,21 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   }
 
   const handlePanelAudit = async () => {
-    if (audited && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
+    let observaciones
+    if (audited) {
+      observaciones = await showPrompt(
+        'Esta orden ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
     setAuditando(true)
     try {
-      const { data } = await pagosApi.audit(pago.id)
+      const { data } = await pagosApi.audit(pago.id, audited ? { observaciones } : undefined)
       setAudited(data.audit)
       notify(data.audit ? 'Pago auditado' : 'Auditoría revertida', 'success')
       onAudit?.(pago.id, data.audit)
+      loadAuditHistory()
     } catch { notify('Error al auditar', 'error') }
     finally { setAuditando(false) }
   }
@@ -482,6 +501,36 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           </tbody>
         </table>
       </div>
+
+      <div className="drawer-section-title">Historial de auditoría</div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+          </thead>
+          <tbody>
+            {loadingHistory ? (
+              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+            ) : auditHistory.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+            ) : (
+              auditHistory.map((ev) => (
+                <tr key={ev.id}>
+                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td>{ev.user?.nombre ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
+                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
+                    </span>
+                  </td>
+                  <td className="td-muted">{ev.observaciones || '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
       <form onSubmit={handleAddImp} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
         <div className="form-group" style={{ margin: 0, flex: 1 }}>
           <label className="form-label">Tipo</label>
@@ -571,6 +620,7 @@ export default function PagoList() {
   const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
@@ -691,10 +741,17 @@ export default function PagoList() {
   const handleAudit = async (id, e) => {
     e.stopPropagation()
     const current = pagos.find(p => p.id === id)
-    if (current?.audit && !(await showConfirm('Esta orden ya está auditada. ¿Querés desauditarla?'))) return
+    let observaciones
+    if (current?.audit) {
+      observaciones = await showPrompt(
+        'Esta orden ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
     setAuditingId(id)
     try {
-      const { data } = await pagosApi.audit(id)
+      const { data } = await pagosApi.audit(id, current?.audit ? { observaciones } : undefined)
       notify(data.audit ? 'Pago auditado' : 'Auditoría revertida', 'success')
       patchPagoAudit(id, data.audit)
     } catch { notify('Error al auditar', 'error') }
