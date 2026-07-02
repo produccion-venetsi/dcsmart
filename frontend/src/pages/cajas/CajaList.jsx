@@ -68,6 +68,7 @@ function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   const [caja,       setCaja]      = useState(null)
   const [loading,    setLoading]   = useState(true)
   const [metodos,    setMetodos]   = useState([])
@@ -76,6 +77,9 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
   const [saving,     setSaving]    = useState(false)
   const [newDet,     setNewDet]    = useState({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDet,  setSavingDet] = useState(false)
+  const [auditando,  setAuditando] = useState(false)
+  const [auditHistory, setAuditHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(true)
 
   const load = () => {
     setLoading(true)
@@ -85,9 +89,18 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
       .finally(() => setLoading(false))
   }
 
+  const loadAuditHistory = () => {
+    setLoadingHistory(true)
+    cajasApi.auditHistory(cajaId)
+      .then(({ data }) => setAuditHistory(data))
+      .catch(() => {})
+      .finally(() => setLoadingHistory(false))
+  }
+
   useEffect(() => {
     if (!cajaId) return
     load()
+    loadAuditHistory()
     metodosApi.list()
       .then(r => setMetodos(r.data || []))
       .catch(() => {})
@@ -147,6 +160,26 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
+  const handleAudit = async () => {
+    let observaciones
+    if (caja.audit) {
+      observaciones = await showPrompt(
+        'Esta caja ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditando(true)
+    try {
+      const { data } = await cajasApi.audit(cajaId, caja.audit ? { observaciones } : undefined)
+      notify(data.audit ? 'Caja auditada' : 'Auditoría revertida', 'success')
+      setCaja(prev => ({ ...prev, audit: data.audit }))
+      onRefreshList?.()
+      loadAuditHistory()
+    } catch { notify('Error al auditar', 'error') }
+    finally { setAuditando(false) }
+  }
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
   if (!caja) return <div style={{ color: 'var(--red)', padding: '1rem' }}>No se pudo cargar la caja.</div>
 
@@ -165,17 +198,30 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
     ['Comensales', caja.comensales ?? '—'],
     ['Tickets',    caja.tickets ?? '—'],
     ['Origen',     caja.origin ?? '—'],
+    ['Auditado',   caja.audit ? 'Sí' : 'No'],
   ]
 
   return (
     <div>
-      {canEdit && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        {canEdit && (
+          <button
+            className={`btn btn-sm ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
+            onClick={handleAudit}
+            disabled={auditando}
+          >
+            {auditando
+              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+              : caja.audit ? '✓ Auditado' : 'Auditar'
+            }
+          </button>
+        )}
+        {canEdit && (
           <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <IcoEdit /> Editar
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {caja.observaciones && (
         <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
@@ -232,6 +278,35 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
             ))}
             {(!caja.detalles || caja.detalles.length === 0) && (
               <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin detalles</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="drawer-section-title">Historial de auditoría</div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+          </thead>
+          <tbody>
+            {loadingHistory ? (
+              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+            ) : auditHistory.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+            ) : (
+              auditHistory.map((ev) => (
+                <tr key={ev.id}>
+                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td>{ev.user?.nombre ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
+                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
+                    </span>
+                  </td>
+                  <td className="td-muted">{ev.observaciones || '—'}</td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
@@ -614,13 +689,14 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
 const ROW_HEIGHT = 32
 const OVERSCAN = 20
-const COL_COUNT = 13
+const COL_COUNT = 14
 
 export default function CajaList() {
   const { activeApp, activeLocal } = useAppStore()
   const locales     = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
@@ -633,27 +709,29 @@ export default function CajaList() {
   const [selectedId, setSelectedId] = useState(null)
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
+  const [auditFilter, setAuditFilter] = useState('')
+  const [auditingId,  setAuditingId]  = useState(null)
 
   const scrollRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
 
   const load = useCallback(() => {
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, limit: 0 })
+    cajasApi.list({ id_local: activeLocal?.id, limit: 0, ...(auditFilter !== '' ? { audit: auditFilter } : {}) })
       .then(({ data }) => setCajas(data.data))
       .catch(() => notify('Error al cargar cajas', 'error'))
       .finally(() => setLoading(false))
-  }, [activeLocal?.id])
+  }, [activeLocal?.id, auditFilter])
 
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, limit: 0 }, ctrl.signal)
+    cajasApi.list({ id_local: activeLocal?.id, limit: 0, ...(auditFilter !== '' ? { audit: auditFilter } : {}) }, ctrl.signal)
       .then(({ data }) => setCajas(data.data))
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [activeLocal?.id])
+  }, [activeLocal?.id, auditFilter])
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -701,6 +779,30 @@ export default function CajaList() {
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
+  const patchCajaAudit = (id, audit) => {
+    setCajas(prev => prev.map(c => c.id === id ? { ...c, audit } : c))
+  }
+
+  const handleAudit = async (id, e) => {
+    e.stopPropagation()
+    const current = cajas.find(c => c.id === id)
+    let observaciones
+    if (current?.audit) {
+      observaciones = await showPrompt(
+        'Esta caja ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditingId(id)
+    try {
+      const { data } = await cajasApi.audit(id, current?.audit ? { observaciones } : undefined)
+      notify(data.audit ? 'Caja auditada' : 'Auditoría revertida', 'success')
+      patchCajaAudit(id, data.audit)
+    } catch { notify('Error al auditar', 'error') }
+    finally { setAuditingId(null) }
+  }
+
   const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
   const openDetail = (id) => { setSelectedId(id); setPanelMode('detail'); setPanelOpen(true) }
   const openEdit   = (id) => { setSelectedId(id); setPanelMode('edit');   setPanelOpen(true) }
@@ -734,7 +836,12 @@ export default function CajaList() {
           <h1 className="page-title">Cajas</h1>
           {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
         </div>
-        <div className="page-actions">
+        <div className="page-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <select className="filter-select" value={auditFilter} onChange={e => setAuditFilter(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="false">No auditado</option>
+            <option value="true">Auditado</option>
+          </select>
           {canCreate && (
             <button className="btn btn-primary" onClick={openCreate}>
               <IcoPlus /> Nueva Caja
@@ -759,6 +866,7 @@ export default function CajaList() {
               <th>Origen</th>
               <th>Foto</th>
               <th>Local</th>
+              <th>Auditado</th>
               <th></th>
             </tr>
           </thead>
@@ -805,6 +913,14 @@ export default function CajaList() {
                         : <span className="td-muted">—</span>}
                     </td>
                     <td className="td-muted">{c.local?.nombre ?? '—'}</td>
+                    <td>
+                      {auditingId === c.id
+                        ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                        : c.audit
+                          ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(c.id, e)} title="Click para revertir">✓ Auditado</span>
+                          : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(c.id, e)}>Auditar</button>
+                      }
+                    </td>
                     <td>
                       <div className="td-actions">
                         {canDelete && (
