@@ -38,7 +38,7 @@ export default async function auditoriasRoutes(fastify) {
       fastify.db.audit.findMany({
         where,
         include: { user: { select: { id: true, nombre: true } } },
-        orderBy: { fecha: 'desc' },
+        orderBy: { fecha: { sort: 'desc', nulls: 'last' } },
         skip,
         take
       }),
