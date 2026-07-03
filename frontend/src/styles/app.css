@@ -1970,6 +1970,9 @@ tr.row-clickable:hover td {
   max-width: 92vw;
   box-shadow: 0 20px 60px rgba(0,0,0,0.6);
 }
+.confirm-modal-wide {
+  width: 440px;
+}
 .confirm-message {
   font-size: 14.5px;
   color: var(--t1);
@@ -1980,6 +1983,17 @@ tr.row-clickable:hover td {
   display: flex;
   justify-content: flex-end;
   gap: 0.6rem;
+}
+
+/* ── link a registro auditado (tabla de Auditorías) ── */
+.registro-link {
+  color: var(--gold-bright);
+  text-decoration: none;
+  font-weight: 600;
+}
+.registro-link:hover,
+.registro-link:focus-visible {
+  text-decoration: underline;
 }
 
 /* ── sort header ── */
