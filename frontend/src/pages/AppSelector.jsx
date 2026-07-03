@@ -212,7 +212,15 @@ export default function AppSelector() {
                       <span className="app-card-locales-summary">Sin apps</span>
                     ) : (
                       <div className={`app-card-locales-marquee${item.locales.length >= 3 ? ' scrolling' : ''}`}>
-                        <div className="app-card-locales-track">
+                        <div
+                          className="app-card-locales-track"
+                          style={item.locales.length >= 3 ? {
+                            // Duración proporcional al largo total del texto, para que la
+                            // velocidad (px/seg) sea la misma en todas las cards, sin
+                            // importar cuántos locales o qué tan largos sean los nombres.
+                            animationDuration: `${Math.max(6, item.locales.reduce((sum, l) => sum + l.nombre.length, 0) * 0.28)}s`
+                          } : undefined}
+                        >
                           {item.locales.map(l => (
                             <span key={l.id} className="app-card-locale-tag">{l.nombre}</span>
                           ))}
