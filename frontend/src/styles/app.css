@@ -2103,3 +2103,25 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   margin-top: 6px;
   display: inline-block;
 }
+
+/* Botón de "quitar" chico para inputs con selección (ej. combobox de proveedor) —
+   antes era una "x" de texto plano de 16px, difícil de ver/clickear. */
+.input-clear-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--t2);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.input-clear-btn:hover {
+  background: var(--red-bg);
+  color: var(--red);
+}

@@ -405,8 +405,8 @@ export default function PagoForm() {
                   <button
                     type="button"
                     onClick={clearProveedor}
-                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', color: 'var(--t3)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                    className="input-clear-btn"
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}
                     title="Quitar proveedor"
                   >×</button>
                 )}
