@@ -207,8 +207,10 @@ export default function AppSelector() {
 
                 {/* Footer */}
                 <div className="app-card-foot">
-                  <span>
-                    {item.locales.length === 0 ? 'Sin apps' : 'Todos los locales'}
+                  <span className="app-card-locales" title={item.locales.map(l => l.nombre).join(', ')}>
+                    {item.locales.length === 0
+                      ? 'Sin apps'
+                      : item.locales.map(l => l.nombre).join(' · ')}
                   </span>
                   <div className="app-card-arrow">
                     <IconArrow />

@@ -633,6 +633,14 @@
   color: var(--t3);
   font-weight: 500;
 }
+.app-card-locales {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  margin-right: 10px;
+}
 .app-card-arrow {
   width: 28px;
   height: 28px;
