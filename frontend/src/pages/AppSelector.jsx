@@ -118,7 +118,6 @@ export default function AppSelector() {
           <div className="sel-user">
             <div className="sel-user-name">
               {user.nombre}
-              <small>Cuenta personal</small>
             </div>
             <div className="sel-avatar">
               {user.avatar_url
@@ -209,11 +208,7 @@ export default function AppSelector() {
                 {/* Footer */}
                 <div className="app-card-foot">
                   <span>
-                    {item.locales.length === 0
-                      ? 'Sin locales'
-                      : item.locales.length === 1
-                        ? item.locales[0].nombre
-                        : `${item.locales.length} locales`}
+                    {item.locales.length === 0 ? 'Sin apps' : 'Todos los locales'}
                   </span>
                   <div className="app-card-arrow">
                     <IconArrow />
