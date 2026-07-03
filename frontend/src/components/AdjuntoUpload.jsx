@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 function IcoUpload() {
   return (
@@ -46,7 +46,17 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
 
   const hasContent = Boolean(file || value)
   const isImage = file ? file.type.startsWith('image/') : Boolean(accept?.includes('image'))
-  const previewSrc = file ? URL.createObjectURL(file) : (isImage ? value : null)
+
+  const [fileBlobUrl, setFileBlobUrl] = useState(null)
+
+  useEffect(() => {
+    if (!file) { setFileBlobUrl(null); return }
+    const url = URL.createObjectURL(file)
+    setFileBlobUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const previewSrc = file ? fileBlobUrl : (isImage ? value : null)
   const displayName = file ? file.name : value?.split('/').pop()
 
   const openPicker = () => inputRef.current?.click()
