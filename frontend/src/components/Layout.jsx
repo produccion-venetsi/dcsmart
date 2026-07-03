@@ -90,6 +90,24 @@ export default function Layout() {
   const notifications    = useUiStore((s) => s.notifications)
   const removeNotification = useUiStore((s) => s.removeNotification)
 
+  // Los inputs de fecha/select dentro de .form-input-wrap se abren clickeando
+  // en cualquier parte del campo, no solo en el icono/flecha nativa.
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.target.closest('input, select, textarea, button, a')) return
+      const wrap = e.target.closest('.form-input-wrap')
+      if (!wrap) return
+      const field = wrap.querySelector('input[type="date"], input[type="datetime-local"], select')
+      if (!field) return
+      if (typeof field.showPicker === 'function') {
+        try { field.showPicker(); return } catch { /* algunos navegadores lo rechazan sin gesto directo */ }
+      }
+      field.focus()
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [])
+
   return (
     <div className="app-layout">
       <Sidebar />
