@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
@@ -692,6 +693,7 @@ const OVERSCAN = 20
 const COL_COUNT = 14
 
 export default function CajaList() {
+  const [searchParams] = useSearchParams()
   const { activeApp, activeLocal } = useAppStore()
   const locales     = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
@@ -711,6 +713,7 @@ export default function CajaList() {
   const [sortDir,    setSortDir]    = useState('desc')
   const [auditFilter, setAuditFilter] = useState('')
   const [auditingId,  setAuditingId]  = useState(null)
+  const autoOpenedRef = useRef(false)
 
   const scrollRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -727,7 +730,17 @@ export default function CajaList() {
     const ctrl = new AbortController()
     setLoading(true)
     cajasApi.list({ id_local: activeLocal?.id, limit: 0, ...(auditFilter !== '' ? { audit: auditFilter } : {}) }, ctrl.signal)
-      .then(({ data }) => setCajas(data.data))
+      .then(({ data }) => {
+        setCajas(data.data)
+        const turno = searchParams.get('turno')
+        if (!autoOpenedRef.current && turno) {
+          const match = data.data.find(c => c.nro_turno === turno)
+          if (match) {
+            autoOpenedRef.current = true
+            openDetail(match.id)
+          }
+        }
+      })
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()

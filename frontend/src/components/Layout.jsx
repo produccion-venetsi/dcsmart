@@ -62,11 +62,11 @@ function PromptModal() {
 
   return (
     <div className="confirm-backdrop" onMouseDown={() => resolvePrompt(null)}>
-      <div className="confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="confirm-modal confirm-modal-wide" onMouseDown={(e) => e.stopPropagation()}>
         <p className="confirm-message">{promptModal.message}</p>
-        <div className="form-input-wrap" style={{ margin: '0.75rem 0' }}>
+        <div className="form-input-wrap form-textarea-wrap" style={{ margin: '0.75rem 0' }}>
           <textarea
-            rows={2}
+            rows={3}
             autoFocus
             placeholder={promptModal.placeholder}
             value={value}

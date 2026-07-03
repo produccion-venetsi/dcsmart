@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
 import { rubrosApi, categoriasApi, rubcatApi } from '../../api/rubcat.js'
@@ -616,6 +616,7 @@ const LIMIT     = 100
 
 export default function PagoList() {
   const navigate    = useNavigate()
+  const [searchParams] = useSearchParams()
   const activeLocal = useAppStore((s) => s.activeLocal)
   const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
@@ -634,9 +635,10 @@ export default function PagoList() {
   const [selectedPago,    setSelectedPago]    = useState(null)
   const [sortField,       setSortField]       = useState('fecha')
   const [sortDir,         setSortDir]         = useState('desc')
-  const [search,          setSearch]          = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [search,          setSearch]          = useState(() => searchParams.get('search') || '')
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') || '')
   const [auditingId,      setAuditingId]      = useState(null)
+  const autoOpenedRef = useRef(false)
 
   const [rubros,      setRubros]      = useState([])
   const [categorias,  setCategorias]  = useState([])
@@ -699,6 +701,10 @@ export default function PagoList() {
       .then(({ data }) => {
         setPagos(data.data)
         setTotal(data.total)
+        if (!autoOpenedRef.current && searchParams.get('search') && data.data.length === 1) {
+          autoOpenedRef.current = true
+          openDetail(data.data[0])
+        }
       })
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar pagos', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
