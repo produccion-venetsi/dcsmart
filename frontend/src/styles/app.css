@@ -2029,3 +2029,77 @@ th.sortable {
 th.sortable:hover { color: var(--gold-bright); }
 th.sortable .sort-ico { opacity: 0.4; margin-left: 4px; font-style: normal; }
 th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
+
+/* ── AdjuntoUpload (dropzone de foto/PDF) ── */
+.adjunto-dropzone {
+  border: 2px dashed var(--glass-border);
+  border-radius: 14px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--t3);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.adjunto-dropzone:hover,
+.adjunto-dropzone.drag-over {
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.05);
+}
+.adjunto-dropzone svg { color: var(--gold); margin-bottom: 8px; }
+.adjunto-dropzone-main { font-size: 13px; font-weight: 600; color: var(--t1); }
+.adjunto-dropzone-sub { font-size: 11.5px; margin-top: 3px; }
+
+.adjunto-filled {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border-hi);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.adjunto-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #3a4a5c, #22303e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-bright);
+  overflow: hidden;
+}
+.adjunto-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.adjunto-info { flex: 1; min-width: 0; }
+.adjunto-name {
+  font-size: 12.5px;
+  color: var(--t1);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adjunto-sub { font-size: 11px; color: var(--t3); margin-top: 1px; }
+.adjunto-remove {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.adjunto-replace {
+  font-size: 11px;
+  color: var(--gold-bright);
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 6px;
+  display: inline-block;
+}
