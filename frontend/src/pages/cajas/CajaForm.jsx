@@ -54,7 +54,7 @@ export default function CajaForm() {
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Nueva Caja</h1>
-          {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
+          {activeLocal && <span className="local-badge">Local: {activeLocal.nombre}</span>}
         </div>
       </div>
 

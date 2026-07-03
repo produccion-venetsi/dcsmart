@@ -66,7 +66,7 @@ function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { m
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
 
-function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) {
+function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -220,6 +220,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
         {canEdit && (
           <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <IcoEdit /> Editar
+          </button>
+        )}
+        {canDelete && (
+          <button className="btn btn-danger btn-sm" onClick={(e) => onDelete(cajaId, e)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IcoTrash /> Eliminar
           </button>
         )}
       </div>
@@ -690,15 +695,12 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
 const ROW_HEIGHT = 32
 const OVERSCAN = 20
-const COL_COUNT = 14
-
 export default function CajaList() {
   const [searchParams] = useSearchParams()
   const { activeApp, activeLocal } = useAppStore()
   const locales     = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
-  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
@@ -712,7 +714,6 @@ export default function CajaList() {
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
   const [auditFilter, setAuditFilter] = useState('')
-  const [auditingId,  setAuditingId]  = useState(null)
   const autoOpenedRef = useRef(false)
 
   const scrollRef = useRef(null)
@@ -782,38 +783,15 @@ export default function CajaList() {
   const visibleCajas = sortedCajas.slice(startIdx, endIdx)
 
   const handleDelete = async (id, e) => {
-    e.stopPropagation()
+    e?.stopPropagation()
     if (!(await showConfirm('¿Eliminar esta caja?'))) return
     try {
       await cajasApi.remove(id)
       notify('Caja eliminada', 'success')
       setCajas(prev => prev.filter(c => c.id !== id))
+      setPanelOpen(false)
     }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
-  }
-
-  const patchCajaAudit = (id, audit) => {
-    setCajas(prev => prev.map(c => c.id === id ? { ...c, audit } : c))
-  }
-
-  const handleAudit = async (id, e) => {
-    e.stopPropagation()
-    const current = cajas.find(c => c.id === id)
-    let observaciones
-    if (current?.audit) {
-      observaciones = await showPrompt(
-        'Esta caja ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
-        { placeholder: 'Motivo (opcional)' }
-      )
-      if (observaciones === null) return
-    }
-    setAuditingId(id)
-    try {
-      const { data } = await cajasApi.audit(id, current?.audit ? { observaciones } : undefined)
-      notify(data.audit ? 'Caja auditada' : 'Auditoría revertida', 'success')
-      patchCajaAudit(id, data.audit)
-    } catch { notify('Error al auditar', 'error') }
-    finally { setAuditingId(null) }
   }
 
   const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
@@ -837,6 +815,11 @@ export default function CajaList() {
     </th>
   )
 
+  // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
+  // Se sacó la columna de acciones (borrar) de la fila (ahora vive en el detalle).
+  const showLocalCol = !activeLocal
+  const colCount = 12 + (showLocalCol ? 1 : 0)
+
   return (
     <div className="page">
       <style>{`
@@ -847,7 +830,7 @@ export default function CajaList() {
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Cajas</h1>
-          {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
+          {activeLocal && <span className="local-badge">Local: {activeLocal.nombre}</span>}
         </div>
         <div className="page-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <select className="filter-select" value={auditFilter} onChange={e => setAuditFilter(e.target.value)}>
@@ -868,6 +851,7 @@ export default function CajaList() {
           <thead>
             <tr>
               <SortTh field="nro_turno">Nro Turno</SortTh>
+              <th>Auditado</th>
               <SortTh field="fecha_inicio">Inicio</SortTh>
               <SortTh field="fecha_cierre">Cierre</SortTh>
               <SortTh field="cajero">Cajero</SortTh>
@@ -878,23 +862,21 @@ export default function CajaList() {
               <th>Tickets</th>
               <th>Origen</th>
               <th>Foto</th>
-              <th>Local</th>
-              <th>Auditado</th>
-              <th></th>
+              {showLocalCol && <th>Local</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               Array.from({ length: 10 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: COL_COUNT }, (_, j) => (
+                  {Array.from({ length: colCount }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${48 + (j * 11 + i * 9) % 44}%` }} /></td>
                   ))}
                 </tr>
               ))
             ) : sortedCajas.length === 0 ? (
               <tr>
-                <td colSpan={COL_COUNT}>
+                <td colSpan={colCount}>
                   <div className="table-empty">
                     <IcoCaja />
                     <p>No hay cajas registradas{activeLocal ? ' para este local' : ''}.</p>
@@ -903,10 +885,13 @@ export default function CajaList() {
               </tr>
             ) : (
               <>
-                {topPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: topPad }} /></tr>}
+                {topPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: topPad }} /></tr>}
                 {visibleCajas.map((c) => (
                   <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
+                    <td>
+                      <span className={`badge ${c.audit ? 'badge-green' : 'badge-muted'}`}>{c.audit ? '✓ Auditado' : 'No auditado'}</span>
+                    </td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
                     <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
                     <td>{c.cajero || <span className="td-muted">—</span>}</td>
@@ -925,30 +910,10 @@ export default function CajaList() {
                         ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
                         : <span className="td-muted">—</span>}
                     </td>
-                    <td className="td-muted">{c.local?.nombre ?? '—'}</td>
-                    <td>
-                      {canEdit ? (
-                        auditingId === c.id
-                          ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                          : c.audit
-                            ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(c.id, e)} title="Click para revertir">✓ Auditado</span>
-                            : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(c.id, e)}>Auditar</button>
-                      ) : (
-                        <span className="td-muted">{c.audit ? 'Sí' : 'No'}</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="td-actions">
-                        {canDelete && (
-                          <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
-                            <IcoTrash />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    {showLocalCol && <td className="td-muted">{c.local?.nombre ?? '—'}</td>}
                   </tr>
                 ))}
-                {bottomPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: bottomPad }} /></tr>}
+                {bottomPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: bottomPad }} /></tr>}
               </>
             )}
           </tbody>
@@ -981,6 +946,7 @@ export default function CajaList() {
             canEdit={canEdit}
             canDelete={canDelete}
             onEdit={() => openEdit(selectedId)}
+            onDelete={handleDelete}
           />
         )}
         {panelMode === 'edit' && (

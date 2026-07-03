@@ -609,7 +609,6 @@ const FILTER_INIT = {
   id_rubcats: [],
 }
 
-const COL_COUNT = 20
 const LIMIT     = 100
 
 // ─── Componente principal ───────────────────────────────────────────────────
@@ -621,7 +620,6 @@ export default function PagoList() {
   const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
-  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
@@ -637,7 +635,6 @@ export default function PagoList() {
   const [sortDir,         setSortDir]         = useState('desc')
   const [search,          setSearch]          = useState(() => searchParams.get('search') || '')
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') || '')
-  const [auditingId,      setAuditingId]      = useState(null)
   const autoOpenedRef = useRef(false)
 
   const [rubros,      setRubros]      = useState([])
@@ -744,26 +741,6 @@ export default function PagoList() {
     setSelectedPago(prev => prev?.id === id ? { ...prev, ...fields } : prev)
   }
 
-  const handleAudit = async (id, e) => {
-    e.stopPropagation()
-    const current = pagos.find(p => p.id === id)
-    let observaciones
-    if (current?.audit) {
-      observaciones = await showPrompt(
-        'Esta orden ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
-        { placeholder: 'Motivo (opcional)' }
-      )
-      if (observaciones === null) return
-    }
-    setAuditingId(id)
-    try {
-      const { data } = await pagosApi.audit(id, current?.audit ? { observaciones } : undefined)
-      notify(data.audit ? 'Pago auditado' : 'Auditoría revertida', 'success')
-      patchPagoAudit(id, data.audit)
-    } catch { notify('Error al auditar', 'error') }
-    finally { setAuditingId(null) }
-  }
-
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
@@ -866,12 +843,17 @@ export default function PagoList() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
+  // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
+  const showLocalCol = !activeLocal
+  const colCount = 18 + (showLocalCol ? 1 : 0)
+
   return (
     <div className="page">
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Pagos</h1>
-          {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
+          {activeLocal && <span className="local-badge">Local: {activeLocal.nombre}</span>}
         </div>
         <div className="page-actions">
           {/* Buscador OP */}
@@ -1099,6 +1081,7 @@ export default function PagoList() {
           <thead>
             <tr>
               <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
+              <th style={{ minWidth: 100 }}>Auditado</th>
               <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
               <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
               <th style={{ minWidth: 160 }}>Rubro / Cat</th>
@@ -1114,24 +1097,22 @@ export default function PagoList() {
               <th>Estado</th>
               <th>Pagado</th>
               <SortTh field="fecha_pago" minWidth={90}>Fecha Pago</SortTh>
-              <th>Audit</th>
               <SortTh field="periodo" minWidth={80}>Período</SortTh>
-              <th>Local</th>
-              <th></th>
+              {showLocalCol && <th>Local</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               Array.from({ length: 12 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: COL_COUNT }, (_, j) => (
+                  {Array.from({ length: colCount }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${45 + (j * 7 + i * 11) % 50}%` }} /></td>
                   ))}
                 </tr>
               ))
             ) : pagos.length === 0 ? (
               <tr>
-                <td colSpan={COL_COUNT}>
+                <td colSpan={colCount}>
                   <div className="table-empty">
                     <IcoPagoEmpty />
                     <p>No hay pagos que coincidan con los filtros.</p>
@@ -1142,6 +1123,9 @@ export default function PagoList() {
               pagos.map((p) => (
                 <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
                   <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
+                  <td style={{ minWidth: 100 }}>
+                    <span className={`badge ${p.audit ? 'badge-green' : 'badge-muted'}`}>{p.audit ? '✓ Auditado' : 'No auditado'}</span>
+                  </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                   <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 160, fontSize: 12 }}>
@@ -1175,26 +1159,8 @@ export default function PagoList() {
                     <span className={p.pagado ? 'bool-yes' : 'bool-no'}>{p.pagado ? '✓' : '✗'}</span>
                   </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
-                  <td style={{ minWidth: 100 }}>
-                    {auditingId === p.id
-                      ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2, display: 'inline-block' }} />
-                      : p.audit
-                        ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(p.id, e)} title="Click para revertir">✓ Auditado</span>
-                        : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(p.id, e)}>Auditar</button>
-                    }
-                  </td>
                   <td style={{ minWidth: 80 }}>{fmtMonth(p.periodo)}</td>
-                  <td style={{ minWidth: 120, fontSize: 12 }}>{p.local?.nombre || <span className="td-muted">—</span>}</td>
-                  <td style={{ minWidth: 50 }}>
-                    <div className="td-actions">
-                      <button className="btn btn-sm btn-secondary btn-icon" onClick={(e) => { e.stopPropagation(); navigate(`/pagos/${p.id}/editar`) }}>
-                        <IcoEdit />
-                      </button>
-                      <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => { e.stopPropagation(); handleDelete(p.id) }}>
-                        <IcoTrash />
-                      </button>
-                    </div>
-                  </td>
+                  {showLocalCol && <td style={{ minWidth: 120, fontSize: 12 }}>{p.local?.nombre || <span className="td-muted">—</span>}</td>}
                 </tr>
               ))
             )}
