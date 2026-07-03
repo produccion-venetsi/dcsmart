@@ -397,21 +397,8 @@ export default function PagoForm() {
               </div>
             )}
 
-            <div className="form-group">
-              <label className="form-label">Fecha Factura *</label>
-              <div className="form-input-wrap">
-                <input type="date" required value={form.fecha} onChange={e => set('fecha', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Período</label>
-              <div className="form-input-wrap">
-                <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
-              </div>
-            </div>
-
-            {/* combobox de proveedor */}
-            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: '1 / -1' }}>
+            {/* combobox de proveedor — ya no ocupa la fila entera */}
+            <div className="form-group combobox-wrap" ref={provRef}>
               <label className="form-label">Proveedor</label>
               <div className="form-input-wrap">
                 <input
@@ -469,6 +456,43 @@ export default function PagoForm() {
               </div>
             </div>
 
+            {/* fechas, todas juntas */}
+            <div className="form-group">
+              <label className="form-label">Fecha Factura *</label>
+              <div className="form-input-wrap">
+                <input type="date" required value={form.fecha} onChange={e => set('fecha', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Período</label>
+              <div className="form-input-wrap">
+                <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Cashflow</label>
+              <div className="form-input-wrap">
+                <input
+                  type="date"
+                  value={form.cashflow}
+                  onChange={e => set('cashflow', e.target.value)}
+                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
+                />
+              </div>
+              {provPlazo && (
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  Plazo: {provPlazo} días
+                </span>
+              )}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Fecha de Pago</label>
+              <div className="form-input-wrap">
+                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
+              </div>
+            </div>
+
+            {/* comprobante: campos angostos, entran cómodos en una fila */}
             <div className="form-group">
               <label className="form-label">Tipo de Comprobante</label>
               <div className="form-input-wrap">
@@ -486,20 +510,6 @@ export default function PagoForm() {
                 </select>
               </div>
             </div>
-
-            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                <input
-                  type="checkbox"
-                  checked={form.periodico}
-                  onChange={e => set('periodico', e.target.checked)}
-                  style={{ width: 15, height: 15, cursor: 'pointer' }}
-                />
-                <span className="form-label" style={{ margin: 0 }}>Pago periódico (recurrente)</span>
-              </label>
-            </div>
-
-            {/* PV y Nro de comprobante */}
             <div className="form-group">
               <label className="form-label">Punto de Venta</label>
               <div className="form-input-wrap">
@@ -531,6 +541,18 @@ export default function PagoForm() {
               </div>
             </div>
 
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={form.periodico}
+                  onChange={e => set('periodico', e.target.checked)}
+                  style={{ width: 15, height: 15, cursor: 'pointer' }}
+                />
+                <span className="form-label" style={{ margin: 0 }}>Pago periódico (recurrente)</span>
+              </label>
+            </div>
+
           </div>
         </div>
 
@@ -554,28 +576,6 @@ export default function PagoForm() {
               <label className="form-label">Importe Total *</label>
               <div className="form-input-wrap">
                 <input type="number" step="0.01" placeholder="0.00" required value={form.importe} onChange={e => set('importe', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Cashflow</label>
-              <div className="form-input-wrap">
-                <input
-                  type="date"
-                  value={form.cashflow}
-                  onChange={e => set('cashflow', e.target.value)}
-                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
-                />
-              </div>
-              {provPlazo && (
-                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
-                  Plazo: {provPlazo} días
-                </span>
-              )}
-            </div>
-            <div className="form-group">
-              <label className="form-label">Fecha de Pago</label>
-              <div className="form-input-wrap">
-                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
               </div>
             </div>
           </div>
