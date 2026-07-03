@@ -50,6 +50,15 @@ Componente presentacional reutilizable, sin lógica de negocio de pagos/cajas ad
 
 **Uso en Cajas:** una sola instancia de `AdjuntoUpload` con `accept="image/*"` (Cajas solo tiene `foto_url`, no hay campo de PDF en el modelo).
 
+### 2.1 Backend necesario para que Cajas tenga upload real
+
+Hallazgo durante el diseño: a diferencia de Pagos, Cajas **no tiene** hoy un endpoint de subida de archivos — el campo `foto_url` es un input `type="url"` donde se pega manualmente un link (`CajaCreatePanel`/`CajaEditPanel` en `frontend/src/pages/cajas/CajaList.jsx`, líneas ~562 y ~676). Para que el dropzone nuevo tenga sentido en Cajas (no solo se vea lindo, sino que realmente suba el archivo), se agrega:
+
+- **`POST /api/cajas/upload`** en `backend/src/routes/caja.js`, mismo patrón que `POST /api/pagos/upload` (`backend/src/routes/pagos.js:582-604`): recibe un archivo multipart, lo sube a GCS bajo `${folder}/fotos-caja/...` (usa el nombre del local si viene `id_local` en la query, igual que pagos), devuelve `{ ok: true, url: 'gs://...' }`.
+- **`GET /api/cajas/:id/attachment`**, mismo patrón que `GET /api/pagos/:id/attachment` (`backend/src/routes/pagos.js`): stream del archivo desde GCS a través del backend, ya que un navegador no puede cargar una URL `gs://` directamente.
+- **Frontend:** se agrega `cajasApi.upload(formData, idLocal)` y un componente `CajaFotoViewer.jsx` (mismo rol que `FotoViewer.jsx` de pagos, pero solo con foto) que reemplaza los usos actuales de `<img src={caja.foto_url}>`/`<a href={caja.foto_url}>` directos (en `CajaDetailPanel` y en la fila de `CajaList`) por una vista que pasa por el backend.
+- **Compatibilidad con datos existentes:** las cajas que ya tienen una URL `https://` pegada a mano en `foto_url` (dato legacy) deben seguir mostrándose — `CajaFotoViewer` debe detectar si `foto_url` empieza con `gs://` (pasar por el backend) o no (renderizar el link/imagen directo, como hoy).
+
 ## 3. Reordenar el form de Pagos
 
 **Archivo:** `frontend/src/pages/pagos/PagoForm.jsx`, panel "Información del Pago" (líneas ~382-533 actuales).
@@ -66,7 +75,7 @@ El panel "Montos" conserva solo Importe Neto, Descuento e Importe Total (ya no C
 
 ## Fuera de alcance
 
-- Cambios al form de Cajas más allá de adoptar `AdjuntoUpload` para su campo de foto (el resto del form de Cajas — más campos, cargar detalles/movimientos antes de crear — es el Bloque 4, spec aparte).
+- Cambios al form de Cajas más allá de adoptar `AdjuntoUpload`/upload real para su campo de foto (el resto del form de Cajas — más campos, cargar detalles/movimientos antes de crear — es el Bloque 4, spec aparte).
 - Validación de tamaño máximo de archivo en el frontend (hoy no existe, no se agrega en este spec).
 
 ## Testing / verificación
@@ -76,3 +85,5 @@ El panel "Montos" conserva solo Importe Neto, Descuento e Importe Total (ya no C
 - Subir una foto y un PDF en un mismo pago (sin edición previa) y confirmar que ambos quedan guardados tras crear el pago.
 - Quitar un adjunto ya cargado (editando un pago existente) y confirmar que el botón de eliminar funciona y que se puede volver a subir otro archivo distinto sin recargar la página.
 - Confirmar visualmente que el form de Pagos ya no tiene al proveedor ocupando una fila entera, que las 4 fechas están juntas, y que no quedan columnas con espacio vacío evidente.
+- Subir una foto real a una caja nueva y confirmar que se ve correctamente en el detalle y en el listado (a través del backend, no como link directo `gs://`).
+- Abrir una caja existente que ya tenga una URL `https://` pegada a mano en `foto_url` y confirmar que se sigue mostrando bien (compatibilidad con datos legacy).
