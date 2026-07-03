@@ -63,6 +63,6 @@ Este documento es el backlog completo que se armó en conversación (no vino de 
 ## Decisiones ya tomadas (para no repreguntar)
 
 - El texto de "sin locales" en la card de apps es **"Sin apps"** (decisión explícita, "por ahora", el usuario puede cambiarlo después).
-- El PDF/foto mutuamente excluyentes en Pagos (ítem que se pensó que era bug) **es lógica intencional**: un pago lleva PDF *o* foto, no ambos. No se toca.
+- ~~El PDF/foto mutuamente excluyentes en Pagos es lógica intencional~~ → **revertido** en el spec del Bloque 2 (2026-07-03-rediseno-formularios-design.md): el usuario decidió que, por ahora, se pueda cargar foto Y PDF en un mismo pago si quiere. Cajas sigue con un solo adjunto (Foto), porque el modelo no tiene columna de PDF.
 - El bug de cajas-no-reactivas-a-fecha en Reportes (no Dashboard) — el usuario aclaró que **solo lo vio en el Dashboard**, no en Reportes.
 - Orden de bloques: se decidió arrancar por el Bloque 1 (fixes chicos) antes que los bloques con spec propia.
