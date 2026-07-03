@@ -208,16 +208,18 @@ export default function AppSelector() {
                 {/* Footer */}
                 <div className="app-card-foot">
                   <div className="app-card-locales-wrap">
-                    <span className="app-card-locales-summary">
-                      {item.locales.length === 0
-                        ? 'Sin apps'
-                        : `${item.locales.length} local${item.locales.length !== 1 ? 'es' : ''}`}
-                    </span>
-                    {item.locales.length > 0 && (
-                      <div className="app-card-locales-full">
-                        {item.locales.map(l => (
-                          <span key={l.id} className="app-card-locale-tag">{l.nombre}</span>
-                        ))}
+                    {item.locales.length === 0 ? (
+                      <span className="app-card-locales-summary">Sin apps</span>
+                    ) : (
+                      <div className={`app-card-locales-marquee${item.locales.length > 3 ? ' scrolling' : ''}`}>
+                        <div className="app-card-locales-track">
+                          {item.locales.map(l => (
+                            <span key={l.id} className="app-card-locale-tag">{l.nombre}</span>
+                          ))}
+                          {item.locales.length > 3 && item.locales.map(l => (
+                            <span key={`dup-${l.id}`} className="app-card-locale-tag" aria-hidden="true">{l.nombre}</span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
