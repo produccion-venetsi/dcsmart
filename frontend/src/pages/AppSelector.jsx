@@ -211,12 +211,12 @@ export default function AppSelector() {
                     {item.locales.length === 0 ? (
                       <span className="app-card-locales-summary">Sin apps</span>
                     ) : (
-                      <div className={`app-card-locales-marquee${item.locales.length > 3 ? ' scrolling' : ''}`}>
+                      <div className={`app-card-locales-marquee${item.locales.length >= 3 ? ' scrolling' : ''}`}>
                         <div className="app-card-locales-track">
                           {item.locales.map(l => (
                             <span key={l.id} className="app-card-locale-tag">{l.nombre}</span>
                           ))}
-                          {item.locales.length > 3 && item.locales.map(l => (
+                          {item.locales.length >= 3 && item.locales.map(l => (
                             <span key={`dup-${l.id}`} className="app-card-locale-tag" aria-hidden="true">{l.nombre}</span>
                           ))}
                         </div>
