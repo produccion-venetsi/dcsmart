@@ -7,6 +7,8 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import CajaFotoViewer from '../../components/CajaFotoViewer.jsx'
+import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
 
 const EMPTY_CAJA = {
@@ -248,13 +250,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
       {caja.foto_url && (
         <div style={{ marginBottom: '1rem' }}>
           <div className="drawer-section-title">Foto</div>
-          <a href={caja.foto_url} target="_blank" rel="noreferrer">
-            <img
-              src={caja.foto_url}
-              alt="Foto caja"
-              style={{ width: 180, height: 180, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border-hi)', display: 'block' }}
-            />
-          </a>
+          <CajaFotoViewer cajaId={caja.id} fotoUrl={caja.foto_url} />
         </div>
       )}
 
@@ -445,6 +441,8 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const notify  = useUiStore((s) => s.notify)
   const [form,   setForm]   = useState(null)
   const [saving, setSaving] = useState(false)
+  const [fotoFile,      setFotoFile]      = useState(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
 
   useEffect(() => {
     if (!cajaId) return
@@ -462,6 +460,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         tickets:      data.tickets      != null ? String(data.tickets)      : '',
         observaciones: data.observaciones ?? '',
         foto_url:     data.foto_url     ?? '',
+        id_local:     data.id_local     ?? '',
       })
     }).catch(() => notify('Error al cargar caja', 'error'))
   }, [cajaId])
@@ -472,6 +471,15 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     e.preventDefault()
     setSaving(true)
     try {
+      let foto_url = form.foto_url
+      if (fotoFile) {
+        setUploadingFoto(true)
+        const fd = new FormData()
+        fd.append('file', fotoFile)
+        const r = await cajasApi.upload(fd, form.id_local)
+        foto_url = r.data.url
+        setUploadingFoto(false)
+      }
       await cajasApi.update(cajaId, {
         nro_turno:    form.nro_turno    || null,
         fecha_cierre: form.fecha_cierre || null,
@@ -482,12 +490,13 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         comensales:   form.comensales   !== '' ? parseInt(form.comensales)   : null,
         tickets:      form.tickets      !== '' ? parseInt(form.tickets)      : null,
         observaciones: form.observaciones || null,
-        foto_url:     form.foto_url     || null,
+        foto_url:     foto_url          || null,
       })
       notify('Caja actualizada', 'success')
       onSaved()
     } catch (err) {
       notify(err.response?.data?.error || 'Error al guardar', 'error')
+      setUploadingFoto(false)
     } finally { setSaving(false) }
   }
 
@@ -556,12 +565,15 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">URL Foto</label>
-          <div className="form-input-wrap">
-            <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
-          </div>
-        </div>
+        <AdjuntoUpload
+          label="Foto"
+          accept="image/*"
+          value={form.foto_url}
+          file={fotoFile}
+          onFileSelected={setFotoFile}
+          onRemove={() => { setF('foto_url', ''); setFotoFile(null) }}
+          uploading={uploadingFoto}
+        />
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
           <label className="form-label">Observaciones</label>
           <div className="form-input-wrap form-textarea-wrap">
@@ -584,6 +596,8 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const [form,      setForm]    = useState(EMPTY_CAJA)
   const [localId,   setLocalId] = useState(activeLocal?.id || '')
   const [saving,    setSaving]  = useState(false)
+  const [fotoFile,      setFotoFile]      = useState(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -594,11 +608,21 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
     if (!targetLocalId) { notify('Seleccioná un local', 'error'); return }
     setSaving(true)
     try {
-      const res = await cajasApi.create({ ...form, id_local: targetLocalId })
+      let foto_url = form.foto_url
+      if (fotoFile) {
+        setUploadingFoto(true)
+        const fd = new FormData()
+        fd.append('file', fotoFile)
+        const r = await cajasApi.upload(fd, targetLocalId)
+        foto_url = r.data.url
+        setUploadingFoto(false)
+      }
+      const res = await cajasApi.create({ ...form, foto_url, id_local: targetLocalId })
       notify('Caja creada', 'success')
       onCreated(res.data?.id)
     } catch (err) {
       notify(err.response?.data?.error || 'Error al crear', 'error')
+      setUploadingFoto(false)
     } finally { setSaving(false) }
   }
 
@@ -670,12 +694,15 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">URL Foto</label>
-          <div className="form-input-wrap">
-            <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
-          </div>
-        </div>
+        <AdjuntoUpload
+          label="Foto"
+          accept="image/*"
+          value={form.foto_url}
+          file={fotoFile}
+          onFileSelected={setFotoFile}
+          onRemove={() => { setF('foto_url', ''); setFotoFile(null) }}
+          uploading={uploadingFoto}
+        />
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
           <label className="form-label">Observaciones</label>
           <div className="form-input-wrap form-textarea-wrap">
@@ -906,9 +933,11 @@ export default function CajaList() {
                         : <span className="td-muted">—</span>}
                     </td>
                     <td>
-                      {c.foto_url
+                      {c.foto_url && !c.foto_url.startsWith('gs://')
                         ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
-                        : <span className="td-muted">—</span>}
+                        : c.foto_url
+                          ? <span className="td-muted" title="Ver en el detalle"><IcoLink /></span>
+                          : <span className="td-muted">—</span>}
                     </td>
                     {showLocalCol && <td className="td-muted">{c.local?.nombre ?? '—'}</td>}
                   </tr>
