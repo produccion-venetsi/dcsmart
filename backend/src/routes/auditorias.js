@@ -1,10 +1,31 @@
+// Arma la condición OR que restringe los eventos de auditoría a los pagos/cajas
+// cuyo local pertenece a la app activa (request.allowedLocalIds, de appContext).
+// Si `tabla` viene fijado a 'pagos' o 'cajas', solo arma esa rama.
+async function buildScopeOr(fastify, allowedLocalIds, tabla) {
+  const wantsPagos = !tabla || tabla === 'pagos'
+  const wantsCajas = !tabla || tabla === 'cajas'
+
+  const [pagos, cajas] = await Promise.all([
+    wantsPagos
+      ? fastify.db.pago.findMany({ where: { id_local: { in: allowedLocalIds } }, select: { id: true } })
+      : [],
+    wantsCajas
+      ? fastify.db.caja.findMany({ where: { id_local: { in: allowedLocalIds } }, select: { id: true } })
+      : []
+  ])
+
+  const scopeOr = []
+  if (wantsPagos) scopeOr.push({ tabla: 'pagos', id_registro: { in: pagos.map(p => p.id) } })
+  if (wantsCajas) scopeOr.push({ tabla: 'cajas', id_registro: { in: cajas.map(c => c.id) } })
+  return scopeOr
+}
+
 export default async function auditoriasRoutes(fastify) {
-  const guard = [fastify.authenticate, fastify.requireSuperAdmin]
+  const guard = [fastify.authenticate, fastify.appContext, fastify.requireSuperAdmin]
 
   // ── GET / ─────────────────────────────────────────────────────────────
-  // Lista todos los eventos de auditoría (pagos + cajas), con filtros.
-  // Vista global — no depende de appContext ni de locales permitidos,
-  // solo accesible para super_admin.
+  // Lista los eventos de auditoría (pagos + cajas) de la app activa
+  // (X-App-Id), con filtros. Solo accesible para super_admin.
   fastify.get('/', { preHandler: guard }, async (request, reply) => {
     const {
       desde, hasta, tabla, id_user, accion,
@@ -18,8 +39,10 @@ export default async function auditoriasRoutes(fastify) {
       return reply.code(400).send({ error: 'accion debe ser "auditado" o "desauditado"' })
     }
 
+    const scopeOr = await buildScopeOr(fastify, request.allowedLocalIds, tabla)
+
     const where = {
-      ...(tabla   ? { tabla }   : {}),
+      OR: scopeOr,
       ...(id_user ? { id_user } : {}),
       ...(accion  ? { accion }  : {}),
       ...(desde || hasta ? {
@@ -80,10 +103,12 @@ export default async function auditoriasRoutes(fastify) {
 
   // ── GET /usuarios ────────────────────────────────────────────────────
   // Lista de usuarios distintos que aparecen como autor de algún evento
-  // de auditoría, para poblar el filtro de usuario en el frontend.
+  // de auditoría dentro de la app activa, para poblar el filtro de usuario.
   fastify.get('/usuarios', { preHandler: guard }, async (request, reply) => {
+    const scopeOr = await buildScopeOr(fastify, request.allowedLocalIds, undefined)
+
     const rows = await fastify.db.audit.findMany({
-      where: { id_user: { not: null } },
+      where: { OR: scopeOr, id_user: { not: null } },
       distinct: ['id_user'],
       select: { user: { select: { id: true, nombre: true } } }
     })
