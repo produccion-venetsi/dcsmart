@@ -27,12 +27,14 @@ Este documento es el backlog completo que se armó en conversación (no vino de 
 
 **Bloque 1: completo y confirmado por el usuario.**
 
-## Bloque 2 — Rediseño de formularios (spec propia, no arrancado)
+## Bloque 2 — Rediseño de formularios (spec: `2026-07-03-rediseno-formularios-design.md`, plan: `2026-07-03-rediseno-formularios.md`)
 
-7. `[ ]` Reordenar form de Pagos: proveedor muy grande, debería ir junto a rubro/categoría; fechas juntas; en general más fácil de cargar.
-8. `[ ]` Inputs de fecha/select: que funcionen clickeando en cualquier parte del input, no solo el ícono chico.
-9. `[ ]` Rediseñar el input de foto/PDF (hoy se ve como un input viejo del navegador).
-10. `[ ]` Poder quitar foto/PDF cómodamente desde el form (hoy no se puede); arreglar la "x" diminuta de proveedores.
+7. `[x]` Reordenar form de Pagos: proveedor ya no ocupa una fila entera (se agrupa con Rubro/Categoría y Método de Pago); las 4 fechas (Factura, Período, Cashflow, Fecha de Pago) quedan juntas en un mismo bloque.
+8. `[x]` Inputs de fecha/select clickeables en cualquier parte del input (fix compartido en `Layout.jsx`, no por formulario) — pendiente de verificación visual en navegador.
+9. `[x]` Nuevo componente `AdjuntoUpload` (dropzone) reemplaza el input de archivo nativo en Pagos (foto + PDF, ambos permitidos) y Cajas (que además ganó upload real de fotos — antes era un input de URL manual, sin backend de subida).
+10. `[x]` Quitar foto/PDF cómodamente desde `AdjuntoUpload` (botón grande de eliminar); la "x" diminuta de proveedores se agrandó a un botón circular de 24px con hover (fix aplicado aparte, se había quedado afuera del spec original por error).
+
+**Bloque 2: completo, pendiente de verificación visual en navegador** (revisión final de código limpia, incluye un fix de preview rota con fotos `gs://` ya guardadas).
 
 ## Bloque 3 — Reportes/Dashboard (spec propia, no arrancado)
 
