@@ -56,7 +56,9 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
     return () => URL.revokeObjectURL(url)
   }, [file])
 
-  const previewSrc = file ? fileBlobUrl : (isImage ? value : null)
+  const previewSrc = file
+    ? fileBlobUrl
+    : (isImage && value && !value.startsWith('gs://') ? value : null)
   const displayName = file ? file.name : value?.split('/').pop()
 
   const openPicker = () => inputRef.current?.click()
