@@ -12,15 +12,20 @@ Este documento es el backlog completo que se armó en conversación (no vino de 
 ## Bloque 1 — Fixes chicos y bugs (sin spec, van directo a implementación)
 
 1. `[x]` Autofill del navegador en Login se veía con fondo blanco → fix CSS (`:-webkit-autofill`).
-2. `[ ]` Verificar que el selector de período del Dashboard (incluida la fecha personalizada) funcione bien — no se tocó código, solo hay que confirmar en vivo. *(No era pedido de renombrar, solo de verificar.)*
-3. `[ ]` Bug reportado: los datos de cajas en el Dashboard no cambian según la fecha. Se revisó el código (frontend `Dashboard.jsx` y backend `caja.js` `/stats`) y **ambos aplican `desde`/`hasta` correctamente** — no se encontró el bug en la lógica. Pendiente de reproducir en vivo; puede ser un tema de datos reales, no de código.
+2. `[x]` Selector de período del Dashboard (incluida fecha personalizada) — confirmado por el usuario en vivo, funciona bien.
+3. `[x]` Bug reportado de cajas en el Dashboard no reactivas a la fecha — confirmado por el usuario en vivo que **no era un bug real** (consistente con la revisión de código previa, donde `desde`/`hasta` ya se aplicaban bien en frontend y backend).
 4. `[x]` Botón de auditar y de eliminar sacados de la fila de tabla en Pagos y Cajas — "Auditado" queda como dato de solo lectura, más cerca del principio de las columnas. Las acciones (auditar, editar, eliminar) ahora viven solo en el panel de detalle (se agregó el botón "Eliminar" al detalle de Caja, que antes solo existía en la fila).
-5. `[x]` Card del selector de apps: mostrar los nombres reales de todos los locales (no un texto genérico ni un conteo) — iterado varias veces:
+5. `[x]` Card del selector de apps: mostrar los nombres reales de todos los locales (no un texto genérico ni un conteo) — iterado varias veces hasta quedar bien:
    - v1: texto genérico "Todos los locales" → **incorrecto**, el usuario pedía lo contrario.
    - v2: nombres truncados en una línea con tooltip → reemplazado.
    - v3: hover-accordion que hacía crecer la card → rompía el diseño de grilla, descartado.
-   - v4 (actual): resumen oculto por defecto; al hacer **hover** aparecen los locales como tags dorados en una fila de **altura fija** (la card no crece); si son más de 3, se deslizan en loop tipo ticker mientras dura el hover (con &gt;3 se anima, con ≤3 quedan fijos sin animación). "Sin apps" cuando no tiene ningún local (siempre visible, no depende de hover).
+   - v4: ticker que corría todo el tiempo (se pausaba en hover) → el usuario pidió que sea al revés.
+   - v5: invisible por defecto, aparece + desliza solo con hover → con 3 locales no entraba el tercero, y con pocos el primero se veía difuminado (el degradado de bordes se aplicaba siempre).
+   - v6: degradado de bordes solo cuando hay scroll real; umbral de "cuenta con scroll" bajado a ≥3 (antes &gt;3).
+   - v7 (final, confirmado): duración de la animación proporcional al largo total del texto, para que la velocidad (px/seg) sea siempre la misma sin importar cuántos locales o qué tan largos sean los nombres.
 6. `[x]` Texto "Cuenta personal" debajo del nombre de usuario en el selector de apps: era texto fijo sin información real → se sacó directamente.
+
+**Bloque 1: completo y confirmado por el usuario.**
 
 ## Bloque 2 — Rediseño de formularios (spec propia, no arrancado)
 
