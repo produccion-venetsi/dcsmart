@@ -8,6 +8,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 
 function IcoBack() {
   return (
@@ -704,58 +705,24 @@ export default function PagoForm() {
         <div className="form-panel">
           <div className="form-panel-title">Adjuntos</div>
           <div className="form-grid">
-            <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <IcoPaperclip /> Foto
-              </label>
-              {form.foto_url ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {form.foto_url.split('/').pop()}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-danger btn-icon"
-                    onClick={() => { set('foto_url', ''); setFotoFile(null) }}>
-                    <IcoTrash />
-                  </button>
-                </div>
-              ) : (
-                <div className="form-input-wrap">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => setFotoFile(e.target.files[0] || null)}
-                    style={{ padding: '4px 0' }}
-                  />
-                </div>
-              )}
-              {uploadingFoto && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo foto...</span>}
-            </div>
-            <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <IcoPaperclip /> PDF
-              </label>
-              {form.pdf_url ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {form.pdf_url.split('/').pop()}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-danger btn-icon"
-                    onClick={() => { set('pdf_url', ''); setPdfFile(null) }}>
-                    <IcoTrash />
-                  </button>
-                </div>
-              ) : (
-                <div className="form-input-wrap">
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={e => setPdfFile(e.target.files[0] || null)}
-                    style={{ padding: '4px 0' }}
-                  />
-                </div>
-              )}
-              {uploadingPdf && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo PDF...</span>}
-            </div>
+            <AdjuntoUpload
+              label="Foto"
+              accept="image/*"
+              value={form.foto_url}
+              file={fotoFile}
+              onFileSelected={setFotoFile}
+              onRemove={() => { set('foto_url', ''); setFotoFile(null) }}
+              uploading={uploadingFoto}
+            />
+            <AdjuntoUpload
+              label="PDF"
+              accept=".pdf,application/pdf"
+              value={form.pdf_url}
+              file={pdfFile}
+              onFileSelected={setPdfFile}
+              onRemove={() => { set('pdf_url', ''); setPdfFile(null) }}
+              uploading={uploadingPdf}
+            />
           </div>
         </div>
 
