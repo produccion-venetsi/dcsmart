@@ -137,7 +137,18 @@ export default function Auditorias() {
                   <td className="td-muted">{fmtDT(ev.fecha)}</td>
                   <td><span className={`badge ${MODULO_BADGE[ev.tabla] ?? 'badge-muted'}`}>{MODULO_LABEL[ev.tabla] ?? ev.tabla}</span></td>
                   <td>
-                    <Link to={ev.tabla === 'pagos' ? '/pagos' : '/cajas'}>{ev.registro_label}</Link>
+                    {ev.registro_label === '—' ? (
+                      <span className="td-muted">—</span>
+                    ) : (
+                      <Link
+                        className="registro-link"
+                        to={ev.tabla === 'pagos'
+                          ? `/pagos?search=${encodeURIComponent(ev.registro_label)}`
+                          : `/cajas?turno=${encodeURIComponent(ev.registro_label.replace(/^TRN\s*/, ''))}`}
+                      >
+                        {ev.registro_label}
+                      </Link>
+                    )}
                   </td>
                   <td>{ev.user?.nombre ?? '—'}</td>
                   <td>
