@@ -52,11 +52,13 @@ Este documento es el backlog completo que se armó en conversación (no vino de 
 
 **Bloque 4: completo, pendiente de verificación visual en navegador.**
 
-## Bloque 5 — Acciones de tabla + detalle + bulk actions (parcialmente arrancado en Bloque 1 item 4)
+## Bloque 5 — Acciones de tabla + detalle + bulk actions (spec: `2026-07-04-acciones-bulk-design.md`, plan: `2026-07-04-acciones-bulk.md`)
 
 17. `[x]` Sacar botones de auditar/borrar de la fila (cubierto en el ítem 4 del Bloque 1).
-18. `[ ]` Detalle (pago o caja): reemplazar la fila de botones de arriba (Editar, Auditar, PDP, Pagar, Eliminar, etc.) por un botón "Acciones" que al hacer **hover** despliega toda la sección con las acciones disponibles — en vez de tenerlas todas visibles como botones separados.
-19. `[ ]` Selector múltiple (checkboxes) de pagos/cajas en el listado, para auditar o borrar varios a la vez.
+18. `[x]` Detalle (pago o caja): botón "Acciones" (hover en desktop, tap en touch) que despliega el panel con Editar/Auditar/PDP/Pagar/Periódico/Eliminar (Pagos) o Auditar/Editar/Eliminar (Cajas), reemplazando la fila de botones sueltos.
+19. `[x]` Selector múltiple (checkboxes) en la tabla de Pagos y de Cajas, con barra flotante de Auditar/Desauditar/Eliminar en bulk.
+
+**Bloque 5: completo, pendiente de verificación visual en navegador.**
 
 ## Bloque 6 — Login/Auth (no arrancado)
 
