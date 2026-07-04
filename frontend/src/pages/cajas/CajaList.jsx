@@ -285,35 +285,6 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
         </table>
       </div>
 
-      <div className="drawer-section-title">Historial de auditoría</div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
-          </thead>
-          <tbody>
-            {loadingHistory ? (
-              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
-            ) : auditHistory.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
-            ) : (
-              auditHistory.map((ev) => (
-                <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
-                  <td>{ev.user?.nombre ?? '—'}</td>
-                  <td>
-                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
-                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
-                    </span>
-                  </td>
-                  <td className="td-muted">{ev.observaciones || '—'}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
       {canEdit && <div className="drawer-section-title">Agregar Detalle</div>}
       {canEdit && <form onSubmit={handleAddDet}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -433,6 +404,35 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
           {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
         </button>
       </form>}
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+          </thead>
+          <tbody>
+            {loadingHistory ? (
+              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+            ) : auditHistory.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+            ) : (
+              auditHistory.map((ev) => (
+                <tr key={ev.id}>
+                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td>{ev.user?.nombre ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
+                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
+                    </span>
+                  </td>
+                  <td className="td-muted">{ev.observaciones || '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

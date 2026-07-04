@@ -1753,6 +1753,8 @@ tr.row-clickable:hover td {
   text-transform: uppercase;
   color: var(--t4);
   margin: 1.25rem 0 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
 }
 .drawer-section-title:first-child { margin-top: 0; }
 

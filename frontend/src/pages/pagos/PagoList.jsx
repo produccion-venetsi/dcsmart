@@ -502,35 +502,6 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
         </table>
       </div>
 
-      <div className="drawer-section-title">Historial de auditoría</div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
-          </thead>
-          <tbody>
-            {loadingHistory ? (
-              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
-            ) : auditHistory.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
-            ) : (
-              auditHistory.map((ev) => (
-                <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
-                  <td>{ev.user?.nombre ?? '—'}</td>
-                  <td>
-                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
-                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
-                    </span>
-                  </td>
-                  <td className="td-muted">{ev.observaciones || '—'}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
       <form onSubmit={handleAddImp} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
         <div className="form-group" style={{ margin: 0, flex: 1 }}>
           <label className="form-label">Tipo</label>
@@ -595,6 +566,35 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           </div>
         </form>
       )}
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+          </thead>
+          <tbody>
+            {loadingHistory ? (
+              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+            ) : auditHistory.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+            ) : (
+              auditHistory.map((ev) => (
+                <tr key={ev.id}>
+                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td>{ev.user?.nombre ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
+                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
+                    </span>
+                  </td>
+                  <td className="td-muted">{ev.observaciones || '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
