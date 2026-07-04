@@ -673,6 +673,7 @@ export default function PagoList() {
   const [metodos,     setMetodos]     = useState([])
   const [provSearchResults, setProvSearchResults] = useState([])
   const [provSearchLoading, setProvSearchLoading] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT))
 
@@ -720,10 +721,19 @@ export default function PagoList() {
   // ── Volver a página 1 cuando cambian filtros / sort / búsqueda ────────────
   useEffect(() => { setPage(1) }, [buildParams])
 
+  const load = useCallback(() => {
+    setLoading(true)
+    pagosApi.list(buildParams(page))
+      .then(({ data }) => { setPagos(data.data); setTotal(data.total) })
+      .catch(() => notify('Error al cargar pagos', 'error'))
+      .finally(() => setLoading(false))
+  }, [buildParams, page])
+
   // ── Carga de la página actual (reemplaza, no acumula) ──────────────────────
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
+    setSelectedIds(new Set())
     pagosApi.list(buildParams(page), ctrl.signal)
       .then(({ data }) => {
         setPagos(data.data)
@@ -769,6 +779,61 @@ export default function PagoList() {
   const patchPago = (id, fields) => {
     setPagos(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p))
     setSelectedPago(prev => prev?.id === id ? { ...prev, ...fields } : prev)
+  }
+
+  const toggleSelected = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const allVisibleSelected = pagos.length > 0 && pagos.every(p => selectedIds.has(p.id))
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(pagos.map(p => p.id)))
+  }
+
+  const selectedPagos    = pagos.filter(p => selectedIds.has(p.id))
+  const canBulkAudit     = selectedPagos.some(p => !p.audit)
+  const canBulkDesaudit  = selectedPagos.some(p => p.audit)
+
+  const bulkCancel = () => setSelectedIds(new Set())
+
+  const bulkAuditar = async () => {
+    const targets = selectedPagos.filter(p => !p.audit)
+    let ok = 0, fail = 0
+    for (const p of targets) {
+      try { await pagosApi.audit(p.id); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} pagos auditados` : `${ok}/${targets.length} auditados, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
+  }
+
+  const bulkDesauditar = async () => {
+    const targets = selectedPagos.filter(p => p.audit)
+    let ok = 0, fail = 0
+    for (const p of targets) {
+      try { await pagosApi.audit(p.id, { observaciones: null }); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} pagos desauditados` : `${ok}/${targets.length} desauditados, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
+  }
+
+  const bulkEliminar = async () => {
+    if (!(await showConfirm(`¿Eliminar ${selectedPagos.length} pagos?`))) return
+    let ok = 0, fail = 0
+    for (const p of selectedPagos) {
+      try { await pagosApi.remove(p.id); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} pagos eliminados` : `${ok}/${selectedPagos.length} eliminados, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
   }
 
   const toggleSort = (field) => {
@@ -876,7 +941,7 @@ export default function PagoList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 18 + (showLocalCol ? 1 : 0)
+  const colCount = 19 + (showLocalCol ? 1 : 0)
 
   return (
     <div className="page">
@@ -1105,11 +1170,39 @@ export default function PagoList() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+          borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.75rem',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>
+            {selectedIds.size} seleccionados
+          </span>
+          <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit}>
+            Auditar
+          </button>
+          <button className="btn btn-sm btn-secondary" onClick={bulkDesauditar} disabled={!canBulkDesaudit}>
+            Desauditar
+          </button>
+          <button className="btn btn-sm btn-danger" onClick={bulkEliminar}>
+            Eliminar
+          </button>
+          <button className="btn btn-sm btn-secondary" onClick={bulkCancel} style={{ marginLeft: 'auto' }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+
       {/* ── Tabla ── */}
       <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: 32 }}>
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
+              </th>
               <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
               <th style={{ minWidth: 100 }}>Auditado</th>
               <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
@@ -1152,6 +1245,9 @@ export default function PagoList() {
             ) : (
               pagos.map((p) => (
                 <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
+                  <td onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
+                  </td>
                   <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 100 }}>
                     <span className={`badge ${p.audit ? 'badge-green' : 'badge-muted'}`}>{p.audit ? '✓ Auditado' : 'No auditado'}</span>
