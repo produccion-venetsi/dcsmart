@@ -986,6 +986,7 @@ export default function CajaList() {
 
   const scrollRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
+  const [selectedIds, setSelectedIds] = useState(new Set())
 
   const cajaListParams = () => ({
     id_local: activeLocal?.id,
@@ -1006,6 +1007,7 @@ export default function CajaList() {
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
+    setSelectedIds(new Set())
     cajasApi.list(cajaListParams(), ctrl.signal)
       .then(({ data }) => {
         setCajas(data.data)
@@ -1070,6 +1072,61 @@ export default function CajaList() {
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
+  const toggleSelected = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const allVisibleSelected = sortedCajas.length > 0 && sortedCajas.every(c => selectedIds.has(c.id))
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(sortedCajas.map(c => c.id)))
+  }
+
+  const selectedCajas    = sortedCajas.filter(c => selectedIds.has(c.id))
+  const canBulkAudit     = selectedCajas.some(c => !c.audit)
+  const canBulkDesaudit  = selectedCajas.some(c => c.audit)
+
+  const bulkCancel = () => setSelectedIds(new Set())
+
+  const bulkAuditar = async () => {
+    const targets = selectedCajas.filter(c => !c.audit)
+    let ok = 0, fail = 0
+    for (const c of targets) {
+      try { await cajasApi.audit(c.id); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} cajas auditadas` : `${ok}/${targets.length} auditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
+  }
+
+  const bulkDesauditar = async () => {
+    const targets = selectedCajas.filter(c => c.audit)
+    let ok = 0, fail = 0
+    for (const c of targets) {
+      try { await cajasApi.audit(c.id, { observaciones: null }); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} cajas desauditadas` : `${ok}/${targets.length} desauditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
+  }
+
+  const bulkEliminar = async () => {
+    if (!(await showConfirm(`¿Eliminar ${selectedCajas.length} cajas?`))) return
+    let ok = 0, fail = 0
+    for (const c of selectedCajas) {
+      try { await cajasApi.remove(c.id); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} cajas eliminadas` : `${ok}/${selectedCajas.length} eliminadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
+  }
+
   const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
   const openDetail = (id) => { setSelectedId(id); setPanelMode('detail'); setPanelOpen(true) }
   const openEdit   = (id) => { setSelectedId(id); setPanelMode('edit');   setPanelOpen(true) }
@@ -1094,7 +1151,7 @@ export default function CajaList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacó la columna de acciones (borrar) de la fila (ahora vive en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 12 + (showLocalCol ? 1 : 0)
+  const colCount = 13 + (showLocalCol ? 1 : 0)
 
   return (
     <div className="page">
@@ -1166,10 +1223,38 @@ export default function CajaList() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap',
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+          borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.75rem',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>
+            {selectedIds.size} seleccionados
+          </span>
+          <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit}>
+            Auditar
+          </button>
+          <button className="btn btn-sm btn-secondary" onClick={bulkDesauditar} disabled={!canBulkDesaudit}>
+            Desauditar
+          </button>
+          <button className="btn btn-sm btn-danger" onClick={bulkEliminar}>
+            Eliminar
+          </button>
+          <button className="btn btn-sm btn-secondary" onClick={bulkCancel} style={{ marginLeft: 'auto' }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+
       <div ref={scrollRef} className="vt-scroll-cajas table-wrap">
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: 32 }}>
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
+              </th>
               <SortTh field="nro_turno">Nro Turno</SortTh>
               <th>Auditado</th>
               <SortTh field="fecha_inicio">Inicio</SortTh>
@@ -1208,6 +1293,9 @@ export default function CajaList() {
                 {topPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: topPad }} /></tr>}
                 {visibleCajas.map((c) => (
                   <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
+                    <td onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleSelected(c.id)} />
+                    </td>
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
                     <td>
                       <span className={`badge ${c.audit ? 'badge-green' : 'badge-muted'}`}>{c.audit ? '✓ Auditado' : 'No auditado'}</span>
