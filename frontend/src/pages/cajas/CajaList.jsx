@@ -62,6 +62,13 @@ function IcoBack() {
     </svg>
   )
 }
+function IcoFilter() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+    </svg>
+  )
+}
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
@@ -764,24 +771,53 @@ export default function CajaList() {
   const [selectedId, setSelectedId] = useState(null)
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
-  const [auditFilter, setAuditFilter] = useState('')
+  const FILTER_INIT_CAJAS = { desde: '', hasta: '', audit: '' }
+  const [filters, setFilters] = useState(FILTER_INIT_CAJAS)
+  const [draft,   setDraft]   = useState(FILTER_INIT_CAJAS)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterRef = useRef(null)
+
+  const activeFilterCount = Object.values(filters).filter(v => v !== '').length
+  const hasActiveFilters  = activeFilterCount > 0
+
+  const openFilters   = () => { setDraft(filters); setFilterOpen(true) }
+  const applyFilters  = () => { setFilters(draft); setFilterOpen(false) }
+  const clearFilters  = () => { setDraft(FILTER_INIT_CAJAS); setFilters(FILTER_INIT_CAJAS) }
+  const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+
+  useEffect(() => {
+    if (!filterOpen) return
+    const handler = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [filterOpen])
   const autoOpenedRef = useRef(false)
 
   const scrollRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
 
+  const cajaListParams = () => ({
+    id_local: activeLocal?.id,
+    limit: 0,
+    ...(filters.audit !== '' ? { audit: filters.audit } : {}),
+    ...(filters.desde !== '' ? { desde: filters.desde } : {}),
+    ...(filters.hasta !== '' ? { hasta: filters.hasta } : {})
+  })
+
   const load = useCallback(() => {
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, limit: 0, ...(auditFilter !== '' ? { audit: auditFilter } : {}) })
+    cajasApi.list(cajaListParams())
       .then(({ data }) => setCajas(data.data))
       .catch(() => notify('Error al cargar cajas', 'error'))
       .finally(() => setLoading(false))
-  }, [activeLocal?.id, auditFilter])
+  }, [activeLocal?.id, filters])
 
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, limit: 0, ...(auditFilter !== '' ? { audit: auditFilter } : {}) }, ctrl.signal)
+    cajasApi.list(cajaListParams(), ctrl.signal)
       .then(({ data }) => {
         setCajas(data.data)
         const turno = searchParams.get('turno')
@@ -796,7 +832,7 @@ export default function CajaList() {
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [activeLocal?.id, auditFilter])
+  }, [activeLocal?.id, filters])
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -884,11 +920,55 @@ export default function CajaList() {
           {activeLocal && <span className="local-badge">Local: {activeLocal.nombre}</span>}
         </div>
         <div className="page-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <select className="filter-select" value={auditFilter} onChange={e => setAuditFilter(e.target.value)}>
-            <option value="">Todos</option>
-            <option value="false">No auditado</option>
-            <option value="true">Auditado</option>
-          </select>
+          <div style={{ position: 'relative' }} ref={filterRef}>
+            <button
+              className={`btn ${filterOpen || hasActiveFilters ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => filterOpen ? setFilterOpen(false) : openFilters()}
+            >
+              <IcoFilter />
+              Filtros
+              {activeFilterCount > 0 && (
+                <span style={{ marginLeft: 6, background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {filterOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                borderRadius: 12, padding: '1.25rem', width: 320, maxWidth: '90vw',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                  <div>
+                    <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Desde</span>
+                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} max={draft.hasta || undefined} onChange={e => setDraftField('desde', e.target.value)} />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Hasta</span>
+                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.hasta} min={draft.desde || undefined} onChange={e => setDraftField('hasta', e.target.value)} />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Auditado</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.audit} onChange={e => setDraftField('audit', e.target.value)}>
+                      <option value="">Todos</option>
+                      <option value="false">No auditado</option>
+                      <option value="true">Auditado</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+                  <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
+                    Limpiar todo
+                  </button>
+                  <button className="btn btn-sm btn-primary" onClick={applyFilters}>
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           {canCreate && (
             <button className="btn btn-primary" onClick={openCreate}>
               <IcoPlus /> Nueva Caja
