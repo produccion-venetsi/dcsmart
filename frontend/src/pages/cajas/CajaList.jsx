@@ -304,7 +304,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
       )}
 
       {canEdit && addingDet && <form onSubmit={handleAddDet}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Clasificación</label>
             <div className="form-input-wrap">
@@ -394,7 +394,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
       )}
 
       {canEdit && addingMov && <form onSubmit={handleAddMov}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
             <div className="form-input-wrap">
@@ -541,7 +541,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fecha Inicio</label>
           <div className="form-input-wrap">
@@ -731,7 +731,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
   return (
     <form onSubmit={handleCreate}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
             <label className="form-label">Local *</label>
@@ -834,8 +834,8 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
           </table>
         </div>
       )}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
-        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nombre</label>
           <div className="form-input-wrap">
             <select value={detForm.id_tipo} onChange={e => setDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
@@ -844,18 +844,20 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
             </select>
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Monto</label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
           <label className="form-label">Observaciones</label>
           <div className="form-input-wrap">
             <input type="text" placeholder="Opcional" value={detForm.observaciones} onChange={e => setDetForm(f => ({ ...f, observaciones: e.target.value }))} />
           </div>
         </div>
+      </div>
+      <div style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
         <button type="button" className="btn btn-secondary" onClick={addPendingDetalle} disabled={!detForm.monto}>
           <IcoPlus /> Agregar
         </button>
@@ -886,7 +888,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
           </table>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Tipo</label>
           <div className="form-input-wrap">
@@ -919,6 +921,8 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
             <input type="number" min="1" step="1" placeholder="Opcional" value={movForm.cantidad} onChange={e => setMovForm(f => ({ ...f, cantidad: e.target.value }))} />
           </div>
         </div>
+      </div>
+      <div style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
         <button type="button" className="btn btn-secondary" onClick={addPendingMovimiento} disabled={!movForm.monto}>
           <IcoPlus /> Agregar
         </button>
@@ -1122,12 +1126,12 @@ export default function CajaList() {
                 borderRadius: 12, padding: '1.25rem', width: 320, maxWidth: '90vw',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
               }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                  <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem' }}>
+                  <div style={{ minWidth: 0 }}>
                     <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Desde</span>
                     <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} max={draft.hasta || undefined} onChange={e => setDraftField('desde', e.target.value)} />
                   </div>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Hasta</span>
                     <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.hasta} min={draft.desde || undefined} onChange={e => setDraftField('hasta', e.target.value)} />
                   </div>
