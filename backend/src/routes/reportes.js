@@ -126,9 +126,8 @@ export default async function reportesRoutes(fastify) {
       },
       secondary: [
         { label: 'Porc Z',          val: pctZ + '%',      color: '#EFEDE8' },
-        { label: 'Porc No Fiscal',   val: pctNoFisc + '%', color: '#EFEDE8' },
         { label: 'Z Digitales',      val: digital,         color: '#3FB6BD' },
-        { label: 'Porc Avión',       val: '0%',            color: 'rgba(255,255,255,.55)' },
+        { label: 'Porc Avión',       val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' },
         { label: 'Desperdicios',     val: desperdicios,    color: '#E0938C' },
         { label: 'Invitaciones',     val: invitaciones,    color: '#D8B98C' }
       ],
@@ -156,8 +155,7 @@ export default async function reportesRoutes(fastify) {
       return {
         total_adeudado: 0, count_adeudado: 0,
         count_auditados: 0, count_no_auditados: 0,
-        total_efectivo: 0, count_efectivo: 0,
-        total_no_avion: 0, count_no_avion: 0
+        total_efectivo: 0, count_efectivo: 0
       }
     }
 
@@ -166,7 +164,7 @@ export default async function reportesRoutes(fastify) {
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { fecha: { gte: desdeDate, lte: hastaDate } }
 
-    const [adeudadoAgg, efectivoAgg, noAvionAgg, pagosEnRango] = await Promise.all([
+    const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
       fastify.db.pago.aggregate({
         where: { ...localFilter, pagado: false, ...fechaWhere },
         _sum: { importe: true },
@@ -174,11 +172,6 @@ export default async function reportesRoutes(fastify) {
       }),
       fastify.db.pago.aggregate({
         where: { ...localFilter, ...fechaWhere, metodo_pago: { nombre: { equals: 'Efectivo', mode: 'insensitive' } } },
-        _sum: { importe: true },
-        _count: { id: true }
-      }),
-      fastify.db.pago.aggregate({
-        where: { ...localFilter, ...fechaWhere, id_tipo: 'C' },
         _sum: { importe: true },
         _count: { id: true }
       }),
@@ -210,9 +203,7 @@ export default async function reportesRoutes(fastify) {
       count_auditados: countAuditados,
       count_no_auditados: countNoAuditados,
       total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
-      count_efectivo: efectivoAgg._count.id,
-      total_no_avion: Number(noAvionAgg._sum.importe ?? 0),
-      count_no_avion: noAvionAgg._count.id
+      count_efectivo: efectivoAgg._count.id
     }
   })
 

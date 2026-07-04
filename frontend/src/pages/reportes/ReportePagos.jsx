@@ -36,14 +36,6 @@ function IcoCash() {
     </svg>
   )
 }
-function IcoNoAvion() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B98CD8" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-1 0-1.3.4l-.7.7c-.4.4-.2 1.1.3 1.3L9 11l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 2.7 5.9c.2.5.9.7 1.3.3l.7-.7c.4-.3.5-.8.4-1.3z"/>
-    </svg>
-  )
-}
-
 export default function ReportePagos({ applied, activeLocal, prettyDate }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -76,7 +68,7 @@ export default function ReportePagos({ applied, activeLocal, prettyDate }) {
       </div>
 
       {/* ── KPI cards ── */}
-      <div className="rep-kpi-grid cols-5">
+      <div className="rep-kpi-grid cols-4">
         <div className="rep-kpi danger">
           <div className="rep-kpi-head">
             <span className="rep-kpi-label">Total adeudado</span>
@@ -119,17 +111,6 @@ export default function ReportePagos({ applied, activeLocal, prettyDate }) {
             ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
             : <div className="rep-kpi-value med">{fmt(d.total_efectivo)}</div>}
           <div className="rep-kpi-sub">{d.count_efectivo ?? 0} pagos en efectivo</div>
-        </div>
-
-        <div className="rep-kpi">
-          <div className="rep-kpi-head">
-            <span className="rep-kpi-label">No avión (Tipo C)</span>
-            <span className="rep-kpi-icon" style={{ background: 'rgba(185,140,216,.18)' }}><IcoNoAvion /></span>
-          </div>
-          {skel
-            ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
-            : <div className="rep-kpi-value med">{fmt(d.total_no_avion)}</div>}
-          <div className="rep-kpi-sub">{d.count_no_avion ?? 0} comprobantes Tipo C</div>
         </div>
       </div>
     </>
