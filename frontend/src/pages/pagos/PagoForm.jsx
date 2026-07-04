@@ -377,8 +377,9 @@ export default function PagoForm() {
           <div className="form-grid">
 
             {/* selector de local — solo cuando no hay local activo */}
+            {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
             {!activeLocal && locales.length > 0 && (
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <div className="form-group">
                 <label className="form-label">Local *</label>
                 <div className="form-input-wrap">
                   <select required value={form.id_local} onChange={e => set('id_local', e.target.value)}>
@@ -388,67 +389,6 @@ export default function PagoForm() {
                 </div>
               </div>
             )}
-
-            {/* combobox de proveedor — ya no ocupa la fila entera */}
-            <div className="form-group combobox-wrap" ref={provRef}>
-              <label className="form-label">Proveedor</label>
-              <div className="form-input-wrap">
-                <input
-                  type="text"
-                  placeholder="Buscar proveedor…"
-                  value={provSearch}
-                  autoComplete="off"
-                  onChange={e => { setProvSearch(e.target.value); setProvOpen(true) }}
-                  onFocus={() => setProvOpen(true)}
-                />
-                {form.id_proveedor && (
-                  <button
-                    type="button"
-                    onClick={clearProveedor}
-                    className="input-clear-btn"
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}
-                    title="Quitar proveedor"
-                  >×</button>
-                )}
-              </div>
-              {provOpen && (
-                <div className="combobox-dropdown">
-                  {filteredProvs.length === 0
-                    ? <span className="combobox-option empty">Sin resultados</span>
-                    : filteredProvs.slice(0, 60).map(p => (
-                      <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
-                        {p.nombre}
-                      </button>
-                    ))
-                  }
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Rubro / Categoría</label>
-              <div className="form-input-wrap">
-                <select value={form.id_rubcat} onChange={e => set('id_rubcat', e.target.value)}>
-                  <option value="">Sin clasificar</option>
-                  {visibleRubcats.map(rc => (
-                    <option key={rc.id} value={rc.id}>
-                      {rc.rubro?.nombre} / {rc.categoria?.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Método de Pago</label>
-              <div className="form-input-wrap">
-                <select value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
-                  <option value="">Sin método</option>
-                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* fechas, todas juntas */}
             <div className="form-group">
               <label className="form-label">Fecha Factura *</label>
               <div className="form-input-wrap">
@@ -484,24 +424,65 @@ export default function PagoForm() {
               </div>
             </div>
 
-            {/* comprobante: campos angostos, entran cómodos en una fila */}
-            <div className="form-group">
-              <label className="form-label">Tipo de Comprobante</label>
+            {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
+            <div className="form-group combobox-wrap" ref={provRef}>
+              <label className="form-label">Proveedor</label>
               <div className="form-input-wrap">
-                <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
-                  <option value="">—</option>
-                  {['A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                <input
+                  type="text"
+                  placeholder="Buscar proveedor…"
+                  value={provSearch}
+                  autoComplete="off"
+                  onChange={e => { setProvSearch(e.target.value); setProvOpen(true) }}
+                  onFocus={() => setProvOpen(true)}
+                />
+                {form.id_proveedor && (
+                  <button
+                    type="button"
+                    onClick={clearProveedor}
+                    className="input-clear-btn"
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}
+                    title="Quitar proveedor"
+                  >×</button>
+                )}
+              </div>
+              {provOpen && (
+                <div className="combobox-dropdown">
+                  {filteredProvs.length === 0
+                    ? <span className="combobox-option empty">Sin resultados</span>
+                    : filteredProvs.slice(0, 60).map(p => (
+                      <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
+                        {p.nombre}
+                      </button>
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Rubro / Categoría</label>
+              <div className="form-input-wrap">
+                <select value={form.id_rubcat} onChange={e => set('id_rubcat', e.target.value)}>
+                  <option value="">Sin clasificar</option>
+                  {visibleRubcats.map(rc => (
+                    <option key={rc.id} value={rc.id}>
+                      {rc.rubro?.nombre} / {rc.categoria?.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Estado</label>
+              <label className="form-label">Método de Pago</label>
               <div className="form-input-wrap">
-                <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
-                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <select value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
+                  <option value="">Sin método</option>
+                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                 </select>
               </div>
             </div>
+
+            {/* fila 3: punto de venta, nro comprobante, estado */}
             <div className="form-group">
               <label className="form-label">Punto de Venta</label>
               <div className="form-input-wrap">
@@ -532,20 +513,35 @@ export default function PagoForm() {
                 />
               </div>
             </div>
-
-            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                <input
-                  type="checkbox"
-                  checked={form.periodico}
-                  onChange={e => set('periodico', e.target.checked)}
-                  style={{ width: 15, height: 15, cursor: 'pointer' }}
-                />
-                <span className="form-label" style={{ margin: 0 }}>Pago periódico (recurrente)</span>
-              </label>
+            <div className="form-group">
+              <label className="form-label">Tipo de Comprobante</label>
+              <div className="form-input-wrap">
+                <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
+                  <option value="">—</option>
+                  {['A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Estado</label>
+              <div className="form-input-wrap">
+                <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
+                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
             </div>
 
           </div>
+
+          {/* pago periódico: suelto, en su propia card chica */}
+          <label className="periodico-card">
+            <input
+              type="checkbox"
+              checked={form.periodico}
+              onChange={e => set('periodico', e.target.checked)}
+            />
+            <span>Pago periódico (recurrente)</span>
+          </label>
         </div>
 
         {/* ── Montos ── */}
