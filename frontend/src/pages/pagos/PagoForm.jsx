@@ -427,7 +427,7 @@ export default function PagoForm() {
 
           {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
           <div className="form-grid form-row">
-            <div className="form-group combobox-wrap" ref={provRef}>
+            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: 'span 2' }}>
               <label className="form-label">Proveedor</label>
               <div className="form-input-wrap">
                 <input
