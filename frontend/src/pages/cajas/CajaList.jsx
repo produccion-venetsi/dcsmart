@@ -9,6 +9,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import CajaFotoViewer from '../../components/CajaFotoViewer.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
 
 const EMPTY_CAJA = {
@@ -217,29 +218,31 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        {canEdit && (
-          <button
-            className={`btn btn-sm ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
-            onClick={handleAudit}
-            disabled={auditando}
-          >
-            {auditando
-              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-              : caja.audit ? '✓ Auditado' : 'Auditar'
-            }
-          </button>
-        )}
-        {canEdit && (
-          <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IcoEdit /> Editar
-          </button>
-        )}
-        {canDelete && (
-          <button className="btn btn-danger btn-sm" onClick={(e) => onDelete(cajaId, e)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IcoTrash /> Eliminar
-          </button>
-        )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+        <ActionsMenu label="Acciones" align="right">
+          {canEdit && (
+            <button
+              className={`btn btn-sm ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handleAudit}
+              disabled={auditando}
+            >
+              {auditando
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : caja.audit ? '✓ Auditado' : 'Auditar'
+              }
+            </button>
+          )}
+          {canEdit && (
+            <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IcoEdit /> Editar
+            </button>
+          )}
+          {canDelete && (
+            <button className="btn btn-danger btn-sm" onClick={(e) => onDelete(cajaId, e)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IcoTrash /> Eliminar
+            </button>
+          )}
+        </ActionsMenu>
       </div>
 
       {caja.observaciones && (
