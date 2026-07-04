@@ -630,9 +630,45 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const [fotoFile,      setFotoFile]      = useState(null)
   const [uploadingFoto, setUploadingFoto] = useState(false)
 
+  const [tipos,   setTipos]   = useState([])
+  const [metodos, setMetodos] = useState([])
+
+  const [pendingDetalles, setPendingDetalles] = useState([])
+  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '', observaciones: '' })
+
+  const [pendingMovimientos, setPendingMovimientos] = useState([])
+  const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const targetLocalId = activeLocal?.id || localId
+
+  useEffect(() => {
+    if (!targetLocalId) return
+    detallesApi.tipos(targetLocalId)
+      .then(r => setTipos(r.data || []))
+      .catch(() => {})
+  }, [targetLocalId])
+
+  useEffect(() => {
+    metodosApi.list()
+      .then(r => setMetodos(r.data || []))
+      .catch(() => {})
+  }, [])
+
+  const addPendingDetalle = () => {
+    if (!detForm.monto) return
+    setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
+    setDetForm({ id_tipo: '', monto: '', observaciones: '' })
+  }
+  const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
+
+  const addPendingMovimiento = () => {
+    if (!movForm.monto) return
+    setPendingMovimientos(prev => [...prev, { ...movForm, _key: crypto.randomUUID() }])
+    setMovForm({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+  }
+  const removePendingMovimiento = (key) => setPendingMovimientos(prev => prev.filter(m => m._key !== key))
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -649,8 +685,44 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
         setUploadingFoto(false)
       }
       const res = await cajasApi.create({ ...form, foto_url, id_local: targetLocalId })
-      notify('Caja creada', 'success')
-      onCreated(res.data?.id)
+      const nuevoId = res.data?.id
+
+      let detOk = 0, detFail = 0
+      for (const d of pendingDetalles) {
+        try {
+          await detallesApi.create({
+            id_caja: nuevoId,
+            id_tipo: d.id_tipo || null,
+            monto: parseFloat(d.monto),
+            observaciones: d.observaciones || null
+          })
+          detOk++
+        } catch { detFail++ }
+      }
+
+      let movOk = 0, movFail = 0
+      for (const m of pendingMovimientos) {
+        try {
+          await movimientosApi.create({
+            id_caja: nuevoId,
+            tipo: m.tipo,
+            id_metodo: m.id_metodo || null,
+            monto: parseFloat(m.monto),
+            cantidad: m.cantidad ? parseInt(m.cantidad) : null
+          })
+          movOk++
+        } catch { movFail++ }
+      }
+
+      if (detFail === 0 && movFail === 0) {
+        notify('Caja creada', 'success')
+      } else {
+        notify(
+          `Caja creada. Detalles: ${detOk}/${pendingDetalles.length} guardados. Movimientos: ${movOk}/${pendingMovimientos.length} guardados. Los que fallaron podés agregarlos manualmente desde el detalle.`,
+          'error'
+        )
+      }
+      onCreated(nuevoId)
     } catch (err) {
       notify(err.response?.data?.error || 'Error al crear', 'error')
       setUploadingFoto(false)
@@ -740,6 +812,116 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
             <textarea rows={2} value={form.observaciones} onChange={e => setF('observaciones', e.target.value)} placeholder="Notas opcionales..." />
           </div>
         </div>
+      </div>
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Detalles (opcional)</div>
+      {pendingDetalles.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
+          <table className="data-table">
+            <thead><tr><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <tbody>
+              {pendingDetalles.map(d => (
+                <tr key={d._key}>
+                  <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(d.monto)}</td>
+                  <td>
+                    <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingDetalle(d._key)}>
+                      <IcoTrash />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
+        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+          <label className="form-label">Nombre</label>
+          <div className="form-input-wrap">
+            <select value={detForm.id_tipo} onChange={e => setDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
+              <option value="">Ver opciones</option>
+              {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+          <label className="form-label">Monto</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0, flex: 1 }}>
+          <label className="form-label">Observaciones</label>
+          <div className="form-input-wrap">
+            <input type="text" placeholder="Opcional" value={detForm.observaciones} onChange={e => setDetForm(f => ({ ...f, observaciones: e.target.value }))} />
+          </div>
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={addPendingDetalle} disabled={!detForm.monto}>
+          <IcoPlus /> Agregar
+        </button>
+      </div>
+
+      <div className="drawer-section-title">Movimientos (opcional)</div>
+      {pendingMovimientos.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
+          <table className="data-table">
+            <thead><tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr></thead>
+            <tbody>
+              {pendingMovimientos.map(m => (
+                <tr key={m._key}>
+                  <td>
+                    <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                  </td>
+                  <td className="td-muted">{metodos.find(x => x.id === m.id_metodo)?.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(m.monto)}</td>
+                  <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad || '—'}</td>
+                  <td>
+                    <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingMovimiento(m._key)}>
+                      <IcoTrash />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1.25rem' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Tipo</label>
+          <div className="form-input-wrap">
+            <select value={movForm.tipo} onChange={e => setMovForm(f => ({ ...f, tipo: e.target.value }))}>
+              <option>INGRESO</option>
+              <option>EGRESO</option>
+              <option>APERTURA</option>
+              <option>CIERRE</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Método</label>
+          <div className="form-input-wrap">
+            <select value={movForm.id_metodo} onChange={e => setMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+              <option value="">Sin método</option>
+              {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Monto</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={movForm.monto} onChange={e => setMovForm(f => ({ ...f, monto: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Cantidad</label>
+          <div className="form-input-wrap">
+            <input type="number" min="1" step="1" placeholder="Opcional" value={movForm.cantidad} onChange={e => setMovForm(f => ({ ...f, cantidad: e.target.value }))} />
+          </div>
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={addPendingMovimiento} disabled={!movForm.monto}>
+          <IcoPlus /> Agregar
+        </button>
       </div>
       <div className="form-actions" style={{ marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
