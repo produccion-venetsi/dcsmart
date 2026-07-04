@@ -36,12 +36,14 @@ Este documento es el backlog completo que se armó en conversación (no vino de 
 
 **Bloque 2: completo, pendiente de verificación visual en navegador** (revisión final de código limpia, incluye un fix de preview rota con fotos `gs://` ya guardadas).
 
-## Bloque 3 — Reportes/Dashboard (spec propia, no arrancado)
+## Bloque 3 — Reportes/Dashboard (spec: `2026-07-04-reportes-dashboard-design.md`, plan: `2026-07-04-reportes-dashboard.md`)
 
-11. `[ ]` Reducir la carga inicial (fetch grande al entrar) + pantalla de bienvenida con botón "Ver dashboard"/"Ver datos".
-12. `[ ]` Fusionar/mover el dashboard a Reportes — que Reportes tenga *todos* los reportes que el usuario necesita.
-13. `[ ]` Separar el reporte de Cajas del de Pagos (hoy están juntos en un mismo reporte).
-14. `[ ]` Reportes nuevos: cantidad de pagos auditados, cantidad no auditados, pagos en efectivo, "no avión" (no fiscal, sin IVA), entre otros.
+11. `[x]` Dashboard reducido a pantalla de bienvenida liviana (saludo + botón "Ver Reportes" + accesos rápidos), sin fetch de stats al cargar.
+12. `[x]` Reportes es ahora la pantalla principal, con todos los reportes (Pagos, Cajas, CMV).
+13. `[x]` Separado el reporte combinado en pestañas propias: Pagos / Cajas / CMV.
+14. `[x]` Reportes nuevos en Pagos: auditados, no auditados, en efectivo. "No avión" (no fiscal, sin IVA) resultó ser un concepto de **Cajas**, no de Pagos — corregido: se unificó con el placeholder "Porc Avión" que ya existía ahí (antes hardcodeado en 0%, duplicado con "Porc No Fiscal"), ahora con el dato real (total - fiscal, %).
+
+**Bloque 3: completo, pendiente de verificación visual en navegador.**
 
 ## Bloque 4 — Cajas a la par de Pagos (spec propia, no arrancado)
 
