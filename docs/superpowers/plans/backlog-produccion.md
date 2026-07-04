@@ -45,10 +45,12 @@ Este documento es el backlog completo que se armó en conversación (no vino de 
 
 **Bloque 3: completo, pendiente de verificación visual en navegador.**
 
-## Bloque 4 — Cajas a la par de Pagos (spec propia, no arrancado)
+## Bloque 4 — Cajas a la par de Pagos (spec: `2026-07-04-cajas-a-la-par-design.md`, plan: `2026-07-04-cajas-a-la-par.md`)
 
-15. `[ ]` Botón "Filtros" en Cajas (mismo patrón visual/UX que Pagos, pero con campos propios de cajas, no los mismos filtros exactos).
-16. `[ ]` Form de caja más completo (todos los campos necesarios) + poder cargar foto/detalles/movimientos *antes* de crear la caja (hoy solo después).
+15. `[x]` Botón "Filtros" en Cajas (Desde/Hasta/Auditado), mismo patrón visual/UX que Pagos.
+16. `[x]` Poder cargar Detalles y Movimientos como pendientes en el form de creación de una caja — se persisten recién al crear la caja (sin rollback si alguno falla individualmente).
+
+**Bloque 4: completo, pendiente de verificación visual en navegador.**
 
 ## Bloque 5 — Acciones de tabla + detalle + bulk actions (parcialmente arrancado en Bloque 1 item 4)
 
