@@ -9,6 +9,7 @@ import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
+import ActionsMenu from '../../components/ActionsMenu.jsx'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -335,57 +336,59 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        {canEdit && (
-          <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
-            <IcoEdit /> Editar
-          </button>
-        )}
-        {canEdit && (
-          <button
-            className={`btn ${audited ? 'btn-secondary' : 'btn-primary'}`}
-            onClick={handlePanelAudit}
-            disabled={auditando}
-          >
-            {auditando
-              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-              : audited ? '✓ Auditado' : 'Auditar'
-            }
-          </button>
-        )}
-        {canEdit && pago.estado_op !== 'PDP' && (
-          <button className="btn btn-secondary" onClick={handleMandarPdp} disabled={mandando} title="Mandar a PDP">
-            {mandando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlane />}
-            {' '}PDP
-          </button>
-        )}
-        {canEdit && pago.estado_op === 'PDP' && (
-          <button className="btn btn-secondary" onClick={handleRevertirPdp} disabled={mandando} title="Revertir a deuda">
-            {mandando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : '↩'}
-            {' '}Deuda
-          </button>
-        )}
-        {canEdit && !pago.pagado && (
-          <button className="btn btn-secondary" onClick={() => setPagarOpen(true)} title="Registrar pago">
-            <IcoDollar /> Pagar
-          </button>
-        )}
-        {canEdit && (
-          <button
-            className={`btn ${periodico ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={handleTogglePeriodico}
-            disabled={toggling}
-            title="Marcar como periódico"
-          >
-            {toggling ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoRepeat />}
-            {' '}{periodico ? 'Periódico' : 'Periódico'}
-          </button>
-        )}
-        {canDelete && (
-          <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
-            <IcoTrash /> Eliminar
-          </button>
-        )}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <ActionsMenu label="Acciones" align="left">
+          {canEdit && (
+            <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
+              <IcoEdit /> Editar
+            </button>
+          )}
+          {canEdit && (
+            <button
+              className={`btn ${audited ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handlePanelAudit}
+              disabled={auditando}
+            >
+              {auditando
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : audited ? '✓ Auditado' : 'Auditar'
+              }
+            </button>
+          )}
+          {canEdit && pago.estado_op !== 'PDP' && (
+            <button className="btn btn-secondary" onClick={handleMandarPdp} disabled={mandando} title="Mandar a PDP">
+              {mandando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlane />}
+              {' '}PDP
+            </button>
+          )}
+          {canEdit && pago.estado_op === 'PDP' && (
+            <button className="btn btn-secondary" onClick={handleRevertirPdp} disabled={mandando} title="Revertir a deuda">
+              {mandando ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : '↩'}
+              {' '}Deuda
+            </button>
+          )}
+          {canEdit && !pago.pagado && (
+            <button className="btn btn-secondary" onClick={() => setPagarOpen(true)} title="Registrar pago">
+              <IcoDollar /> Pagar
+            </button>
+          )}
+          {canEdit && (
+            <button
+              className={`btn ${periodico ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={handleTogglePeriodico}
+              disabled={toggling}
+              title="Marcar como periódico"
+            >
+              {toggling ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoRepeat />}
+              {' '}{periodico ? 'Periódico' : 'Periódico'}
+            </button>
+          )}
+          {canDelete && (
+            <button className="btn btn-danger" onClick={() => onDelete(pago.id)}>
+              <IcoTrash /> Eliminar
+            </button>
+          )}
+        </ActionsMenu>
       </div>
 
       {/* Modal Pagar */}
