@@ -449,9 +449,9 @@ export default function PagoForm() {
                 )}
               </div>
               {provOpen && (
-                <div className="combobox-dropdown">
+                <div className="combobox-inline-list">
                   {filteredProvs.length === 0
-                    ? <span className="combobox-option empty">Sin resultados</span>
+                    ? <div className="combobox-inline-empty">Sin resultados</div>
                     : filteredProvs.slice(0, 60).map(p => (
                       <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
                         {p.nombre}
