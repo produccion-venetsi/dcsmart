@@ -374,10 +374,10 @@ export default function PagoForm() {
         {/* ── Información del Pago ── */}
         <div className="form-panel">
           <div className="form-panel-title">Información del Pago</div>
-          <div className="form-grid">
 
-            {/* selector de local — solo cuando no hay local activo */}
-            {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
+          {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
+          <div className="form-grid form-row">
+
             {!activeLocal && locales.length > 0 && (
               <div className="form-group">
                 <label className="form-label">Local *</label>
@@ -423,8 +423,10 @@ export default function PagoForm() {
                 <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
               </div>
             </div>
+          </div>
 
-            {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
+          {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
+          <div className="form-grid form-row">
             <div className="form-group combobox-wrap" ref={provRef}>
               <label className="form-label">Proveedor</label>
               <div className="form-input-wrap">
@@ -481,8 +483,10 @@ export default function PagoForm() {
                 </select>
               </div>
             </div>
+          </div>
 
-            {/* fila 3: punto de venta, nro comprobante, estado */}
+          {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
+          <div className="form-grid form-row">
             <div className="form-group">
               <label className="form-label">Punto de Venta</label>
               <div className="form-input-wrap">
