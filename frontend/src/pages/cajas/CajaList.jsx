@@ -78,8 +78,10 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
   const [tipos,      setTipos]     = useState([])
   const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [saving,     setSaving]    = useState(false)
+  const [addingMov,  setAddingMov] = useState(false)
   const [newDet,     setNewDet]    = useState({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDet,  setSavingDet] = useState(false)
+  const [addingDet,  setAddingDet] = useState(false)
   const [auditando,  setAuditando] = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -129,6 +131,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
       })
       notify('Movimiento agregado', 'success')
       setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+      setAddingMov(false)
       load()
     } catch { notify('Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
@@ -152,6 +155,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
       })
       notify('Detalle agregado', 'success')
       setNewDet({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+      setAddingDet(false)
       load()
     } catch { notify('Error al agregar detalle', 'error') }
     finally { setSavingDet(false) }
@@ -257,36 +261,42 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
+        {canEdit && !addingDet && (
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
+            <IcoPlus /> Añadir
+          </button>
+        )}
       </div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th></th></tr>
-          </thead>
-          <tbody>
-            {(caja.detalles || []).map((d) => (
-              <tr key={d.id}>
-                <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
-                <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
-                <td className="td-number">{fmt$2(d.monto)}</td>
-                <td>
-                  {canDelete && (
-                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
-                      <IcoTrash />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {(!caja.detalles || caja.detalles.length === 0) && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin detalles</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {caja.detalles && caja.detalles.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+          <table className="data-table">
+            <thead>
+              <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th></th></tr>
+            </thead>
+            <tbody>
+              {caja.detalles.map((d) => (
+                <tr key={d.id}>
+                  <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
+                  <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(d.monto)}</td>
+                  <td>
+                    {canDelete && (
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                        <IcoTrash />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {(!caja.detalles || caja.detalles.length === 0) && !addingDet && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin detalles</div>
+      )}
 
-      {canEdit && <div className="drawer-section-title">Agregar Detalle</div>}
-      {canEdit && <form onSubmit={handleAddDet}>
+      {canEdit && addingDet && <form onSubmit={handleAddDet}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Clasificación</label>
@@ -324,48 +334,59 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
             </div>
           </div>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginTop: '0.75rem', marginBottom: '1.5rem' }}>
-          {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem', marginBottom: '1.5rem' }}>
+          <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto}>
+            {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAddingDet(false)}>✕</button>
+        </div>
       </form>}
 
       {/* ── MOVIMIENTOS ──────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
-        <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalMov)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalMov)}</span>
+          {canEdit && !addingMov && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMov(true)}>
+              <IcoPlus /> Añadir
+            </button>
+          )}
+        </div>
       </div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
-          </thead>
-          <tbody>
-            {(caja.movimientos || []).map((m) => (
-              <tr key={m.id}>
-                <td>
-                  <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
-                </td>
-                <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
-                <td className="td-number">{fmt$2(m.monto)}</td>
-                <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
-                <td>
-                  {canDelete && (
-                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                      <IcoTrash />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {(!caja.movimientos || caja.movimientos.length === 0) && (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin movimientos</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {caja.movimientos && caja.movimientos.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+          <table className="data-table">
+            <thead>
+              <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
+            </thead>
+            <tbody>
+              {caja.movimientos.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                  </td>
+                  <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(m.monto)}</td>
+                  <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
+                  <td>
+                    {canDelete && (
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                        <IcoTrash />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {(!caja.movimientos || caja.movimientos.length === 0) && !addingMov && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin movimientos</div>
+      )}
 
-      {canEdit && <div className="drawer-section-title">Agregar Movimiento</div>}
-      {canEdit && <form onSubmit={handleAddMov}>
+      {canEdit && addingMov && <form onSubmit={handleAddMov}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
@@ -400,9 +421,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
             </div>
           </div>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
-          {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
+            {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAddingMov(false)}>✕</button>
+        </div>
       </form>}
 
       <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>

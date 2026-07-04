@@ -106,6 +106,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [loadingImp,   setLoadingImp]   = useState(true)
   const [impForm,      setImpForm]      = useState({ tipo: 'IVA21', monto: '' })
   const [savingImp,    setSavingImp]    = useState(false)
+  const [addingImp,    setAddingImp]    = useState(false)
   const [editingImpId, setEditingImpId] = useState(null)
   const [editImpForm,  setEditImpForm]  = useState({ tipo: 'IVA21', monto: '' })
   const [audited,      setAudited]      = useState(pago.audit)
@@ -118,6 +119,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [loadingMM,   setLoadingMM]   = useState(true)
   const [mmForm,      setMmForm]      = useState({ tipo: 'USD', tdc: '', monto: '' })
   const [savingMM,    setSavingMM]    = useState(false)
+  const [addingMM,    setAddingMM]    = useState(false)
   const [pagarOpen,   setPagarOpen]   = useState(false)
   const [pagarForm,   setPagarForm]   = useState({ fecha_pago: new Date().toISOString().slice(0, 10), id_metodo: '' })
   const [pagando,     setPagando]     = useState(false)
@@ -223,6 +225,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       const updatedList = multimoneda.filter(m => m.id !== mmId)
       setMultimoneda(updatedList)
       await recalcNeto(updatedList)
+      setAddingMM(false)
       notify('Eliminado', 'success')
     } catch { notify('Error', 'error') }
   }
@@ -255,6 +258,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       await impuestosApi.create({ id_pago: pago.id, tipo: impForm.tipo, monto: parseFloat(impForm.monto) })
       notify('Impuesto agregado', 'success')
       setImpForm({ tipo: 'IVA21', monto: '' })
+      setAddingImp(false)
       loadImpuestos()
     } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
     finally { setSavingImp(false) }
@@ -439,28 +443,36 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
         ))}
       </div>
 
-      <div className="drawer-section-title">Impuestos</div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Tipo</th>
-              <th>Monto</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loadingImp ? (
-              Array.from({ length: 3 }, (_, i) => (
-                <tr key={i} className="skel-row">
-                  {Array.from({ length: 3 }, (_, j) => (
-                    <td key={j}><span className="skel" style={{ width: `${50 + (j * 15 + i * 11) % 35}%` }} /></td>
-                  ))}
-                </tr>
-              ))
-            ) : (
-              <>
-                {impuestos.map((imp) => (
+      <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Impuestos</span>
+        {!addingImp && (
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingImp(true)}>
+            <IcoPlus /> Añadir
+          </button>
+        )}
+      </div>
+
+      {(loadingImp || impuestos.length > 0) && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Monto</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingImp ? (
+                Array.from({ length: 3 }, (_, i) => (
+                  <tr key={i} className="skel-row">
+                    {Array.from({ length: 3 }, (_, j) => (
+                      <td key={j}><span className="skel" style={{ width: `${50 + (j * 15 + i * 11) % 35}%` }} /></td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                impuestos.map((imp) => (
                   <tr key={imp.id}>
                     {editingImpId === imp.id ? (
                       <>
@@ -492,37 +504,47 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
                       </>
                     )}
                   </tr>
-                ))}
-                {impuestos.length === 0 && (
-                  <tr><td colSpan={3} style={{ textAlign: 'center', padding: '1.25rem', color: 'var(--t3)' }}>Sin impuestos</td></tr>
-                )}
-              </>
-            )}
-          </tbody>
-        </table>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!loadingImp && impuestos.length === 0 && !addingImp && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin impuestos</div>
+      )}
+
+      {addingImp && (
+        <form onSubmit={handleAddImp} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1rem' }}>
+          <div className="form-group" style={{ margin: 0, flex: 1 }}>
+            <label className="form-label">Tipo</label>
+            <div className="form-input-wrap">
+              <select value={impForm.tipo} onChange={e => setImpForm({ ...impForm, tipo: e.target.value })}>
+                {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{ margin: 0, flex: 1 }}>
+            <label className="form-label">Monto *</label>
+            <div className="form-input-wrap">
+              <input type="number" step="0.01" required placeholder="0.00" value={impForm.monto} onChange={e => setImpForm({ ...impForm, monto: e.target.value })} />
+            </div>
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={savingImp || !impForm.monto}>
+            {savingImp ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAddingImp(false)}>✕</button>
+        </form>
+      )}
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Multimoneda</span>
+        {!loadingMM && !multimoneda[0] && !addingMM && (
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMM(true)}>
+            <IcoPlus /> Añadir
+          </button>
+        )}
       </div>
-
-      <form onSubmit={handleAddImp} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
-        <div className="form-group" style={{ margin: 0, flex: 1 }}>
-          <label className="form-label">Tipo</label>
-          <div className="form-input-wrap">
-            <select value={impForm.tipo} onChange={e => setImpForm({ ...impForm, tipo: e.target.value })}>
-              {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="form-group" style={{ margin: 0, flex: 1 }}>
-          <label className="form-label">Monto *</label>
-          <div className="form-input-wrap">
-            <input type="number" step="0.01" required placeholder="0.00" value={impForm.monto} onChange={e => setImpForm({ ...impForm, monto: e.target.value })} />
-          </div>
-        </div>
-        <button type="submit" className="btn btn-primary" disabled={savingImp || !impForm.monto}>
-          {savingImp ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />}
-        </button>
-      </form>
-
-      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Multimoneda</div>
       {loadingMM ? (
         <div className="skel" style={{ height: 36, borderRadius: 8, marginBottom: '1rem' }} />
       ) : multimoneda[0] && savingMM !== 'editing' ? (
@@ -534,7 +556,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           <button className="btn btn-sm btn-secondary btn-icon" onClick={handleEditMM}><IcoEdit /></button>
           <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMM(multimoneda[0].id)}><IcoTrash /></button>
         </div>
-      ) : (
+      ) : (multimoneda[0] || addingMM) ? (
         <form onSubmit={handleSaveMM} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '1rem' }}>
           <div className="form-group" style={{ margin: 0, flex: '0 0 70px' }}>
             <label className="form-label">Moneda</label>
@@ -563,8 +585,13 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             {savingMM === 'editing' && (
               <button type="button" className="btn btn-secondary" onClick={() => setSavingMM(false)}>✕</button>
             )}
+            {!multimoneda[0] && (
+              <button type="button" className="btn btn-secondary" onClick={() => setAddingMM(false)}>✕</button>
+            )}
           </div>
         </form>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin multimoneda</div>
       )}
 
       <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>
