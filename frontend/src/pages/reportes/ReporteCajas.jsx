@@ -105,7 +105,7 @@ export default function ReporteCajas({ applied, activeLocal, prettyDate }) {
       </div>
 
       {/* ── KPI cards ── */}
-      <div className="rep-kpi-grid">
+      <div className="rep-kpi-grid cols-3">
         <div className="rep-kpi hero">
           <div className="rep-kpi-head">
             <span className="rep-kpi-label">Total de ventas</span>

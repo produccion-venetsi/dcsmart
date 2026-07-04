@@ -191,11 +191,16 @@ export default async function reportesRoutes(fastify) {
     const pagoIds = pagosEnRango.map(p => p.id)
     let countAuditados = 0
     if (pagoIds.length) {
-      const auditRows = await fastify.db.audit.findMany({
-        where: { tabla: 'pagos', id_registro: { in: pagoIds }, vigente: true, accion: 'auditado' },
-        select: { id_registro: true }
-      })
-      countAuditados = new Set(auditRows.map(r => r.id_registro)).size
+      try {
+        const auditRows = await fastify.db.audit.findMany({
+          where: { tabla: 'pagos', id_registro: { in: pagoIds }, vigente: true, accion: 'auditado' },
+          select: { id_registro: true }
+        })
+        countAuditados = new Set(auditRows.map(r => r.id_registro)).size
+      } catch (err) {
+        fastify.log.error({ err }, 'No se pudo leer la tabla audits (GET /reportes/pagos)')
+        countAuditados = 0
+      }
     }
     const countNoAuditados = pagoIds.length - countAuditados
 
