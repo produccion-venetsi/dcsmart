@@ -562,7 +562,6 @@ body {
   -webkit-backdrop-filter: blur(var(--blur));
   animation: fadeUp 0.28s var(--ease) both;
   position: relative;
-  overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.16);
 }
 .form-panel::before {
