@@ -173,7 +173,7 @@ export default async function reportesRoutes(fastify) {
         _count: { id: true }
       }),
       fastify.db.pago.aggregate({
-        where: { ...localFilter, ...fechaWhere, metodo_pago: { nombre: 'Efectivo' } },
+        where: { ...localFilter, ...fechaWhere, metodo_pago: { nombre: { equals: 'Efectivo', mode: 'insensitive' } } },
         _sum: { importe: true },
         _count: { id: true }
       }),
