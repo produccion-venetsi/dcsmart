@@ -99,7 +99,7 @@ export default function AppSelector() {
     if (item.locales.length === 1) {
       setActiveLocal(item.locales[0])
     }
-    navigate('/dashboard', { replace: true })
+    navigate(item.role === 'reportes' ? '/reportes' : '/dashboard', { replace: true })
   }
 
   const handleLogout = async () => {
