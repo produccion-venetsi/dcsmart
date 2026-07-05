@@ -11,10 +11,15 @@ export default function StartChoice() {
 
   const roleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
   const hasGlobalRole = GLOBAL_ROLES.some(r => roleNames.includes(r))
+  const isSuperAdmin = roleNames.includes('super_admin')
 
   // Sin rol global: nunca debería ver esta pantalla -- sigue directo al selector,
   // sin ningún flash visible (la redirección ocurre antes de pintar nada más).
   if (!hasGlobalRole) return <Navigate to="/select-app" replace />
+
+  // super_admin entra directo a Usuarios; dcsmart no tiene esa ruta (solo super_admin),
+  // así que entra por Apps -- primer panel de Admin al que sí tiene acceso.
+  const adminLanding = isSuperAdmin ? '/admin/users' : '/admin/apps'
 
   return (
     <div className="auth-root">
@@ -26,7 +31,7 @@ export default function StartChoice() {
           <p>Elegí si querés administrar el sistema o entrar a operar un grupo</p>
         </div>
         <div className="app-grid" style={{ maxWidth: 640 }}>
-          <button className="app-card" onClick={() => navigate('/admin/users')}>
+          <button className="app-card" onClick={() => navigate(adminLanding)}>
             <div className="app-card-body">
               <h2>Administrar</h2>
               <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 4 }}>
