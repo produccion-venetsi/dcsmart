@@ -60,9 +60,9 @@ Este documento es el backlog completo que se armó en conversación (no vino de 
 
 **Bloque 5: completo, pendiente de verificación visual en navegador.**
 
-## Bloque 6 — Login/Auth (no arrancado)
+## Bloque 6 — Login/Auth (arrancado)
 
-20. `[ ]` Verificar/reforzar el flujo Google Auth + permisos ya asignados por email (ya existe parcialmente: si el email ya existe sin `google_id`, se asocia automático — falta probarlo a fondo en producción).
+20. `[x]` Verificar/reforzar el flujo Google Auth + permisos ya asignados por email. El flujo de auto-asociación por email ya funcionaba (trae `user_app_roles` con app+rol al loguear); se encontró y corrigió un bug real: el email no se normalizaba a minúsculas, así que una diferencia de mayúsculas entre lo cargado por el admin y lo que devuelve Google creaba un usuario duplicado vacío en vez de asociar el ya existente. Corregido en los 4 puntos de entrada (crear usuario admin, register, login, google). Verificado en vivo: login con mayúsculas funciona igual que en minúsculas; los 10 usuarios reales ya estaban en minúsculas, sin necesidad de limpieza de datos.
 21. `[ ]` Favoritos / "más usados" para el usuario que tiene muchas apps/grupos.
 22. Recuperar contraseña — **sin cambios**, baja prioridad (la mayoría de los usuarios entran por Google; el login por contraseña probablemente lo usan cuentas compartidas tipo `gestion@dcsmart.app`).
 
