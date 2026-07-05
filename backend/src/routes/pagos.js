@@ -46,6 +46,18 @@ async function buildAuditFilter(fastify, audit, allowedLocalIds) {
   }
 }
 
+// Calcula el próximo nro_ord correlativo para un local: (último nro_ord
+// no nulo de ese local, descendente) + 1, o 1 si el local no tiene pagos
+// con nro_ord asignado todavía.
+async function getNextNroOrd(fastify, id_local) {
+  const last = await fastify.db.pago.findFirst({
+    where: { id_local, nro_ord: { not: null } },
+    orderBy: { nro_ord: 'desc' },
+    select: { nro_ord: true }
+  })
+  return (last?.nro_ord ?? 0) + 1
+}
+
 export default async function pagosRoutes(fastify) {
   await fastify.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } })
   const gcs = new Storage()
@@ -252,6 +264,17 @@ export default async function pagosRoutes(fastify) {
     }))
   })
 
+  // ── GET /next-nro-ord ────────────────────────────────────────────────
+  fastify.get('/next-nro-ord', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local } = request.query
+    if (!id_local) return reply.code(400).send({ error: 'id_local es requerido' })
+    if (!request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+    const nro_ord = await getNextNroOrd(fastify, id_local)
+    return { nro_ord }
+  })
+
   // ── GET /:id ───────────────────────────────────────────────────────────
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
     const pago = await fastify.db.pago.findUnique({
@@ -304,12 +327,7 @@ export default async function pagosRoutes(fastify) {
 
     let finalNroOrd = nro_ord ? (parseInt(nro_ord) || null) : null
     if (!finalNroOrd) {
-      const last = await fastify.db.pago.findFirst({
-        where: { id_local, nro_ord: { not: null } },
-        orderBy: { nro_ord: 'desc' },
-        select: { nro_ord: true }
-      })
-      finalNroOrd = (last?.nro_ord ?? 0) + 1
+      finalNroOrd = await getNextNroOrd(fastify, id_local)
     }
 
     const pago = await fastify.db.pago.create({
