@@ -1,7 +1,7 @@
 export default async function reportesRoutes(fastify) {
-  const viewHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
+  const viewHandler = [fastify.authenticate, fastify.appContext, fastify.can('reportes', 'view')]
 
-  fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
+  fastify.get('/cajas', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, desde, hasta } = request.query
 
     if (!desde || !hasta) {
@@ -26,26 +26,17 @@ export default async function reportesRoutes(fastify) {
       fecha_inicio: { gte: desdeDate, lte: hastaDate }
     }
 
-    const [cajaAgg, pagoAdeudado] = await Promise.all([
-      fastify.db.caja.aggregate({
-        where: cajaWhere,
-        _sum: { total: true, efectivo: true, fiscal: true, tickets: true, comensales: true },
-        _count: { id: true }
-      }),
-      fastify.db.pago.aggregate({
-        where: { ...localFilter, pagado: false, fecha: { gte: desdeDate, lte: hastaDate } },
-        _sum: { importe: true },
-        _count: { id: true }
-      })
-    ])
+    const cajaAgg = await fastify.db.caja.aggregate({
+      where: cajaWhere,
+      _sum: { total: true, efectivo: true, fiscal: true, tickets: true, comensales: true },
+      _count: { id: true }
+    })
 
     const totalVentas   = Number(cajaAgg._sum.total    ?? 0)
     const totalFiscal   = Number(cajaAgg._sum.fiscal   ?? 0)
-    const totalEfectivo = Number(cajaAgg._sum.efectivo ?? 0)
     const totalTickets  = Number(cajaAgg._sum.tickets  ?? 0)
     const totalComens   = Number(cajaAgg._sum.comensales ?? 0)
     const countZ        = cajaAgg._count.id
-    const totalAdeudado = Number(pagoAdeudado._sum.importe ?? 0)
 
     const ticketProm = totalTickets > 0 ? Math.round(totalVentas / totalTickets) : 0
     const noFiscal = totalVentas - totalFiscal
@@ -121,26 +112,22 @@ export default async function reportesRoutes(fastify) {
 
     const pctZ      = totalVentas > 0 ? ((totalFiscal / totalVentas) * 100).toFixed(0) : '0'
     const pctNoFisc = totalVentas > 0 ? ((noFiscal / totalVentas) * 100).toFixed(0) : '0'
-    const pctAdeud  = totalVentas > 0 ? ((totalAdeudado / totalVentas) * 100).toFixed(1) : '0.0'
 
     return {
       kpi: {
         total_ventas: totalVentas,
         total_z: totalFiscal,
         ticket_promedio: ticketProm,
-        total_adeudado: totalAdeudado,
         cubiertos: totalComens,
         count_z: countZ,
         total_tickets: totalTickets,
         pct_z: pctZ,
-        pct_no_fiscal: pctNoFisc,
-        pct_adeudado: pctAdeud
+        pct_no_fiscal: pctNoFisc
       },
       secondary: [
         { label: 'Porc Z',          val: pctZ + '%',      color: '#EFEDE8' },
-        { label: 'Porc No Fiscal',   val: pctNoFisc + '%', color: '#EFEDE8' },
         { label: 'Z Digitales',      val: digital,         color: '#3FB6BD' },
-        { label: 'Porc Avión',       val: '0%',            color: 'rgba(255,255,255,.55)' },
+        { label: 'Porc Avión',       val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' },
         { label: 'Desperdicios',     val: desperdicios,    color: '#E0938C' },
         { label: 'Invitaciones',     val: invitaciones,    color: '#D8B98C' }
       ],
@@ -148,6 +135,75 @@ export default async function reportesRoutes(fastify) {
       fiscal: { fiscal: totalFiscal, no_fiscal: noFiscal, digital },
       payments,
       pay_total: payTotal
+    }
+  })
+
+  // ── GET /pagos ──────────────────────────────────────────────────────────
+  fastify.get('/pagos', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local, desde, hasta } = request.query
+
+    if (!desde || !hasta) {
+      return reply.code(400).send({ error: 'desde y hasta son requeridos' })
+    }
+
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    const localIds = id_local ? [id_local] : request.allowedLocalIds
+    if (!localIds.length) {
+      return {
+        total_adeudado: 0, count_adeudado: 0,
+        count_auditados: 0, count_no_auditados: 0,
+        total_efectivo: 0, count_efectivo: 0
+      }
+    }
+
+    const desdeDate = new Date(desde)
+    const hastaDate = new Date(hasta + 'T23:59:59.999')
+    const localFilter = { id_local: { in: localIds } }
+    const fechaWhere = { fecha: { gte: desdeDate, lte: hastaDate } }
+
+    const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
+      fastify.db.pago.aggregate({
+        where: { ...localFilter, pagado: false, ...fechaWhere },
+        _sum: { importe: true },
+        _count: { id: true }
+      }),
+      fastify.db.pago.aggregate({
+        where: { ...localFilter, ...fechaWhere, metodo_pago: { nombre: { equals: 'Efectivo', mode: 'insensitive' } } },
+        _sum: { importe: true },
+        _count: { id: true }
+      }),
+      fastify.db.pago.findMany({
+        where: { ...localFilter, ...fechaWhere },
+        select: { id: true }
+      })
+    ])
+
+    const pagoIds = pagosEnRango.map(p => p.id)
+    let countAuditados = 0
+    if (pagoIds.length) {
+      try {
+        const auditRows = await fastify.db.audit.findMany({
+          where: { tabla: 'pagos', id_registro: { in: pagoIds }, vigente: true, accion: 'auditado' },
+          select: { id_registro: true }
+        })
+        countAuditados = new Set(auditRows.map(r => r.id_registro)).size
+      } catch (err) {
+        fastify.log.error({ err }, 'No se pudo leer la tabla audits (GET /reportes/pagos)')
+        countAuditados = 0
+      }
+    }
+    const countNoAuditados = pagoIds.length - countAuditados
+
+    return {
+      total_adeudado: Number(adeudadoAgg._sum.importe ?? 0),
+      count_adeudado: adeudadoAgg._count.id,
+      count_auditados: countAuditados,
+      count_no_auditados: countNoAuditados,
+      total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
+      count_efectivo: efectivoAgg._count.id
     }
   })
 

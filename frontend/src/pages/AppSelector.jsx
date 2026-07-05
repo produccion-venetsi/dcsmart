@@ -76,6 +76,7 @@ export default function AppSelector() {
   const [fetchError, setFetchError] = useState(null)
   const [selecting, setSelecting] = useState(false)
   const [search, setSearch] = useState('')
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   useEffect(() => {
     authApi.myApps()
@@ -93,11 +94,12 @@ export default function AppSelector() {
   const handleSelect = (item) => {
     if (selecting) return
     setSelecting(true)
+    authApi.touchApp(item.app.id).catch(() => {})
     setActiveApp(item)
     if (item.locales.length === 1) {
       setActiveLocal(item.locales[0])
     }
-    navigate('/dashboard', { replace: true })
+    navigate(item.role === 'reportes' ? '/reportes' : '/dashboard', { replace: true })
   }
 
   const handleLogout = async () => {
@@ -118,11 +120,10 @@ export default function AppSelector() {
           <div className="sel-user">
             <div className="sel-user-name">
               {user.nombre}
-              <small>Cuenta personal</small>
             </div>
             <div className="sel-avatar">
-              {user.avatar_url
-                ? <img src={user.avatar_url} alt={user.nombre} />
+              {user.avatar_url && !avatarFailed
+                ? <img src={user.avatar_url} alt={user.nombre} onError={() => setAvatarFailed(true)} />
                 : initials(user.nombre)}
             </div>
             <button className="sel-logout sel-logout-header" onClick={handleLogout}>
@@ -208,13 +209,30 @@ export default function AppSelector() {
 
                 {/* Footer */}
                 <div className="app-card-foot">
-                  <span>
-                    {item.locales.length === 0
-                      ? 'Sin locales'
-                      : item.locales.length === 1
-                        ? item.locales[0].nombre
-                        : `${item.locales.length} locales`}
-                  </span>
+                  <div className="app-card-locales-wrap">
+                    {item.locales.length === 0 ? (
+                      <span className="app-card-locales-summary">Sin apps</span>
+                    ) : (
+                      <div className={`app-card-locales-marquee${item.locales.length >= 3 ? ' scrolling' : ''}`}>
+                        <div
+                          className="app-card-locales-track"
+                          style={item.locales.length >= 3 ? {
+                            // Duración proporcional al largo total del texto, para que la
+                            // velocidad (px/seg) sea la misma en todas las cards, sin
+                            // importar cuántos locales o qué tan largos sean los nombres.
+                            animationDuration: `${Math.max(6, item.locales.reduce((sum, l) => sum + l.nombre.length, 0) * 0.28)}s`
+                          } : undefined}
+                        >
+                          {item.locales.map(l => (
+                            <span key={l.id} className="app-card-locale-tag">{l.nombre}</span>
+                          ))}
+                          {item.locales.length >= 3 && item.locales.map(l => (
+                            <span key={`dup-${l.id}`} className="app-card-locale-tag" aria-hidden="true">{l.nombre}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <div className="app-card-arrow">
                     <IconArrow />
                   </div>

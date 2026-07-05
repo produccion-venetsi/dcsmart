@@ -5,7 +5,7 @@ import { useUiStore } from '../../store/uiStore.js'
 
 const LIMIT = 50
 
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
+function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
 const MODULO_LABEL = { pagos: 'Pagos', cajas: 'Cajas' }
 const MODULO_BADGE = { pagos: 'badge-blue', cajas: 'badge-muted' }

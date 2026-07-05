@@ -8,6 +8,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 
 function IcoBack() {
   return (
@@ -30,14 +31,6 @@ function IcoDown() {
     </svg>
   )
 }
-function IcoPaperclip() {
-  return (
-    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-    </svg>
-  )
-}
-
 function padLeft(val, len) {
   const str = String(val ?? '').replace(/\D/g, '')
   return str ? str.padStart(len, '0') : ''
@@ -381,11 +374,12 @@ export default function PagoForm() {
         {/* ── Información del Pago ── */}
         <div className="form-panel">
           <div className="form-panel-title">Información del Pago</div>
-          <div className="form-grid">
 
-            {/* selector de local — solo cuando no hay local activo */}
+          {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
+          <div className="form-grid form-row">
+
             {!activeLocal && locales.length > 0 && (
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <div className="form-group">
                 <label className="form-label">Local *</label>
                 <div className="form-input-wrap">
                   <select required value={form.id_local} onChange={e => set('id_local', e.target.value)}>
@@ -395,7 +389,6 @@ export default function PagoForm() {
                 </div>
               </div>
             )}
-
             <div className="form-group">
               <label className="form-label">Fecha Factura *</label>
               <div className="form-input-wrap">
@@ -408,9 +401,33 @@ export default function PagoForm() {
                 <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Cashflow</label>
+              <div className="form-input-wrap">
+                <input
+                  type="date"
+                  value={form.cashflow}
+                  onChange={e => set('cashflow', e.target.value)}
+                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
+                />
+              </div>
+              {provPlazo && (
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  Plazo: {provPlazo} días
+                </span>
+              )}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Fecha de Pago</label>
+              <div className="form-input-wrap">
+                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
+              </div>
+            </div>
+          </div>
 
-            {/* combobox de proveedor */}
-            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: '1 / -1' }}>
+          {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
+          <div className="form-grid form-row">
+            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: 'span 2' }}>
               <label className="form-label">Proveedor</label>
               <div className="form-input-wrap">
                 <input
@@ -425,16 +442,16 @@ export default function PagoForm() {
                   <button
                     type="button"
                     onClick={clearProveedor}
-                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', color: 'var(--t3)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                    className="input-clear-btn"
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}
                     title="Quitar proveedor"
                   >×</button>
                 )}
               </div>
               {provOpen && (
-                <div className="combobox-dropdown">
+                <div className="combobox-inline-list">
                   {filteredProvs.length === 0
-                    ? <span className="combobox-option empty">Sin resultados</span>
+                    ? <div className="combobox-inline-empty">Sin resultados</div>
                     : filteredProvs.slice(0, 60).map(p => (
                       <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
                         {p.nombre}
@@ -444,7 +461,6 @@ export default function PagoForm() {
                 </div>
               )}
             </div>
-
             <div className="form-group">
               <label className="form-label">Rubro / Categoría</label>
               <div className="form-input-wrap">
@@ -467,38 +483,10 @@ export default function PagoForm() {
                 </select>
               </div>
             </div>
+          </div>
 
-            <div className="form-group">
-              <label className="form-label">Tipo de Comprobante</label>
-              <div className="form-input-wrap">
-                <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
-                  <option value="">—</option>
-                  {['A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Estado</label>
-              <div className="form-input-wrap">
-                <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
-                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                <input
-                  type="checkbox"
-                  checked={form.periodico}
-                  onChange={e => set('periodico', e.target.checked)}
-                  style={{ width: 15, height: 15, cursor: 'pointer' }}
-                />
-                <span className="form-label" style={{ margin: 0 }}>Pago periódico (recurrente)</span>
-              </label>
-            </div>
-
-            {/* PV y Nro de comprobante */}
+          {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
+          <div className="form-grid form-row">
             <div className="form-group">
               <label className="form-label">Punto de Venta</label>
               <div className="form-input-wrap">
@@ -529,8 +517,35 @@ export default function PagoForm() {
                 />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Tipo de Comprobante</label>
+              <div className="form-input-wrap">
+                <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
+                  <option value="">—</option>
+                  {['A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Estado</label>
+              <div className="form-input-wrap">
+                <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
+                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
 
           </div>
+
+          {/* pago periódico: suelto, en su propia card chica */}
+          <label className="periodico-card">
+            <input
+              type="checkbox"
+              checked={form.periodico}
+              onChange={e => set('periodico', e.target.checked)}
+            />
+            <span>Pago periódico (recurrente)</span>
+          </label>
         </div>
 
         {/* ── Montos ── */}
@@ -553,28 +568,6 @@ export default function PagoForm() {
               <label className="form-label">Importe Total *</label>
               <div className="form-input-wrap">
                 <input type="number" step="0.01" placeholder="0.00" required value={form.importe} onChange={e => set('importe', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Cashflow</label>
-              <div className="form-input-wrap">
-                <input
-                  type="date"
-                  value={form.cashflow}
-                  onChange={e => set('cashflow', e.target.value)}
-                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
-                />
-              </div>
-              {provPlazo && (
-                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
-                  Plazo: {provPlazo} días
-                </span>
-              )}
-            </div>
-            <div className="form-group">
-              <label className="form-label">Fecha de Pago</label>
-              <div className="form-input-wrap">
-                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
               </div>
             </div>
           </div>
@@ -704,58 +697,24 @@ export default function PagoForm() {
         <div className="form-panel">
           <div className="form-panel-title">Adjuntos</div>
           <div className="form-grid">
-            <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <IcoPaperclip /> Foto
-              </label>
-              {form.foto_url ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {form.foto_url.split('/').pop()}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-danger btn-icon"
-                    onClick={() => { set('foto_url', ''); setFotoFile(null) }}>
-                    <IcoTrash />
-                  </button>
-                </div>
-              ) : (
-                <div className="form-input-wrap">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => setFotoFile(e.target.files[0] || null)}
-                    style={{ padding: '4px 0' }}
-                  />
-                </div>
-              )}
-              {uploadingFoto && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo foto...</span>}
-            </div>
-            <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <IcoPaperclip /> PDF
-              </label>
-              {form.pdf_url ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {form.pdf_url.split('/').pop()}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-danger btn-icon"
-                    onClick={() => { set('pdf_url', ''); setPdfFile(null) }}>
-                    <IcoTrash />
-                  </button>
-                </div>
-              ) : (
-                <div className="form-input-wrap">
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={e => setPdfFile(e.target.files[0] || null)}
-                    style={{ padding: '4px 0' }}
-                  />
-                </div>
-              )}
-              {uploadingPdf && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo PDF...</span>}
-            </div>
+            <AdjuntoUpload
+              label="Foto"
+              accept="image/*"
+              value={form.foto_url}
+              file={fotoFile}
+              onFileSelected={setFotoFile}
+              onRemove={() => { set('foto_url', ''); setFotoFile(null) }}
+              uploading={uploadingFoto}
+            />
+            <AdjuntoUpload
+              label="PDF"
+              accept=".pdf,application/pdf"
+              value={form.pdf_url}
+              file={pdfFile}
+              onFileSelected={setPdfFile}
+              onRemove={() => { set('pdf_url', ''); setPdfFile(null) }}
+              uploading={uploadingPdf}
+            />
           </div>
         </div>
 

@@ -556,6 +556,36 @@ export default function Users() {
                 </div>
               </div>
 
+              {/* Permisos individuales */}
+              {userRoles.some(r => r.role?.nombre === 'admin') && (
+                <>
+                  <div className="drawer-section-title">Permisos individuales</div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none', marginBottom: '1.25rem', fontSize: 13, color: 'var(--t2)' }}>
+                    <input
+                      type="checkbox"
+                      className="select-checkbox"
+                      checked={(selected.user_permissions ?? []).some(p => p.module?.nombre === 'reportes' && p.can_view)}
+                      onChange={async (e) => {
+                        const checked = e.target.checked
+                        try {
+                          if (checked) {
+                            await usersApi.setPermission(selected.id, 'reportes', { can_view: true })
+                          } else {
+                            await usersApi.removePermission(selected.id, 'reportes')
+                          }
+                          const { data } = await usersApi.get(selected.id)
+                          setSelected(data)
+                          usersApi.list().then(({ data: all }) => setUsers(all)).catch(() => {})
+                        } catch (err) {
+                          notify(err.response?.data?.error || 'Error al actualizar el permiso', 'error')
+                        }
+                      }}
+                    />
+                    Puede ver Reportes
+                  </label>
+                </>
+              )}
+
               {/* Roles y Accesos */}
               <div className="drawer-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>Roles y Accesos</span>

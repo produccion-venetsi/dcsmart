@@ -73,7 +73,7 @@ export default function Login() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (token) navigate('/select-app', { replace: true })
+    if (token) navigate('/start', { replace: true })
   }, [token, navigate])
 
   // Initialize Google Identity Services
@@ -86,7 +86,7 @@ export default function Login() {
         callback: async ({ credential }) => {
           try {
             await loginGoogle(credential)
-            navigate('/select-app')
+            navigate('/start')
           } catch {}
         }
       })
@@ -112,7 +112,7 @@ export default function Login() {
     clearError()
     try {
       await login(email, password)
-      navigate('/select-app')
+      navigate('/start')
     } catch {}
   }
 

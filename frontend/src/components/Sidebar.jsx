@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
@@ -161,7 +162,7 @@ const NAV_MAIN = [
   { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
   { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
-  { to: '/reportes',    label: 'Reportes',    Icon: IcoReportes,  roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/reportes',    label: 'Reportes',    Icon: IcoReportes },
 ]
 
 const NAV_ADMIN = [
@@ -182,6 +183,7 @@ export default function Sidebar() {
   const activeApp      = useAppStore((s) => s.activeApp)
   const activeLocal    = useAppStore((s) => s.activeLocal)
   const setActiveLocal = useAppStore((s) => s.setActiveLocal)
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -201,9 +203,20 @@ export default function Sidebar() {
 
   const role       = activeApp?.role
   const isGlobal   = role === 'super_admin' || role === 'dcsmart'
-  const visibleFor = (item) => !item.roles || item.roles.includes(role)
-  const mainItems  = NAV_MAIN.filter(visibleFor)
-  const adminItems = NAV_ADMIN.filter(visibleFor)
+  const isReportesOnly = role === 'reportes'
+
+  const visibleFor = (item) => {
+    if (item.to === '/reportes') return !!activeApp?.can_reportes
+    return !item.roles || item.roles.includes(role)
+  }
+  const mainItems = isReportesOnly
+    ? NAV_MAIN.filter(i => i.to === '/reportes')
+    : NAV_MAIN.filter(visibleFor)
+
+  // Admin: independiente de la app activa -- evalúa TODAS las asignaciones
+  // de rol del usuario, no la app elegida (para cuando no hay app activa).
+  const globalRoleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
+  const adminItems = NAV_ADMIN.filter(item => !item.roles || item.roles.some(r => globalRoleNames.includes(r)))
 
   return (
     <aside className="sidebar">
@@ -287,8 +300,8 @@ export default function Sidebar() {
       {/* User footer */}
       <div className="sidebar-user">
         <div className="sidebar-user-avatar">
-          {user?.avatar_url
-            ? <img src={user.avatar_url} alt={user.nombre} />
+          {user?.avatar_url && !avatarFailed
+            ? <img src={user.avatar_url} alt={user.nombre} onError={() => setAvatarFailed(true)} />
             : initials(user?.nombre)}
         </div>
         <div className="sidebar-user-info">

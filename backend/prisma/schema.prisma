@@ -20,6 +20,7 @@ model App {
   user_app_roles UserAppRole[]
   detalle_tipos  DetalleTipo[]
   local_access   UserLocalAccess[]
+  usage          UserAppUsage[]
 
   @@map("apps")
 }
@@ -62,6 +63,7 @@ model User {
   pagos_creados    Pago[]            @relation("PagoCreatedBy")
   local_access     UserLocalAccess[]
   audits           Audit[]           @relation("AuditUser")
+  app_usage        UserAppUsage[]
 
   @@map("users")
 }
@@ -131,6 +133,18 @@ model UserAppRole {
 
   @@unique([id_user, id_app])
   @@map("user_app_roles")
+}
+
+model UserAppUsage {
+  id_user      String
+  id_app       String
+  last_used_at DateTime @default(now())
+
+  user User @relation(fields: [id_user], references: [id])
+  app  App  @relation(fields: [id_app], references: [id])
+
+  @@id([id_user, id_app])
+  @@map("user_app_usage")
 }
 
 model UserPermission {

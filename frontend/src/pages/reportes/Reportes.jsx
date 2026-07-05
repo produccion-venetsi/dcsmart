@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useAppStore } from '../../store/appStore.js'
 import ReportePagos from './ReportePagos.jsx'
+import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
 import './reportes.css'
 
@@ -43,7 +44,8 @@ const PRESETS = [
 ]
 
 const TABS = [
-  { key: 'pagos', label: 'Pagos y Cajas' },
+  { key: 'pagos', label: 'Pagos' },
+  { key: 'cajas', label: 'Cajas' },
   { key: 'cmv',   label: 'CMV' },
 ]
 
@@ -179,6 +181,9 @@ export default function Reportes() {
         {/* ── Active report ── */}
         {tab === 'pagos' && (
           <ReportePagos applied={applied} activeLocal={activeLocal} prettyDate={prettyDate} />
+        )}
+        {tab === 'cajas' && (
+          <ReporteCajas applied={applied} activeLocal={activeLocal} prettyDate={prettyDate} />
         )}
         {tab === 'cmv' && (
           <ReporteCMV applied={applied} activeLocal={activeLocal} prettyDate={prettyDate} />

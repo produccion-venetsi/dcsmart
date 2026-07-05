@@ -7,6 +7,9 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import CajaFotoViewer from '../../components/CajaFotoViewer.jsx'
+import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
 
 const EMPTY_CAJA = {
@@ -18,6 +21,14 @@ function IcoPlus() {
   return (
     <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  )
+}
+function IcoCheckSquare() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
     </svg>
   )
 }
@@ -60,13 +71,20 @@ function IcoBack() {
     </svg>
   )
 }
+function IcoFilter() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+    </svg>
+  )
+}
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
+function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
-function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) {
+function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -76,8 +94,10 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
   const [tipos,      setTipos]     = useState([])
   const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [saving,     setSaving]    = useState(false)
+  const [addingMov,  setAddingMov] = useState(false)
   const [newDet,     setNewDet]    = useState({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDet,  setSavingDet] = useState(false)
+  const [addingDet,  setAddingDet] = useState(false)
   const [auditando,  setAuditando] = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -127,6 +147,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
       })
       notify('Movimiento agregado', 'success')
       setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+      setAddingMov(false)
       load()
     } catch { notify('Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
@@ -150,6 +171,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
       })
       notify('Detalle agregado', 'success')
       setNewDet({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+      setAddingDet(false)
       load()
     } catch { notify('Error al agregar detalle', 'error') }
     finally { setSavingDet(false) }
@@ -204,24 +226,31 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        {canEdit && (
-          <button
-            className={`btn btn-sm ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
-            onClick={handleAudit}
-            disabled={auditando}
-          >
-            {auditando
-              ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-              : caja.audit ? '✓ Auditado' : 'Auditar'
-            }
-          </button>
-        )}
-        {canEdit && (
-          <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IcoEdit /> Editar
-          </button>
-        )}
+      <div style={{ marginBottom: '0.75rem' }}>
+        <ActionsMenu label="Acciones">
+          {canEdit && (
+            <button
+              className={`btn btn-sm ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handleAudit}
+              disabled={auditando}
+            >
+              {auditando
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : caja.audit ? '✓ Auditado' : 'Auditar'
+              }
+            </button>
+          )}
+          {canEdit && (
+            <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IcoEdit /> Editar
+            </button>
+          )}
+          {canDelete && (
+            <button className="btn btn-danger btn-sm" onClick={(e) => onDelete(cajaId, e)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IcoTrash /> Eliminar
+            </button>
+          )}
+        </ActionsMenu>
       </div>
 
       {caja.observaciones && (
@@ -243,79 +272,50 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
       {caja.foto_url && (
         <div style={{ marginBottom: '1rem' }}>
           <div className="drawer-section-title">Foto</div>
-          <a href={caja.foto_url} target="_blank" rel="noreferrer">
-            <img
-              src={caja.foto_url}
-              alt="Foto caja"
-              style={{ width: 180, height: 180, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border-hi)', display: 'block' }}
-            />
-          </a>
+          <CajaFotoViewer cajaId={caja.id} fotoUrl={caja.foto_url} />
         </div>
       )}
 
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
+        {canEdit && !addingDet && (
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
+            <IcoPlus /> Añadir
+          </button>
+        )}
       </div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th></th></tr>
-          </thead>
-          <tbody>
-            {(caja.detalles || []).map((d) => (
-              <tr key={d.id}>
-                <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
-                <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
-                <td className="td-number">{fmt$2(d.monto)}</td>
-                <td>
-                  {canDelete && (
-                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
-                      <IcoTrash />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {(!caja.detalles || caja.detalles.length === 0) && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin detalles</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="drawer-section-title">Historial de auditoría</div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
-          </thead>
-          <tbody>
-            {loadingHistory ? (
-              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
-            ) : auditHistory.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
-            ) : (
-              auditHistory.map((ev) => (
-                <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
-                  <td>{ev.user?.nombre ?? '—'}</td>
+      {caja.detalles && caja.detalles.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+          <table className="data-table">
+            <thead>
+              <tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th></th></tr>
+            </thead>
+            <tbody>
+              {caja.detalles.map((d) => (
+                <tr key={d.id}>
+                  <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
+                  <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(d.monto)}</td>
                   <td>
-                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
-                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
-                    </span>
+                    {canDelete && (
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                        <IcoTrash />
+                      </button>
+                    )}
                   </td>
-                  <td className="td-muted">{ev.observaciones || '—'}</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {(!caja.detalles || caja.detalles.length === 0) && !addingDet && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin detalles</div>
+      )}
 
-      {canEdit && <div className="drawer-section-title">Agregar Detalle</div>}
-      {canEdit && <form onSubmit={handleAddDet}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      {canEdit && addingDet && <form onSubmit={handleAddDet}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Clasificación</label>
             <div className="form-input-wrap">
@@ -352,49 +352,60 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
             </div>
           </div>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto} style={{ marginTop: '0.75rem', marginBottom: '1.5rem' }}>
-          {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem', marginBottom: '1.5rem' }}>
+          <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto}>
+            {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAddingDet(false)}>✕</button>
+        </div>
       </form>}
 
       {/* ── MOVIMIENTOS ──────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
-        <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalMov)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalMov)}</span>
+          {canEdit && !addingMov && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMov(true)}>
+              <IcoPlus /> Añadir
+            </button>
+          )}
+        </div>
       </div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
-          </thead>
-          <tbody>
-            {(caja.movimientos || []).map((m) => (
-              <tr key={m.id}>
-                <td>
-                  <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
-                </td>
-                <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
-                <td className="td-number">{fmt$2(m.monto)}</td>
-                <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
-                <td>
-                  {canDelete && (
-                    <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                      <IcoTrash />
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {(!caja.movimientos || caja.movimientos.length === 0) && (
-              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--t3)' }}>Sin movimientos</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {caja.movimientos && caja.movimientos.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+          <table className="data-table">
+            <thead>
+              <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
+            </thead>
+            <tbody>
+              {caja.movimientos.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                  </td>
+                  <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(m.monto)}</td>
+                  <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
+                  <td>
+                    {canDelete && (
+                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                        <IcoTrash />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {(!caja.movimientos || caja.movimientos.length === 0) && !addingMov && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin movimientos</div>
+      )}
 
-      {canEdit && <div className="drawer-section-title">Agregar Movimiento</div>}
-      {canEdit && <form onSubmit={handleAddMov}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+      {canEdit && addingMov && <form onSubmit={handleAddMov}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
             <div className="form-input-wrap">
@@ -428,10 +439,42 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit }) 
             </div>
           </div>
         </div>
-        <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
-          {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
+            {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setAddingMov(false)}>✕</button>
+        </div>
       </form>}
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>
+      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+          </thead>
+          <tbody>
+            {loadingHistory ? (
+              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+            ) : auditHistory.length === 0 ? (
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+            ) : (
+              auditHistory.map((ev) => (
+                <tr key={ev.id}>
+                  <td className="td-muted">{fmtDT(ev.fecha)}</td>
+                  <td>{ev.user?.nombre ?? '—'}</td>
+                  <td>
+                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
+                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
+                    </span>
+                  </td>
+                  <td className="td-muted">{ev.observaciones || '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -440,6 +483,8 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const notify  = useUiStore((s) => s.notify)
   const [form,   setForm]   = useState(null)
   const [saving, setSaving] = useState(false)
+  const [fotoFile,      setFotoFile]      = useState(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
 
   useEffect(() => {
     if (!cajaId) return
@@ -457,6 +502,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         tickets:      data.tickets      != null ? String(data.tickets)      : '',
         observaciones: data.observaciones ?? '',
         foto_url:     data.foto_url     ?? '',
+        id_local:     data.id_local     ?? '',
       })
     }).catch(() => notify('Error al cargar caja', 'error'))
   }, [cajaId])
@@ -467,6 +513,15 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     e.preventDefault()
     setSaving(true)
     try {
+      let foto_url = form.foto_url
+      if (fotoFile) {
+        setUploadingFoto(true)
+        const fd = new FormData()
+        fd.append('file', fotoFile)
+        const r = await cajasApi.upload(fd, form.id_local)
+        foto_url = r.data.url
+        setUploadingFoto(false)
+      }
       await cajasApi.update(cajaId, {
         nro_turno:    form.nro_turno    || null,
         fecha_cierre: form.fecha_cierre || null,
@@ -477,12 +532,13 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         comensales:   form.comensales   !== '' ? parseInt(form.comensales)   : null,
         tickets:      form.tickets      !== '' ? parseInt(form.tickets)      : null,
         observaciones: form.observaciones || null,
-        foto_url:     form.foto_url     || null,
+        foto_url:     foto_url          || null,
       })
       notify('Caja actualizada', 'success')
       onSaved()
     } catch (err) {
       notify(err.response?.data?.error || 'Error al guardar', 'error')
+      setUploadingFoto(false)
     } finally { setSaving(false) }
   }
 
@@ -496,7 +552,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fecha Inicio</label>
           <div className="form-input-wrap">
@@ -551,12 +607,15 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">URL Foto</label>
-          <div className="form-input-wrap">
-            <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
-          </div>
-        </div>
+        <AdjuntoUpload
+          label="Foto"
+          accept="image/*"
+          value={form.foto_url}
+          file={fotoFile}
+          onFileSelected={setFotoFile}
+          onRemove={() => { setF('foto_url', ''); setFotoFile(null) }}
+          uploading={uploadingFoto}
+        />
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
           <label className="form-label">Observaciones</label>
           <div className="form-input-wrap form-textarea-wrap">
@@ -579,27 +638,111 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const [form,      setForm]    = useState(EMPTY_CAJA)
   const [localId,   setLocalId] = useState(activeLocal?.id || '')
   const [saving,    setSaving]  = useState(false)
+  const [fotoFile,      setFotoFile]      = useState(null)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
+
+  const [tipos,   setTipos]   = useState([])
+  const [metodos, setMetodos] = useState([])
+
+  const [pendingDetalles, setPendingDetalles] = useState([])
+  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '', observaciones: '' })
+
+  const [pendingMovimientos, setPendingMovimientos] = useState([])
+  const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const targetLocalId = activeLocal?.id || localId
+
+  useEffect(() => {
+    if (!targetLocalId) return
+    detallesApi.tipos(targetLocalId)
+      .then(r => setTipos(r.data || []))
+      .catch(() => {})
+  }, [targetLocalId])
+
+  useEffect(() => {
+    metodosApi.list()
+      .then(r => setMetodos(r.data || []))
+      .catch(() => {})
+  }, [])
+
+  const addPendingDetalle = () => {
+    if (!detForm.monto) return
+    setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
+    setDetForm({ id_tipo: '', monto: '', observaciones: '' })
+  }
+  const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
+
+  const addPendingMovimiento = () => {
+    if (!movForm.monto) return
+    setPendingMovimientos(prev => [...prev, { ...movForm, _key: crypto.randomUUID() }])
+    setMovForm({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+  }
+  const removePendingMovimiento = (key) => setPendingMovimientos(prev => prev.filter(m => m._key !== key))
 
   const handleCreate = async (e) => {
     e.preventDefault()
     if (!targetLocalId) { notify('Seleccioná un local', 'error'); return }
     setSaving(true)
     try {
-      const res = await cajasApi.create({ ...form, id_local: targetLocalId })
-      notify('Caja creada', 'success')
-      onCreated(res.data?.id)
+      let foto_url = form.foto_url
+      if (fotoFile) {
+        setUploadingFoto(true)
+        const fd = new FormData()
+        fd.append('file', fotoFile)
+        const r = await cajasApi.upload(fd, targetLocalId)
+        foto_url = r.data.url
+        setUploadingFoto(false)
+      }
+      const res = await cajasApi.create({ ...form, foto_url, id_local: targetLocalId })
+      const nuevoId = res.data?.id
+
+      let detOk = 0, detFail = 0
+      for (const d of pendingDetalles) {
+        try {
+          await detallesApi.create({
+            id_caja: nuevoId,
+            id_tipo: d.id_tipo || null,
+            monto: parseFloat(d.monto),
+            observaciones: d.observaciones || null
+          })
+          detOk++
+        } catch { detFail++ }
+      }
+
+      let movOk = 0, movFail = 0
+      for (const m of pendingMovimientos) {
+        try {
+          await movimientosApi.create({
+            id_caja: nuevoId,
+            tipo: m.tipo,
+            id_metodo: m.id_metodo || null,
+            monto: parseFloat(m.monto),
+            cantidad: m.cantidad ? parseInt(m.cantidad) : null
+          })
+          movOk++
+        } catch { movFail++ }
+      }
+
+      if (detFail === 0 && movFail === 0) {
+        notify('Caja creada', 'success')
+      } else {
+        notify(
+          `Caja creada. Detalles: ${detOk}/${pendingDetalles.length} guardados. Movimientos: ${movOk}/${pendingMovimientos.length} guardados. Los que fallaron podés agregarlos manualmente desde el detalle.`,
+          'error'
+        )
+      }
+      onCreated(nuevoId)
     } catch (err) {
       notify(err.response?.data?.error || 'Error al crear', 'error')
+      setUploadingFoto(false)
     } finally { setSaving(false) }
   }
 
   return (
     <form onSubmit={handleCreate}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
             <label className="form-label">Local *</label>
@@ -665,18 +808,135 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
         </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">URL Foto</label>
-          <div className="form-input-wrap">
-            <input type="url" placeholder="https://..." value={form.foto_url} onChange={e => setF('foto_url', e.target.value)} />
-          </div>
-        </div>
+        <AdjuntoUpload
+          label="Foto"
+          accept="image/*"
+          value={form.foto_url}
+          file={fotoFile}
+          onFileSelected={setFotoFile}
+          onRemove={() => { setF('foto_url', ''); setFotoFile(null) }}
+          uploading={uploadingFoto}
+        />
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
           <label className="form-label">Observaciones</label>
           <div className="form-input-wrap form-textarea-wrap">
             <textarea rows={2} value={form.observaciones} onChange={e => setF('observaciones', e.target.value)} placeholder="Notas opcionales..." />
           </div>
         </div>
+      </div>
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Detalles (opcional)</div>
+      {pendingDetalles.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
+          <table className="data-table">
+            <thead><tr><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <tbody>
+              {pendingDetalles.map(d => (
+                <tr key={d._key}>
+                  <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(d.monto)}</td>
+                  <td>
+                    <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingDetalle(d._key)}>
+                      <IcoTrash />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Nombre</label>
+          <div className="form-input-wrap">
+            <select value={detForm.id_tipo} onChange={e => setDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
+              <option value="">Ver opciones</option>
+              {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Monto</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <label className="form-label">Observaciones</label>
+          <div className="form-input-wrap">
+            <input type="text" placeholder="Opcional" value={detForm.observaciones} onChange={e => setDetForm(f => ({ ...f, observaciones: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
+        <button type="button" className="btn btn-secondary" onClick={addPendingDetalle} disabled={!detForm.monto}>
+          <IcoPlus /> Agregar
+        </button>
+      </div>
+
+      <div className="drawer-section-title">Movimientos (opcional)</div>
+      {pendingMovimientos.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
+          <table className="data-table">
+            <thead><tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr></thead>
+            <tbody>
+              {pendingMovimientos.map(m => (
+                <tr key={m._key}>
+                  <td>
+                    <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                  </td>
+                  <td className="td-muted">{metodos.find(x => x.id === m.id_metodo)?.nombre || '—'}</td>
+                  <td className="td-number">{fmt$2(m.monto)}</td>
+                  <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad || '—'}</td>
+                  <td>
+                    <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingMovimiento(m._key)}>
+                      <IcoTrash />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Tipo</label>
+          <div className="form-input-wrap">
+            <select value={movForm.tipo} onChange={e => setMovForm(f => ({ ...f, tipo: e.target.value }))}>
+              <option>INGRESO</option>
+              <option>EGRESO</option>
+              <option>APERTURA</option>
+              <option>CIERRE</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Método</label>
+          <div className="form-input-wrap">
+            <select value={movForm.id_metodo} onChange={e => setMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+              <option value="">Sin método</option>
+              {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Monto</label>
+          <div className="form-input-wrap">
+            <input type="number" step="0.01" placeholder="0.00" value={movForm.monto} onChange={e => setMovForm(f => ({ ...f, monto: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Cantidad</label>
+          <div className="form-input-wrap">
+            <input type="number" min="1" step="1" placeholder="Opcional" value={movForm.cantidad} onChange={e => setMovForm(f => ({ ...f, cantidad: e.target.value }))} />
+          </div>
+        </div>
+      </div>
+      <div style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
+        <button type="button" className="btn btn-secondary" onClick={addPendingMovimiento} disabled={!movForm.monto}>
+          <IcoPlus /> Agregar
+        </button>
       </div>
       <div className="form-actions" style={{ marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
@@ -690,15 +950,12 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
 const ROW_HEIGHT = 32
 const OVERSCAN = 20
-const COL_COUNT = 14
-
 export default function CajaList() {
   const [searchParams] = useSearchParams()
   const { activeApp, activeLocal } = useAppStore()
   const locales     = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
-  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
@@ -711,25 +968,56 @@ export default function CajaList() {
   const [selectedId, setSelectedId] = useState(null)
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
-  const [auditFilter, setAuditFilter] = useState('')
-  const [auditingId,  setAuditingId]  = useState(null)
+  const FILTER_INIT_CAJAS = { desde: '', hasta: '', audit: '' }
+  const [filters, setFilters] = useState(FILTER_INIT_CAJAS)
+  const [draft,   setDraft]   = useState(FILTER_INIT_CAJAS)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterRef = useRef(null)
+
+  const activeFilterCount = Object.values(filters).filter(v => v !== '').length
+  const hasActiveFilters  = activeFilterCount > 0
+
+  const openFilters   = () => { setDraft(filters); setFilterOpen(true) }
+  const applyFilters  = () => { setFilters(draft); setFilterOpen(false) }
+  const clearFilters  = () => { setDraft(FILTER_INIT_CAJAS); setFilters(FILTER_INIT_CAJAS) }
+  const setDraftField = (k, v) => setDraft(d => ({ ...d, [k]: v }))
+
+  useEffect(() => {
+    if (!filterOpen) return
+    const handler = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [filterOpen])
   const autoOpenedRef = useRef(false)
 
   const scrollRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [selectionMode, setSelectionMode] = useState(false)
+
+  const cajaListParams = () => ({
+    id_local: activeLocal?.id,
+    limit: 0,
+    ...(filters.audit !== '' ? { audit: filters.audit } : {}),
+    ...(filters.desde !== '' ? { desde: filters.desde } : {}),
+    ...(filters.hasta !== '' ? { hasta: filters.hasta } : {})
+  })
 
   const load = useCallback(() => {
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, limit: 0, ...(auditFilter !== '' ? { audit: auditFilter } : {}) })
+    cajasApi.list(cajaListParams())
       .then(({ data }) => setCajas(data.data))
       .catch(() => notify('Error al cargar cajas', 'error'))
       .finally(() => setLoading(false))
-  }, [activeLocal?.id, auditFilter])
+  }, [activeLocal?.id, filters])
 
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    cajasApi.list({ id_local: activeLocal?.id, limit: 0, ...(auditFilter !== '' ? { audit: auditFilter } : {}) }, ctrl.signal)
+    setSelectedIds(new Set())
+    cajasApi.list(cajaListParams(), ctrl.signal)
       .then(({ data }) => {
         setCajas(data.data)
         const turno = searchParams.get('turno')
@@ -744,7 +1032,7 @@ export default function CajaList() {
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [activeLocal?.id, auditFilter])
+  }, [activeLocal?.id, filters])
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -782,38 +1070,75 @@ export default function CajaList() {
   const visibleCajas = sortedCajas.slice(startIdx, endIdx)
 
   const handleDelete = async (id, e) => {
-    e.stopPropagation()
+    e?.stopPropagation()
     if (!(await showConfirm('¿Eliminar esta caja?'))) return
     try {
       await cajasApi.remove(id)
       notify('Caja eliminada', 'success')
       setCajas(prev => prev.filter(c => c.id !== id))
+      setPanelOpen(false)
     }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
   }
 
-  const patchCajaAudit = (id, audit) => {
-    setCajas(prev => prev.map(c => c.id === id ? { ...c, audit } : c))
+  const toggleSelected = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
 
-  const handleAudit = async (id, e) => {
-    e.stopPropagation()
-    const current = cajas.find(c => c.id === id)
-    let observaciones
-    if (current?.audit) {
-      observaciones = await showPrompt(
-        'Esta caja ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
-        { placeholder: 'Motivo (opcional)' }
-      )
-      if (observaciones === null) return
+  const allVisibleSelected = sortedCajas.length > 0 && sortedCajas.every(c => selectedIds.has(c.id))
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(sortedCajas.map(c => c.id)))
+  }
+
+  const selectedCajas    = sortedCajas.filter(c => selectedIds.has(c.id))
+  const canBulkAudit     = selectedCajas.some(c => !c.audit)
+  const canBulkDesaudit  = selectedCajas.some(c => c.audit)
+
+  const bulkCancel = () => setSelectedIds(new Set())
+
+  const toggleSelectionMode = () => {
+    setSelectionMode(m => !m)
+    setSelectedIds(new Set())
+  }
+
+  const bulkAuditar = async () => {
+    const targets = selectedCajas.filter(c => !c.audit)
+    let ok = 0, fail = 0
+    for (const c of targets) {
+      try { await cajasApi.audit(c.id); ok++ }
+      catch { fail++ }
     }
-    setAuditingId(id)
-    try {
-      const { data } = await cajasApi.audit(id, current?.audit ? { observaciones } : undefined)
-      notify(data.audit ? 'Caja auditada' : 'Auditoría revertida', 'success')
-      patchCajaAudit(id, data.audit)
-    } catch { notify('Error al auditar', 'error') }
-    finally { setAuditingId(null) }
+    notify(fail === 0 ? `${ok} cajas auditadas` : `${ok}/${targets.length} auditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
+  }
+
+  const bulkDesauditar = async () => {
+    const targets = selectedCajas.filter(c => c.audit)
+    let ok = 0, fail = 0
+    for (const c of targets) {
+      try { await cajasApi.audit(c.id, { observaciones: null }); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} cajas desauditadas` : `${ok}/${targets.length} desauditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
+  }
+
+  const bulkEliminar = async () => {
+    if (!(await showConfirm(`¿Eliminar ${selectedCajas.length} cajas?`))) return
+    let ok = 0, fail = 0
+    for (const c of selectedCajas) {
+      try { await cajasApi.remove(c.id); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} cajas eliminadas` : `${ok}/${selectedCajas.length} eliminadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSelectedIds(new Set())
+    load()
   }
 
   const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
@@ -837,6 +1162,11 @@ export default function CajaList() {
     </th>
   )
 
+  // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
+  // Se sacó la columna de acciones (borrar) de la fila (ahora vive en el detalle).
+  const showLocalCol = !activeLocal
+  const colCount = 12 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+
   return (
     <div className="page">
       <style>{`
@@ -847,14 +1177,61 @@ export default function CajaList() {
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Cajas</h1>
-          {activeLocal && <p className="page-sub">{activeLocal.nombre}</p>}
+          {activeLocal && <span className="local-badge">Local: {activeLocal.nombre}</span>}
         </div>
         <div className="page-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <select className="filter-select" value={auditFilter} onChange={e => setAuditFilter(e.target.value)}>
-            <option value="">Todos</option>
-            <option value="false">No auditado</option>
-            <option value="true">Auditado</option>
-          </select>
+          <div style={{ position: 'relative' }} ref={filterRef}>
+            <button
+              className={`btn ${filterOpen || hasActiveFilters ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => filterOpen ? setFilterOpen(false) : openFilters()}
+            >
+              <IcoFilter />
+              Filtros
+              {activeFilterCount > 0 && (
+                <span style={{ marginLeft: 6, background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {filterOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                borderRadius: 12, padding: '1.25rem', width: 320, maxWidth: '90vw',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Desde</span>
+                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} max={draft.hasta || undefined} onChange={e => setDraftField('desde', e.target.value)} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Hasta</span>
+                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.hasta} min={draft.desde || undefined} onChange={e => setDraftField('hasta', e.target.value)} />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Auditado</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.audit} onChange={e => setDraftField('audit', e.target.value)}>
+                      <option value="">Todos</option>
+                      <option value="false">No auditado</option>
+                      <option value="true">Auditado</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
+                  <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
+                    Limpiar todo
+                  </button>
+                  <button className="btn btn-sm btn-primary" onClick={applyFilters}>
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
+            <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+          </button>
           {canCreate && (
             <button className="btn btn-primary" onClick={openCreate}>
               <IcoPlus /> Nueva Caja
@@ -863,11 +1240,37 @@ export default function CajaList() {
         </div>
       </div>
 
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="bulk-bar">
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-bright)' }}>
+            {selectedIds.size} seleccionados
+          </span>
+          <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit}>
+            Auditar
+          </button>
+          <button className="btn btn-sm btn-secondary" onClick={bulkDesauditar} disabled={!canBulkDesaudit}>
+            Desauditar
+          </button>
+          <button className="btn btn-sm btn-danger" onClick={bulkEliminar}>
+            Eliminar
+          </button>
+          <button className="btn btn-sm btn-secondary" onClick={bulkCancel} style={{ marginLeft: 'auto' }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+
       <div ref={scrollRef} className="vt-scroll-cajas table-wrap">
         <table className="data-table">
           <thead>
             <tr>
+              {selectionMode && (
+                <th style={{ width: 32 }}>
+                  <input type="checkbox" className="select-checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
+                </th>
+              )}
               <SortTh field="nro_turno">Nro Turno</SortTh>
+              <th>Auditado</th>
               <SortTh field="fecha_inicio">Inicio</SortTh>
               <SortTh field="fecha_cierre">Cierre</SortTh>
               <SortTh field="cajero">Cajero</SortTh>
@@ -878,23 +1281,21 @@ export default function CajaList() {
               <th>Tickets</th>
               <th>Origen</th>
               <th>Foto</th>
-              <th>Local</th>
-              <th>Auditado</th>
-              <th></th>
+              {showLocalCol && <th>Local</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               Array.from({ length: 10 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: COL_COUNT }, (_, j) => (
+                  {Array.from({ length: colCount }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${48 + (j * 11 + i * 9) % 44}%` }} /></td>
                   ))}
                 </tr>
               ))
             ) : sortedCajas.length === 0 ? (
               <tr>
-                <td colSpan={COL_COUNT}>
+                <td colSpan={colCount}>
                   <div className="table-empty">
                     <IcoCaja />
                     <p>No hay cajas registradas{activeLocal ? ' para este local' : ''}.</p>
@@ -903,10 +1304,18 @@ export default function CajaList() {
               </tr>
             ) : (
               <>
-                {topPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: topPad }} /></tr>}
+                {topPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: topPad }} /></tr>}
                 {visibleCajas.map((c) => (
                   <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
+                    {selectionMode && (
+                      <td onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="select-checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleSelected(c.id)} />
+                      </td>
+                    )}
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
+                    <td>
+                      <span className={`badge ${c.audit ? 'badge-green' : 'badge-muted'}`}>{c.audit ? '✓ Auditado' : 'No auditado'}</span>
+                    </td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
                     <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
                     <td>{c.cajero || <span className="td-muted">—</span>}</td>
@@ -921,34 +1330,16 @@ export default function CajaList() {
                         : <span className="td-muted">—</span>}
                     </td>
                     <td>
-                      {c.foto_url
+                      {c.foto_url && !c.foto_url.startsWith('gs://')
                         ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
-                        : <span className="td-muted">—</span>}
+                        : c.foto_url
+                          ? <span className="td-muted" title="Ver en el detalle"><IcoLink /></span>
+                          : <span className="td-muted">—</span>}
                     </td>
-                    <td className="td-muted">{c.local?.nombre ?? '—'}</td>
-                    <td>
-                      {canEdit ? (
-                        auditingId === c.id
-                          ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                          : c.audit
-                            ? <span className="badge badge-green" style={{ cursor: 'pointer' }} onClick={(e) => handleAudit(c.id, e)} title="Click para revertir">✓ Auditado</span>
-                            : <button className="btn btn-sm btn-secondary" onClick={(e) => handleAudit(c.id, e)}>Auditar</button>
-                      ) : (
-                        <span className="td-muted">{c.audit ? 'Sí' : 'No'}</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="td-actions">
-                        {canDelete && (
-                          <button className="btn btn-sm btn-danger btn-icon" onClick={(e) => handleDelete(c.id, e)}>
-                            <IcoTrash />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    {showLocalCol && <td className="td-muted">{c.local?.nombre ?? '—'}</td>}
                   </tr>
                 ))}
-                {bottomPad > 0 && <tr className="vt-spacer"><td colSpan={COL_COUNT} style={{ height: bottomPad }} /></tr>}
+                {bottomPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: bottomPad }} /></tr>}
               </>
             )}
           </tbody>
@@ -981,6 +1372,7 @@ export default function CajaList() {
             canEdit={canEdit}
             canDelete={canDelete}
             onEdit={() => openEdit(selectedId)}
+            onDelete={handleDelete}
           />
         )}
         {panelMode === 'edit' && (

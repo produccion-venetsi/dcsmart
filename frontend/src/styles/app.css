@@ -399,6 +399,30 @@ body {
   font-weight: 500;
 }
 
+/* indicador de local activo — mucho mas visible que el page-sub muted comun */
+.local-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(201, 176, 134, 0.14);
+  border: 1px solid rgba(201, 176, 134, 0.32);
+  color: var(--gold-bright);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.local-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold-bright);
+  flex-shrink: 0;
+}
+
 .page-actions {
   display: flex;
   gap: 0.6rem;
@@ -538,7 +562,6 @@ body {
   -webkit-backdrop-filter: blur(var(--blur));
   animation: fadeUp 0.28s var(--ease) both;
   position: relative;
-  overflow: hidden;
   box-shadow: 0 4px 24px rgba(0,0,0,0.16);
 }
 .form-panel::before {
@@ -708,6 +731,50 @@ body {
   color: var(--t1);
   background: rgba(255,255,255,0.09);
 }
+.btn-secondary.active {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+  background: rgba(201,176,134,0.12);
+}
+
+/* Panel de ActionsMenu: se abre en el flujo normal (empuja el contenido de
+   abajo), no flotando encima -- así el hover puede sostenerse moviendo el
+   mouse del botón al panel sin que se cierre de golpe. */
+.actions-menu-panel {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(201,176,134,0.05);
+  border: 1px solid var(--border-hi);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  animation: fadeUp 0.18s var(--ease) both;
+}
+
+/* Checkbox de selección múltiple (listados) -- acento dorado, no el azul/gris
+   por defecto del navegador. */
+.select-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--gold);
+}
+
+/* Barra flotante de acciones bulk (auditar/desauditar/eliminar en lote) */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: rgba(201,176,134,0.07);
+  border: 1px solid var(--border-hi);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  animation: fadeUp 0.18s var(--ease) both;
+}
 
 .btn-ghost {
   color: var(--gold);
@@ -793,6 +860,33 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 1.1rem;
   margin-bottom: 1.25rem;
+}
+
+/* Card chica y suelta para un checkbox destacado (ej. "Pago periódico") */
+.periodico-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  user-select: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t1);
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+.periodico-card:hover {
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.06);
+}
+.periodico-card input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--gold);
 }
 
 .form-group {
@@ -1703,6 +1797,8 @@ tr.row-clickable:hover td {
   text-transform: uppercase;
   color: var(--t4);
   margin: 1.25rem 0 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
 }
 .drawer-section-title:first-child { margin-top: 0; }
 
@@ -1934,6 +2030,26 @@ tr.row-clickable:hover td {
 }
 .combobox-dropdown::-webkit-scrollbar { width: 6px; }
 .combobox-dropdown::-webkit-scrollbar-thumb { background: var(--gold-deep); border-radius: 6px; }
+
+/* Lista en linea (no flota encima de otro contenido, empuja el resto del
+   form hacia abajo) -- mismo criterio que el filtro de proveedores de la
+   tabla de Pagos, pero de seleccion unica. */
+.combobox-inline-list {
+  margin-top: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--border-hi);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.combobox-inline-list::-webkit-scrollbar { width: 6px; }
+.combobox-inline-list::-webkit-scrollbar-thumb { background: var(--gold-deep); border-radius: 6px; }
+.combobox-inline-empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--t3);
+}
 .combobox-option {
   display: block;
   width: 100%;
@@ -2005,3 +2121,99 @@ th.sortable {
 th.sortable:hover { color: var(--gold-bright); }
 th.sortable .sort-ico { opacity: 0.4; margin-left: 4px; font-style: normal; }
 th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
+
+/* ── AdjuntoUpload (dropzone de foto/PDF) ── */
+.adjunto-dropzone {
+  border: 2px dashed var(--glass-border);
+  border-radius: 14px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--t3);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.adjunto-dropzone:hover,
+.adjunto-dropzone.drag-over {
+  border-color: var(--gold);
+  background: rgba(255, 255, 255, 0.05);
+}
+.adjunto-dropzone svg { color: var(--gold); margin-bottom: 8px; }
+.adjunto-dropzone-main { font-size: 13px; font-weight: 600; color: var(--t1); }
+.adjunto-dropzone-sub { font-size: 11.5px; margin-top: 3px; }
+
+.adjunto-filled {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border-hi);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.adjunto-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #3a4a5c, #22303e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-bright);
+  overflow: hidden;
+}
+.adjunto-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.adjunto-info { flex: 1; min-width: 0; }
+.adjunto-name {
+  font-size: 12.5px;
+  color: var(--t1);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adjunto-sub { font-size: 11px; color: var(--t3); margin-top: 1px; }
+.adjunto-remove {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.adjunto-replace {
+  font-size: 11px;
+  color: var(--gold-bright);
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 6px;
+  display: inline-block;
+}
+
+/* Botón de "quitar" chico para inputs con selección (ej. combobox de proveedor) —
+   antes era una "x" de texto plano de 16px, difícil de ver/clickear. */
+.input-clear-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--t2);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.input-clear-btn:hover {
+  background: var(--red-bg);
+  color: var(--red);
+}
