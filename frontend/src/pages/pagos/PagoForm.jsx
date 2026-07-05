@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { impuestosApi } from '../../api/impuestos.js'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
@@ -9,6 +9,7 @@ import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import Combobox from '../../components/Combobox.jsx'
 
 function IcoBack() {
   return (
@@ -73,8 +74,6 @@ export default function PagoForm() {
 
   const hoy = new Date().toISOString().slice(0, 10)
 
-  const [proveedores,     setProveedores]     = useState([])
-  const [rubcats,         setRubcats]         = useState([])
   const [metodos,         setMetodos]         = useState([])
   const [loading,         setLoading]         = useState(false)
   const [localProveedor,  setLocalProveedor]  = useState(null)
@@ -83,11 +82,11 @@ export default function PagoForm() {
   const [uploadingFoto,   setUploadingFoto]   = useState(false)
   const [uploadingPdf,    setUploadingPdf]    = useState(false)
 
-  // combobox de proveedor
-  const [provSearch, setProvSearch] = useState('')
-  const [provOpen,   setProvOpen]   = useState(false)
-  const [provPlazo,  setProvPlazo]  = useState(null)
-  const provRef = useRef(null)
+  // proveedor y rubcat seleccionados (objeto completo, para mostrar su label en el Combobox)
+  const [provSelected,   setProvSelected]   = useState(null)
+  const [provPlazo,      setProvPlazo]      = useState(null)
+  const [rubcatSelected, setRubcatSelected] = useState(null)
+  const [previewNroOrd,  setPreviewNroOrd]  = useState(null)
 
   // impuestos pendientes (solo al crear)
   const [pendingImp, setPendingImp] = useState([])
@@ -128,34 +127,23 @@ export default function PagoForm() {
     foto_url: '', pdf_url: '',
   }))
 
-  // cerrar dropdown al hacer click fuera
-  useEffect(() => {
-    const handler = (e) => {
-      if (provRef.current && !provRef.current.contains(e.target)) setProvOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
   useEffect(() => {
     const ctrl = new AbortController()
-    const provReq   = proveedoresApi.list({ activo: 'true', limit: 500 }, ctrl.signal)
-    const rubcatReq = rubcatApi.list()
-    const metReq    = metodosApi.list()
-    const pagoReq   = isEditing ? pagosApi.get(id, ctrl.signal) : Promise.resolve(null)
-    const localReq  = (!isEditing && modoRapido && activeLocal) ? localesApi.get(activeLocal.id) : Promise.resolve(null)
+    const metReq   = metodosApi.list()
+    const pagoReq  = isEditing ? pagosApi.get(id, ctrl.signal) : Promise.resolve(null)
+    const localReq = (!isEditing && modoRapido && activeLocal) ? localesApi.get(activeLocal.id) : Promise.resolve(null)
 
-    Promise.all([provReq, rubcatReq, metReq, pagoReq, localReq])
-      .then(([{ data: provs }, { data: rubs }, { data: mets }, pagoRes, localRes]) => {
-        setProveedores(provs.data)
-        setRubcats(rubs)
+    Promise.all([metReq, pagoReq, localReq])
+      .then(async ([{ data: mets }, pagoRes, localRes]) => {
         setMetodos(mets)
         if (pagoRes) {
           const d = pagoRes.data
-          const prov = provs.data.find(p => p.id === d.id_proveedor)
-          if (prov) {
-            setProvSearch(prov.nombre)
-            setProvPlazo(prov.plazo || null)
+          if (d.id_proveedor && d.proveedor) {
+            setProvSelected(d.proveedor)
+            setProvPlazo(d.proveedor.plazo || null)
+          }
+          if (d.id_rubcat && d.rubcat) {
+            setRubcatSelected(d.rubcat)
           }
           setForm({
             fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
@@ -179,25 +167,37 @@ export default function PagoForm() {
             id_local:       d.id_local       || '',
             foto_url:       d.foto_url       || '',
             pdf_url:        d.pdf_url        || '',
+            nro_ord:        d.nro_ord        ?? null,
           })
         } else if (localRes?.data?.id_proveedor) {
-          const prov = provs.data.find(p => p.id === localRes.data.id_proveedor)
-          if (prov) {
-            setProvSearch(prov.nombre)
-            setProvPlazo(prov.plazo || null)
-            setForm(f => ({
-              ...f,
-              id_proveedor: prov.id,
-              id_rubcat:    prov.id_rubcat || f.id_rubcat,
-              cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
-            }))
-          }
+          const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
+          setProvSelected(prov)
+          setProvPlazo(prov.plazo || null)
+          if (prov.rubcat) setRubcatSelected(prov.rubcat)
+          setForm(f => ({
+            ...f,
+            id_proveedor: prov.id,
+            id_rubcat:    prov.id_rubcat || f.id_rubcat,
+            cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
+          }))
         }
       })
       .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
 
     return () => ctrl.abort()
   }, [id])
+
+  // preview del próximo número de OP (solo al crear; en edición se muestra form.nro_ord real)
+  useEffect(() => {
+    if (isEditing) return
+    const localId = activeLocal?.id || form.id_local
+    if (!localId) { setPreviewNroOrd(null); return }
+    const ctrl = new AbortController()
+    pagosApi.nextNroOrd(localId, ctrl.signal)
+      .then(({ data }) => setPreviewNroOrd(data.nro_ord))
+      .catch(() => { if (!ctrl.signal.aborted) setPreviewNroOrd(null) })
+    return () => ctrl.abort()
+  }, [isEditing, activeLocal?.id, form.id_local])
 
   // set con efectos encadenados
   const set = (field, value) => setForm(f => {
@@ -215,33 +215,33 @@ export default function PagoForm() {
   const selectProveedor = (prov) => {
     const plazo = prov.plazo || null
     setProvPlazo(plazo)
+    setProvSelected(prov)
+    if (prov.rubcat) setRubcatSelected(prov.rubcat)
     setForm(f => ({
       ...f,
       id_proveedor: prov.id,
       id_rubcat:    prov.id_rubcat || f.id_rubcat,
       cashflow:     calcCashflow(f.fecha, plazo) || f.cashflow
     }))
-    setProvSearch(prov.nombre)
-    setProvOpen(false)
   }
 
   const clearProveedor = () => {
     setProvPlazo(null)
+    setProvSelected(null)
     setForm(f => ({ ...f, id_proveedor: '', cashflow: '' }))
-    setProvSearch('')
-    setProvOpen(false)
   }
 
-  const filteredProvs = proveedores.filter(p =>
-    p.nombre.toLowerCase().includes(provSearch.toLowerCase())
-  )
+  const fetchProveedores = (search) =>
+    proveedoresApi.list({ search, activo: 'true', limit: 60 }).then(r => r.data.data)
 
-  const visibleRubcats = useMemo(() => {
-    if (modoRapido && form.id_tipo === 'STK') {
-      return rubcats.filter(rc => rc.rubro?.nombre?.toUpperCase().startsWith('CMV'))
-    }
-    return rubcats
-  }, [rubcats, modoRapido, form.id_tipo])
+  const fetchRubcats = (search) =>
+    rubcatApi.list({ search }).then(r => {
+      const data = r.data
+      if (modoRapido && form.id_tipo === 'STK') {
+        return data.filter(rc => rc.rubro?.nombre?.toUpperCase().startsWith('CMV'))
+      }
+      return data
+    })
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -374,6 +374,17 @@ export default function PagoForm() {
         {/* ── Información del Pago ── */}
         <div className="form-panel">
           <div className="form-panel-title">Información del Pago</div>
+          <div style={{ marginBottom: '0.75rem', fontSize: 13, color: 'var(--t3)' }}>
+            {isEditing
+              ? (form.nro_ord != null && <>N° OP: <strong style={{ color: 'var(--t1)' }}>{form.nro_ord}</strong></>)
+              : (previewNroOrd != null && (
+                <>
+                  N° OP a asignar: <strong style={{ color: 'var(--t1)' }}>{previewNroOrd}</strong>
+                  {' '}<span title="El número final se confirma al guardar; puede variar si se crea otro pago en el mismo local antes de guardar este.">(previsualización)</span>
+                </>
+              ))
+            }
+          </div>
 
           {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
           <div className="form-grid form-row">
@@ -427,52 +438,31 @@ export default function PagoForm() {
 
           {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
           <div className="form-grid form-row">
-            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: 'span 2' }}>
+            <div className="form-group" style={{ gridColumn: 'span 2' }}>
               <label className="form-label">Proveedor</label>
-              <div className="form-input-wrap">
-                <input
-                  type="text"
-                  placeholder="Buscar proveedor…"
-                  value={provSearch}
-                  autoComplete="off"
-                  onChange={e => { setProvSearch(e.target.value); setProvOpen(true) }}
-                  onFocus={() => setProvOpen(true)}
-                />
-                {form.id_proveedor && (
-                  <button
-                    type="button"
-                    onClick={clearProveedor}
-                    className="input-clear-btn"
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}
-                    title="Quitar proveedor"
-                  >×</button>
-                )}
-              </div>
-              {provOpen && (
-                <div className="combobox-inline-list">
-                  {filteredProvs.length === 0
-                    ? <div className="combobox-inline-empty">Sin resultados</div>
-                    : filteredProvs.slice(0, 60).map(p => (
-                      <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
-                        {p.nombre}
-                      </button>
-                    ))
-                  }
-                </div>
-              )}
+              <Combobox
+                value={form.id_proveedor}
+                displayValue={provSelected?.nombre || ''}
+                getKey={p => p.id}
+                getLabel={p => p.nombre}
+                onSelect={selectProveedor}
+                onClear={clearProveedor}
+                fetchItems={fetchProveedores}
+                placeholder="Buscar proveedor…"
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Rubro / Categoría</label>
-              <div className="form-input-wrap">
-                <select value={form.id_rubcat} onChange={e => set('id_rubcat', e.target.value)}>
-                  <option value="">Sin clasificar</option>
-                  {visibleRubcats.map(rc => (
-                    <option key={rc.id} value={rc.id}>
-                      {rc.rubro?.nombre} / {rc.categoria?.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Combobox
+                value={form.id_rubcat}
+                displayValue={rubcatSelected ? `${rubcatSelected.rubro?.nombre} / ${rubcatSelected.categoria?.nombre}` : ''}
+                getKey={rc => rc.id}
+                getLabel={rc => `${rc.rubro?.nombre} / ${rc.categoria?.nombre}`}
+                onSelect={rc => { setRubcatSelected(rc); set('id_rubcat', rc.id) }}
+                onClear={() => { setRubcatSelected(null); set('id_rubcat', '') }}
+                fetchItems={fetchRubcats}
+                placeholder="Buscar rubro / categoría…"
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Método de Pago</label>

@@ -15,7 +15,7 @@ export const categoriasApi = {
 }
 
 export const rubcatApi = {
-  list: () => client.get('/rubcat'),
+  list: (params) => client.get('/rubcat', { params }),
   get: (id) => client.get(`/rubcat/${id}`),
   create: (data) => client.post('/rubcat', data),
   update: (id, data) => client.put(`/rubcat/${id}`, data),
