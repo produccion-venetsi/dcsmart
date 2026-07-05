@@ -116,13 +116,13 @@ export default function PagoForm() {
   ]
 
   const [form, setForm] = useState(() => ({
-    fecha: modoRapido ? hoy : '',
+    fecha: hoy,
     id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? 'STK' : '',
     pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
     pagado: modoRapido, fecha_pago: modoRapido ? hoy : '', periodo: modoRapido ? hoy : '',
-    estado_op: 'CUENTA_CTE', ingresa_egreso: true,
+    estado_op: 'CUENTA_CTE', ingresa_egreso: false,
     periodico: false,
     id_local: activeLocal?.id || '',
     foto_url: '', pdf_url: '',
