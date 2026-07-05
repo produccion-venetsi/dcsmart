@@ -9,5 +9,7 @@ export const usersApi = {
   assignRole: (id, data) => client.post(`/users/${id}/roles`, data),
   removeRole: (id, id_app) => client.delete(`/users/${id}/roles/${id_app ?? 'global'}`),
   addLocalAccess: (id, data) => client.post(`/users/${id}/local-access`, data),
-  removeLocalAccess: (id, data) => client.delete(`/users/${id}/local-access`, { data })
+  removeLocalAccess: (id, data) => client.delete(`/users/${id}/local-access`, { data }),
+  setPermission: (id, moduleName, data) => client.put(`/users/${id}/permissions/${moduleName}`, data),
+  removePermission: (id, moduleName) => client.delete(`/users/${id}/permissions/${moduleName}`)
 }
