@@ -89,7 +89,7 @@ export default function Combobox({
         )}
       </div>
       {open && (
-        <div className="combobox-inline-list">
+        <div className="combobox-dropdown">
           {loading
             ? <div className="combobox-inline-empty">Buscando…</div>
             : items.length === 0

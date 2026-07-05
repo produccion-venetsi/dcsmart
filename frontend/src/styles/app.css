@@ -2031,20 +2031,6 @@ tr.row-clickable:hover td {
 .combobox-dropdown::-webkit-scrollbar { width: 6px; }
 .combobox-dropdown::-webkit-scrollbar-thumb { background: var(--gold-deep); border-radius: 6px; }
 
-/* Lista en linea (no flota encima de otro contenido, empuja el resto del
-   form hacia abajo) -- mismo criterio que el filtro de proveedores de la
-   tabla de Pagos, pero de seleccion unica. */
-.combobox-inline-list {
-  margin-top: 6px;
-  max-height: 160px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  border: 1px solid var(--border-hi);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-}
-.combobox-inline-list::-webkit-scrollbar { width: 6px; }
-.combobox-inline-list::-webkit-scrollbar-thumb { background: var(--gold-deep); border-radius: 6px; }
 .combobox-inline-empty {
   padding: 8px 12px;
   font-size: 12px;
