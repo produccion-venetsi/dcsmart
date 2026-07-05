@@ -242,13 +242,18 @@ export default async function authRoutes(fastify) {
   })
 
   // POST /api/auth/my-apps/:appId/touch
-  fastify.post('/my-apps/:appId/touch', { preHandler: [fastify.authenticate] }, async (request) => {
+  fastify.post('/my-apps/:appId/touch', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { appId } = request.params
-    await fastify.db.userAppUsage.upsert({
-      where: { id_user_id_app: { id_user: request.user.id, id_app: appId } },
-      create: { id_user: request.user.id, id_app: appId },
-      update: { last_used_at: new Date() }
-    })
+    try {
+      await fastify.db.userAppUsage.upsert({
+        where: { id_user_id_app: { id_user: request.user.id, id_app: appId } },
+        create: { id_user: request.user.id, id_app: appId },
+        update: { last_used_at: new Date() }
+      })
+    } catch (err) {
+      if (err.code === 'P2003') return reply.code(404).send({ error: 'App no encontrada' })
+      throw err
+    }
     return { ok: true }
   })
 
