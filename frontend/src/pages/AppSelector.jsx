@@ -93,6 +93,7 @@ export default function AppSelector() {
   const handleSelect = (item) => {
     if (selecting) return
     setSelecting(true)
+    authApi.touchApp(item.app.id).catch(() => {})
     setActiveApp(item)
     if (item.locales.length === 1) {
       setActiveLocal(item.locales[0])
