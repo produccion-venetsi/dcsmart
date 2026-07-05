@@ -6,7 +6,8 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 export default async function authRoutes(fastify) {
   // POST /api/auth/register
   fastify.post('/register', async (request, reply) => {
-    const { email, nombre, password } = request.body
+    const { nombre, password } = request.body
+    const email = request.body.email?.trim().toLowerCase()
 
     if (!email || !nombre || !password) {
       return reply.code(400).send({ error: 'email, nombre y password son requeridos' })
@@ -37,7 +38,8 @@ export default async function authRoutes(fastify) {
 
   // POST /api/auth/login
   fastify.post('/login', async (request, reply) => {
-    const { email, password } = request.body
+    const { password } = request.body
+    const email = request.body.email?.trim().toLowerCase()
 
     if (!email || !password) {
       return reply.code(400).send({ error: 'email y password son requeridos' })
@@ -95,7 +97,8 @@ export default async function authRoutes(fastify) {
       return reply.code(401).send({ error: 'Token de Google inválido' })
     }
 
-    const { sub: google_id, email, name: nombre, picture: avatar_url } = payload
+    const { sub: google_id, name: nombre, picture: avatar_url } = payload
+    const email = payload.email?.trim().toLowerCase()
 
     let user = await fastify.db.user.findUnique({ where: { google_id } })
 

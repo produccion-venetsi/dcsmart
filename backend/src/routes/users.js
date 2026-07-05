@@ -33,7 +33,8 @@ export default async function usersRoutes(fastify) {
   fastify.post('/', {
     preHandler: [fastify.authenticate, fastify.can('usuarios', 'create')]
   }, async (request, reply) => {
-    const { email, nombre, password, activo } = request.body
+    const { nombre, password, activo } = request.body
+    const email = request.body.email?.trim().toLowerCase()
     if (!email || !nombre) return reply.code(400).send({ error: 'email y nombre son requeridos' })
 
     const existing = await fastify.db.user.findUnique({ where: { email } })
