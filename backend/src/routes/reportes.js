@@ -1,5 +1,5 @@
 export default async function reportesRoutes(fastify) {
-  const viewHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
+  const viewHandler = [fastify.authenticate, fastify.appContext, fastify.can('reportes', 'view')]
 
   fastify.get('/cajas', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, desde, hasta } = request.query
