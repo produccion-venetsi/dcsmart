@@ -169,6 +169,8 @@ export default async function authRoutes(fastify) {
       }
     })
 
+    let result
+
     // super_admin / dcsmart: acceso a TODAS las apps y a todos sus locales.
     const isSuperAdmin = userRoles.some(r => r.role.nombre === 'super_admin')
     const isDcsmart    = !isSuperAdmin && userRoles.some(r => r.role.nombre === 'dcsmart')
@@ -178,47 +180,76 @@ export default async function authRoutes(fastify) {
         include: { locales: { where: { activo: true }, orderBy: { nombre: 'asc' } } },
         orderBy: { nombre: 'asc' }
       })
-      return allApps.map(a => ({
+      result = allApps.map(a => ({
         app:     { id: a.id, nombre: a.nombre, slug: a.slug },
         role:    isSuperAdmin ? 'super_admin' : 'dcsmart',
         locales: a.locales.map(l => ({ id: l.id, nombre: l.nombre }))
       }))
+    } else {
+      // Para usuarios normales: resolver locales permitidos desde user_local_access
+      const localAccesses = await fastify.db.userLocalAccess.findMany({
+        where: { id_user: request.user.id },
+        include: { local: { select: { id: true, nombre: true } } }
+      })
+
+      // Agrupar por app
+      const accessByApp = {}
+      for (const la of localAccesses) {
+        if (!accessByApp[la.id_app]) accessByApp[la.id_app] = []
+        accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
+      }
+
+      // admin / cajero: locales asignados en user_local_access.
+      // Excepción: admin sin filas explícitas = acceso a TODOS los locales activos de la app.
+      result = []
+      for (const r of userRoles) {
+        const assigned = accessByApp[r.id_app] ?? []
+        let locales = assigned
+        if (r.role.nombre === 'admin' && assigned.length === 0) {
+          const allLocales = await fastify.db.local.findMany({
+            where: { id_app: r.id_app, activo: true },
+            select: { id: true, nombre: true },
+            orderBy: { nombre: 'asc' }
+          })
+          locales = allLocales
+        }
+        result.push({
+          app:    { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
+          role:   r.role.nombre,
+          locales
+        })
+      }
     }
 
-    // Para usuarios normales: resolver locales permitidos desde user_local_access
-    const localAccesses = await fastify.db.userLocalAccess.findMany({
-      where: { id_user: request.user.id },
-      include: { local: { select: { id: true, nombre: true } } }
+    // Ordenar por uso: las apps usadas más recientemente primero; las nunca
+    // usadas quedan al final, en el orden que ya traían (alfabético).
+    const usage = await fastify.db.userAppUsage.findMany({
+      where: { id_user: request.user.id }
+    })
+    const lastUsedByApp = {}
+    for (const u of usage) lastUsedByApp[u.id_app] = u.last_used_at
+
+    result.sort((a, b) => {
+      const ta = lastUsedByApp[a.app.id]
+      const tb = lastUsedByApp[b.app.id]
+      if (ta && tb) return new Date(tb) - new Date(ta)
+      if (ta) return -1
+      if (tb) return 1
+      return 0
     })
 
-    // Agrupar por app
-    const accessByApp = {}
-    for (const la of localAccesses) {
-      if (!accessByApp[la.id_app]) accessByApp[la.id_app] = []
-      accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
-    }
-
-    // admin / cajero: locales asignados en user_local_access.
-    // Excepción: admin sin filas explícitas = acceso a TODOS los locales activos de la app.
-    const result = []
-    for (const r of userRoles) {
-      const assigned = accessByApp[r.id_app] ?? []
-      let locales = assigned
-      if (r.role.nombre === 'admin' && assigned.length === 0) {
-        const allLocales = await fastify.db.local.findMany({
-          where: { id_app: r.id_app, activo: true },
-          select: { id: true, nombre: true },
-          orderBy: { nombre: 'asc' }
-        })
-        locales = allLocales
-      }
-      result.push({
-        app:    { id: r.app.id, nombre: r.app.nombre, slug: r.app.slug },
-        role:   r.role.nombre,
-        locales
-      })
-    }
     return result
+  })
+
+  // POST /api/auth/my-apps/:appId/touch
+  fastify.post('/my-apps/:appId/touch', { preHandler: [fastify.authenticate] }, async (request) => {
+    const { appId } = request.params
+    await fastify.db.userAppUsage.upsert({
+      where: { id_user_id_app: { id_user: request.user.id, id_app: appId } },
+      create: { id_user: request.user.id, id_app: appId },
+      update: { last_used_at: new Date() }
+    })
+    return { ok: true }
   })
 
   // POST /api/auth/logout
