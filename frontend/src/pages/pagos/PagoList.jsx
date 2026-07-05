@@ -64,6 +64,14 @@ function IcoFilter() {
     </svg>
   )
 }
+function IcoCheckSquare() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  )
+}
 function IcoPagoEmpty() {
   return (
     <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
@@ -337,7 +345,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   return (
     <div>
       <div style={{ marginBottom: '1.25rem' }}>
-        <ActionsMenu label="Acciones" align="left">
+        <ActionsMenu label="Acciones">
           {canEdit && (
             <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
               <IcoEdit /> Editar
@@ -674,6 +682,7 @@ export default function PagoList() {
   const [provSearchResults, setProvSearchResults] = useState([])
   const [provSearchLoading, setProvSearchLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [selectionMode, setSelectionMode] = useState(false)
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT))
 
@@ -799,6 +808,11 @@ export default function PagoList() {
   const canBulkDesaudit  = selectedPagos.some(p => p.audit)
 
   const bulkCancel = () => setSelectedIds(new Set())
+
+  const toggleSelectionMode = () => {
+    setSelectionMode(m => !m)
+    setSelectedIds(new Set())
+  }
 
   const bulkAuditar = async () => {
     const targets = selectedPagos.filter(p => !p.audit)
@@ -941,7 +955,7 @@ export default function PagoList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 19 + (showLocalCol ? 1 : 0)
+  const colCount = 18 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1161,6 +1175,9 @@ export default function PagoList() {
               </div>
             )}
           </div>
+          <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
+            <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+          </button>
           <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido')} title="Carga rápida">
             <IcoPlane /> Carga rápida
           </button>
@@ -1170,14 +1187,9 @@ export default function PagoList() {
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap',
-          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-          borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.75rem',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="bulk-bar">
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-bright)' }}>
             {selectedIds.size} seleccionados
           </span>
           <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit}>
@@ -1200,9 +1212,11 @@ export default function PagoList() {
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: 32 }}>
-                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
-              </th>
+              {selectionMode && (
+                <th style={{ width: 32 }}>
+                  <input type="checkbox" className="select-checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
+                </th>
+              )}
               <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
               <th style={{ minWidth: 100 }}>Auditado</th>
               <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
@@ -1245,9 +1259,11 @@ export default function PagoList() {
             ) : (
               pagos.map((p) => (
                 <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
-                  <td onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
-                  </td>
+                  {selectionMode && (
+                    <td onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" className="select-checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
+                    </td>
+                  )}
                   <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 100 }}>
                     <span className={`badge ${p.audit ? 'badge-green' : 'badge-muted'}`}>{p.audit ? '✓ Auditado' : 'No auditado'}</span>

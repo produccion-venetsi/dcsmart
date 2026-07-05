@@ -731,6 +731,50 @@ body {
   color: var(--t1);
   background: rgba(255,255,255,0.09);
 }
+.btn-secondary.active {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+  background: rgba(201,176,134,0.12);
+}
+
+/* Panel de ActionsMenu: se abre en el flujo normal (empuja el contenido de
+   abajo), no flotando encima -- así el hover puede sostenerse moviendo el
+   mouse del botón al panel sin que se cierre de golpe. */
+.actions-menu-panel {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(201,176,134,0.05);
+  border: 1px solid var(--border-hi);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  animation: fadeUp 0.18s var(--ease) both;
+}
+
+/* Checkbox de selección múltiple (listados) -- acento dorado, no el azul/gris
+   por defecto del navegador. */
+.select-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--gold);
+}
+
+/* Barra flotante de acciones bulk (auditar/desauditar/eliminar en lote) */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: rgba(201,176,134,0.07);
+  border: 1px solid var(--border-hi);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  animation: fadeUp 0.18s var(--ease) both;
+}
 
 .btn-ghost {
   color: var(--gold);

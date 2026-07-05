@@ -8,7 +8,7 @@ function IcoChevronDown() {
   )
 }
 
-export default function ActionsMenu({ label = 'Acciones', align = 'left', children }) {
+export default function ActionsMenu({ label = 'Acciones', children }) {
   const [open, setOpen] = useState(false)
   const [hoverCapable, setHoverCapable] = useState(true)
   const wrapRef = useRef(null)
@@ -26,27 +26,26 @@ export default function ActionsMenu({ label = 'Acciones', align = 'left', childr
     return () => document.removeEventListener('mousedown', handler)
   }, [hoverCapable, open])
 
+  // El panel se renderiza en el flujo normal (no position:absolute) para que
+  // el wrapper con los handlers de hover abarque tanto el botón como el panel
+  // abierto -- si el panel flotara fuera del flujo, el área "hovereable" del
+  // wrapper solo cubriría al botón, y bajar el mouse hacia el panel dispararía
+  // mouseleave antes de llegar, cerrándolo de golpe.
   const hoverProps = hoverCapable
     ? { onMouseEnter: () => setOpen(true), onMouseLeave: () => setOpen(false) }
     : {}
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', display: 'inline-block' }} {...hoverProps}>
+    <div ref={wrapRef} {...hoverProps}>
       <button
         type="button"
-        className="btn btn-secondary"
+        className={`btn btn-secondary${open ? ' active' : ''}`}
         onClick={() => { if (!hoverCapable) setOpen(o => !o) }}
       >
         {label} <IcoChevronDown />
       </button>
       {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', [align]: 0, zIndex: 200,
-          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-          borderRadius: 12, padding: '0.6rem', minWidth: 200,
-          boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
-          display: 'flex', flexDirection: 'column', gap: '0.4rem',
-        }}>
+        <div className="actions-menu-panel">
           {children}
         </div>
       )}

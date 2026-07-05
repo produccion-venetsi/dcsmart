@@ -24,6 +24,14 @@ function IcoPlus() {
     </svg>
   )
 }
+function IcoCheckSquare() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  )
+}
 function IcoTrash() {
   return (
     <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -218,8 +226,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
-        <ActionsMenu label="Acciones" align="right">
+      <div style={{ marginBottom: '0.75rem' }}>
+        <ActionsMenu label="Acciones">
           {canEdit && (
             <button
               className={`btn btn-sm ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
@@ -987,6 +995,7 @@ export default function CajaList() {
   const scrollRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [selectionMode, setSelectionMode] = useState(false)
 
   const cajaListParams = () => ({
     id_local: activeLocal?.id,
@@ -1091,6 +1100,11 @@ export default function CajaList() {
 
   const bulkCancel = () => setSelectedIds(new Set())
 
+  const toggleSelectionMode = () => {
+    setSelectionMode(m => !m)
+    setSelectedIds(new Set())
+  }
+
   const bulkAuditar = async () => {
     const targets = selectedCajas.filter(c => !c.audit)
     let ok = 0, fail = 0
@@ -1151,7 +1165,7 @@ export default function CajaList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacó la columna de acciones (borrar) de la fila (ahora vive en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 13 + (showLocalCol ? 1 : 0)
+  const colCount = 12 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1215,6 +1229,9 @@ export default function CajaList() {
               </div>
             )}
           </div>
+          <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
+            <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+          </button>
           {canCreate && (
             <button className="btn btn-primary" onClick={openCreate}>
               <IcoPlus /> Nueva Caja
@@ -1223,14 +1240,9 @@ export default function CajaList() {
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap',
-          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-          borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '0.75rem',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-        }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="bulk-bar">
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-bright)' }}>
             {selectedIds.size} seleccionados
           </span>
           <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit}>
@@ -1252,9 +1264,11 @@ export default function CajaList() {
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: 32 }}>
-                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
-              </th>
+              {selectionMode && (
+                <th style={{ width: 32 }}>
+                  <input type="checkbox" className="select-checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
+                </th>
+              )}
               <SortTh field="nro_turno">Nro Turno</SortTh>
               <th>Auditado</th>
               <SortTh field="fecha_inicio">Inicio</SortTh>
@@ -1293,9 +1307,11 @@ export default function CajaList() {
                 {topPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: topPad }} /></tr>}
                 {visibleCajas.map((c) => (
                   <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
-                    <td onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleSelected(c.id)} />
-                    </td>
+                    {selectionMode && (
+                      <td onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" className="select-checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleSelected(c.id)} />
+                      </td>
+                    )}
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
                     <td>
                       <span className={`badge ${c.audit ? 'badge-green' : 'badge-muted'}`}>{c.audit ? '✓ Auditado' : 'No auditado'}</span>
