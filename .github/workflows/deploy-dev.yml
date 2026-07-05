@@ -64,7 +64,12 @@ jobs:
       - name: Crear env vars file
         env:
           CLOUDRUN_ENV_YAML: ${{ secrets.CLOUDRUN_ENV_YAML }}
-        run: printf '%s' "$CLOUDRUN_ENV_YAML" > backend/.env.cloudrun.yaml
+          GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+          GCS_PROJECT_ID: ${{ secrets.GCS_PROJECT_ID }}
+        run: |
+          printf '%s\n' "$CLOUDRUN_ENV_YAML" > backend/.env.cloudrun.yaml
+          printf 'GCS_BUCKET_NAME: %s\n' "$GCS_BUCKET_NAME" >> backend/.env.cloudrun.yaml
+          printf 'GCS_PROJECT_ID: %s\n' "$GCS_PROJECT_ID" >> backend/.env.cloudrun.yaml
 
       - name: Deploy a Cloud Run
         run: |
