@@ -76,6 +76,7 @@ export default function AppSelector() {
   const [fetchError, setFetchError] = useState(null)
   const [selecting, setSelecting] = useState(false)
   const [search, setSearch] = useState('')
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   useEffect(() => {
     authApi.myApps()
@@ -121,8 +122,8 @@ export default function AppSelector() {
               {user.nombre}
             </div>
             <div className="sel-avatar">
-              {user.avatar_url
-                ? <img src={user.avatar_url} alt={user.nombre} />
+              {user.avatar_url && !avatarFailed
+                ? <img src={user.avatar_url} alt={user.nombre} onError={() => setAvatarFailed(true)} />
                 : initials(user.nombre)}
             </div>
             <button className="sel-logout sel-logout-header" onClick={handleLogout}>

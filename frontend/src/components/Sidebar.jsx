@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
@@ -182,6 +183,7 @@ export default function Sidebar() {
   const activeApp      = useAppStore((s) => s.activeApp)
   const activeLocal    = useAppStore((s) => s.activeLocal)
   const setActiveLocal = useAppStore((s) => s.setActiveLocal)
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -287,8 +289,8 @@ export default function Sidebar() {
       {/* User footer */}
       <div className="sidebar-user">
         <div className="sidebar-user-avatar">
-          {user?.avatar_url
-            ? <img src={user.avatar_url} alt={user.nombre} />
+          {user?.avatar_url && !avatarFailed
+            ? <img src={user.avatar_url} alt={user.nombre} onError={() => setAvatarFailed(true)} />
             : initials(user?.nombre)}
         </div>
         <div className="sidebar-user-info">
