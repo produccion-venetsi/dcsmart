@@ -238,6 +238,36 @@ export default async function authRoutes(fastify) {
       return 0
     })
 
+    // Resolver si el usuario puede ver Reportes — misma lógica de precedencia
+    // que fastify.can(): override individual (UserPermission) manda si existe;
+    // si no, el permiso del rol (super_admin bypasea todo).
+    const reportesModule = await fastify.db.module.findUnique({ where: { nombre: 'reportes' } })
+    const userReportesPerm = reportesModule
+      ? await fastify.db.userPermission.findUnique({
+          where: { id_user_id_module: { id_user: request.user.id, id_module: reportesModule.id } }
+        })
+      : null
+
+    let reportesRolePermByRole = {}
+    if (reportesModule && !isSuperAdmin) {
+      const roleIds = [...new Set(result.map(r => {
+        const match = userRoles.find(ur => ur.app?.id === r.app.id)
+          ?? userRoles.find(ur => ur.id_app === null)
+        return match?.id_role
+      }).filter(Boolean))]
+      const rolePerms = await fastify.db.rolePermission.findMany({
+        where: { id_role: { in: roleIds }, id_module: reportesModule.id }
+      })
+      reportesRolePermByRole = Object.fromEntries(rolePerms.map(rp => [rp.id_role, rp.can_view]))
+    }
+
+    for (const entry of result) {
+      if (isSuperAdmin) { entry.can_reportes = true; continue }
+      if (userReportesPerm) { entry.can_reportes = !!userReportesPerm.can_view; continue }
+      const roleMatch = userRoles.find(ur => ur.app?.id === entry.app.id) ?? userRoles.find(ur => ur.id_app === null)
+      entry.can_reportes = !!reportesRolePermByRole[roleMatch?.id_role]
+    }
+
     return result
   })
 

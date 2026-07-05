@@ -183,4 +183,39 @@ export default async function usersRoutes(fastify) {
     })
     return reply.code(204).send()
   })
+
+  // ─── Permisos individuales por usuario (override sobre el permiso del rol) ─
+  fastify.put('/:id/permissions/:moduleName', {
+    preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { moduleName } = request.params
+    const moduleRecord = await fastify.db.module.findUnique({ where: { nombre: moduleName } })
+    if (!moduleRecord) return reply.code(404).send({ error: `Módulo '${moduleName}' no encontrado` })
+
+    const { can_view, can_create, can_edit, can_delete } = request.body ?? {}
+    const data = {
+      can_view: !!can_view, can_create: !!can_create,
+      can_edit: !!can_edit, can_delete: !!can_delete
+    }
+
+    const perm = await fastify.db.userPermission.upsert({
+      where: { id_user_id_module: { id_user: request.params.id, id_module: moduleRecord.id } },
+      create: { id_user: request.params.id, id_module: moduleRecord.id, ...data },
+      update: data
+    })
+    return perm
+  })
+
+  fastify.delete('/:id/permissions/:moduleName', {
+    preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { moduleName } = request.params
+    const moduleRecord = await fastify.db.module.findUnique({ where: { nombre: moduleName } })
+    if (!moduleRecord) return reply.code(404).send({ error: `Módulo '${moduleName}' no encontrado` })
+
+    await fastify.db.userPermission.deleteMany({
+      where: { id_user: request.params.id, id_module: moduleRecord.id }
+    })
+    return reply.code(204).send()
+  })
 }
