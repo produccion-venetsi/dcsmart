@@ -619,7 +619,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR', { hour12: false })}</td>
                   <td>{ev.user?.nombre ?? '—'}</td>
                   <td>
                     <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>

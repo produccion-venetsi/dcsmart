@@ -82,7 +82,7 @@ function IcoFilter() {
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
+function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
@@ -461,7 +461,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td className="td-muted">{fmtDT(ev.fecha)}</td>
                   <td>{ev.user?.nombre ?? '—'}</td>
                   <td>
                     <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>

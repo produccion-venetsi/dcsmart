@@ -35,7 +35,7 @@ function IcoMovs() {
 }
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR') : '—' }
+function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
 export default function CajaDetail() {
   const { id }   = useParams()
@@ -273,7 +273,7 @@ export default function CajaDetail() {
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR')}</td>
+                  <td className="td-muted">{fmtDT(ev.fecha)}</td>
                   <td>{ev.user?.nombre ?? '—'}</td>
                   <td>
                     <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
