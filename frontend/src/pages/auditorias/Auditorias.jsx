@@ -111,6 +111,7 @@ export default function Auditorias() {
               <th>Registro</th>
               <th>Usuario</th>
               <th>Acción</th>
+              <th>Circuito</th>
               <th>Observación</th>
             </tr>
           </thead>
@@ -118,14 +119,14 @@ export default function Auditorias() {
             {loading ? (
               Array.from({ length: 10 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 6 }, (_, j) => (
+                  {Array.from({ length: 7 }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 9) % 40}%` }} /></td>
                   ))}
                 </tr>
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div className="table-empty">
                     <p>Sin eventos de auditoría para los filtros aplicados.</p>
                   </div>
@@ -154,6 +155,11 @@ export default function Auditorias() {
                   <td>
                     <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
                       {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge ${ev.audit_dc ? 'badge-purple' : 'badge-muted'}`}>
+                      {ev.audit_dc ? 'DC' : 'Normal'}
                     </span>
                   </td>
                   <td className="td-muted">{ev.observaciones || '—'}</td>
