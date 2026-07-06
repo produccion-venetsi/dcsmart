@@ -11,6 +11,7 @@ export const pagosApi = {
   remove:     (id)             => client.delete(`/pagos/${id}`),
   audit:        (id, data)     => client.patch(`/pagos/${id}/audit`,        data),
   auditHistory: (id)           => client.get(`/pagos/${id}/audit-history`),
+  auditDc:      (id, data)     => client.patch(`/pagos/${id}/audit-dc`,     data),
   periodico:  (id)             => client.patch(`/pagos/${id}/periodico`),
   mandarPdp:  (ids)            => client.post('/pagos/mandar-pdp',          { ids }),
   revertirPdp:(ids)            => client.post('/pagos/revertir-pdp',        { ids }),
