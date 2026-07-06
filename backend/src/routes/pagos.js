@@ -22,6 +22,21 @@ async function getAuditedSet(fastify, pagoIds) {
   }
 }
 
+// Igual que getAuditedSet pero para el circuito de auditoría DC (audit_dc: true).
+async function getAuditedDcSet(fastify, pagoIds) {
+  if (!pagoIds.length) return new Set()
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: true, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    return new Set(rows.map(r => r.id_registro))
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedDcSet)')
+    return new Set()
+  }
+}
+
 // Construye el filtro Prisma { id: { in/notIn } } para auditados/no-auditados.
 // Si `audit` es undefined, no filtra (devuelve {}). Ante un error de la tabla
 // `audits`, devolvemos {} (sin filtrar) para no romper la consulta de pagos.
@@ -151,8 +166,14 @@ export default async function pagosRoutes(fastify) {
       fastify.db.pago.count({ where })
     ])
 
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
     const auditedSet = await getAuditedSet(fastify, pagos.map(p => p.id))
-    const data = pagos.map(p => ({ ...p, audit: auditedSet.has(p.id) }))
+    const auditedDcSet = isDc ? await getAuditedDcSet(fastify, pagos.map(p => p.id)) : new Set()
+    const data = pagos.map(p => ({
+      ...p,
+      audit: auditedSet.has(p.id),
+      ...(isDc ? { audit_dc: auditedDcSet.has(p.id) } : {})
+    }))
 
     return { data, total, page: Number(page), limit: Number(limit) }
   })

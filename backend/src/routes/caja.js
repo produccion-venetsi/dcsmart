@@ -151,16 +151,22 @@ export default async function cajaRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
+
     const auditRow = await fastify.db.audit.findFirst({
       where: { tabla: 'cajas', id_registro: caja.id, vigente: true, audit_dc: false },
       include: { user: { select: { id: true, nombre: true } } }
     })
+    const auditDcRow = isDc ? await fastify.db.audit.findFirst({
+      where: { tabla: 'cajas', id_registro: caja.id, vigente: true, audit_dc: true }
+    }) : null
 
     return {
       ...caja,
       audit:      auditRow?.accion === 'auditado',
       audit_by:   auditRow?.user?.nombre ?? null,
       audit_date: auditRow?.fecha ?? null,
+      ...(isDc ? { audit_dc: auditDcRow?.accion === 'auditado' } : {})
     }
   })
 
