@@ -100,6 +100,36 @@ function IcoRepeat() {
     </svg>
   )
 }
+function IcoThumbUp() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 11v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3z"/>
+      <path d="M7 11l4-8a2 2 0 0 1 2 2v5h5.5a2 2 0 0 1 1.94 2.5l-1.5 6A2 2 0 0 1 16.97 21H7"/>
+    </svg>
+  )
+}
+function IcoEye() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  )
+}
+function IcoArrowUp() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+    </svg>
+  )
+}
+function IcoArrowDown() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+    </svg>
+  )
+}
 
 function fmt$(n)     { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
@@ -453,6 +483,18 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           </div>
         ))}
       </div>
+
+      {pago.importe != null && (() => {
+        const sumaImpuestos = impuestos.reduce((acc, imp) => acc + Number(imp.monto), 0)
+        const esperado = sumaImpuestos + Number(pago.importe_neto ?? 0) - Number(pago.descuento ?? 0)
+        const diff = Number(pago.importe) - esperado
+        if (Math.abs(diff) <= 0.01) return null
+        return (
+          <div className="badge badge-red" style={{ marginTop: '0.5rem', marginBottom: '1rem', display: 'inline-block' }} title="Impuestos + Neto − Descuento vs. Importe">
+            ⚠ No cierra: diferencia de {fmt$(Math.abs(diff))}
+          </div>
+        )
+      })()}
 
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Impuestos</span>
@@ -1265,8 +1307,10 @@ export default function PagoList() {
                     </td>
                   )}
                   <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
-                  <td style={{ minWidth: 100 }}>
-                    <span className={`badge ${p.audit ? 'badge-green' : 'badge-muted'}`}>{p.audit ? '✓ Auditado' : 'No auditado'}</span>
+                  <td style={{ minWidth: 40, textAlign: 'center' }}>
+                    <span style={{ color: p.audit ? 'var(--green)' : 'var(--amber)' }} title={p.audit ? 'Auditado' : 'No auditado'}>
+                      {p.audit ? <IcoThumbUp /> : <IcoEye />}
+                    </span>
                   </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                   <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
@@ -1287,9 +1331,13 @@ export default function PagoList() {
                   <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
                   <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.cashflow)}</td>
-                  <td style={{ minWidth: 90 }}>
+                  <td style={{ minWidth: 40, textAlign: 'center' }}>
                     {p.ingresa_egreso != null
-                      ? <span className={`badge ${p.ingresa_egreso ? 'badge-green' : 'badge-red'}`}>{p.ingresa_egreso ? 'Ingreso' : 'Egreso'}</span>
+                      ? (
+                        <span style={{ color: p.ingresa_egreso ? 'var(--green)' : 'var(--red)' }} title={p.ingresa_egreso ? 'Ingreso' : 'Egreso'}>
+                          {p.ingresa_egreso ? <IcoArrowUp /> : <IcoArrowDown />}
+                        </span>
+                      )
                       : <span className="td-muted">—</span>}
                   </td>
                   <td style={{ minWidth: 90 }}>
