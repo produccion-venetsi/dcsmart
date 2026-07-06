@@ -445,6 +445,7 @@ model Audit {
   accion        String    @default("auditado")
   aprobado      Boolean?  @default(false)
   vigente       Boolean   @default(true)
+  audit_dc      Boolean   @default(false)
   id_user       String?
   fecha         DateTime?
   observaciones String?
