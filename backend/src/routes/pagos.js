@@ -296,7 +296,7 @@ export default async function pagosRoutes(fastify) {
 
     // Estado de auditoría desde la tabla `audits` (fila vigente, si existe).
     const auditRow = await fastify.db.audit.findFirst({
-      where: { tabla: 'pagos', id_registro: pago.id, vigente: true },
+      where: { tabla: 'pagos', id_registro: pago.id, vigente: true, audit_dc: false },
       include: { user: { select: { id: true, nombre: true } } }
     })
 
