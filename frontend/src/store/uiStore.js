@@ -2,12 +2,18 @@ import { create } from 'zustand'
 
 export const useUiStore = create((set, get) => ({
   sidebarOpen: true,
+  mobileNavOpen: false,
   notifications: [],
   confirmModal: null,
   promptModal: null,
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+  // Menú de navegación mobile (off-canvas). Independiente de sidebarOpen
+  // (que gobierna el colapso del sidebar de escritorio).
+  toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
+  closeMobileNav: () => set({ mobileNavOpen: false }),
 
   addNotification: (notification) =>
     set((s) => ({

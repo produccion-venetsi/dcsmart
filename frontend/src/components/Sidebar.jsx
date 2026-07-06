@@ -180,6 +180,8 @@ export default function Sidebar() {
   const logout    = useAuthStore((s) => s.logout)
   const user      = useAuthStore((s) => s.user)
   const sidebarOpen    = useUiStore((s) => s.sidebarOpen)
+  const mobileNavOpen  = useUiStore((s) => s.mobileNavOpen)
+  const closeMobileNav = useUiStore((s) => s.closeMobileNav)
   const activeApp      = useAppStore((s) => s.activeApp)
   const activeLocal    = useAppStore((s) => s.activeLocal)
   const setActiveLocal = useAppStore((s) => s.setActiveLocal)
@@ -191,11 +193,12 @@ export default function Sidebar() {
   }
 
   const handleChangeApp = () => {
+    closeMobileNav()
     useAppStore.getState().clearContext()
     navigate('/select-app')
   }
 
-  if (!sidebarOpen) return null
+  if (!sidebarOpen && !mobileNavOpen) return null
 
   const locales    = activeApp?.locales ?? []
   const multiLocal = locales.length > 1
@@ -219,7 +222,12 @@ export default function Sidebar() {
   const adminItems = NAV_ADMIN.filter(item => !item.roles || item.roles.some(r => globalRoleNames.includes(r)))
 
   return (
-    <aside className="sidebar">
+    <>
+      <div
+        className={'sidebar-mobile-backdrop' + (mobileNavOpen ? ' open' : '')}
+        onClick={closeMobileNav}
+      />
+      <aside className={'sidebar' + (mobileNavOpen ? ' mobile-open' : '')}>
       {/* Brand */}
       <div className="sidebar-brand">
         <AppLogo variant="horizontal" />
@@ -274,6 +282,7 @@ export default function Sidebar() {
             key={to}
             to={to}
             className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+            onClick={closeMobileNav}
           >
             <Icon />
             {label}
@@ -311,6 +320,7 @@ export default function Sidebar() {
           <IcoLogout />
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

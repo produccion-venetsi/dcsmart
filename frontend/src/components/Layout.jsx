@@ -1,7 +1,27 @@
 import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar.jsx'
 import { useUiStore } from '../store/uiStore.js'
+
+function IcoMenu() {
+  return (
+    <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  )
+}
+
+function MobileTopbar() {
+  const toggleMobileNav = useUiStore((s) => s.toggleMobileNav)
+  return (
+    <div className="mobile-topbar">
+      <button className="mobile-topbar-menu" onClick={toggleMobileNav} aria-label="Abrir menú">
+        <IcoMenu />
+      </button>
+      <span className="mobile-topbar-title">DCSmart</span>
+    </div>
+  )
+}
 
 function NotifIcon({ type }) {
   if (type === 'success') return (
@@ -89,6 +109,12 @@ function PromptModal() {
 export default function Layout() {
   const notifications    = useUiStore((s) => s.notifications)
   const removeNotification = useUiStore((s) => s.removeNotification)
+  const closeMobileNav   = useUiStore((s) => s.closeMobileNav)
+  const location = useLocation()
+
+  // Cierra el menú mobile cada vez que cambia la ruta (red de seguridad
+  // además del onClick de cada NavLink, ej. si se navega por otro medio).
+  useEffect(() => { closeMobileNav() }, [location.pathname])
 
   // Los inputs de fecha/select dentro de .form-input-wrap se abren clickeando
   // en cualquier parte del campo, no solo en el icono/flecha nativa.
@@ -112,6 +138,7 @@ export default function Layout() {
     <div className="app-layout">
       <Sidebar />
       <div className="app-body">
+        <MobileTopbar />
         <main className="app-main">
           <Outlet />
         </main>
