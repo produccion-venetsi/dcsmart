@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { useAppStore } from '../../store/appStore.js'
 
 function IcoBack() {
   return (
@@ -46,6 +47,9 @@ export default function CajaDetail() {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
+  const role       = useAppStore((s) => s.activeApp)?.role
+  const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
+  const [auditandoDc, setAuditandoDc] = useState(false)
 
   const [caja,    setCaja]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -113,6 +117,25 @@ export default function CajaDetail() {
     finally { setAuditando(false) }
   }
 
+  const handleAuditDc = async () => {
+    let observaciones
+    if (caja.audit_dc) {
+      observaciones = await showPrompt(
+        'Esta caja ya tiene audit DC. ¿Querés revertirlo? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditandoDc(true)
+    try {
+      const { data } = await cajasApi.auditDc(id, caja.audit_dc ? { observaciones } : undefined)
+      notify(data.audit_dc ? 'Audit DC aplicado' : 'Audit DC revertido', 'success')
+      setCaja(prev => ({ ...prev, audit_dc: data.audit_dc, audit: data.audit }))
+      loadAuditHistory()
+    } catch { notify('Error al auditar (DC)', 'error') }
+    finally { setAuditandoDc(false) }
+  }
+
   if (loading) return <div className="page-loading"><div className="spinner" /></div>
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
@@ -133,6 +156,7 @@ export default function CajaDetail() {
     ['Tickets',      caja.tickets ?? '—'],
     ['Origen',       caja.origin ?? '—'],
     ['Auditado',     caja.audit ? 'Sí' : 'No'],
+    ...(canAuditDc ? [['Audit DC', caja.audit_dc ? 'Sí' : 'No']] : []),
   ]
 
   return (
@@ -159,6 +183,19 @@ export default function CajaDetail() {
               : caja.audit ? '✓ Auditado' : 'Auditar'
             }
           </button>
+          {canAuditDc && (
+            <button
+              className={`btn ${caja.audit_dc ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handleAuditDc}
+              disabled={auditandoDc}
+              style={{ marginLeft: '0.5rem' }}
+            >
+              {auditandoDc
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : caja.audit_dc ? '✓ Audit DC' : 'Audit DC'
+              }
+            </button>
+          )}
         </div>
       </div>
 
