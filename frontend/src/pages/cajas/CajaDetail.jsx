@@ -37,6 +37,9 @@ function IcoMovs() {
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
+const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
+const TOLERANCE = 0.01
+
 export default function CajaDetail() {
   const { id }   = useParams()
   const navigate = useNavigate()
@@ -114,6 +117,9 @@ export default function CajaDetail() {
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
+  const totalEsperado = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0
+  const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
+  const hayDescuadre = descuadre != null && Math.abs(descuadre) > TOLERANCE
 
   const infoRows = [
     ['Local',        caja.local?.nombre ?? '—'],
@@ -169,6 +175,11 @@ export default function CajaDetail() {
                 </div>
               ))}
             </div>
+            {hayDescuadre && (
+              <div className="badge badge-red" style={{ marginTop: '0.75rem', display: 'inline-block' }} title="Total de caja vs. inicial + ingresos − egresos de los movimientos">
+                ⚠ Descuadre: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
+              </div>
+            )}
           </div>
         </div>
 
