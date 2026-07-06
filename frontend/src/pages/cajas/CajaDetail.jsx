@@ -311,13 +311,13 @@ export default function CajaDetail() {
         </div>
         <table className="data-table">
           <thead>
-            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th>{canAuditDc && <th>Circuito</th>}<th>Observación</th></tr>
           </thead>
           <tbody>
             {loadingHistory ? (
-              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+              <tr><td colSpan={canAuditDc ? 5 : 4}><span className="skel" style={{ width: '60%' }} /></td></tr>
             ) : auditHistory.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+              <tr><td colSpan={canAuditDc ? 5 : 4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
@@ -328,6 +328,13 @@ export default function CajaDetail() {
                       {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
                     </span>
                   </td>
+                  {canAuditDc && (
+                    <td>
+                      <span className={`badge ${ev.audit_dc ? 'badge-purple' : 'badge-muted'}`}>
+                        {ev.audit_dc ? 'DC' : 'Normal'}
+                      </span>
+                    </td>
+                  )}
                   <td className="td-muted">{ev.observaciones || '—'}</td>
                 </tr>
               ))
