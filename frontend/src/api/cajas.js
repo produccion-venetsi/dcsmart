@@ -9,5 +9,6 @@ export const cajasApi = {
   remove:       (id)             => client.delete(`/cajas/${id}`),
   audit:        (id, data)       => client.patch(`/cajas/${id}/audit`, data),
   auditHistory: (id)             => client.get(`/cajas/${id}/audit-history`),
+  auditDc:      (id, data)       => client.patch(`/cajas/${id}/audit-dc`, data),
   upload:       (formData, idLocal) => client.post(`/cajas/upload${idLocal ? `?id_local=${idLocal}` : ''}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
 }

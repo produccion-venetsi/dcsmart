@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { useAppStore } from '../../store/appStore.js'
 
 function IcoBack() {
   return (
@@ -37,12 +38,18 @@ function IcoMovs() {
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
+const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
+const TOLERANCE = 0.01
+
 export default function CajaDetail() {
   const { id }   = useParams()
   const navigate = useNavigate()
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
+  const role       = useAppStore((s) => s.activeApp)?.role
+  const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
+  const [auditandoDc, setAuditandoDc] = useState(false)
 
   const [caja,    setCaja]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -110,10 +117,32 @@ export default function CajaDetail() {
     finally { setAuditando(false) }
   }
 
+  const handleAuditDc = async () => {
+    let observaciones
+    if (caja.audit_dc) {
+      observaciones = await showPrompt(
+        'Esta caja ya tiene audit DC. ¿Querés revertirlo? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditandoDc(true)
+    try {
+      const { data } = await cajasApi.auditDc(id, caja.audit_dc ? { observaciones } : undefined)
+      notify(data.audit_dc ? 'Audit DC aplicado' : 'Audit DC revertido', 'success')
+      setCaja(prev => ({ ...prev, audit_dc: data.audit_dc, audit: data.audit }))
+      loadAuditHistory()
+    } catch { notify('Error al auditar (DC)', 'error') }
+    finally { setAuditandoDc(false) }
+  }
+
   if (loading) return <div className="page-loading"><div className="spinner" /></div>
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
+  const totalEsperado = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0
+  const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
+  const hayDescuadre = descuadre != null && Math.abs(descuadre) > TOLERANCE
 
   const infoRows = [
     ['Local',        caja.local?.nombre ?? '—'],
@@ -127,6 +156,7 @@ export default function CajaDetail() {
     ['Tickets',      caja.tickets ?? '—'],
     ['Origen',       caja.origin ?? '—'],
     ['Auditado',     caja.audit ? 'Sí' : 'No'],
+    ...(canAuditDc ? [['Audit DC', caja.audit_dc ? 'Sí' : 'No']] : []),
   ]
 
   return (
@@ -153,6 +183,19 @@ export default function CajaDetail() {
               : caja.audit ? '✓ Auditado' : 'Auditar'
             }
           </button>
+          {canAuditDc && (
+            <button
+              className={`btn ${caja.audit_dc ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handleAuditDc}
+              disabled={auditandoDc}
+              style={{ marginLeft: '0.5rem' }}
+            >
+              {auditandoDc
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : caja.audit_dc ? '✓ Audit DC' : 'Audit DC'
+              }
+            </button>
+          )}
         </div>
       </div>
 
@@ -169,6 +212,11 @@ export default function CajaDetail() {
                 </div>
               ))}
             </div>
+            {hayDescuadre && (
+              <div className="badge badge-red" style={{ marginTop: '0.75rem', display: 'inline-block' }} title="Total de caja vs. inicial + ingresos − egresos de los movimientos">
+                ⚠ Descuadre: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
+              </div>
+            )}
           </div>
         </div>
 
@@ -263,13 +311,13 @@ export default function CajaDetail() {
         </div>
         <table className="data-table">
           <thead>
-            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th>{canAuditDc && <th>Circuito</th>}<th>Observación</th></tr>
           </thead>
           <tbody>
             {loadingHistory ? (
-              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+              <tr><td colSpan={canAuditDc ? 5 : 4}><span className="skel" style={{ width: '60%' }} /></td></tr>
             ) : auditHistory.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+              <tr><td colSpan={canAuditDc ? 5 : 4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
@@ -280,6 +328,13 @@ export default function CajaDetail() {
                       {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
                     </span>
                   </td>
+                  {canAuditDc && (
+                    <td>
+                      <span className={`badge ${ev.audit_dc ? 'badge-purple' : 'badge-muted'}`}>
+                        {ev.audit_dc ? 'DC' : 'Normal'}
+                      </span>
+                    </td>
+                  )}
                   <td className="td-muted">{ev.observaciones || '—'}</td>
                 </tr>
               ))

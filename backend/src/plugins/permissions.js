@@ -13,6 +13,14 @@ async function permissionsPlugin(fastify) {
     }
   })
 
+  // Guard: solo super_admin o dcsmart pueden auditar por el circuito DC.
+  // Requiere que fastify.appContext haya corrido antes (usa request.activeRole).
+  fastify.decorate('requireDc', async (request, reply) => {
+    if (!['super_admin', 'dcsmart'].includes(request.activeRole)) {
+      return reply.code(403).send({ error: 'Solo DCSmart puede realizar esta acción' })
+    }
+  })
+
   fastify.decorate('can', (moduleName, action) => {
     return async (request, reply) => {
       const userId = request.user.id

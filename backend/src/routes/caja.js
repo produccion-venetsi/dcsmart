@@ -9,7 +9,7 @@ async function getAuditedCajaSet(fastify, cajaIds) {
   if (!cajaIds.length) return new Set()
   try {
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'cajas', id_registro: { in: cajaIds }, vigente: true, accion: 'auditado' },
+      where: { tabla: 'cajas', id_registro: { in: cajaIds }, audit_dc: false, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     return new Set(rows.map(r => r.id_registro))
@@ -29,7 +29,7 @@ async function buildCajaAuditFilter(fastify, audit, allowedLocalIds) {
     const cajaIds = cajasInScope.map(c => c.id)
     if (!cajaIds.length) return audit === 'true' ? { id: { in: [] } } : {}
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'cajas', id_registro: { in: cajaIds }, vigente: true, accion: 'auditado' },
+      where: { tabla: 'cajas', id_registro: { in: cajaIds }, audit_dc: false, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     const auditedIds = [...new Set(rows.map(r => r.id_registro))]
@@ -151,16 +151,22 @@ export default async function cajaRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
+
     const auditRow = await fastify.db.audit.findFirst({
-      where: { tabla: 'cajas', id_registro: caja.id, vigente: true },
+      where: { tabla: 'cajas', id_registro: caja.id, vigente: true, audit_dc: false },
       include: { user: { select: { id: true, nombre: true } } }
     })
+    const auditDcRow = isDc ? await fastify.db.audit.findFirst({
+      where: { tabla: 'cajas', id_registro: caja.id, vigente: true, audit_dc: true }
+    }) : null
 
     return {
       ...caja,
       audit:      auditRow?.accion === 'auditado',
       audit_by:   auditRow?.user?.nombre ?? null,
       audit_date: auditRow?.fecha ?? null,
+      ...(isDc ? { audit_dc: auditDcRow?.accion === 'auditado' } : {})
     }
   })
 
@@ -311,11 +317,11 @@ export default async function cajaRoutes(fastify) {
 
     const nextAccion = await fastify.db.$transaction(async (tx) => {
       const current = await tx.audit.findFirst({
-        where: { tabla: 'cajas', id_registro: request.params.id, vigente: true }
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true }
       })
 
       await tx.audit.updateMany({
-        where: { tabla: 'cajas', id_registro: request.params.id, vigente: true },
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true },
         data: { vigente: false }
       })
 
@@ -329,6 +335,7 @@ export default async function cajaRoutes(fastify) {
           accion,
           aprobado:      accion === 'auditado',
           vigente:       true,
+          audit_dc:      false,
           id_user:       request.user.id,
           fecha:         new Date(),
           observaciones: accion === 'desauditado' ? (observaciones || null) : null
@@ -339,6 +346,84 @@ export default async function cajaRoutes(fastify) {
     })
 
     return { ok: true, audit: nextAccion === 'auditado' }
+  })
+
+  // ── PATCH /:id/audit-dc ───────────────────────────────────────────────
+  // Ver pagos.js para la explicación completa del mecanismo de cascada.
+  fastify.patch('/:id/audit-dc', { preHandler: [fastify.authenticate, fastify.appContext, fastify.requireDc] }, async (request, reply) => {
+    const caja = await fastify.db.caja.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
+
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { observaciones } = request.body ?? {}
+
+    const result = await fastify.db.$transaction(async (tx) => {
+      const currentDc = await tx.audit.findFirst({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: true, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: true, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accionDc = currentDc?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'cajas',
+          tipo:          'auditoria_caja',
+          accion:        accionDc,
+          aprobado:      accionDc === 'auditado',
+          vigente:       true,
+          audit_dc:      true,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accionDc === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      const currentNormal = await tx.audit.findFirst({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true }
+      })
+
+      let accionNormal = currentNormal?.accion === 'auditado' ? 'auditado' : 'desauditado'
+
+      if (accionNormal !== accionDc) {
+        await tx.audit.updateMany({
+          where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true },
+          data: { vigente: false }
+        })
+
+        await tx.audit.create({
+          data: {
+            id_registro:   request.params.id,
+            tabla:         'cajas',
+            tipo:          'auditoria_caja',
+            accion:        accionDc,
+            aprobado:      accionDc === 'auditado',
+            vigente:       true,
+            audit_dc:      false,
+            id_user:       request.user.id,
+            fecha:         new Date(),
+            observaciones: null
+          }
+        })
+
+        accionNormal = accionDc
+      }
+
+      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado' }
+    })
+
+    return { ok: true, ...result }
   })
 
   // ── GET /:id/audit-history ─────────────────────────────────────────────
@@ -352,8 +437,14 @@ export default async function cajaRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
+
     return fastify.db.audit.findMany({
-      where: { tabla: 'cajas', id_registro: request.params.id },
+      where: {
+        tabla: 'cajas',
+        id_registro: request.params.id,
+        ...(isDc ? {} : { audit_dc: false })
+      },
       orderBy: { fecha: 'desc' },
       include: { user: { select: { id: true, nombre: true } } }
     })

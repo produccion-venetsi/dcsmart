@@ -12,12 +12,27 @@ async function getAuditedSet(fastify, pagoIds) {
   if (!pagoIds.length) return new Set()
   try {
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: { in: pagoIds }, vigente: true, accion: 'auditado' },
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: false, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     return new Set(rows.map(r => r.id_registro))
   } catch (err) {
     fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedSet)')
+    return new Set()
+  }
+}
+
+// Igual que getAuditedSet pero para el circuito de auditoría DC (audit_dc: true).
+async function getAuditedDcSet(fastify, pagoIds) {
+  if (!pagoIds.length) return new Set()
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: true, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    return new Set(rows.map(r => r.id_registro))
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedDcSet)')
     return new Set()
   }
 }
@@ -35,7 +50,7 @@ async function buildAuditFilter(fastify, audit, allowedLocalIds) {
     const pagoIds = pagosInScope.map(p => p.id)
     if (!pagoIds.length) return audit === 'true' ? { id: { in: [] } } : {}
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: { in: pagoIds }, vigente: true, accion: 'auditado' },
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: false, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     const auditedIds = [...new Set(rows.map(r => r.id_registro))]
@@ -151,8 +166,14 @@ export default async function pagosRoutes(fastify) {
       fastify.db.pago.count({ where })
     ])
 
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
     const auditedSet = await getAuditedSet(fastify, pagos.map(p => p.id))
-    const data = pagos.map(p => ({ ...p, audit: auditedSet.has(p.id) }))
+    const auditedDcSet = isDc ? await getAuditedDcSet(fastify, pagos.map(p => p.id)) : new Set()
+    const data = pagos.map(p => ({
+      ...p,
+      audit: auditedSet.has(p.id),
+      ...(isDc ? { audit_dc: auditedDcSet.has(p.id) } : {})
+    }))
 
     return { data, total, page: Number(page), limit: Number(limit) }
   })
@@ -296,7 +317,7 @@ export default async function pagosRoutes(fastify) {
 
     // Estado de auditoría desde la tabla `audits` (fila vigente, si existe).
     const auditRow = await fastify.db.audit.findFirst({
-      where: { tabla: 'pagos', id_registro: pago.id, vigente: true },
+      where: { tabla: 'pagos', id_registro: pago.id, vigente: true, audit_dc: false },
       include: { user: { select: { id: true, nombre: true } } }
     })
 
@@ -439,11 +460,11 @@ export default async function pagosRoutes(fastify) {
 
     const nextAccion = await fastify.db.$transaction(async (tx) => {
       const current = await tx.audit.findFirst({
-        where: { tabla: 'pagos', id_registro: request.params.id, vigente: true }
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true }
       })
 
       await tx.audit.updateMany({
-        where: { tabla: 'pagos', id_registro: request.params.id, vigente: true },
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true },
         data: { vigente: false }
       })
 
@@ -457,6 +478,7 @@ export default async function pagosRoutes(fastify) {
           accion,
           aprobado:      accion === 'auditado',
           vigente:       true,
+          audit_dc:      false,
           id_user:       request.user.id,
           fecha:         new Date(),
           observaciones: accion === 'desauditado' ? (observaciones || null) : null
@@ -467,6 +489,86 @@ export default async function pagosRoutes(fastify) {
     })
 
     return { ok: true, audit: nextAccion === 'auditado' }
+  })
+
+  // ── PATCH /:id/audit-dc ───────────────────────────────────────────────
+  // Circuito de auditoría exclusivo de super_admin/dcsmart. Cascadea el
+  // estado al circuito normal cuando difiere, sin dejar rastro visible
+  // para admin/cajero (observaciones null en la fila cascadeada).
+  fastify.patch('/:id/audit-dc', { preHandler: [fastify.authenticate, fastify.appContext, fastify.requireDc] }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+
+    if (!request.allowedLocalIds.includes(pago.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { observaciones } = request.body ?? {}
+
+    const result = await fastify.db.$transaction(async (tx) => {
+      const currentDc = await tx.audit.findFirst({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: true, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: true, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accionDc = currentDc?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'pagos',
+          tipo:          'auditoria_pago',
+          accion:        accionDc,
+          aprobado:      accionDc === 'auditado',
+          vigente:       true,
+          audit_dc:      true,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accionDc === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      const currentNormal = await tx.audit.findFirst({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true }
+      })
+
+      let accionNormal = currentNormal?.accion === 'auditado' ? 'auditado' : 'desauditado'
+
+      if (accionNormal !== accionDc) {
+        await tx.audit.updateMany({
+          where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true },
+          data: { vigente: false }
+        })
+
+        await tx.audit.create({
+          data: {
+            id_registro:   request.params.id,
+            tabla:         'pagos',
+            tipo:          'auditoria_pago',
+            accion:        accionDc,
+            aprobado:      accionDc === 'auditado',
+            vigente:       true,
+            audit_dc:      false,
+            id_user:       request.user.id,
+            fecha:         new Date(),
+            observaciones: null
+          }
+        })
+
+        accionNormal = accionDc
+      }
+
+      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado' }
+    })
+
+    return { ok: true, ...result }
   })
 
   // ── GET /:id/audit-history ─────────────────────────────────────────────
@@ -481,8 +583,14 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
+
     return fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: request.params.id },
+      where: {
+        tabla: 'pagos',
+        id_registro: request.params.id,
+        ...(isDc ? {} : { audit_dc: false })
+      },
       orderBy: { fecha: 'desc' },
       include: { user: { select: { id: true, nombre: true } } }
     })

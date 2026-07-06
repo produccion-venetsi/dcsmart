@@ -100,6 +100,36 @@ function IcoRepeat() {
     </svg>
   )
 }
+function IcoThumbUp() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 11v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3z"/>
+      <path d="M7 11l4-8a2 2 0 0 1 2 2v5h5.5a2 2 0 0 1 1.94 2.5l-1.5 6A2 2 0 0 1 16.97 21H7"/>
+    </svg>
+  )
+}
+function IcoEye() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  )
+}
+function IcoArrowUp() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+    </svg>
+  )
+}
+function IcoArrowDown() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+    </svg>
+  )
+}
 
 function fmt$(n)     { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
@@ -107,7 +137,7 @@ function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year
 function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
 function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false }) {
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -120,6 +150,8 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [editImpForm,  setEditImpForm]  = useState({ tipo: 'IVA21', monto: '' })
   const [audited,      setAudited]      = useState(pago.audit)
   const [auditando,    setAuditando]    = useState(false)
+  const [auditedDc,    setAuditedDc]    = useState(pago.audit_dc)
+  const [auditandoDc,  setAuditandoDc]  = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [periodico,   setPeriodico]   = useState(pago.periodico ?? false)
@@ -259,6 +291,27 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     finally { setAuditando(false) }
   }
 
+  const handlePanelAuditDc = async () => {
+    let observaciones
+    if (auditedDc) {
+      observaciones = await showPrompt(
+        'Esta orden ya tiene audit DC. ¿Querés revertirlo? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditandoDc(true)
+    try {
+      const { data } = await pagosApi.auditDc(pago.id, auditedDc ? { observaciones } : undefined)
+      setAuditedDc(data.audit_dc)
+      setAudited(data.audit)
+      notify(data.audit_dc ? 'Audit DC aplicado' : 'Audit DC revertido', 'success')
+      onAudit?.(pago.id, data.audit)
+      loadAuditHistory()
+    } catch { notify('Error al auditar (DC)', 'error') }
+    finally { setAuditandoDc(false) }
+  }
+
   const handleAddImp = async (e) => {
     e.preventDefault()
     if (!impForm.monto) return
@@ -339,6 +392,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
     ['Auditado',    audited ? 'Sí' : 'No'],
+    ...(canAuditDc ? [['Audit DC', auditedDc ? 'Sí' : 'No']] : []),
     ['Periódico',   periodico ? 'Sí' : 'No'],
   ]
 
@@ -360,6 +414,18 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
               {auditando
                 ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
                 : audited ? '✓ Auditado' : 'Auditar'
+              }
+            </button>
+          )}
+          {canAuditDc && (
+            <button
+              className={`btn ${auditedDc ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handlePanelAuditDc}
+              disabled={auditandoDc}
+            >
+              {auditandoDc
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : auditedDc ? '✓ Audit DC' : 'Audit DC'
               }
             </button>
           )}
@@ -453,6 +519,18 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           </div>
         ))}
       </div>
+
+      {pago.importe != null && (() => {
+        const sumaImpuestos = impuestos.reduce((acc, imp) => acc + Number(imp.monto), 0)
+        const esperado = sumaImpuestos + Number(pago.importe_neto ?? 0) - Number(pago.descuento ?? 0)
+        const diff = Number(pago.importe) - esperado
+        if (Math.abs(diff) <= 0.01) return null
+        return (
+          <div className="badge badge-red" style={{ marginTop: '0.5rem', marginBottom: '1rem', display: 'inline-block' }} title="Impuestos + Neto − Descuento vs. Importe">
+            ⚠ No cierra: diferencia de {fmt$(Math.abs(diff))}
+          </div>
+        )
+      })()}
 
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Impuestos</span>
@@ -609,13 +687,13 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       <div className="table-wrap" style={{ marginBottom: '1rem' }}>
         <table className="data-table">
           <thead>
-            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
+            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th>{canAuditDc && <th>Circuito</th>}<th>Observación</th></tr>
           </thead>
           <tbody>
             {loadingHistory ? (
-              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
+              <tr><td colSpan={canAuditDc ? 5 : 4}><span className="skel" style={{ width: '60%' }} /></td></tr>
             ) : auditHistory.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
+              <tr><td colSpan={canAuditDc ? 5 : 4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
@@ -626,6 +704,13 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
                       {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
                     </span>
                   </td>
+                  {canAuditDc && (
+                    <td>
+                      <span className={`badge ${ev.audit_dc ? 'badge-purple' : 'badge-muted'}`}>
+                        {ev.audit_dc ? 'DC' : 'Normal'}
+                      </span>
+                    </td>
+                  )}
                   <td className="td-muted">{ev.observaciones || '—'}</td>
                 </tr>
               ))
@@ -661,6 +746,7 @@ export default function PagoList() {
   const role        = activeApp?.role
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
+  const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
 
   const [pagos,           setPagos]           = useState([])
   const [total,           setTotal]           = useState(0)
@@ -1265,8 +1351,10 @@ export default function PagoList() {
                     </td>
                   )}
                   <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
-                  <td style={{ minWidth: 100 }}>
-                    <span className={`badge ${p.audit ? 'badge-green' : 'badge-muted'}`}>{p.audit ? '✓ Auditado' : 'No auditado'}</span>
+                  <td style={{ minWidth: 40, textAlign: 'center' }}>
+                    <span style={{ color: p.audit ? 'var(--green)' : 'var(--amber)' }} title={p.audit ? 'Auditado' : 'No auditado'}>
+                      {p.audit ? <IcoThumbUp /> : <IcoEye />}
+                    </span>
                   </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                   <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
@@ -1287,9 +1375,13 @@ export default function PagoList() {
                   <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
                   <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.cashflow)}</td>
-                  <td style={{ minWidth: 90 }}>
+                  <td style={{ minWidth: 40, textAlign: 'center' }}>
                     {p.ingresa_egreso != null
-                      ? <span className={`badge ${p.ingresa_egreso ? 'badge-green' : 'badge-red'}`}>{p.ingresa_egreso ? 'Ingreso' : 'Egreso'}</span>
+                      ? (
+                        <span style={{ color: p.ingresa_egreso ? 'var(--green)' : 'var(--red)' }} title={p.ingresa_egreso ? 'Ingreso' : 'Egreso'}>
+                          {p.ingresa_egreso ? <IcoArrowUp /> : <IcoArrowDown />}
+                        </span>
+                      )
                       : <span className="td-muted">—</span>}
                   </td>
                   <td style={{ minWidth: 90 }}>
@@ -1335,7 +1427,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} />
         )}
       </DrawerPanel>
     </div>

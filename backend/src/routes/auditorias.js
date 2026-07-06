@@ -93,6 +93,7 @@ export default async function auditoriasRoutes(fastify) {
       tabla: r.tabla,
       id_registro: r.id_registro,
       accion: r.accion,
+      audit_dc: r.audit_dc,
       observaciones: r.observaciones,
       user: r.user,
       registro_label: labelMap.get(r.id_registro) ?? '—'
