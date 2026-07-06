@@ -137,7 +137,7 @@ function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year
 function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
 function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false }) {
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -150,6 +150,8 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [editImpForm,  setEditImpForm]  = useState({ tipo: 'IVA21', monto: '' })
   const [audited,      setAudited]      = useState(pago.audit)
   const [auditando,    setAuditando]    = useState(false)
+  const [auditedDc,    setAuditedDc]    = useState(pago.audit_dc)
+  const [auditandoDc,  setAuditandoDc]  = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [periodico,   setPeriodico]   = useState(pago.periodico ?? false)
@@ -289,6 +291,27 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     finally { setAuditando(false) }
   }
 
+  const handlePanelAuditDc = async () => {
+    let observaciones
+    if (auditedDc) {
+      observaciones = await showPrompt(
+        'Esta orden ya tiene audit DC. ¿Querés revertirlo? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditandoDc(true)
+    try {
+      const { data } = await pagosApi.auditDc(pago.id, auditedDc ? { observaciones } : undefined)
+      setAuditedDc(data.audit_dc)
+      setAudited(data.audit)
+      notify(data.audit_dc ? 'Audit DC aplicado' : 'Audit DC revertido', 'success')
+      onAudit?.(pago.id, data.audit)
+      loadAuditHistory()
+    } catch { notify('Error al auditar (DC)', 'error') }
+    finally { setAuditandoDc(false) }
+  }
+
   const handleAddImp = async (e) => {
     e.preventDefault()
     if (!impForm.monto) return
@@ -369,6 +392,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
     ['Auditado',    audited ? 'Sí' : 'No'],
+    ...(canAuditDc ? [['Audit DC', auditedDc ? 'Sí' : 'No']] : []),
     ['Periódico',   periodico ? 'Sí' : 'No'],
   ]
 
@@ -390,6 +414,18 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
               {auditando
                 ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
                 : audited ? '✓ Auditado' : 'Auditar'
+              }
+            </button>
+          )}
+          {canAuditDc && (
+            <button
+              className={`btn ${auditedDc ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handlePanelAuditDc}
+              disabled={auditandoDc}
+            >
+              {auditandoDc
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : auditedDc ? '✓ Audit DC' : 'Audit DC'
               }
             </button>
           )}
@@ -703,6 +739,7 @@ export default function PagoList() {
   const role        = activeApp?.role
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
+  const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
 
   const [pagos,           setPagos]           = useState([])
   const [total,           setTotal]           = useState(0)
@@ -1383,7 +1420,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} />
         )}
       </DrawerPanel>
     </div>
