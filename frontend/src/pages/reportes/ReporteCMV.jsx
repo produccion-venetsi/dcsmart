@@ -151,7 +151,7 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
 
       {/* ── KPI cards ── */}
       {skel ? (
-        <div className="rep-kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="rep-kpi-grid cols-4">
           {[0,1,2,3].map(i => (
             <div key={i} className="rep-kpi">
               <div className="rep-skel" style={{ width: '50%', height: 14, marginBottom: 14 }} />
@@ -161,7 +161,7 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
           ))}
         </div>
       ) : (
-        <div className="rep-kpi-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="rep-kpi-grid cols-4">
           {kpis.map((k, i) => (
             <KpiCard key={i} label={k.label} val={k.val} delta={k.delta} />
           ))}
@@ -170,7 +170,7 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
 
       {/* ── Tables row: Alimentos / Bebidas / Ajustes ── */}
       {skel ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18, marginBottom: 18 }}>
+        <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
           {[0,1,2].map(i => (
             <div key={i} className="rep-chart-card">
               <div className="rep-skel" style={{ width: '40%', height: 14, marginBottom: 16 }} />
@@ -181,7 +181,7 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
           ))}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18, marginBottom: 18 }}>
+        <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
           <CostTable title="Alimentos" dotColor="var(--green)" items={alimentos}
             total={totAlim} gradient={CAT_COLORS.alimentos.gradient} />
           <CostTable title="Bebidas" dotColor="var(--gold)" items={bebidas}
@@ -230,7 +230,7 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
 
       {/* ── Charts row ── */}
       {!skel && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18 }}>
+        <div className="rep-3col-grid">
           <CostChart title="Alimentos" items={alimentos} barColor="#4CAF7D" />
           <CostChart title="Bebidas" items={bebidas} barColor="#C9B086" />
           <CostChart title="Ajustes" items={ajustes.map(a => ({
