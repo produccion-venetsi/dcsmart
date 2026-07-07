@@ -1,6 +1,7 @@
 export default async function cajaDetallesRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
+  const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'edit')]
   const deleteHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'delete')]
 
   // ── GET /tipos ─────────────────────────────────────────────────────────
@@ -83,6 +84,55 @@ export default async function cajaDetallesRoutes(fastify) {
       }
     })
     return reply.code(201).send(detalle)
+  })
+
+  // ── PUT /:id ───────────────────────────────────────────────────────────
+  fastify.put('/:id', { preHandler: editHandler }, async (request, reply) => {
+    const existing = await fastify.db.cajaDetalle.findUnique({
+      where: { id: request.params.id },
+      include: { caja: { select: { id_local: true } } }
+    })
+    if (!existing) return reply.code(404).send({ error: 'Detalle no encontrado' })
+
+    if (!request.allowedLocalIds.includes(existing.caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { id_tipo, nombre, monto, observaciones } = request.body
+    if (monto === undefined) return reply.code(400).send({ error: 'El monto es requerido' })
+
+    // tipo y nombre se derivan del tipo del catálogo cuando se elige id_tipo,
+    // igual que en la creación (ver POST /)
+    let tipo = existing.tipo
+    let nombreFinal = nombre !== undefined ? (nombre || null) : existing.nombre
+    if (id_tipo !== undefined) {
+      if (id_tipo) {
+        const dt = await fastify.db.detalleTipo.findUnique({
+          where: { id: id_tipo },
+          select: { clasificacion: true, nombre: true }
+        })
+        if (!dt) return reply.code(400).send({ error: 'Tipo de detalle inexistente' })
+        tipo = dt.clasificacion
+        nombreFinal = dt.nombre
+      } else {
+        tipo = null
+      }
+    }
+
+    const detalle = await fastify.db.cajaDetalle.update({
+      where: { id: request.params.id },
+      data: {
+        id_tipo:       id_tipo       !== undefined ? (id_tipo || null) : undefined,
+        tipo,
+        nombre:        nombreFinal,
+        monto:         parseFloat(monto),
+        observaciones: observaciones !== undefined ? (observaciones || null) : undefined
+      },
+      include: {
+        detalle_tipo: { select: { id: true, nombre: true } }
+      }
+    })
+    return detalle
   })
 
   // ── DELETE /:id ────────────────────────────────────────────────────────

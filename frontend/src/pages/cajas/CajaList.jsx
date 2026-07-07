@@ -48,11 +48,19 @@ function IcoCaja() {
     </svg>
   )
 }
-function IcoLink() {
+function IcoThumbUp() {
   return (
-    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 11v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3z"/>
+      <path d="M7 11l4-8a2 2 0 0 1 2 2v5h5.5a2 2 0 0 1 1.94 2.5l-1.5 6A2 2 0 0 1 16.97 21H7"/>
+    </svg>
+  )
+}
+function IcoEye() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
     </svg>
   )
 }
@@ -101,6 +109,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   const [newDet,     setNewDet]    = useState({ tipo: '', id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDet,  setSavingDet] = useState(false)
   const [addingDet,  setAddingDet] = useState(false)
+  const [editingMovId, setEditingMovId] = useState(null)
+  const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+  const [savingMovEdit, setSavingMovEdit] = useState(false)
+  const [editingDetId, setEditingDetId] = useState(null)
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [savingDetEdit, setSavingDetEdit] = useState(false)
   const [auditando,  setAuditando] = useState(false)
   const [auditandoDc, setAuditandoDc] = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
@@ -185,6 +199,49 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     if (!(await showConfirm('¿Eliminar detalle?'))) return
     try { await detallesApi.remove(detId); notify('Eliminado', 'success'); load() }
     catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
+  }
+
+  const handleEditMov = (m) => {
+    setEditingMovId(m.id)
+    setEditMovForm({ tipo: m.tipo, id_metodo: m.id_metodo || '', monto: String(m.monto), cantidad: m.cantidad != null ? String(m.cantidad) : '' })
+  }
+
+  const handleSaveMov = async (movId) => {
+    if (!editMovForm.monto) return
+    setSavingMovEdit(true)
+    try {
+      await movimientosApi.update(movId, {
+        tipo:      editMovForm.tipo,
+        id_metodo: editMovForm.id_metodo || null,
+        monto:     parseFloat(editMovForm.monto),
+        cantidad:  editMovForm.cantidad ? parseInt(editMovForm.cantidad) : null
+      })
+      notify('Movimiento actualizado', 'success')
+      setEditingMovId(null)
+      load()
+    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar', 'error') }
+    finally { setSavingMovEdit(false) }
+  }
+
+  const handleEditDet = (d) => {
+    setEditingDetId(d.id)
+    setEditDetForm({ id_tipo: d.id_tipo || '', monto: String(d.monto), observaciones: d.observaciones || '' })
+  }
+
+  const handleSaveDet = async (detId) => {
+    if (!editDetForm.monto) return
+    setSavingDetEdit(true)
+    try {
+      await detallesApi.update(detId, {
+        id_tipo:       editDetForm.id_tipo || null,
+        monto:         parseFloat(editDetForm.monto),
+        observaciones: editDetForm.observaciones || null
+      })
+      notify('Detalle actualizado', 'success')
+      setEditingDetId(null)
+      load()
+    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar', 'error') }
+    finally { setSavingDetEdit(false) }
   }
 
   const handleAudit = async () => {
@@ -348,16 +405,41 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
             <tbody>
               {caja.detalles.map((d) => (
                 <tr key={d.id}>
-                  <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
-                  <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
-                  <td className="td-number">{fmt$2(d.monto)}</td>
-                  <td>
-                    {canDelete && (
-                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
-                        <IcoTrash />
-                      </button>
-                    )}
-                  </td>
+                  {editingDetId === d.id ? (
+                    <>
+                      <td colSpan={2}>
+                        <select value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
+                          <option value="">Ver opciones</option>
+                          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
+                      </td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-sm btn-primary" disabled={savingDetEdit} onClick={() => handleSaveDet(d.id)}>Guardar</button>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setEditingDetId(null)}>Cancelar</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
+                      <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                      <td className="td-number">{fmt$2(d.monto)}</td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        {canEdit && (
+                          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditDet(d)}>
+                            <IcoEdit />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                            <IcoTrash />
+                          </button>
+                        )}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -435,19 +517,55 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
             <tbody>
               {caja.movimientos.map((m) => (
                 <tr key={m.id}>
-                  <td>
-                    <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
-                  </td>
-                  <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
-                  <td className="td-number">{fmt$2(m.monto)}</td>
-                  <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
-                  <td>
-                    {canDelete && (
-                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                        <IcoTrash />
-                      </button>
-                    )}
-                  </td>
+                  {editingMovId === m.id ? (
+                    <>
+                      <td>
+                        <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                          <option>INGRESO</option>
+                          <option>EGRESO</option>
+                          <option>APERTURA</option>
+                          <option>CIERRE</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+                          <option value="">Sin método</option>
+                          {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                      </td>
+                      <td>
+                        <input type="number" min="1" step="1" style={{ maxWidth: 70 }} value={editMovForm.cantidad} onChange={e => setEditMovForm(f => ({ ...f, cantidad: e.target.value }))} />
+                      </td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn btn-sm btn-primary" disabled={savingMovEdit} onClick={() => handleSaveMov(m.id)}>Guardar</button>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setEditingMovId(null)}>Cancelar</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>
+                        <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                      </td>
+                      <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                      <td className="td-number">{fmt$2(m.monto)}</td>
+                      <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        {canEdit && (
+                          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditMov(m)}>
+                            <IcoEdit />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                            <IcoTrash />
+                          </button>
+                        )}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -534,11 +652,41 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
 }
 
 function CajaEditPanel({ cajaId, onSaved, onBack }) {
-  const notify  = useUiStore((s) => s.notify)
+  const notify      = useUiStore((s) => s.notify)
+  const showConfirm = useUiStore((s) => s.showConfirm)
   const [form,   setForm]   = useState(null)
   const [saving, setSaving] = useState(false)
   const [fotoFile,      setFotoFile]      = useState(null)
   const [uploadingFoto, setUploadingFoto] = useState(false)
+
+  const [detalles,    setDetalles]    = useState([])
+  const [movimientos, setMovimientos] = useState([])
+  const [tipos,       setTipos]       = useState([])
+  const [metodos,     setMetodos]     = useState([])
+
+  const [addingDet,  setAddingDet]  = useState(false)
+  const [newDet,     setNewDet]     = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [savingDet,  setSavingDet]  = useState(false)
+  const [editingDetId, setEditingDetId] = useState(null)
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [savingDetEdit, setSavingDetEdit] = useState(false)
+
+  const [addingMov,  setAddingMov]  = useState(false)
+  const [newMov,     setNewMov]     = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+  const [savingMov,  setSavingMov]  = useState(false)
+  const [editingMovId, setEditingMovId] = useState(null)
+  const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+  const [savingMovEdit, setSavingMovEdit] = useState(false)
+
+  const loadRelacionales = (idLocal) => {
+    cajasApi.get(cajaId).then(({ data }) => {
+      setDetalles(data.detalles || [])
+      setMovimientos(data.movimientos || [])
+    }).catch(() => notify('Error al cargar detalles/movimientos', 'error'))
+    if (idLocal) {
+      detallesApi.tipos(idLocal).then(r => setTipos(r.data || [])).catch(() => {})
+    }
+  }
 
   useEffect(() => {
     if (!cajaId) return
@@ -558,10 +706,88 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         foto_url:     data.foto_url     ?? '',
         id_local:     data.id_local     ?? '',
       })
+      setDetalles(data.detalles || [])
+      setMovimientos(data.movimientos || [])
+      if (data.id_local) detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(() => {})
     }).catch(() => notify('Error al cargar caja', 'error'))
+    metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [cajaId])
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleAddDet = async (e) => {
+    e.preventDefault()
+    if (!newDet.monto) return
+    setSavingDet(true)
+    try {
+      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null })
+      notify('Detalle agregado', 'success')
+      setNewDet({ id_tipo: '', monto: '', observaciones: '' })
+      setAddingDet(false)
+      loadRelacionales(form?.id_local)
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar detalle', 'error') }
+    finally { setSavingDet(false) }
+  }
+
+  const handleDeleteDet = async (detId) => {
+    if (!(await showConfirm('¿Eliminar detalle?'))) return
+    try { await detallesApi.remove(detId); notify('Eliminado', 'success'); loadRelacionales(form?.id_local) }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
+  }
+
+  const handleEditDet = (d) => {
+    setEditingDetId(d.id)
+    setEditDetForm({ id_tipo: d.id_tipo || '', monto: String(d.monto), observaciones: d.observaciones || '' })
+  }
+
+  const handleSaveDet = async (detId) => {
+    if (!editDetForm.monto) return
+    setSavingDetEdit(true)
+    try {
+      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null })
+      notify('Detalle actualizado', 'success')
+      setEditingDetId(null)
+      loadRelacionales(form?.id_local)
+    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar', 'error') }
+    finally { setSavingDetEdit(false) }
+  }
+
+  const handleAddMov = async (e) => {
+    e.preventDefault()
+    if (!newMov.monto) return
+    setSavingMov(true)
+    try {
+      await movimientosApi.create({ id_caja: cajaId, tipo: newMov.tipo, id_metodo: newMov.id_metodo || null, monto: parseFloat(newMov.monto), cantidad: newMov.cantidad ? parseInt(newMov.cantidad) : null })
+      notify('Movimiento agregado', 'success')
+      setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+      setAddingMov(false)
+      loadRelacionales(form?.id_local)
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar movimiento', 'error') }
+    finally { setSavingMov(false) }
+  }
+
+  const handleDeleteMov = async (movId) => {
+    if (!(await showConfirm('¿Eliminar movimiento?'))) return
+    try { await movimientosApi.remove(movId); notify('Eliminado', 'success'); loadRelacionales(form?.id_local) }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
+  }
+
+  const handleEditMov = (m) => {
+    setEditingMovId(m.id)
+    setEditMovForm({ tipo: m.tipo, id_metodo: m.id_metodo || '', monto: String(m.monto), cantidad: m.cantidad != null ? String(m.cantidad) : '' })
+  }
+
+  const handleSaveMov = async (movId) => {
+    if (!editMovForm.monto) return
+    setSavingMovEdit(true)
+    try {
+      await movimientosApi.update(movId, { tipo: editMovForm.tipo, id_metodo: editMovForm.id_metodo || null, monto: parseFloat(editMovForm.monto), cantidad: editMovForm.cantidad ? parseInt(editMovForm.cantidad) : null })
+      notify('Movimiento actualizado', 'success')
+      setEditingMovId(null)
+      loadRelacionales(form?.id_local)
+    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar', 'error') }
+    finally { setSavingMovEdit(false) }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -677,6 +903,212 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
           </div>
         </div>
       </div>
+
+      {/* ── Detalles ─────────────────────────────────────────────────────── */}
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Detalles ({detalles.length})</span>
+        {!addingDet && (
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
+            <IcoPlus /> Añadir
+          </button>
+        )}
+      </div>
+      {detalles.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+          <table className="data-table">
+            <thead><tr><th>Tipo</th><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <tbody>
+              {detalles.map((d) => (
+                <tr key={d.id}>
+                  {editingDetId === d.id ? (
+                    <>
+                      <td colSpan={2}>
+                        <select value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
+                          <option value="">Ver opciones</option>
+                          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
+                      </td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button type="button" className="btn btn-sm btn-primary" disabled={savingDetEdit} onClick={() => handleSaveDet(d.id)}>Guardar</button>
+                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditingDetId(null)}>Cancelar</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
+                      <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                      <td className="td-number">{fmt$2(d.monto)}</td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditDet(d)}>
+                          <IcoEdit />
+                        </button>
+                        <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
+                          <IcoTrash />
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {detalles.length === 0 && !addingDet && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin detalles</div>
+      )}
+      {addingDet && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Nombre</label>
+              <div className="form-input-wrap">
+                <select value={newDet.id_tipo} onChange={e => setNewDet(f => ({ ...f, id_tipo: e.target.value }))}>
+                  <option value="">Ver opciones</option>
+                  {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Monto *</label>
+              <div className="form-input-wrap">
+                <input type="number" step="0.01" placeholder="0.00" value={newDet.monto} onChange={e => setNewDet(f => ({ ...f, monto: e.target.value }))} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Observaciones</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Opcional" value={newDet.observaciones} onChange={e => setNewDet(f => ({ ...f, observaciones: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem' }}>
+            <button type="button" className="btn btn-primary" disabled={savingDet || !newDet.monto} onClick={handleAddDet}>
+              {savingDet ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />} Agregar
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setAddingDet(false)}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Movimientos ──────────────────────────────────────────────────── */}
+      <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Movimientos ({movimientos.length})</span>
+        {!addingMov && (
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMov(true)}>
+            <IcoPlus /> Añadir
+          </button>
+        )}
+      </div>
+      {movimientos.length > 0 && (
+        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+          <table className="data-table">
+            <thead><tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr></thead>
+            <tbody>
+              {movimientos.map((m) => (
+                <tr key={m.id}>
+                  {editingMovId === m.id ? (
+                    <>
+                      <td>
+                        <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                          <option>INGRESO</option>
+                          <option>EGRESO</option>
+                          <option>APERTURA</option>
+                          <option>CIERRE</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+                          <option value="">Sin método</option>
+                          {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                      </td>
+                      <td>
+                        <input type="number" min="1" step="1" style={{ maxWidth: 70 }} value={editMovForm.cantidad} onChange={e => setEditMovForm(f => ({ ...f, cantidad: e.target.value }))} />
+                      </td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button type="button" className="btn btn-sm btn-primary" disabled={savingMovEdit} onClick={() => handleSaveMov(m.id)}>Guardar</button>
+                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditingMovId(null)}>Cancelar</button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>
+                        <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                      </td>
+                      <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                      <td className="td-number">{fmt$2(m.monto)}</td>
+                      <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditMov(m)}>
+                          <IcoEdit />
+                        </button>
+                        <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                          <IcoTrash />
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {movimientos.length === 0 && !addingMov && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin movimientos</div>
+      )}
+      {addingMov && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Tipo</label>
+              <div className="form-input-wrap">
+                <select value={newMov.tipo} onChange={e => setNewMov(f => ({ ...f, tipo: e.target.value }))}>
+                  <option>INGRESO</option>
+                  <option>EGRESO</option>
+                  <option>APERTURA</option>
+                  <option>CIERRE</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Método</label>
+              <div className="form-input-wrap">
+                <select value={newMov.id_metodo} onChange={e => setNewMov(f => ({ ...f, id_metodo: e.target.value }))}>
+                  <option value="">Sin método</option>
+                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Monto *</label>
+              <div className="form-input-wrap">
+                <input type="number" step="0.01" placeholder="0.00" value={newMov.monto} onChange={e => setNewMov(f => ({ ...f, monto: e.target.value }))} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Cantidad</label>
+              <div className="form-input-wrap">
+                <input type="number" min="1" step="1" placeholder="Opcional" value={newMov.cantidad} onChange={e => setNewMov(f => ({ ...f, cantidad: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem' }}>
+            <button type="button" className="btn btn-primary" disabled={savingMov || !newMov.monto} onClick={handleAddMov}>
+              {savingMov ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <IcoPlus />} Agregar
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setAddingMov(false)}>✕</button>
+          </div>
+        </div>
+      )}
+
       <div className="form-actions" style={{ marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : 'Guardar cambios'}
@@ -1368,8 +1800,10 @@ export default function CajaList() {
                       </td>
                     )}
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
-                    <td>
-                      <span className={`badge ${c.audit ? 'badge-green' : 'badge-muted'}`}>{c.audit ? '✓ Auditado' : 'No auditado'}</span>
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ color: c.audit ? 'var(--green)' : 'var(--amber)' }} title={c.audit ? 'Auditado' : 'No auditado'}>
+                        {c.audit ? <IcoThumbUp /> : <IcoEye />}
+                      </span>
                     </td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
                     <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
@@ -1385,11 +1819,9 @@ export default function CajaList() {
                         : <span className="td-muted">—</span>}
                     </td>
                     <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                      {c.foto_url && !c.foto_url.startsWith('gs://')
-                        ? <a href={c.foto_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
-                        : c.foto_url
-                          ? <FotoViewer pagoId={c.id} fotoUrl={c.foto_url} entity="cajas" drawerWidth={0} compact />
-                          : <span className="td-muted">—</span>}
+                      {c.foto_url
+                        ? <FotoViewer pagoId={c.id} fotoUrl={c.foto_url} entity="cajas" drawerWidth={0} compact />
+                        : <span className="td-muted">—</span>}
                     </td>
                     {showLocalCol && <td className="td-muted">{c.local?.nombre ?? '—'}</td>}
                   </tr>
