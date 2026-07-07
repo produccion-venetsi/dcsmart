@@ -302,7 +302,7 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
   // Contenedor invisible que ocupa el espacio a la izquierda del drawer,
   // sin backdrop — el drawer sigue visible e interactuable detrás.
   return createPortal(
-    <div style={{
+    <div className="media-panel-frame" style={{
       position: 'fixed', top: 0, left: 0, bottom: 0,
       right: drawerWidth,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
