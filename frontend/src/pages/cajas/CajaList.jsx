@@ -7,7 +7,6 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
-import CajaFotoViewer from '../../components/CajaFotoViewer.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
@@ -85,7 +84,10 @@ function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { m
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
-function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, onDelete }) {
+const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
+const DESCUADRE_TOLERANCE = 0.01
+
+function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -100,6 +102,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
   const [savingDet,  setSavingDet] = useState(false)
   const [addingDet,  setAddingDet] = useState(false)
   const [auditando,  setAuditando] = useState(false)
+  const [auditandoDc, setAuditandoDc] = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
 
@@ -204,11 +207,35 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
     finally { setAuditando(false) }
   }
 
+  const handleAuditDc = async () => {
+    let observaciones
+    if (caja.audit_dc) {
+      observaciones = await showPrompt(
+        'Esta caja ya tiene audit DC. ¿Querés revertirlo? Podés dejar un motivo.',
+        { placeholder: 'Motivo (opcional)' }
+      )
+      if (observaciones === null) return
+    }
+    setAuditandoDc(true)
+    try {
+      const { data } = await cajasApi.auditDc(cajaId, caja.audit_dc ? { observaciones } : undefined)
+      notify(data.audit_dc ? 'Audit DC aplicado' : 'Audit DC revertido', 'success')
+      setCaja(prev => ({ ...prev, audit_dc: data.audit_dc, audit: data.audit }))
+      onRefreshList?.()
+      loadAuditHistory()
+    } catch { notify('Error al auditar (DC)', 'error') }
+    finally { setAuditandoDc(false) }
+  }
+
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
   if (!caja) return <div style={{ color: 'var(--red)', padding: '1rem' }}>No se pudo cargar la caja.</div>
 
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
   const totalDet = caja.detalles?.reduce((acc, d) => acc + Number(d.monto), 0) || 0
+
+  const totalEsperado = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0
+  const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
+  const hayDescuadre = descuadre != null && Math.abs(descuadre) > DESCUADRE_TOLERANCE
 
   const rows = [
     ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
@@ -221,12 +248,26 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
     ['Fiscal',     fmt$(caja.fiscal)],
     ['Comensales', caja.comensales ?? '—'],
     ['Tickets',    caja.tickets ?? '—'],
-    ['Origen',     caja.origin ?? '—'],
-    ['Auditado',   caja.audit ? 'Sí' : 'No'],
   ]
 
   return (
     <div>
+      {/* Tags destacados: mismos indicadores que ya tienen color/badge en la lista */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1rem' }}>
+        <span className={`badge ${caja.audit ? 'badge-green' : 'badge-muted'}`}>{caja.audit ? '✓ Auditado' : 'No auditado'}</span>
+        {canAuditDc && (
+          <span className={`badge ${caja.audit_dc ? 'badge-purple' : 'badge-muted'}`}>{caja.audit_dc ? '✓ Audit DC' : 'Sin Audit DC'}</span>
+        )}
+        {caja.origin && caja.origin !== 'DCSMART' && (
+          <span className="badge badge-muted">{caja.origin}</span>
+        )}
+        {hayDescuadre && (
+          <span className="badge badge-red" title="Total de caja vs. inicial + ingresos − egresos de los movimientos">
+            ⚠ Descuadre: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
+          </span>
+        )}
+      </div>
+
       <div style={{ marginBottom: '0.75rem' }}>
         <ActionsMenu label="Acciones">
           {canEdit && (
@@ -238,6 +279,18 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
               {auditando
                 ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
                 : caja.audit ? '✓ Auditado' : 'Auditar'
+              }
+            </button>
+          )}
+          {canAuditDc && (
+            <button
+              className={`btn btn-sm ${caja.audit_dc ? 'btn-secondary' : 'btn-primary'}`}
+              onClick={handleAuditDc}
+              disabled={auditandoDc}
+            >
+              {auditandoDc
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : caja.audit_dc ? '✓ Audit DC' : 'Audit DC'
               }
             </button>
           )}
@@ -254,9 +307,10 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
         </ActionsMenu>
       </div>
 
-      {caja.observaciones && (
-        <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
-          {caja.observaciones}
+      {caja.foto_url && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <div className="drawer-section-title">Adjuntos</div>
+          <FotoViewer pagoId={caja.id} fotoUrl={caja.foto_url} entity="cajas" />
         </div>
       )}
 
@@ -270,10 +324,9 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, onEdit, on
         ))}
       </div>
 
-      {caja.foto_url && (
-        <div style={{ marginBottom: '1rem' }}>
-          <div className="drawer-section-title">Foto</div>
-          <CajaFotoViewer cajaId={caja.id} fotoUrl={caja.foto_url} />
+      {caja.observaciones && (
+        <div style={{ marginTop: '0.75rem', marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
+          {caja.observaciones}
         </div>
       )}
 
@@ -959,8 +1012,9 @@ export default function CajaList() {
   const showConfirm = useUiStore((s) => s.showConfirm)
   const role        = activeApp?.role
   const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
-  const canEdit   = ['super_admin', 'dcsmart', 'admin'].includes(role)
-  const canDelete = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canEdit    = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canDelete  = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
 
   const [cajas,      setCajas]      = useState([])
   const [loading,    setLoading]    = useState(true)
@@ -1372,6 +1426,7 @@ export default function CajaList() {
             onRefreshList={load}
             canEdit={canEdit}
             canDelete={canDelete}
+            canAuditDc={canAuditDc}
             onEdit={() => openEdit(selectedId)}
             onDelete={handleDelete}
           />
