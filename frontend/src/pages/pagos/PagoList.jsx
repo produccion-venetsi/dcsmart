@@ -377,7 +377,6 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     ['Fecha',       fmtDate(pago.fecha)],
     ['Proveedor',   pago.proveedor?.nombre || '—'],
     ['Rubro / Cat', pago.rubcat ? `${pago.rubcat.rubro?.nombre} / ${pago.rubcat.categoria?.nombre}` : '—'],
-    ['Tipo',        pago.id_tipo || '—'],
     ['PV',          fmtPV(pago.pv)],
     ['Nro',         fmtNro(pago.nro)],
     ['Neto',        fmt$(pago.importe_neto)],
@@ -385,19 +384,32 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     ['Importe',     fmt$(pago.importe)],
     ['Método',      pago.metodo_pago?.nombre || '—'],
     ['Cashflow',    fmtDate(pago.cashflow)],
-    ['Dirección',   pago.ingresa_egreso != null ? (pago.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
-    ['Estado Op.',  ESTADO_OP_LABEL[pago.estado_op] ?? pago.estado_op ?? '—'],
     ['Pagado',      pago.pagado ? 'Sí' : 'No'],
     ['Fecha Pago',  fmtDate(pago.fecha_pago)],
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
-    ['Auditado',    audited ? 'Sí' : 'No'],
-    ...(canAuditDc ? [['Audit DC', auditedDc ? 'Sí' : 'No']] : []),
     ['Periódico',   periodico ? 'Sí' : 'No'],
   ]
 
   return (
     <div>
+      {/* Tags destacados: mismos indicadores que ya tienen color/badge en la tabla */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1rem' }}>
+        <span className={`badge ${audited ? 'badge-green' : 'badge-muted'}`}>{audited ? '✓ Auditado' : 'No auditado'}</span>
+        {canAuditDc && (
+          <span className={`badge ${auditedDc ? 'badge-purple' : 'badge-muted'}`}>{auditedDc ? '✓ Audit DC' : 'Sin Audit DC'}</span>
+        )}
+        {pago.ingresa_egreso != null && (
+          <span className={`badge ${pago.ingresa_egreso ? 'badge-green' : 'badge-red'}`}>{pago.ingresa_egreso ? 'Ingreso' : 'Egreso'}</span>
+        )}
+        {pago.estado_op && (
+          <span className={`badge ${ESTADO_BADGE[pago.estado_op] ?? 'badge-muted'}`}>{ESTADO_OP_LABEL[pago.estado_op] ?? pago.estado_op}</span>
+        )}
+        {pago.id_tipo && (
+          <span className={`badge ${TIPO_BADGE[pago.id_tipo] ?? 'badge-muted'}`}>{pago.id_tipo}</span>
+        )}
+      </div>
+
       <div style={{ marginBottom: '1.25rem' }}>
         <ActionsMenu label="Acciones">
           {canEdit && (
@@ -469,7 +481,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       {pagarOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           onClick={() => setPagarOpen(false)}>
-          <form onSubmit={handlePagar} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: '1.5rem', width: 340, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+          <form onSubmit={handlePagar} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: '1.5rem', width: 340, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Registrar pago</div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -497,12 +509,6 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
         </div>
       )}
 
-      {pago.observaciones && (
-        <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
-          {pago.observaciones}
-        </div>
-      )}
-
       {(pago.foto_url || pago.pdf_url) && (
         <div style={{ marginBottom: '0.5rem' }}>
           <div className="drawer-section-title">Adjuntos</div>
@@ -519,6 +525,12 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           </div>
         ))}
       </div>
+
+      {pago.observaciones && (
+        <div style={{ marginTop: '0.75rem', marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
+          {pago.observaciones}
+        </div>
+      )}
 
       {pago.importe != null && (() => {
         const sumaImpuestos = impuestos.reduce((acc, imp) => acc + Number(imp.monto), 0)
@@ -1041,7 +1053,7 @@ export default function PagoList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 18 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  const colCount = 20 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1321,6 +1333,8 @@ export default function PagoList() {
               <th>Pagado</th>
               <SortTh field="fecha_pago" minWidth={90}>Fecha Pago</SortTh>
               <SortTh field="periodo" minWidth={80}>Período</SortTh>
+              <th style={{ minWidth: 40, textAlign: 'center' }}>Foto</th>
+              <th style={{ minWidth: 40, textAlign: 'center' }}>PDF</th>
               {showLocalCol && <th>Local</th>}
             </tr>
           </thead>
@@ -1394,6 +1408,16 @@ export default function PagoList() {
                   </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
                   <td style={{ minWidth: 80 }}>{fmtMonth(p.periodo)}</td>
+                  <td style={{ minWidth: 40, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                    {p.foto_url
+                      ? <FotoViewer pagoId={p.id} fotoUrl={p.foto_url} drawerWidth={0} compact />
+                      : <span className="td-muted">—</span>}
+                  </td>
+                  <td style={{ minWidth: 40, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                    {p.pdf_url
+                      ? <FotoViewer pagoId={p.id} pdfUrl={p.pdf_url} drawerWidth={0} compact />
+                      : <span className="td-muted">—</span>}
+                  </td>
                   {showLocalCol && <td style={{ minWidth: 120, fontSize: 12 }}>{p.local?.nombre || <span className="td-muted">—</span>}</td>}
                 </tr>
               ))

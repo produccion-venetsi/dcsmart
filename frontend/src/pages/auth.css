@@ -132,6 +132,15 @@
   margin-bottom: 28px;
 }
 
+/* Tope defensivo: el <img> del logo no tiene tamaño intrínseco chico, así
+   que cualquier contexto que lo use sin una regla de tamaño propia (como
+   .auth-brand/.sel-brand más abajo) cae en esto en vez de su resolución
+   nativa (esto era exactamente lo que rompía StartChoice en mobile). */
+.app-logo {
+  max-width: 100%;
+  height: auto;
+}
+
 .auth-brand .app-logo {
   height: 100px;
   width: auto;
@@ -493,6 +502,11 @@
   text-align: center;
   margin-bottom: 44px;
   animation: fadeUp 0.5s var(--ease) both;
+}
+.sel-heading .app-logo {
+  height: 100px;
+  width: auto;
+  margin: 0 auto;
 }
 .sel-heading h1 {
   margin: 0;

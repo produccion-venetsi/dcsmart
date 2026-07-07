@@ -201,7 +201,7 @@ export default function CajaDetail() {
 
       <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* Info column */}
-        <div className="card" style={{ flex: '0 0 280px', minWidth: 240 }}>
+        <div className="card" style={{ flex: '0 1 280px', minWidth: 'min(240px, 100%)' }}>
           <div className="card-body">
             <div className="card-title">Datos del turno</div>
             <div className="detail-rows">
@@ -221,7 +221,7 @@ export default function CajaDetail() {
         </div>
 
         {/* Movements column */}
-        <div style={{ flex: 1, minWidth: 320 }}>
+        <div style={{ flex: 1, minWidth: 'min(320px, 100%)' }}>
           {/* Movimientos table */}
           <div className="table-wrap" style={{ marginBottom: '1.25rem' }}>
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

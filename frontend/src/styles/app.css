@@ -129,6 +129,7 @@ body {
   min-height: 0;
   padding: 2rem 2.25rem;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ═══════════════════════════════════════════════
@@ -364,6 +365,12 @@ body {
   color: var(--red);
 }
 
+/* ── mobile nav (topbar + off-canvas drawer) ── */
+/* Ocultos por defecto en escritorio; se activan dentro del media query
+   de RESPONSIVE (max-width: 900px), donde el sidebar normal ya desaparece. */
+.mobile-topbar { display: none; }
+.sidebar-mobile-backdrop { display: none; }
+
 /* ═══════════════════════════════════════════════
    PAGE STRUCTURE
    ═══════════════════════════════════════════════ */
@@ -428,6 +435,7 @@ body {
   gap: 0.6rem;
   align-items: center;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 /* ═══════════════════════════════════════════════
@@ -894,6 +902,15 @@ body {
   flex-direction: column;
 }
 
+/* Campo que ocupa 2 columnas dentro de un .form-grid (auto-fill). En mobile
+   la grilla suele tener una sola columna real disponible; forzar span 2 ahí
+   obliga al navegador a crear una columna extra igual, ensanchando la
+   grilla más allá del viewport. Se anula el span por debajo de los 640px. */
+.form-span-2 { grid-column: span 2; }
+@media (max-width: 640px) {
+  .form-span-2 { grid-column: auto; }
+}
+
 .form-label {
   font-size: 10px;
   font-weight: 700;
@@ -1099,6 +1116,7 @@ body {
 .pagination {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 1.25rem;
 }
@@ -1461,6 +1479,72 @@ tr.skel-row td {
   :root { --sidebar-w: 0px; }
   .sidebar { display: none; }
   .app-main { padding: 1.25rem; }
+
+  /* El visor de Foto/PDF (FotoViewer.jsx) se posiciona con un `right:
+     drawerWidth` inline para dejarse lugar junto al drawer de detalle en
+     desktop. En mobile el drawer ocupa toda la pantalla, así que ese
+     `right` fijo (500-680px) empuja el visor fuera de la pantalla. */
+  .media-panel-frame { right: 0 !important; }
+
+  /* Topbar con botón de menú, siempre visible arriba del contenido. */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .mobile-topbar-menu {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--t1);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .mobile-topbar-menu:hover { background: rgba(255,255,255,0.06); }
+  .mobile-topbar-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--t1);
+    letter-spacing: 0.02em;
+  }
+
+  /* Backdrop del menú off-canvas. */
+  .sidebar-mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1099;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s var(--ease, ease);
+  }
+  .sidebar-mobile-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* El sidebar, cuando está en modo off-canvas (.mobile-open), pasa de
+     display:none a un panel fijo que entra desde la izquierda. */
+  .sidebar.mobile-open {
+    display: flex;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(80vw, 300px);
+    max-width: 300px;
+    z-index: 1100;
+    box-shadow: 8px 0 32px rgba(0,0,0,0.4);
+    transform: translateX(0);
+    transition: transform 0.25s var(--ease, ease);
+  }
 }
 
 @media (max-width: 640px) {
@@ -1472,6 +1556,12 @@ tr.skel-row td {
   .quick-actions-grid { grid-template-columns: repeat(2, 1fr); }
   .filter-bar { gap: 0.5rem; }
   .search-input { min-width: 180px; }
+  .confirm-modal { padding: 1.25rem; }
+  .drawer-header { padding: 0.9rem 1rem; }
+  .drawer-body { padding: 1rem; }
+  /* Montos grandes (7+ dígitos) no entran a 22px en dos tarjetas de ~160px
+     de ancho -- se apilan en una columna en vez de reducir la fuente. */
+  .pdp-stat-card { flex: 1 1 100%; }
 }
 
 @media (max-width: 420px) {
