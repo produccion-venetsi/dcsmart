@@ -15,7 +15,7 @@ const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
   'DC (1)': 'badge-purple', 'DC (2)': 'badge-purple',
   DC_1: 'badge-purple', DC_2: 'badge-purple',
-  DDJJ: 'badge-red', M: 'badge-muted', NCA: 'badge-amber', NDA: 'badge-amber', STK: 'badge-blue',
+  DDJJ: 'badge-red', LF: 'badge-blue', M: 'badge-muted', NCA: 'badge-amber', NDA: 'badge-amber', STK: 'badge-blue',
 }
 const ESTADO_BADGE = {
   CAJA: 'badge-muted', CUENTA_CTE: 'badge-amber', MP_PDP: 'badge-blue', PDP: 'badge-green',
@@ -30,9 +30,9 @@ const ESTADO_OP_OPTIONS = [
   { value: 'PDP',        label: 'PDP' },
 ]
 const TIPO_PAGO_OPTIONS = [
-  'A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'
+  'A','B','C','CM','DC_1','DC_2','DDJJ','LF','M','NCA','NDA','STK'
 ]
-const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
+const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
 
 function IcoPlus() {
   return (
