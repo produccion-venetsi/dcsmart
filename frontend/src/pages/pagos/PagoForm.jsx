@@ -438,7 +438,7 @@ export default function PagoForm() {
 
           {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
           <div className="form-grid form-row">
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <div className="form-group form-span-2">
               <label className="form-label">Proveedor</label>
               <Combobox
                 value={form.id_proveedor}

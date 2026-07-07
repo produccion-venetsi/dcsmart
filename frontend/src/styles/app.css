@@ -902,6 +902,15 @@ body {
   flex-direction: column;
 }
 
+/* Campo que ocupa 2 columnas dentro de un .form-grid (auto-fill). En mobile
+   la grilla suele tener una sola columna real disponible; forzar span 2 ahí
+   obliga al navegador a crear una columna extra igual, ensanchando la
+   grilla más allá del viewport. Se anula el span por debajo de los 640px. */
+.form-span-2 { grid-column: span 2; }
+@media (max-width: 640px) {
+  .form-span-2 { grid-column: auto; }
+}
+
 .form-label {
   font-size: 10px;
   font-weight: 700;
@@ -1471,6 +1480,12 @@ tr.skel-row td {
   .sidebar { display: none; }
   .app-main { padding: 1.25rem; }
 
+  /* El visor de Foto/PDF (FotoViewer.jsx) se posiciona con un `right:
+     drawerWidth` inline para dejarse lugar junto al drawer de detalle en
+     desktop. En mobile el drawer ocupa toda la pantalla, así que ese
+     `right` fijo (500-680px) empuja el visor fuera de la pantalla. */
+  .media-panel-frame { right: 0 !important; }
+
   /* Topbar con botón de menú, siempre visible arriba del contenido. */
   .mobile-topbar {
     display: flex;
@@ -1544,6 +1559,9 @@ tr.skel-row td {
   .confirm-modal { padding: 1.25rem; }
   .drawer-header { padding: 0.9rem 1rem; }
   .drawer-body { padding: 1rem; }
+  /* Montos grandes (7+ dígitos) no entran a 22px en dos tarjetas de ~160px
+     de ancho -- se apilan en una columna en vez de reducir la fuente. */
+  .pdp-stat-card { flex: 1 1 100%; }
 }
 
 @media (max-width: 420px) {
