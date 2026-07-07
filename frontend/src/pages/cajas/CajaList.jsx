@@ -8,6 +8,7 @@ import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import CajaFotoViewer from '../../components/CajaFotoViewer.jsx'
+import FotoViewer from '../../components/FotoViewer.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
@@ -1329,11 +1330,11 @@ export default function CajaList() {
                         ? <span className="badge badge-muted">{c.origin}</span>
                         : <span className="td-muted">—</span>}
                     </td>
-                    <td>
+                    <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                       {c.foto_url && !c.foto_url.startsWith('gs://')
-                        ? <a href={c.foto_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
+                        ? <a href={c.foto_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)' }}><IcoLink /></a>
                         : c.foto_url
-                          ? <span className="td-muted" title="Ver en el detalle"><IcoLink /></span>
+                          ? <FotoViewer pagoId={c.id} fotoUrl={c.foto_url} entity="cajas" drawerWidth={0} compact />
                           : <span className="td-muted">—</span>}
                     </td>
                     {showLocalCol && <td className="td-muted">{c.local?.nombre ?? '—'}</td>}
