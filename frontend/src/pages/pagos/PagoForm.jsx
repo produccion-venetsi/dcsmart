@@ -59,6 +59,14 @@ function IcoTrash() {
     </svg>
   )
 }
+function IcoEdit() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
 
 export default function PagoForm() {
   const { id }          = useParams()
@@ -68,6 +76,7 @@ export default function PagoForm() {
   const activeLocal     = useAppStore((s) => s.activeLocal)
   const activeApp       = useAppStore((s) => s.activeApp)
   const notify          = useUiStore((s) => s.notify)
+  const showConfirm     = useUiStore((s) => s.showConfirm)
   const isEditing       = Boolean(id)
 
   const locales = activeApp?.locales ?? []
@@ -88,8 +97,13 @@ export default function PagoForm() {
   const [rubcatSelected, setRubcatSelected] = useState(null)
   const [previewNroOrd,  setPreviewNroOrd]  = useState(null)
 
-  // impuestos pendientes (solo al crear)
+  // impuestos pendientes (solo al crear, se mandan junto con el pago)
   const [pendingImp, setPendingImp] = useState([])
+  // impuestos ya guardados del pago (solo al editar; cada cambio pega al backend al toque)
+  const [savedImp,      setSavedImp]      = useState([])
+  const [savingImp,     setSavingImp]     = useState(false)
+  const [editingImpId,  setEditingImpId]  = useState(null)
+  const [editImpForm,   setEditImpForm]   = useState({ tipo: 'IVA21', monto: '' })
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
   const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
 
@@ -145,6 +159,7 @@ export default function PagoForm() {
           if (d.id_rubcat && d.rubcat) {
             setRubcatSelected(d.rubcat)
           }
+          setSavedImp(d.impuestos || [])
           setForm({
             fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
             id_proveedor:   d.id_proveedor   || '',
@@ -211,6 +226,18 @@ export default function PagoForm() {
     return next
   })
 
+  // El importe total es Neto + Impuestos − Descuento; nunca se edita a mano.
+  const impuestosSum = isEditing
+    ? savedImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
+    : pendingImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
+  useEffect(() => {
+    const neto = parseFloat(form.importe_neto) || 0
+    const descuento = parseFloat(form.descuento) || 0
+    if (!form.importe_neto && !impuestosSum && !descuento) { set('importe', ''); return }
+    const total = neto + impuestosSum - descuento
+    set('importe', total.toFixed(2))
+  }, [form.importe_neto, form.descuento, impuestosSum])
+
   // seleccionar proveedor desde el combobox: pre-llena rubcat y recalcula cashflow si hay plazo
   const selectProveedor = (prov) => {
     const plazo = prov.plazo || null
@@ -243,11 +270,52 @@ export default function PagoForm() {
       return data
     })
 
+  // impuestos guardados (edición): cada acción pega directo al backend y
+  // recarga la lista, que a su vez dispara el recálculo del importe total.
+  const handleAddSavedImp = async () => {
+    if (!impForm.monto) return
+    setSavingImp(true)
+    try {
+      await impuestosApi.create({ id_pago: id, tipo: impForm.tipo, monto: parseFloat(impForm.monto) })
+      const { data } = await impuestosApi.list({ id_pago: id, limit: 100 })
+      setSavedImp(data.data || data)
+      setImpForm(f => ({ ...f, monto: '' }))
+      notify('Impuesto agregado', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar el impuesto', 'error') }
+    finally { setSavingImp(false) }
+  }
+
+  const handleEditSavedImp = (imp) => {
+    setEditingImpId(imp.id)
+    setEditImpForm({ tipo: imp.tipo, monto: String(imp.monto) })
+  }
+
+  const handleSaveSavedImp = async (impId) => {
+    if (!editImpForm.monto) return
+    try {
+      await impuestosApi.update(impId, { tipo: editImpForm.tipo, monto: parseFloat(editImpForm.monto) })
+      setSavedImp(prev => prev.map(i => i.id === impId ? { ...i, tipo: editImpForm.tipo, monto: editImpForm.monto } : i))
+      setEditingImpId(null)
+      notify('Impuesto actualizado', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar el impuesto', 'error') }
+  }
+
+  const handleDeleteSavedImp = async (impId) => {
+    if (!(await showConfirm('¿Eliminar este impuesto?'))) return
+    try {
+      await impuestosApi.remove(impId)
+      setSavedImp(prev => prev.filter(i => i.id !== impId))
+      notify('Impuesto eliminado', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error al eliminar el impuesto', 'error') }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!activeLocal && !form.id_local) { notify('Seleccioná un local', 'error'); return }
-    if (!form.fecha)   { notify('La fecha es obligatoria', 'error'); return }
-    if (!form.importe) { notify('El importe es obligatorio', 'error'); return }
+    if (!form.fecha)     { notify('La fecha es obligatoria', 'error'); return }
+    if (!form.id_rubcat) { notify('El rubro / categoría es obligatorio', 'error'); return }
+    if (!form.id_metodo) { notify('El método de pago es obligatorio', 'error'); return }
+    if (!form.importe)   { notify('Ingresá el importe neto (o un impuesto) para calcular el total', 'error'); return }
     setLoading(true)
     try {
       let foto_url = form.foto_url
@@ -452,7 +520,7 @@ export default function PagoForm() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Rubro / Categoría</label>
+              <label className="form-label">Rubro / Categoría *</label>
               <Combobox
                 value={form.id_rubcat}
                 displayValue={rubcatSelected ? `${rubcatSelected.rubro?.nombre} / ${rubcatSelected.categoria?.nombre}` : ''}
@@ -465,10 +533,10 @@ export default function PagoForm() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Método de Pago</label>
+              <label className="form-label">Método de Pago *</label>
               <div className="form-input-wrap">
-                <select value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
-                  <option value="">Sin método</option>
+                <select required value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
+                  <option value="">Seleccioná un método…</option>
                   {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                 </select>
               </div>
@@ -555,11 +623,14 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Importe Total *</label>
+              <label className="form-label" title="Se calcula solo: Neto + Impuestos − Descuento">Importe Total</label>
               <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" required value={form.importe} onChange={e => set('importe', e.target.value)} />
+                <input type="number" step="0.01" placeholder="0.00" value={form.importe} disabled readOnly style={{ opacity: 0.75 }} />
               </div>
             </div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
+            El importe total se calcula automáticamente (Neto + Impuestos − Descuento).
           </div>
           <div style={{ marginTop: '0.5rem' }}>
             <span className={`badge ${form.pagado ? 'badge-green' : 'badge-muted'}`} style={{ fontSize: 12 }}>
@@ -568,13 +639,74 @@ export default function PagoForm() {
           </div>
         </div>
 
-        {/* ── Impuestos (solo al crear) ── */}
-        {!isEditing && (
-          <div className="form-panel">
-            <div className="form-panel-title">Impuestos</div>
+        {/* ── Impuestos ── */}
+        <div className="form-panel">
+          <div className="form-panel-title">Impuestos</div>
 
-            {/* Tabla de impuestos agregados */}
-            {pendingImp.length > 0 && (
+          {/* Tabla de impuestos: al crear son locales (se mandan junto al pago),
+              al editar cada cambio pega directo al backend. */}
+          {isEditing ? (
+            savedImp.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <table className="data-table" style={{ marginBottom: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Monto</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedImp.map((imp) => (
+                      <tr key={imp.id}>
+                        {editingImpId === imp.id ? (
+                          <>
+                            <td>
+                              <select value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                                {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="number" step="0.01" style={{ maxWidth: 110 }}
+                                value={editImpForm.monto}
+                                onChange={e => setEditImpForm(f => ({ ...f, monto: e.target.value }))}
+                              />
+                            </td>
+                            <td style={{ display: 'flex', gap: 4 }}>
+                              <button type="button" className="btn btn-sm btn-primary" onClick={() => handleSaveSavedImp(imp.id)}>Guardar</button>
+                              <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditingImpId(null)}>Cancelar</button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td><span className="badge badge-blue">{imp.tipo}</span></td>
+                            <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            <td style={{ display: 'flex', gap: 4 }}>
+                              <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditSavedImp(imp)}>
+                                <IcoEdit />
+                              </button>
+                              <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteSavedImp(imp.id)}>
+                                <IcoTrash />
+                              </button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
+                      <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
+                        ${impuestosSum.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : (
+            pendingImp.length > 0 && (
               <div style={{ marginBottom: '1rem' }}>
                 <table className="data-table" style={{ marginBottom: 0 }}>
                   <thead>
@@ -610,44 +742,45 @@ export default function PagoForm() {
                   </tbody>
                 </table>
               </div>
-            )}
+            )
+          )}
 
-            {/* Formulario para agregar un impuesto */}
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
-                <label className="form-label">Tipo</label>
-                <div className="form-input-wrap">
-                  <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
-                    {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
+          {/* Formulario para agregar un impuesto */}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
+              <label className="form-label">Tipo</label>
+              <div className="form-input-wrap">
+                <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                  {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                </select>
               </div>
-              <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
-                <label className="form-label">Monto</label>
-                <div className="form-input-wrap">
-                  <input
-                    type="number" step="0.01" placeholder="0.00"
-                    value={impForm.monto}
-                    onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ whiteSpace: 'nowrap' }}
-                disabled={!impForm.monto}
-                onClick={() => {
-                  if (!impForm.monto) return
-                  setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
-                  setImpForm(f => ({ ...f, monto: '' }))
-                }}
-              >
-                <IcoPlus /> Agregar
-              </button>
             </div>
+            <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+              <label className="form-label">Monto</label>
+              <div className="form-input-wrap">
+                <input
+                  type="number" step="0.01" placeholder="0.00"
+                  value={impForm.monto}
+                  onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ whiteSpace: 'nowrap' }}
+              disabled={!impForm.monto || savingImp}
+              onClick={() => {
+                if (isEditing) { handleAddSavedImp(); return }
+                if (!impForm.monto) return
+                setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
+                setImpForm(f => ({ ...f, monto: '' }))
+              }}
+            >
+              {savingImp ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <IcoPlus />} Agregar
+            </button>
           </div>
-        )}
+        </div>
 
         {/* ── Multimoneda (solo al crear) ── */}
         {!isEditing && (
