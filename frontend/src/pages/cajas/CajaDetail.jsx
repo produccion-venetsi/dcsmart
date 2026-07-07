@@ -27,6 +27,14 @@ function IcoPlus() {
     </svg>
   )
 }
+function IcoEdit() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
 function IcoMovs() {
   return (
     <svg viewBox="0 0 24 24" width={34} height={34} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
@@ -55,6 +63,9 @@ export default function CajaDetail() {
   const [loading, setLoading] = useState(true)
   const [newMov,  setNewMov]  = useState({ tipo: 'INGRESO', monto: '', id_metodo: '' })
   const [saving,  setSaving]  = useState(false)
+  const [editingMovId, setEditingMovId] = useState(null)
+  const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', monto: '' })
+  const [savingMovEdit, setSavingMovEdit] = useState(false)
   const [auditando, setAuditando] = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(true)
@@ -96,6 +107,23 @@ export default function CajaDetail() {
       notify('Movimiento eliminado', 'success')
       load()
     } catch { notify('Error al eliminar', 'error') }
+  }
+
+  const handleEditMov = (m) => {
+    setEditingMovId(m.id)
+    setEditMovForm({ tipo: m.tipo, monto: String(m.monto) })
+  }
+
+  const handleSaveMov = async (movId) => {
+    if (!editMovForm.monto) return
+    setSavingMovEdit(true)
+    try {
+      await movimientosApi.update(movId, { tipo: editMovForm.tipo, monto: parseFloat(editMovForm.monto) })
+      notify('Movimiento actualizado', 'success')
+      setEditingMovId(null)
+      load()
+    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar', 'error') }
+    finally { setSavingMovEdit(false) }
   }
 
   const handleAudit = async () => {
@@ -245,19 +273,46 @@ export default function CajaDetail() {
               <tbody>
                 {(caja.movimientos || []).map((m) => (
                   <tr key={m.id}>
-                    <td>
-                      <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>
-                        {m.tipo}
-                      </span>
-                    </td>
-                    <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
-                    <td className="td-number">{fmt$(m.monto)}</td>
-                    <td className="td-muted">{m.cantidad ?? '—'}</td>
-                    <td>
-                      <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                        <IcoTrash />
-                      </button>
-                    </td>
+                    {editingMovId === m.id ? (
+                      <>
+                        <td>
+                          <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                            <option>INGRESO</option>
+                            <option>EGRESO</option>
+                            <option>APERTURA</option>
+                            <option>CIERRE</option>
+                          </select>
+                        </td>
+                        <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                        <td>
+                          <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                        </td>
+                        <td className="td-muted">{m.cantidad ?? '—'}</td>
+                        <td style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-sm btn-primary" disabled={savingMovEdit} onClick={() => handleSaveMov(m.id)}>Guardar</button>
+                          <button className="btn btn-sm btn-secondary" onClick={() => setEditingMovId(null)}>Cancelar</button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td>
+                          <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>
+                            {m.tipo}
+                          </span>
+                        </td>
+                        <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                        <td className="td-number">{fmt$(m.monto)}</td>
+                        <td className="td-muted">{m.cantidad ?? '—'}</td>
+                        <td style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditMov(m)}>
+                            <IcoEdit />
+                          </button>
+                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                            <IcoTrash />
+                          </button>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
                 {(!caja.movimientos || caja.movimientos.length === 0) && (

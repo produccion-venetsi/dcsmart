@@ -73,6 +73,21 @@ async function getNextNroOrd(fastify, id_local) {
   return (last?.nro_ord ?? 0) + 1
 }
 
+// Traduce errores de Prisma (u otros inesperados) al guardar un pago a un
+// mensaje entendible para el usuario, en vez del error crudo de la DB.
+function translatePagoError(err) {
+  if (err.code === 'P2003') {
+    const field = err.meta?.field_name || ''
+    if (field.includes('proveedor')) return 'El proveedor seleccionado no existe o fue eliminado'
+    if (field.includes('rubcat'))    return 'El rubro / categoría seleccionado no existe o fue eliminado'
+    if (field.includes('metodo'))    return 'El método de pago seleccionado no existe o fue eliminado'
+    if (field.includes('local'))     return 'El local seleccionado no existe o fue eliminado'
+    return 'Uno de los datos seleccionados (proveedor, rubro/categoría, método de pago o local) no es válido'
+  }
+  if (err.code === 'P2025') return 'El registro no existe o ya fue eliminado'
+  return 'No se pudo guardar el pago. Revisá los campos obligatorios e intentá de nuevo'
+}
+
 export default async function pagosRoutes(fastify) {
   await fastify.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } })
   const gcs = new Storage()
@@ -338,9 +353,11 @@ export default async function pagosRoutes(fastify) {
       periodo, ingresa_egreso, periodico, id_local, impuestos
     } = request.body
 
-    if (!fecha) return reply.code(400).send({ error: 'fecha es requerida' })
-    if (!importe && importe !== 0) return reply.code(400).send({ error: 'importe es requerido' })
-    if (!id_local) return reply.code(400).send({ error: 'id_local es requerido' })
+    if (!fecha) return reply.code(400).send({ error: 'La fecha de la factura es obligatoria' })
+    if (!importe && importe !== 0) return reply.code(400).send({ error: 'El importe es obligatorio' })
+    if (!id_local) return reply.code(400).send({ error: 'Seleccioná un local' })
+    if (!id_rubcat) return reply.code(400).send({ error: 'El rubro / categoría es obligatorio' })
+    if (!id_metodo) return reply.code(400).send({ error: 'El método de pago es obligatorio' })
 
     if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
@@ -351,42 +368,46 @@ export default async function pagosRoutes(fastify) {
       finalNroOrd = await getNextNroOrd(fastify, id_local)
     }
 
-    const pago = await fastify.db.pago.create({
-      data: {
-        nro_ord:        finalNroOrd,
-        fecha:          new Date(fecha),
-        id_proveedor:   id_proveedor   || null,
-        id_rubcat:      id_rubcat      || null,
-        id_tipo:        id_tipo        || null,
-        pv:             pv             ? (parseInt(pv) || null)    : null,
-        nro:            nro            ? BigInt(nro)              : null,
-        importe_neto:   importe_neto   ? parseFloat(importe_neto) : null,
-        descuento:      descuento      ? parseFloat(descuento)    : null,
-        importe:        importe        ? parseFloat(importe)      : null,
-        id_metodo:      id_metodo      || null,
-        cashflow:       cashflow       ? new Date(cashflow)       : null,
-        observaciones,
-        pagado:         pagado         ?? false,
-        fecha_pago:     fecha_pago     ? new Date(fecha_pago)     : null,
-        estado_op:      estado_op      || null,
-        foto_url, pdf_url,
-        periodo:        periodo        ? new Date(periodo)        : null,
-        ingresa_egreso: ingresa_egreso ?? true,
-        periodico:      periodico      ?? false,
-        id_local:       id_local       || null,
-        created_by:     request.user.id,
-        ...(impuestos && impuestos.length > 0 ? {
-          impuestos: {
-            create: impuestos.map(imp => ({
-              tipo:  imp.tipo,
-              monto: parseFloat(imp.monto)
-            }))
-          }
-        } : {})
-      },
-      include: { impuestos: true }
-    })
-    return reply.code(201).send(pago)
+    try {
+      const pago = await fastify.db.pago.create({
+        data: {
+          nro_ord:        finalNroOrd,
+          fecha:          new Date(fecha),
+          id_proveedor:   id_proveedor   || null,
+          id_rubcat,
+          id_tipo:        id_tipo        || null,
+          pv:             pv             ? (parseInt(pv) || null)    : null,
+          nro:            nro            ? BigInt(nro)              : null,
+          importe_neto:   importe_neto   ? parseFloat(importe_neto) : null,
+          descuento:      descuento      ? parseFloat(descuento)    : null,
+          importe:        importe        ? parseFloat(importe)      : null,
+          id_metodo,
+          cashflow:       cashflow       ? new Date(cashflow)       : null,
+          observaciones,
+          pagado:         pagado         ?? false,
+          fecha_pago:     fecha_pago     ? new Date(fecha_pago)     : null,
+          estado_op:      estado_op      || null,
+          foto_url, pdf_url,
+          periodo:        periodo        ? new Date(periodo)        : null,
+          ingresa_egreso: ingresa_egreso ?? true,
+          periodico:      periodico      ?? false,
+          id_local,
+          created_by:     request.user.id,
+          ...(impuestos && impuestos.length > 0 ? {
+            impuestos: {
+              create: impuestos.map(imp => ({
+                tipo:  imp.tipo,
+                monto: parseFloat(imp.monto)
+              }))
+            }
+          } : {})
+        },
+        include: { impuestos: true }
+      })
+      return reply.code(201).send(pago)
+    } catch (err) {
+      return reply.code(400).send({ error: translatePagoError(err) })
+    }
   })
 
   // ── PUT /:id ──────────────────────────────────────────────────────────
@@ -412,33 +433,44 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso al local destino' })
     }
 
-    const pago = await fastify.db.pago.update({
-      where: { id: request.params.id },
-      data: {
-        nro_ord:        nro_ord        !== undefined ? (parseInt(nro_ord) || null) : undefined,
-        fecha:          fecha                       ? new Date(fecha)             : undefined,
-        id_proveedor:   id_proveedor   !== undefined ? id_proveedor               : undefined,
-        id_rubcat:      id_rubcat      !== undefined ? id_rubcat                  : undefined,
-        id_tipo:        id_tipo        !== undefined ? id_tipo                    : undefined,
-        pv:             pv             !== undefined ? (parseInt(pv) || null)     : undefined,
-        nro:            nro            !== undefined ? (nro ? BigInt(nro) : null) : undefined,
-        importe_neto:   importe_neto   !== undefined ? parseFloat(importe_neto)   : undefined,
-        descuento:      descuento      !== undefined ? parseFloat(descuento)      : undefined,
-        importe:        importe        !== undefined ? parseFloat(importe)        : undefined,
-        id_metodo:      id_metodo      !== undefined ? id_metodo                  : undefined,
-        cashflow:       cashflow                    ? new Date(cashflow)          : undefined,
-        observaciones,
-        pagado,
-        fecha_pago:     fecha_pago                  ? new Date(fecha_pago)        : undefined,
-        estado_op,
-        foto_url, pdf_url,
-        periodo:        periodo                     ? new Date(periodo)           : undefined,
-        ingresa_egreso,
-        periodico:      periodico      !== undefined ? periodico                  : undefined,
-        id_local:       id_local       !== undefined ? id_local                  : undefined,
-      }
-    })
-    return pago
+    if (id_rubcat !== undefined && !id_rubcat) {
+      return reply.code(400).send({ error: 'El rubro / categoría es obligatorio' })
+    }
+    if (id_metodo !== undefined && !id_metodo) {
+      return reply.code(400).send({ error: 'El método de pago es obligatorio' })
+    }
+
+    try {
+      const pago = await fastify.db.pago.update({
+        where: { id: request.params.id },
+        data: {
+          nro_ord:        nro_ord        !== undefined ? (parseInt(nro_ord) || null) : undefined,
+          fecha:          fecha                       ? new Date(fecha)             : undefined,
+          id_proveedor:   id_proveedor   !== undefined ? (id_proveedor || null)      : undefined,
+          id_rubcat:      id_rubcat      !== undefined ? id_rubcat                  : undefined,
+          id_tipo:        id_tipo        !== undefined ? (id_tipo || null)           : undefined,
+          pv:             pv             !== undefined ? (parseInt(pv) || null)     : undefined,
+          nro:            nro            !== undefined ? (nro ? BigInt(nro) : null) : undefined,
+          importe_neto:   importe_neto   !== undefined ? parseFloat(importe_neto)   : undefined,
+          descuento:      descuento      !== undefined ? parseFloat(descuento)      : undefined,
+          importe:        importe        !== undefined ? parseFloat(importe)        : undefined,
+          id_metodo:      id_metodo      !== undefined ? id_metodo                  : undefined,
+          cashflow:       cashflow                    ? new Date(cashflow)          : undefined,
+          observaciones,
+          pagado,
+          fecha_pago:     fecha_pago                  ? new Date(fecha_pago)        : undefined,
+          estado_op,
+          foto_url, pdf_url,
+          periodo:        periodo                     ? new Date(periodo)           : undefined,
+          ingresa_egreso,
+          periodico:      periodico      !== undefined ? periodico                  : undefined,
+          id_local:       id_local       !== undefined ? id_local                  : undefined,
+        }
+      })
+      return pago
+    } catch (err) {
+      return reply.code(400).send({ error: translatePagoError(err) })
+    }
   })
 
   // ── PATCH /:id/audit ───────────────────────────────────────────────────

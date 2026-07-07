@@ -174,6 +174,26 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       .finally(() => setLoadingImp(false))
   }
 
+  // El importe total es Neto + Impuestos − Descuento; se recalcula solo
+  // cada vez que cambia algún impuesto del pago (igual que con multimoneda/neto).
+  const recalcImporte = async (impuestosList) => {
+    const suma = impuestosList.reduce((acc, imp) => acc + Number(imp.monto), 0)
+    const total = Number(pago.importe_neto ?? 0) + suma - Number(pago.descuento ?? 0)
+    await pagosApi.update(pago.id, { importe: total })
+    onPatch?.(pago.id, { importe: total })
+  }
+
+  const reloadImpuestosAndTotal = async () => {
+    setLoadingImp(true)
+    try {
+      const { data } = await impuestosApi.list({ id_pago: pago.id, limit: 100 })
+      const list = data.data || data
+      setImpuestos(list)
+      await recalcImporte(list)
+    } catch { notify('Error al recalcular el total', 'error') }
+    finally { setLoadingImp(false) }
+  }
+
   const loadMM = () => {
     setLoadingMM(true)
     pagosApi.listMM(pago.id)
@@ -240,8 +260,11 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
 
   const recalcNeto = async (updatedList) => {
     const neto = updatedList.reduce((acc, m) => acc + parseFloat(m.tdc) * parseFloat(m.monto), 0)
-    await pagosApi.update(pago.id, { importe_neto: neto > 0 ? neto : null })
-    onPatch?.(pago.id, { importe_neto: neto > 0 ? neto : null })
+    const nuevoNeto = neto > 0 ? neto : null
+    const suma = impuestos.reduce((acc, imp) => acc + Number(imp.monto), 0)
+    const total = Number(nuevoNeto ?? 0) + suma - Number(pago.descuento ?? 0)
+    await pagosApi.update(pago.id, { importe_neto: nuevoNeto, importe: total })
+    onPatch?.(pago.id, { importe_neto: nuevoNeto, importe: total })
   }
 
   const handleAddMM = async (e) => {
@@ -321,14 +344,14 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       notify('Impuesto agregado', 'success')
       setImpForm({ tipo: 'IVA21', monto: '' })
       setAddingImp(false)
-      loadImpuestos()
+      await reloadImpuestosAndTotal()
     } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
     finally { setSavingImp(false) }
   }
 
   const handleDeleteImp = async (id) => {
     if (!(await showConfirm('¿Eliminar impuesto?'))) return
-    try { await impuestosApi.remove(id); notify('Eliminado', 'success'); loadImpuestos() }
+    try { await impuestosApi.remove(id); notify('Eliminado', 'success'); await reloadImpuestosAndTotal() }
     catch { notify('Error al eliminar', 'error') }
   }
 
@@ -341,9 +364,9 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     if (!editImpForm.monto) return
     try {
       await impuestosApi.update(id, { tipo: editImpForm.tipo, monto: parseFloat(editImpForm.monto) })
-      setImpuestos(prev => prev.map(i => i.id === id ? { ...i, tipo: editImpForm.tipo, monto: editImpForm.monto } : i))
       setEditingImpId(null)
       notify('Impuesto actualizado', 'success')
+      await reloadImpuestosAndTotal()
     } catch { notify('Error al actualizar', 'error') }
   }
 
