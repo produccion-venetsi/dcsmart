@@ -105,7 +105,7 @@ export default function PagoForm() {
   const [editingImpId,  setEditingImpId]  = useState(null)
   const [editImpForm,   setEditImpForm]   = useState({ tipo: 'IVA21', monto: '' })
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
-  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
+  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
 
   // multimoneda (solo al crear — un único registro por pago)
   const [mmForm,  setMmForm]  = useState({ tipo: 'USD', tdc: '', monto: '' })
@@ -580,7 +580,7 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
                   <option value="">—</option>
-                  {['A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                  {['A','B','C','CM','DC_1','DC_2','DDJJ','LF','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
             </div>

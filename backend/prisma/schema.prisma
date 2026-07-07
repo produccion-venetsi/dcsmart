@@ -213,6 +213,10 @@ model Proveedor {
   mail_contacto String?
   mail_envio    String?
   tag           String?
+  cuenta        String?
+  observaciones String?
+  tipo_local    String?
+  tipo          String?
   id_rubcat     String?
   plazo         Int?
   activo        Boolean  @default(true)
@@ -385,6 +389,7 @@ enum TipoPago {
   DC_1 @map("DC (1)")
   DC_2 @map("DC (2)")
   DDJJ
+  LF
   M
   NCA
   NDA
@@ -433,6 +438,7 @@ enum TipoImpuesto {
   IVA10
   RETENCION
   PERCEPCION
+  IMP_INTERNOS
 
   @@map("tipo_impuesto")
 }
