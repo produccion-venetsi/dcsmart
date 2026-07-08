@@ -199,7 +199,9 @@ export default function Sidebar() {
     navigate('/select-app')
   }
 
-  if (!sidebarOpen && !mobileNavOpen) return null
+  // Colapsado: rail angosto solo con íconos. En mobile el off-canvas
+  // siempre se muestra expandido, independiente de sidebarOpen.
+  const collapsed = !sidebarOpen && !mobileNavOpen
 
   const locales    = activeApp?.locales ?? []
   const multiLocal = locales.length > 1
@@ -228,14 +230,14 @@ export default function Sidebar() {
         className={'sidebar-mobile-backdrop' + (mobileNavOpen ? ' open' : '')}
         onClick={closeMobileNav}
       />
-      <aside className={'sidebar' + (mobileNavOpen ? ' mobile-open' : '')}>
+      <aside className={'sidebar' + (mobileNavOpen ? ' mobile-open' : '') + (collapsed ? ' collapsed' : '')}>
       {/* Brand */}
       <div className="sidebar-brand">
         <AppLogo variant="horizontal" />
       </div>
 
       {/* App / Local context */}
-      {activeApp && (
+      {activeApp && !collapsed && (
         <div className="sidebar-context">
           {isGlobal ? (
             <div style={{
@@ -284,9 +286,10 @@ export default function Sidebar() {
             to={to}
             className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
             onClick={closeMobileNav}
+            title={collapsed ? label : undefined}
           >
             <Icon />
-            {label}
+            <span className="nav-item-label">{label}</span>
           </NavLink>
         ))}
 
@@ -298,9 +301,10 @@ export default function Sidebar() {
                 key={to}
                 to={to}
                 className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+                title={collapsed ? label : undefined}
               >
                 <Icon />
-                {label}
+                <span className="nav-item-label">{label}</span>
               </NavLink>
             ))}
           </>
@@ -309,7 +313,7 @@ export default function Sidebar() {
 
       {/* User footer */}
       <div className="sidebar-user">
-        <div className="sidebar-user-avatar">
+        <div className="sidebar-user-avatar" title={collapsed ? user?.nombre : undefined}>
           {user?.avatar_url && !avatarFailed
             ? <img src={user.avatar_url} alt={user.nombre} onError={() => setAvatarFailed(true)} />
             : initials(user?.nombre)}

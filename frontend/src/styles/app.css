@@ -52,6 +52,7 @@
 
   /* layout */
   --sidebar-w: 234px;
+  --sidebar-w-collapsed: 64px;
   --blur:      18px;
   --ease:      cubic-bezier(0.2, 0.8, 0.2, 1);
 
@@ -172,9 +173,20 @@ body {
   transition: left 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .sidebar-collapse-toggle:hover { color: var(--t1); border-color: var(--border-hi); }
-.sidebar-collapse-toggle.collapsed { left: 14px; }
+.sidebar-collapse-toggle.collapsed { left: calc(var(--sidebar-w-collapsed) - 13px); }
 .sidebar-collapse-toggle span { display: flex; transition: transform 0.15s ease; }
 .sidebar-collapse-toggle span.flipped { transform: rotate(180deg); }
+
+/* ── sidebar colapsado: rail angosto solo con íconos ── */
+.sidebar.collapsed { width: var(--sidebar-w-collapsed); transition: width 0.15s ease; }
+.sidebar.collapsed .sidebar-brand { display: none; }
+.sidebar.collapsed .nav-item { justify-content: center; padding: 10px 0; margin: 0 8px 2px; gap: 0; }
+.sidebar.collapsed .nav-item-label { display: none; }
+.sidebar.collapsed .nav-section-label { justify-content: center; padding: 14px 6px 5px; }
+.sidebar.collapsed .nav-section-label::after { display: none; }
+.sidebar.collapsed .sidebar-user { flex-direction: column; justify-content: center; padding: 12px 4px; gap: 8px; }
+.sidebar.collapsed .sidebar-user-info { display: none; }
+.nav-item-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── brand ── */
 .sidebar-brand {
