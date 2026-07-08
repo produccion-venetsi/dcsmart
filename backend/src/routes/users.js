@@ -90,6 +90,32 @@ export default async function usersRoutes(fastify) {
     }
   })
 
+  // Borrado definitivo: solo permitido sobre un usuario ya desactivado (paso
+  // previo obligatorio con DELETE /:id de arriba). Preserva el historial de
+  // pagos/cajas/auditorías que haya creado (created_by/id_user quedan en
+  // null), y borra solo lo que es propio de la cuenta (roles, accesos,
+  // permisos, uso de apps).
+  fastify.delete('/:id/permanente', {
+    preHandler: [fastify.authenticate, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { id } = request.params
+    const user = await fastify.db.user.findUnique({ where: { id }, select: { id: true, activo: true } })
+    if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
+    if (user.activo) return reply.code(409).send({ error: 'Desactivá el usuario antes de eliminarlo definitivamente' })
+
+    await fastify.db.$transaction([
+      fastify.db.pago.updateMany({ where: { created_by: id }, data: { created_by: null } }),
+      fastify.db.caja.updateMany({ where: { created_by: id }, data: { created_by: null } }),
+      fastify.db.audit.updateMany({ where: { id_user: id }, data: { id_user: null } }),
+      fastify.db.userAppRole.deleteMany({ where: { id_user: id } }),
+      fastify.db.userLocalAccess.deleteMany({ where: { id_user: id } }),
+      fastify.db.userPermission.deleteMany({ where: { id_user: id } }),
+      fastify.db.userAppUsage.deleteMany({ where: { id_user: id } }),
+      fastify.db.user.delete({ where: { id } }),
+    ])
+    return reply.code(204).send()
+  })
+
   // ─── Asignación de rol/app — solo super_admin ──────────────────────────────
   // Roles globales (super_admin, dcsmart): id_app debe omitirse → null en DB
   // Roles scoped (admin, cajero): id_app requerido

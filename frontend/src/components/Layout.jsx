@@ -11,6 +11,29 @@ function IcoMenu() {
   )
 }
 
+function IcoChevronLeft() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  )
+}
+
+function SidebarCollapseToggle() {
+  const sidebarOpen   = useUiStore((s) => s.sidebarOpen)
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+  return (
+    <button
+      className={'sidebar-collapse-toggle' + (sidebarOpen ? '' : ' collapsed')}
+      onClick={toggleSidebar}
+      title={sidebarOpen ? 'Colapsar menú' : 'Expandir menú'}
+      aria-label={sidebarOpen ? 'Colapsar menú' : 'Expandir menú'}
+    >
+      <span className={sidebarOpen ? '' : 'flipped'}><IcoChevronLeft /></span>
+    </button>
+  )
+}
+
 function MobileTopbar() {
   const toggleMobileNav = useUiStore((s) => s.toggleMobileNav)
   return (
@@ -137,6 +160,7 @@ export default function Layout() {
   return (
     <div className="app-layout">
       <Sidebar />
+      <SidebarCollapseToggle />
       <div className="app-body">
         <MobileTopbar />
         <main className="app-main">

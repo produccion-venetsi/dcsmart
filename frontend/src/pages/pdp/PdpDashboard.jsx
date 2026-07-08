@@ -6,6 +6,7 @@ import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
+import { generarReportePdp } from '../../lib/pdpReport.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -62,6 +63,15 @@ function IcoUndo() {
   return (
     <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+    </svg>
+  )
+}
+function IcoFile() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="9" y1="15" x2="15" y2="15" /><line x1="9" y1="11" x2="15" y2="11" />
     </svg>
   )
 }
@@ -192,6 +202,7 @@ function PdpColumn({
   actionLabel, actionIcon, onAction,
   secondaryActionLabel, secondaryActionIcon, onSecondaryAction,
   working,
+  onGenerateReport, generatingReport,
 }) {
   const [collapsed, setCollapsed] = useState(() => new Set())
 
@@ -217,6 +228,18 @@ function PdpColumn({
         <span className="pdp-col-title">{title}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="pdp-col-total">{fmt$(total)}</span>
+          {onGenerateReport && (
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={onGenerateReport}
+              disabled={groups.length === 0 || generatingReport}
+              title="Generar Reporte PDP (PDF)"
+            >
+              {generatingReport
+                ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, display: 'inline-block' }} />
+                : <IcoFile />} Reporte
+            </button>
+          )}
           {groups.length > 0 && (
             <button
               className="pdp-collapse-all"
@@ -334,6 +357,7 @@ export default function PdpDashboard() {
   const [selDeuda, setSelDeuda] = useState(new Set())
   const [selPagar, setSelPagar] = useState(new Set())
   const [pagarOpen, setPagarOpen] = useState(false)
+  const [generatingReport, setGeneratingReport] = useState(false)
 
   const [panelOpen,    setPanelOpen]    = useState(false)
   const [selectedPago, setSelectedPago] = useState(null)
@@ -400,6 +424,21 @@ export default function PdpDashboard() {
       load()
     } catch { notify('Error al revertir', 'error') }
     finally { setWorking(false) }
+  }
+
+  const handleGenerarReporte = async () => {
+    setGeneratingReport(true)
+    try {
+      await generarReportePdp({
+        localNombre: activeLocal?.nombre,
+        pagosPdp: pagar,
+        totalDeuda: sumImporte(deuda),
+      })
+    } catch {
+      notify('Error al generar el reporte', 'error')
+    } finally {
+      setGeneratingReport(false)
+    }
   }
 
   const handlePagar = async ({ fecha_pago, id_metodo }) => {
@@ -476,6 +515,8 @@ export default function PdpDashboard() {
           actionIcon={<IcoMoney />}
           onAction={() => setPagarOpen(true)}
           working={working}
+          onGenerateReport={handleGenerarReporte}
+          generatingReport={generatingReport}
         />
       </div>
 
