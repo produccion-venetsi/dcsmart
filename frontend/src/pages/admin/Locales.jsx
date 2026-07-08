@@ -53,6 +53,9 @@ export default function Locales() {
   const [selected,  setSelected]  = useState(null)
   const [form,      setForm]      = useState(EMPTY)
   const [saving,    setSaving]    = useState(false)
+  const [addingApp, setAddingApp] = useState(false)
+  const [newApp,    setNewApp]    = useState({ nombre: '', slug: '' })
+  const [savingApp, setSavingApp] = useState(false)
 
   const totalPages = Math.ceil(total / LIMIT)
 
@@ -70,7 +73,13 @@ export default function Locales() {
   useEffect(() => setPage(1), [filterApp])
   useEffect(load, [filterApp, page])
 
-  const openCreate = () => { setSelected(null); setForm(EMPTY); setPanelOpen(true) }
+  const slugify = (s) => s
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  const openCreate = () => { setSelected(null); setForm(EMPTY); setAddingApp(false); setNewApp({ nombre: '', slug: '' }); setPanelOpen(true) }
   const openEdit   = (l) => {
     setSelected(l)
     setForm({ nombre: l.nombre, id_app: l.id_app, direccion: l.direccion || '', telefono: l.telefono || '', activo: l.activo })
@@ -89,6 +98,22 @@ export default function Locales() {
       load()
     } catch (err) { notify(err.response?.data?.error || 'Error', 'error') }
     finally { setSaving(false) }
+  }
+
+  const handleCreateApp = async (e) => {
+    e.preventDefault()
+    if (!newApp.nombre.trim() || !newApp.slug.trim()) { notify('Nombre y slug son requeridos', 'error'); return }
+    setSavingApp(true)
+    try {
+      const { data } = await appsApi.create({ nombre: newApp.nombre.trim(), slug: newApp.slug.trim(), activo: true })
+      const { data: appsList } = await appsApi.list()
+      setApps(appsList)
+      setForm(f => ({ ...f, id_app: data.id }))
+      setAddingApp(false)
+      setNewApp({ nombre: '', slug: '' })
+      notify('App creada', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error al crear la app', 'error') }
+    finally { setSavingApp(false) }
   }
 
   const handleDelete = async (id, e) => {
@@ -196,12 +221,43 @@ export default function Locales() {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">App *</label>
-            <div className="form-input-wrap">
-              <select required value={form.id_app} onChange={e => setForm({ ...form, id_app: e.target.value })}>
-                <option value="">Seleccionar app...</option>
-                {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-              </select>
-            </div>
+            {!addingApp ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                <div className="form-input-wrap" style={{ flex: 1 }}>
+                  <select required value={form.id_app} onChange={e => setForm({ ...form, id_app: e.target.value })}>
+                    <option value="">Seleccionar app...</option>
+                    {apps.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                  </select>
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddingApp(true)}>
+                  <IcoPlus /> Nueva app
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0.75rem', border: '1px solid var(--border)', borderRadius: 8 }}>
+                <div className="form-input-wrap">
+                  <input
+                    placeholder="Nombre de la app"
+                    value={newApp.nombre}
+                    onChange={e => {
+                      const nombre = e.target.value
+                      setNewApp(f => ({ nombre, slug: f.slug === slugify(f.nombre) ? slugify(nombre) : f.slug }))
+                    }}
+                  />
+                </div>
+                <div className="form-input-wrap">
+                  <input placeholder="slug" value={newApp.slug} onChange={e => setNewApp(f => ({ ...f, slug: e.target.value }))} />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={handleCreateApp} disabled={savingApp}>
+                    {savingApp ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : 'Crear app'}
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddingApp(false)} disabled={savingApp}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="form-group" style={{ marginTop: '1rem' }}>
             <label className="form-label">Nombre *</label>
