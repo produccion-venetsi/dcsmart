@@ -166,6 +166,7 @@ const NAV_MAIN = [
 ]
 
 const NAV_ADMIN = [
+  { to: '/admin/apps',          label: 'Apps',          Icon: IcoApps,    roles: ['super_admin'] },
   { to: '/admin/locales',       label: 'Locales',       Icon: IcoLocales, roles: ['super_admin'] },
   { to: '/admin/users',         label: 'Usuarios',      Icon: IcoUsers,   roles: ['super_admin'] },
   { to: '/admin/roles',         label: 'Roles',         Icon: IcoRoles,   roles: ['super_admin'] },
