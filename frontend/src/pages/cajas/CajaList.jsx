@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
@@ -1434,8 +1434,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   )
 }
 
-const ROW_HEIGHT = 32
-const OVERSCAN = 20
+const LIMIT = 100
 export default function CajaList() {
   const [searchParams] = useSearchParams()
   const { activeApp, activeLocal } = useAppStore()
@@ -1449,6 +1448,8 @@ export default function CajaList() {
   const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
 
   const [cajas,      setCajas]      = useState([])
+  const [total,      setTotal]      = useState(0)
+  const [page,       setPage]       = useState(1)
   const [loading,    setLoading]    = useState(true)
   const [panelOpen,  setPanelOpen]  = useState(false)
   const [panelMode,  setPanelMode]  = useState('create')
@@ -1479,34 +1480,41 @@ export default function CajaList() {
   }, [filterOpen])
   const autoOpenedRef = useRef(false)
 
-  const scrollRef = useRef(null)
-  const [scrollTop, setScrollTop] = useState(0)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
 
-  const cajaListParams = () => ({
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT))
+
+  const cajaListParams = useCallback((pageNum) => ({
     id_local: activeLocal?.id,
-    limit: 0,
+    page: pageNum,
+    limit: LIMIT,
+    sort_field: sortField,
+    sort_dir: sortDir,
     ...(filters.audit !== '' ? { audit: filters.audit } : {}),
     ...(filters.desde !== '' ? { desde: filters.desde } : {}),
     ...(filters.hasta !== '' ? { hasta: filters.hasta } : {})
-  })
+  }), [activeLocal?.id, sortField, sortDir, filters])
+
+  // Volver a página 1 cuando cambian filtros / sort / local
+  useEffect(() => { setPage(1) }, [cajaListParams])
 
   const load = useCallback(() => {
     setLoading(true)
-    cajasApi.list(cajaListParams())
-      .then(({ data }) => setCajas(data.data))
+    cajasApi.list(cajaListParams(page))
+      .then(({ data }) => { setCajas(data.data); setTotal(data.total) })
       .catch(() => notify('Error al cargar cajas', 'error'))
       .finally(() => setLoading(false))
-  }, [activeLocal?.id, filters])
+  }, [cajaListParams, page])
 
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
     setSelectedIds(new Set())
-    cajasApi.list(cajaListParams(), ctrl.signal)
+    cajasApi.list(cajaListParams(page), ctrl.signal)
       .then(({ data }) => {
         setCajas(data.data)
+        setTotal(data.total)
         const turno = searchParams.get('turno')
         if (!autoOpenedRef.current && turno) {
           const match = data.data.find(c => c.nro_turno === turno)
@@ -1519,42 +1527,20 @@ export default function CajaList() {
       .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar cajas', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [activeLocal?.id, filters])
+  }, [cajaListParams, page])
+
+  const goToPage = (p) => {
+    const next = Math.min(Math.max(1, p), totalPages)
+    if (next !== page) {
+      setPage(next)
+      document.querySelector('.app-main')?.scrollTo({ top: 0 })
+    }
+  }
 
   const toggleSort = (field) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
   }
-
-  const sortedCajas = useMemo(() => {
-    return [...cajas].sort((a, b) => {
-      const va = a[sortField] ?? ''
-      const vb = b[sortField] ?? ''
-      if (va < vb) return sortDir === 'asc' ? -1 : 1
-      if (va > vb) return sortDir === 'asc' ? 1 : -1
-      return 0
-    })
-  }, [cajas, sortField, sortDir])
-
-  // Scroll virtual
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const onScroll = () => setScrollTop(el.scrollTop)
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [])
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0 })
-  }, [sortField, sortDir])
-
-  const viewportH = scrollRef.current?.clientHeight ?? 800
-  const startIdx  = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
-  const endIdx    = Math.min(sortedCajas.length, Math.ceil((scrollTop + viewportH) / ROW_HEIGHT) + OVERSCAN)
-  const topPad    = startIdx * ROW_HEIGHT
-  const bottomPad = Math.max(0, (sortedCajas.length - endIdx) * ROW_HEIGHT)
-  const visibleCajas = sortedCajas.slice(startIdx, endIdx)
 
   const handleDelete = async (id, e) => {
     e?.stopPropagation()
@@ -1576,12 +1562,12 @@ export default function CajaList() {
     })
   }
 
-  const allVisibleSelected = sortedCajas.length > 0 && sortedCajas.every(c => selectedIds.has(c.id))
+  const allVisibleSelected = cajas.length > 0 && cajas.every(c => selectedIds.has(c.id))
   const toggleSelectAllVisible = () => {
-    setSelectedIds(allVisibleSelected ? new Set() : new Set(sortedCajas.map(c => c.id)))
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(cajas.map(c => c.id)))
   }
 
-  const selectedCajas    = sortedCajas.filter(c => selectedIds.has(c.id))
+  const selectedCajas    = cajas.filter(c => selectedIds.has(c.id))
   const canBulkAudit     = selectedCajas.some(c => !c.audit)
   const canBulkDesaudit  = selectedCajas.some(c => c.audit)
 
@@ -1656,11 +1642,6 @@ export default function CajaList() {
 
   return (
     <div className="page">
-      <style>{`
-        .vt-scroll-cajas { max-height: calc(100vh - 180px); overflow: auto; }
-        .vt-spacer td { padding: 0 !important; border: none !important; }
-      `}</style>
-
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Cajas</h1>
@@ -1747,7 +1728,7 @@ export default function CajaList() {
         </div>
       )}
 
-      <div ref={scrollRef} className="vt-scroll-cajas table-wrap">
+      <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
@@ -1780,7 +1761,7 @@ export default function CajaList() {
                   ))}
                 </tr>
               ))
-            ) : sortedCajas.length === 0 ? (
+            ) : cajas.length === 0 ? (
               <tr>
                 <td colSpan={colCount}>
                   <div className="table-empty">
@@ -1791,8 +1772,7 @@ export default function CajaList() {
               </tr>
             ) : (
               <>
-                {topPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: topPad }} /></tr>}
-                {visibleCajas.map((c) => (
+                {cajas.map((c) => (
                   <tr key={c.id} className="row-clickable" onClick={() => openDetail(c.id)}>
                     {selectionMode && (
                       <td onClick={e => e.stopPropagation()}>
@@ -1826,16 +1806,24 @@ export default function CajaList() {
                     {showLocalCol && <td className="td-muted">{c.local?.nombre ?? '—'}</td>}
                   </tr>
                 ))}
-                {bottomPad > 0 && <tr className="vt-spacer"><td colSpan={colCount} style={{ height: bottomPad }} /></tr>}
               </>
             )}
           </tbody>
         </table>
       </div>
 
-      {!loading && cajas.length > 0 && (
-        <div className="pagination">
-          <span className="pagination-info">{cajas.length} cajas</span>
+      {!loading && total > 0 && (
+        <div className="pagination" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <span className="pagination-info">
+            {`${(page - 1) * LIMIT + 1}–${Math.min(page * LIMIT, total)} de ${total} cajas`}
+          </span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(1)} disabled={page <= 1} title="Primera página">«</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(page - 1)} disabled={page <= 1}>‹ Anterior</button>
+            <span className="pagination-info">Página {page} de {totalPages}</span>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(page + 1)} disabled={page >= totalPages}>Siguiente ›</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => goToPage(totalPages)} disabled={page >= totalPages} title="Última página">»</button>
+          </div>
         </div>
       )}
 

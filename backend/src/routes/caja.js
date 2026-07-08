@@ -51,7 +51,10 @@ export default async function cajaRoutes(fastify) {
 
   // ── GET / ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta, audit, page = 1, limit = 50 } = request.query
+    const {
+      id_local, desde, hasta, audit, page = 1, limit = 50,
+      sort_field = 'fecha_inicio', sort_dir = 'desc'
+    } = request.query
     const limitNum = Number(limit)
     const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
     const take = limitNum > 0 ? limitNum : undefined
@@ -74,6 +77,10 @@ export default async function cajaRoutes(fastify) {
       } : {})
     }
 
+    const VALID_SORT = ['fecha_inicio', 'fecha_cierre', 'nro_turno', 'cajero', 'total']
+    const orderField = VALID_SORT.includes(sort_field) ? sort_field : 'fecha_inicio'
+    const orderDir   = sort_dir === 'asc' ? 'asc' : 'desc'
+
     const [cajas, total] = await Promise.all([
       fastify.db.caja.findMany({
         where,
@@ -81,7 +88,7 @@ export default async function cajaRoutes(fastify) {
           local:   { select: { id: true, nombre: true } },
           creador: { select: { id: true, nombre: true } }
         },
-        orderBy: { fecha_inicio: 'desc' },
+        orderBy: { [orderField]: orderDir },
         skip,
         take
       }),
