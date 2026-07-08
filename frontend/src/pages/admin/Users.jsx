@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { usersApi }  from '../../api/users.js'
 import { appsApi }   from '../../api/apps.js'
 import { localesApi } from '../../api/locales.js'
@@ -102,6 +102,7 @@ export default function Users() {
   // List state
   const [users,   setUsers]   = useState([])
   const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
 
   // Detail drawer
   const [panelOpen,  setPanelOpen]  = useState(false)
@@ -230,6 +231,19 @@ export default function Users() {
       load()
     } catch {
       notify('Error al reactivar', 'error')
+    }
+  }
+
+  const handleHardDelete = async (id, e) => {
+    e?.stopPropagation?.()
+    if (!(await showConfirm('¿Eliminar este usuario definitivamente? No se puede deshacer.'))) return
+    try {
+      await usersApi.removePermanente(id)
+      notify('Usuario eliminado', 'success')
+      closeDetail()
+      load()
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al eliminar', 'error')
     }
   }
 
@@ -388,6 +402,14 @@ export default function Users() {
   // Render
   // ─────────────────────────────────────────────────────────────────────────
 
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return users
+    return users.filter(u =>
+      u.nombre?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+    )
+  }, [users, search])
+
   return (
     <div className="page">
       {/* ── Page head ── */}
@@ -400,6 +422,17 @@ export default function Users() {
           <button className="btn btn-primary" onClick={openNew}>
             <IcoPlus /> Nuevo Usuario
           </button>
+        </div>
+      </div>
+
+      <div className="filter-bar">
+        <div className="form-input-wrap" style={{ maxWidth: 320 }}>
+          <input
+            type="text"
+            placeholder="Buscar por nombre o email..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
       </div>
 
@@ -426,7 +459,7 @@ export default function Users() {
               ))
             ) : (
               <>
-                {users.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr key={u.id} className="row-clickable" onClick={() => openDetail(u)}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -455,20 +488,26 @@ export default function Users() {
                       </span>
                     </td>
                     <td>
-                      {u.activo && (
+                      {u.activo ? (
                         <button className="btn btn-sm btn-danger" onClick={(e) => handleDeactivate(u.id, e)}>
                           <IcoTrash /> Desactivar
                         </button>
+                      ) : (
+                        amISuperAdmin && (
+                          <button className="btn btn-sm btn-danger" onClick={(e) => handleHardDelete(u.id, e)}>
+                            <IcoTrash /> Eliminar
+                          </button>
+                        )
                       )}
                     </td>
                   </tr>
                 ))}
-                {users.length === 0 && (
+                {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan={5}>
                       <div className="table-empty">
                         <IcoUsers />
-                        <p>No hay usuarios registrados.</p>
+                        <p>{users.length === 0 ? 'No hay usuarios registrados.' : 'No hay usuarios que coincidan con la búsqueda.'}</p>
                       </div>
                     </td>
                   </tr>
@@ -875,12 +914,20 @@ export default function Users() {
                       <IcoTrash /> Desactivar usuario
                     </button>
                   ) : (
-                    <button
-                      className="btn btn-sm btn-secondary"
-                      onClick={() => handleReactivate(selected.id)}
-                    >
-                      ↺ Reactivar usuario
-                    </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => handleReactivate(selected.id)}
+                      >
+                        ↺ Reactivar usuario
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={(e) => handleHardDelete(selected.id, e)}
+                      >
+                        <IcoTrash /> Eliminar definitivamente
+                      </button>
+                    </div>
                   )}
                 </>
               )}

@@ -1076,7 +1076,7 @@ export default function PagoList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 20 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  const colCount = 19 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1347,7 +1347,6 @@ export default function PagoList() {
               <th>PV</th>
               <th>Nro</th>
               <th>Neto</th>
-              <th>Descuento</th>
               <SortTh field="importe" minWidth={90}>Importe</SortTh>
               <th>Método</th>
               <th>Cashflow</th>
@@ -1408,7 +1407,6 @@ export default function PagoList() {
                   <td className="td-mono" style={{ textAlign: 'right', minWidth: 60 }}>{fmtPV(p.pv)}</td>
                   <td className="td-mono" style={{ minWidth: 80 }}>{fmtNro(p.nro)}</td>
                   <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
-                  <td className="td-number" style={{ minWidth: 90 }}>{fmt$(p.descuento)}</td>
                   <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
                   <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.cashflow)}</td>

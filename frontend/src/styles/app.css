@@ -152,6 +152,30 @@ body {
 }
 .sidebar::-webkit-scrollbar { display: none; }
 
+/* ── botón flotante para colapsar/expandir el sidebar (solo desktop) ── */
+.sidebar-collapse-toggle {
+  position: absolute;
+  top: 22px;
+  left: calc(var(--sidebar-w) - 13px);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 20;
+  color: var(--t2);
+  padding: 0;
+  transition: left 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.sidebar-collapse-toggle:hover { color: var(--t1); border-color: var(--border-hi); }
+.sidebar-collapse-toggle.collapsed { left: 14px; }
+.sidebar-collapse-toggle span { display: flex; transition: transform 0.15s ease; }
+.sidebar-collapse-toggle span.flipped { transform: rotate(180deg); }
+
 /* ── brand ── */
 .sidebar-brand {
   display: flex;
@@ -1478,6 +1502,7 @@ tr.skel-row td {
 @media (max-width: 900px) {
   :root { --sidebar-w: 0px; }
   .sidebar { display: none; }
+  .sidebar-collapse-toggle { display: none; }
   .app-main { padding: 1.25rem; }
 
   /* El visor de Foto/PDF (FotoViewer.jsx) se posiciona con un `right:
