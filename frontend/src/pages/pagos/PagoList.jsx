@@ -132,8 +132,8 @@ function IcoArrowDown() {
 }
 
 function fmt$(n)     { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
-function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
-function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' }) : '—' }
+function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
+function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short', timeZone: 'UTC' }) : '—' }
 function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
 function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 

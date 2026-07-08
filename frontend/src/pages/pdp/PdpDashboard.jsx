@@ -13,8 +13,8 @@ function fmt$(n) {
     ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
     : '—'
 }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
-function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short' }) : '—' }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
+function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short', timeZone: 'UTC' }) : '—' }
 function todayISO() { return new Date().toISOString().slice(0, 10) }
 
 function provName(p) {

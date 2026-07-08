@@ -22,7 +22,7 @@ const TIPOS = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERN
 const TIPO_BADGE = { IVA21: 'badge-blue', IVA27: 'badge-blue', IVA10: 'badge-blue', RETENCION: 'badge-amber', PERCEPCION: 'badge-amber' }
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR') : '—' }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
 
 export default function Impuestos() {
   const notify      = useUiStore((s) => s.notify)

@@ -198,7 +198,7 @@ export default function CajaDetail() {
           <h1 className="page-title">
             {caja.nro_turno ? `Turno ${caja.nro_turno}` : `Caja #${caja.id.slice(0, 8)}`}
           </h1>
-          <p className="page-sub">{caja.local?.nombre} · {new Date(caja.fecha_inicio).toLocaleDateString('es-AR')}</p>
+          <p className="page-sub">{caja.local?.nombre} · {new Date(caja.fecha_inicio).toLocaleDateString('es-AR', { timeZone: 'UTC' })}</p>
         </div>
         <div className="page-actions">
           <button
