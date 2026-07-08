@@ -3,20 +3,36 @@ import multipart from '@fastify/multipart'
 
 // El estado de auditoría de un pago se guarda en la tabla `audits`
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
+// Cada auditar/desauditar inserta una fila nueva (historial append-only);
+// el estado actual es la fila con vigente=true de ese id_registro.
 
-// Devuelve un Set con los ids de pago que están auditados, de entre los ids dados.
-// Si la tabla `audits` no existiera / fallara la consulta, degradamos a "ninguno
-// auditado" para no romper el listado de pagos.
+// Devuelve un Set con los ids de pago que están auditados (vigente y con
+// accion='auditado'), de entre los ids dados.
 async function getAuditedSet(fastify, pagoIds) {
   if (!pagoIds.length) return new Set()
   try {
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: { in: pagoIds } },
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: false, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     return new Set(rows.map(r => r.id_registro))
   } catch (err) {
     fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedSet)')
+    return new Set()
+  }
+}
+
+// Igual que getAuditedSet pero para el circuito de auditoría DC (audit_dc: true).
+async function getAuditedDcSet(fastify, pagoIds) {
+  if (!pagoIds.length) return new Set()
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: true, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    return new Set(rows.map(r => r.id_registro))
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedDcSet)')
     return new Set()
   }
 }
@@ -34,7 +50,7 @@ async function buildAuditFilter(fastify, audit, allowedLocalIds) {
     const pagoIds = pagosInScope.map(p => p.id)
     if (!pagoIds.length) return audit === 'true' ? { id: { in: [] } } : {}
     const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: { in: pagoIds } },
+      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: false, vigente: true, accion: 'auditado' },
       select: { id_registro: true }
     })
     const auditedIds = [...new Set(rows.map(r => r.id_registro))]
@@ -43,6 +59,33 @@ async function buildAuditFilter(fastify, audit, allowedLocalIds) {
     fastify.log.error({ err }, 'No se pudo leer la tabla audits (buildAuditFilter)')
     return {}
   }
+}
+
+// Calcula el próximo nro_ord correlativo para un local: (último nro_ord
+// no nulo de ese local, descendente) + 1, o 1 si el local no tiene pagos
+// con nro_ord asignado todavía.
+async function getNextNroOrd(fastify, id_local) {
+  const last = await fastify.db.pago.findFirst({
+    where: { id_local, nro_ord: { not: null } },
+    orderBy: { nro_ord: 'desc' },
+    select: { nro_ord: true }
+  })
+  return (last?.nro_ord ?? 0) + 1
+}
+
+// Traduce errores de Prisma (u otros inesperados) al guardar un pago a un
+// mensaje entendible para el usuario, en vez del error crudo de la DB.
+function translatePagoError(err) {
+  if (err.code === 'P2003') {
+    const field = err.meta?.field_name || ''
+    if (field.includes('proveedor')) return 'El proveedor seleccionado no existe o fue eliminado'
+    if (field.includes('rubcat'))    return 'El rubro / categoría seleccionado no existe o fue eliminado'
+    if (field.includes('metodo'))    return 'El método de pago seleccionado no existe o fue eliminado'
+    if (field.includes('local'))     return 'El local seleccionado no existe o fue eliminado'
+    return 'Uno de los datos seleccionados (proveedor, rubro/categoría, método de pago o local) no es válido'
+  }
+  if (err.code === 'P2025') return 'El registro no existe o ya fue eliminado'
+  return 'No se pudo guardar el pago. Revisá los campos obligatorios e intentá de nuevo'
 }
 
 export default async function pagosRoutes(fastify) {
@@ -138,8 +181,14 @@ export default async function pagosRoutes(fastify) {
       fastify.db.pago.count({ where })
     ])
 
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
     const auditedSet = await getAuditedSet(fastify, pagos.map(p => p.id))
-    const data = pagos.map(p => ({ ...p, audit: auditedSet.has(p.id) }))
+    const auditedDcSet = isDc ? await getAuditedDcSet(fastify, pagos.map(p => p.id)) : new Set()
+    const data = pagos.map(p => ({
+      ...p,
+      audit: auditedSet.has(p.id),
+      ...(isDc ? { audit_dc: auditedDcSet.has(p.id) } : {})
+    }))
 
     return { data, total, page: Number(page), limit: Number(limit) }
   })
@@ -251,6 +300,17 @@ export default async function pagosRoutes(fastify) {
     }))
   })
 
+  // ── GET /next-nro-ord ────────────────────────────────────────────────
+  fastify.get('/next-nro-ord', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local } = request.query
+    if (!id_local) return reply.code(400).send({ error: 'id_local es requerido' })
+    if (!request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+    const nro_ord = await getNextNroOrd(fastify, id_local)
+    return { nro_ord }
+  })
+
   // ── GET /:id ───────────────────────────────────────────────────────────
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
     const pago = await fastify.db.pago.findUnique({
@@ -270,17 +330,17 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    // Estado de auditoría desde la tabla `audits` (último registro si existe).
+    // Estado de auditoría desde la tabla `audits` (fila vigente, si existe).
     const auditRow = await fastify.db.audit.findFirst({
-      where: { tabla: 'pagos', id_registro: pago.id },
-      orderBy: { fecha: 'desc' }
+      where: { tabla: 'pagos', id_registro: pago.id, vigente: true, audit_dc: false },
+      include: { user: { select: { id: true, nombre: true } } }
     })
 
     return {
       ...pago,
-      audit:      !!auditRow,
-      audit_by:   auditRow?.id_user ?? null,
-      audit_date: auditRow?.fecha   ?? null,
+      audit:      auditRow?.accion === 'auditado',
+      audit_by:   auditRow?.user?.nombre ?? null,
+      audit_date: auditRow?.fecha ?? null,
     }
   })
 
@@ -293,9 +353,11 @@ export default async function pagosRoutes(fastify) {
       periodo, ingresa_egreso, periodico, id_local, impuestos
     } = request.body
 
-    if (!fecha) return reply.code(400).send({ error: 'fecha es requerida' })
-    if (!importe && importe !== 0) return reply.code(400).send({ error: 'importe es requerido' })
-    if (!id_local) return reply.code(400).send({ error: 'id_local es requerido' })
+    if (!fecha) return reply.code(400).send({ error: 'La fecha de la factura es obligatoria' })
+    if (!importe && importe !== 0) return reply.code(400).send({ error: 'El importe es obligatorio' })
+    if (!id_local) return reply.code(400).send({ error: 'Seleccioná un local' })
+    if (!id_rubcat) return reply.code(400).send({ error: 'El rubro / categoría es obligatorio' })
+    if (!id_metodo) return reply.code(400).send({ error: 'El método de pago es obligatorio' })
 
     if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
@@ -303,50 +365,49 @@ export default async function pagosRoutes(fastify) {
 
     let finalNroOrd = nro_ord ? (parseInt(nro_ord) || null) : null
     if (!finalNroOrd) {
-      const last = await fastify.db.pago.findFirst({
-        where: { id_local, nro_ord: { not: null } },
-        orderBy: { nro_ord: 'desc' },
-        select: { nro_ord: true }
-      })
-      finalNroOrd = (last?.nro_ord ?? 0) + 1
+      finalNroOrd = await getNextNroOrd(fastify, id_local)
     }
 
-    const pago = await fastify.db.pago.create({
-      data: {
-        nro_ord:        finalNroOrd,
-        fecha:          new Date(fecha),
-        id_proveedor:   id_proveedor   || null,
-        id_rubcat:      id_rubcat      || null,
-        id_tipo:        id_tipo        || null,
-        pv:             pv             ? (parseInt(pv) || null)    : null,
-        nro:            nro            ? BigInt(nro)              : null,
-        importe_neto:   importe_neto   ? parseFloat(importe_neto) : null,
-        descuento:      descuento      ? parseFloat(descuento)    : null,
-        importe:        importe        ? parseFloat(importe)      : null,
-        id_metodo:      id_metodo      || null,
-        cashflow:       cashflow       ? new Date(cashflow)       : null,
-        observaciones,
-        pagado:         pagado         ?? false,
-        fecha_pago:     fecha_pago     ? new Date(fecha_pago)     : null,
-        estado_op:      estado_op      || null,
-        foto_url, pdf_url,
-        periodo:        periodo        ? new Date(periodo)        : null,
-        ingresa_egreso: ingresa_egreso ?? true,
-        periodico:      periodico      ?? false,
-        id_local:       id_local       || null,
-        created_by:     request.user.id,
-        ...(impuestos && impuestos.length > 0 ? {
-          impuestos: {
-            create: impuestos.map(imp => ({
-              tipo:  imp.tipo,
-              monto: parseFloat(imp.monto)
-            }))
-          }
-        } : {})
-      },
-      include: { impuestos: true }
-    })
-    return reply.code(201).send(pago)
+    try {
+      const pago = await fastify.db.pago.create({
+        data: {
+          nro_ord:        finalNroOrd,
+          fecha:          new Date(fecha),
+          id_proveedor:   id_proveedor   || null,
+          id_rubcat,
+          id_tipo:        id_tipo        || null,
+          pv:             pv             ? (parseInt(pv) || null)    : null,
+          nro:            nro            ? BigInt(nro)              : null,
+          importe_neto:   importe_neto   ? parseFloat(importe_neto) : null,
+          descuento:      descuento      ? parseFloat(descuento)    : null,
+          importe:        importe        ? parseFloat(importe)      : null,
+          id_metodo,
+          cashflow:       cashflow       ? new Date(cashflow)       : null,
+          observaciones,
+          pagado:         pagado         ?? false,
+          fecha_pago:     fecha_pago     ? new Date(fecha_pago)     : null,
+          estado_op:      estado_op      || null,
+          foto_url, pdf_url,
+          periodo:        periodo        ? new Date(periodo)        : null,
+          ingresa_egreso: ingresa_egreso ?? true,
+          periodico:      periodico      ?? false,
+          id_local,
+          created_by:     request.user.id,
+          ...(impuestos && impuestos.length > 0 ? {
+            impuestos: {
+              create: impuestos.map(imp => ({
+                tipo:  imp.tipo,
+                monto: parseFloat(imp.monto)
+              }))
+            }
+          } : {})
+        },
+        include: { impuestos: true }
+      })
+      return reply.code(201).send(pago)
+    } catch (err) {
+      return reply.code(400).send({ error: translatePagoError(err) })
+    }
   })
 
   // ── PUT /:id ──────────────────────────────────────────────────────────
@@ -372,38 +433,50 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso al local destino' })
     }
 
-    const pago = await fastify.db.pago.update({
-      where: { id: request.params.id },
-      data: {
-        nro_ord:        nro_ord        !== undefined ? (parseInt(nro_ord) || null) : undefined,
-        fecha:          fecha                       ? new Date(fecha)             : undefined,
-        id_proveedor:   id_proveedor   !== undefined ? id_proveedor               : undefined,
-        id_rubcat:      id_rubcat      !== undefined ? id_rubcat                  : undefined,
-        id_tipo:        id_tipo        !== undefined ? id_tipo                    : undefined,
-        pv:             pv             !== undefined ? (parseInt(pv) || null)     : undefined,
-        nro:            nro            !== undefined ? (nro ? BigInt(nro) : null) : undefined,
-        importe_neto:   importe_neto   !== undefined ? parseFloat(importe_neto)   : undefined,
-        descuento:      descuento      !== undefined ? parseFloat(descuento)      : undefined,
-        importe:        importe        !== undefined ? parseFloat(importe)        : undefined,
-        id_metodo:      id_metodo      !== undefined ? id_metodo                  : undefined,
-        cashflow:       cashflow                    ? new Date(cashflow)          : undefined,
-        observaciones,
-        pagado,
-        fecha_pago:     fecha_pago                  ? new Date(fecha_pago)        : undefined,
-        estado_op,
-        foto_url, pdf_url,
-        periodo:        periodo                     ? new Date(periodo)           : undefined,
-        ingresa_egreso,
-        periodico:      periodico      !== undefined ? periodico                  : undefined,
-        id_local:       id_local       !== undefined ? id_local                  : undefined,
-      }
-    })
-    return pago
+    if (id_rubcat !== undefined && !id_rubcat) {
+      return reply.code(400).send({ error: 'El rubro / categoría es obligatorio' })
+    }
+    if (id_metodo !== undefined && !id_metodo) {
+      return reply.code(400).send({ error: 'El método de pago es obligatorio' })
+    }
+
+    try {
+      const pago = await fastify.db.pago.update({
+        where: { id: request.params.id },
+        data: {
+          nro_ord:        nro_ord        !== undefined ? (parseInt(nro_ord) || null) : undefined,
+          fecha:          fecha                       ? new Date(fecha)             : undefined,
+          id_proveedor:   id_proveedor   !== undefined ? (id_proveedor || null)      : undefined,
+          id_rubcat:      id_rubcat      !== undefined ? id_rubcat                  : undefined,
+          id_tipo:        id_tipo        !== undefined ? (id_tipo || null)           : undefined,
+          pv:             pv             !== undefined ? (parseInt(pv) || null)     : undefined,
+          nro:            nro            !== undefined ? (nro ? BigInt(nro) : null) : undefined,
+          importe_neto:   importe_neto   !== undefined ? parseFloat(importe_neto)   : undefined,
+          descuento:      descuento      !== undefined ? parseFloat(descuento)      : undefined,
+          importe:        importe        !== undefined ? parseFloat(importe)        : undefined,
+          id_metodo:      id_metodo      !== undefined ? id_metodo                  : undefined,
+          cashflow:       cashflow                    ? new Date(cashflow)          : undefined,
+          observaciones,
+          pagado,
+          fecha_pago:     fecha_pago                  ? new Date(fecha_pago)        : undefined,
+          estado_op,
+          foto_url, pdf_url,
+          periodo:        periodo                     ? new Date(periodo)           : undefined,
+          ingresa_egreso,
+          periodico:      periodico      !== undefined ? periodico                  : undefined,
+          id_local:       id_local       !== undefined ? id_local                  : undefined,
+        }
+      })
+      return pago
+    } catch (err) {
+      return reply.code(400).send({ error: translatePagoError(err) })
+    }
   })
 
   // ── PATCH /:id/audit ───────────────────────────────────────────────────
-  // Alterna el estado de auditoría. Auditar = crear fila en `audits`.
-  // Des-auditar = borrar las filas de auditoría de ese pago.
+  // Alterna el estado de auditoría creando una fila nueva en `audits`
+  // (historial append-only). Nunca se borra: la fila anterior se marca
+  // vigente=false y se inserta una nueva vigente=true con la acción inversa.
   fastify.patch('/:id/audit', { preHandler: editHandler }, async (request, reply) => {
     const pago = await fastify.db.pago.findUnique({
       where: { id: request.params.id },
@@ -415,30 +488,144 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    const existing = await fastify.db.audit.findFirst({
-      where: { tabla: 'pagos', id_registro: request.params.id }
+    const { observaciones } = request.body ?? {}
+
+    const nextAccion = await fastify.db.$transaction(async (tx) => {
+      const current = await tx.audit.findFirst({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accion = current?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'pagos',
+          tipo:          'auditoria_pago',
+          accion,
+          aprobado:      accion === 'auditado',
+          vigente:       true,
+          audit_dc:      false,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accion === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      return accion
     })
 
-    if (existing) {
-      // Ya auditado → revertir (borrar todas las filas de auditoría del pago).
-      await fastify.db.audit.deleteMany({
-        where: { tabla: 'pagos', id_registro: request.params.id }
-      })
-      return { ok: true, audit: false }
+    return { ok: true, audit: nextAccion === 'auditado' }
+  })
+
+  // ── PATCH /:id/audit-dc ───────────────────────────────────────────────
+  // Circuito de auditoría exclusivo de super_admin/dcsmart. Cascadea el
+  // estado al circuito normal cuando difiere, sin dejar rastro visible
+  // para admin/cajero (observaciones null en la fila cascadeada).
+  fastify.patch('/:id/audit-dc', { preHandler: [fastify.authenticate, fastify.appContext, fastify.requireDc] }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+
+    if (!request.allowedLocalIds.includes(pago.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    // No auditado → crear registro de auditoría.
-    await fastify.db.audit.create({
-      data: {
-        id_registro: request.params.id,
-        tabla:       'pagos',
-        tipo:        'auditoria_pago',
-        aprobado:    true,
-        id_user:     request.user.id,
-        fecha:       new Date()
+    const { observaciones } = request.body ?? {}
+
+    const result = await fastify.db.$transaction(async (tx) => {
+      const currentDc = await tx.audit.findFirst({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: true, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: true, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accionDc = currentDc?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'pagos',
+          tipo:          'auditoria_pago',
+          accion:        accionDc,
+          aprobado:      accionDc === 'auditado',
+          vigente:       true,
+          audit_dc:      true,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accionDc === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      const currentNormal = await tx.audit.findFirst({
+        where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true }
+      })
+
+      let accionNormal = currentNormal?.accion === 'auditado' ? 'auditado' : 'desauditado'
+
+      if (accionNormal !== accionDc) {
+        await tx.audit.updateMany({
+          where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true },
+          data: { vigente: false }
+        })
+
+        await tx.audit.create({
+          data: {
+            id_registro:   request.params.id,
+            tabla:         'pagos',
+            tipo:          'auditoria_pago',
+            accion:        accionDc,
+            aprobado:      accionDc === 'auditado',
+            vigente:       true,
+            audit_dc:      false,
+            id_user:       request.user.id,
+            fecha:         new Date(),
+            observaciones: null
+          }
+        })
+
+        accionNormal = accionDc
       }
+
+      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado' }
     })
-    return { ok: true, audit: true }
+
+    return { ok: true, ...result }
+  })
+
+  // ── GET /:id/audit-history ─────────────────────────────────────────────
+  // Historial completo de eventos de auditoría de un pago, más reciente primero.
+  fastify.get('/:id/audit-history', { preHandler: viewHandler }, async (request, reply) => {
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
+    if (!request.allowedLocalIds.includes(pago.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
+
+    return fastify.db.audit.findMany({
+      where: {
+        tabla: 'pagos',
+        id_registro: request.params.id,
+        ...(isDc ? {} : { audit_dc: false })
+      },
+      orderBy: { fecha: 'desc' },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
   })
 
   // ── POST /mandar-pdp ───────────────────────────────────────────────────
@@ -633,7 +820,6 @@ export default async function pagosRoutes(fastify) {
     // Eliminar registros dependientes antes que el pago (FK constraints)
     await fastify.db.impuesto.deleteMany({ where: { id_pago: request.params.id } })
     await fastify.db.multiMoneda.deleteMany({ where: { id_pago: request.params.id } })
-    await fastify.db.audit.deleteMany({ where: { tabla: 'pagos', id_registro: request.params.id } })
     await fastify.db.pago.delete({ where: { id: request.params.id } })
     return reply.code(204).send()
   })

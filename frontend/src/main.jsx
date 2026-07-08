@@ -5,6 +5,8 @@ import App from './App.jsx'
 import './index.css'
 import './styles/app.css'
 
+if (import.meta.env.VITE_GIT_SHA) console.info('Build:', import.meta.env.VITE_GIT_SHA)
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

@@ -206,6 +206,51 @@
   .rep-kpi-grid { grid-template-columns: 1fr; }
 }
 
+.rep-kpi-grid.cols-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+@media (max-width: 1100px) {
+  .rep-kpi-grid.cols-5 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 600px) {
+  .rep-kpi-grid.cols-5 { grid-template-columns: 1fr; }
+}
+
+.rep-kpi-grid.cols-3 {
+  grid-template-columns: 1.3fr 1fr 1fr;
+}
+@media (max-width: 1100px) {
+  .rep-kpi-grid.cols-3 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .rep-kpi-grid.cols-3 { grid-template-columns: 1fr; }
+}
+
+.rep-kpi-grid.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+@media (max-width: 1100px) {
+  .rep-kpi-grid.cols-4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .rep-kpi-grid.cols-4 { grid-template-columns: 1fr; }
+}
+
+/* Grilla de 3 columnas para filas de tarjetas (tablas/gráficos de costo por
+   categoría). A diferencia de .rep-kpi-grid, colapsa antes (700px) porque
+   cada celda suele traer un gráfico completo, no solo un número. */
+.rep-3col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 18px;
+}
+@media (max-width: 1100px) {
+  .rep-3col-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .rep-3col-grid { grid-template-columns: 1fr; }
+}
+
 .rep-kpi {
   background: var(--bg-card);
   border: 1px solid var(--border);

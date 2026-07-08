@@ -1,4 +1,49 @@
+import multipart from '@fastify/multipart'
+import { Storage } from '@google-cloud/storage'
+
+// El estado de auditoría de una caja se guarda en la tabla `audits`
+// (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
+// Ver backend/src/routes/pagos.js para la explicación del historial append-only.
+
+async function getAuditedCajaSet(fastify, cajaIds) {
+  if (!cajaIds.length) return new Set()
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'cajas', id_registro: { in: cajaIds }, audit_dc: false, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    return new Set(rows.map(r => r.id_registro))
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedCajaSet)')
+    return new Set()
+  }
+}
+
+async function buildCajaAuditFilter(fastify, audit, allowedLocalIds) {
+  if (audit === undefined) return {}
+  try {
+    const cajasInScope = await fastify.db.caja.findMany({
+      where: { id_local: { in: allowedLocalIds } },
+      select: { id: true }
+    })
+    const cajaIds = cajasInScope.map(c => c.id)
+    if (!cajaIds.length) return audit === 'true' ? { id: { in: [] } } : {}
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'cajas', id_registro: { in: cajaIds }, audit_dc: false, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    const auditedIds = [...new Set(rows.map(r => r.id_registro))]
+    return audit === 'true' ? { id: { in: auditedIds } } : { id: { notIn: auditedIds } }
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (buildCajaAuditFilter)')
+    return {}
+  }
+}
+
 export default async function cajaRoutes(fastify) {
+  await fastify.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } })
+  const gcs = new Storage()
+
   const viewHandler    = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
   const createHandler  = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
   const editHandler    = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'edit')]
@@ -6,7 +51,7 @@ export default async function cajaRoutes(fastify) {
 
   // ── GET / ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta, page = 1, limit = 50 } = request.query
+    const { id_local, desde, hasta, audit, page = 1, limit = 50 } = request.query
     const limitNum = Number(limit)
     const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
     const take = limitNum > 0 ? limitNum : undefined
@@ -16,9 +61,11 @@ export default async function cajaRoutes(fastify) {
     }
 
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
+    const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
 
     const where = {
       ...localFilter,
+      ...auditFilter,
       ...(desde || hasta ? {
         fecha_inicio: {
           ...(desde ? { gte: new Date(desde) } : {}),
@@ -41,7 +88,10 @@ export default async function cajaRoutes(fastify) {
       fastify.db.caja.count({ where })
     ])
 
-    return { data: cajas, total, page: Number(page), limit: Number(limit) }
+    const auditedSet = await getAuditedCajaSet(fastify, cajas.map(c => c.id))
+    const data = cajas.map(c => ({ ...c, audit: auditedSet.has(c.id) }))
+
+    return { data, total, page: Number(page), limit: Number(limit) }
   })
 
   // ── GET /stats ─────────────────────────────────────────────────────────
@@ -101,7 +151,23 @@ export default async function cajaRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    return caja
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
+
+    const auditRow = await fastify.db.audit.findFirst({
+      where: { tabla: 'cajas', id_registro: caja.id, vigente: true, audit_dc: false },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
+    const auditDcRow = isDc ? await fastify.db.audit.findFirst({
+      where: { tabla: 'cajas', id_registro: caja.id, vigente: true, audit_dc: true }
+    }) : null
+
+    return {
+      ...caja,
+      audit:      auditRow?.accion === 'auditado',
+      audit_by:   auditRow?.user?.nombre ?? null,
+      audit_date: auditRow?.fecha ?? null,
+      ...(isDc ? { audit_dc: auditDcRow?.accion === 'auditado' } : {})
+    }
   })
 
   // ── POST / ────────────────────────────────────────────────────────────
@@ -170,6 +236,218 @@ export default async function cajaRoutes(fastify) {
       }
     })
     return caja
+  })
+
+  // ── POST /upload ───────────────────────────────────────────────────────
+  fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
+    const { id_local } = request.query
+    const data = await request.file()
+    if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
+    const bucket = process.env.GCS_BUCKET_NAME
+    if (!bucket) return reply.code(500).send({ error: 'GCS_BUCKET_NAME no configurado' })
+
+    let folder = 'general'
+    if (id_local) {
+      const local = await fastify.db.local.findUnique({ where: { id: id_local }, select: { nombre: true } })
+      if (local?.nombre) folder = local.nombre
+    }
+
+    const ext      = data.filename.split('.').pop().toLowerCase()
+    const filename = `${folder}/fotos-caja/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const file     = gcs.bucket(bucket).file(filename)
+    await new Promise((resolve, reject) => {
+      const stream = file.createWriteStream({ metadata: { contentType: data.mimetype } })
+      data.file.pipe(stream).on('error', reject).on('finish', resolve)
+    })
+    return { ok: true, url: `gs://${bucket}/${filename}` }
+  })
+
+  // ── GET /:id/attachment ────────────────────────────────────────────────
+  // Streams la foto de una caja desde GCS a través del backend (un navegador
+  // no puede cargar una URL gs:// directamente). Ver GET /pagos/:id/attachment
+  // en pagos.js para el mismo patrón.
+  fastify.get('/:id/attachment', { preHandler: viewHandler }, async (request, reply) => {
+    const caja = await fastify.db.caja.findUnique({
+      where: { id: request.params.id },
+      select: { foto_url: true, id_local: true }
+    })
+    if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const gsPath = caja.foto_url
+    if (!gsPath?.startsWith('gs://')) return reply.code(404).send({ error: 'Sin adjunto' })
+
+    const withoutScheme = gsPath.replace('gs://', '')
+    const slashIdx      = withoutScheme.indexOf('/')
+    const bucketName    = withoutScheme.slice(0, slashIdx)
+    const filePath      = withoutScheme.slice(slashIdx + 1)
+
+    const ext         = filePath.split('.').pop().toLowerCase()
+    const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
+
+    reply.header('Content-Type', contentType)
+    reply.header('Cache-Control', 'private, max-age=300')
+
+    const stream = gcs.bucket(bucketName).file(filePath).createReadStream({
+      userProject: process.env.GCS_PROJECT_ID,
+    })
+    stream.on('error', (err) => {
+      fastify.log.error({ err, gsPath }, 'GCS stream error')
+      if (!reply.sent) reply.code(502).send({ error: 'No se pudo obtener el archivo' })
+    })
+    return reply.send(stream)
+  })
+
+  // ── PATCH /:id/audit ───────────────────────────────────────────────────
+  // Mismo mecanismo de historial append-only que pagos (ver pagos.js).
+  fastify.patch('/:id/audit', { preHandler: editHandler }, async (request, reply) => {
+    const caja = await fastify.db.caja.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
+
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { observaciones } = request.body ?? {}
+
+    const nextAccion = await fastify.db.$transaction(async (tx) => {
+      const current = await tx.audit.findFirst({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accion = current?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'cajas',
+          tipo:          'auditoria_caja',
+          accion,
+          aprobado:      accion === 'auditado',
+          vigente:       true,
+          audit_dc:      false,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accion === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      return accion
+    })
+
+    return { ok: true, audit: nextAccion === 'auditado' }
+  })
+
+  // ── PATCH /:id/audit-dc ───────────────────────────────────────────────
+  // Ver pagos.js para la explicación completa del mecanismo de cascada.
+  fastify.patch('/:id/audit-dc', { preHandler: [fastify.authenticate, fastify.appContext, fastify.requireDc] }, async (request, reply) => {
+    const caja = await fastify.db.caja.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
+
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { observaciones } = request.body ?? {}
+
+    const result = await fastify.db.$transaction(async (tx) => {
+      const currentDc = await tx.audit.findFirst({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: true, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: true, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accionDc = currentDc?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'cajas',
+          tipo:          'auditoria_caja',
+          accion:        accionDc,
+          aprobado:      accionDc === 'auditado',
+          vigente:       true,
+          audit_dc:      true,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accionDc === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      const currentNormal = await tx.audit.findFirst({
+        where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true }
+      })
+
+      let accionNormal = currentNormal?.accion === 'auditado' ? 'auditado' : 'desauditado'
+
+      if (accionNormal !== accionDc) {
+        await tx.audit.updateMany({
+          where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true },
+          data: { vigente: false }
+        })
+
+        await tx.audit.create({
+          data: {
+            id_registro:   request.params.id,
+            tabla:         'cajas',
+            tipo:          'auditoria_caja',
+            accion:        accionDc,
+            aprobado:      accionDc === 'auditado',
+            vigente:       true,
+            audit_dc:      false,
+            id_user:       request.user.id,
+            fecha:         new Date(),
+            observaciones: null
+          }
+        })
+
+        accionNormal = accionDc
+      }
+
+      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado' }
+    })
+
+    return { ok: true, ...result }
+  })
+
+  // ── GET /:id/audit-history ─────────────────────────────────────────────
+  fastify.get('/:id/audit-history', { preHandler: viewHandler }, async (request, reply) => {
+    const caja = await fastify.db.caja.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
+    if (!request.allowedLocalIds.includes(caja.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const isDc = ['super_admin', 'dcsmart'].includes(request.activeRole)
+
+    return fastify.db.audit.findMany({
+      where: {
+        tabla: 'cajas',
+        id_registro: request.params.id,
+        ...(isDc ? {} : { audit_dc: false })
+      },
+      orderBy: { fecha: 'desc' },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
   })
 
   // ── DELETE /:id ────────────────────────────────────────────────────────

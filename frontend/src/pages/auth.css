@@ -132,6 +132,15 @@
   margin-bottom: 28px;
 }
 
+/* Tope defensivo: el <img> del logo no tiene tamaño intrínseco chico, así
+   que cualquier contexto que lo use sin una regla de tamaño propia (como
+   .auth-brand/.sel-brand más abajo) cae en esto en vez de su resolución
+   nativa (esto era exactamente lo que rompía StartChoice en mobile). */
+.app-logo {
+  max-width: 100%;
+  height: auto;
+}
+
 .auth-brand .app-logo {
   height: 100px;
   width: auto;
@@ -225,6 +234,16 @@
   font-size: 14.5px;
 }
 .auth-input input::placeholder { color: var(--t3); }
+
+/* Evita el fondo blanco que impone Chrome/Edge al autocompletar */
+.auth-input input:-webkit-autofill,
+.auth-input input:-webkit-autofill:hover,
+.auth-input input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--t1);
+  -webkit-box-shadow: 0 0 0px 1000px transparent inset;
+  box-shadow: 0 0 0px 1000px transparent inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
 
 .pw-toggle {
   flex: 0 0 auto;
@@ -484,6 +503,11 @@
   margin-bottom: 44px;
   animation: fadeUp 0.5s var(--ease) both;
 }
+.sel-heading .app-logo {
+  height: 100px;
+  width: auto;
+  margin: 0 auto;
+}
 .sel-heading h1 {
   margin: 0;
   font-size: 28px;
@@ -622,6 +646,63 @@
   font-size: 12px;
   color: var(--t3);
   font-weight: 500;
+}
+.app-card-locales-wrap {
+  flex: 1;
+  min-width: 0;
+  margin-right: 10px;
+}
+.app-card-foot .app-card-locales-summary {
+  display: block;
+  font-size: 12px;
+  color: var(--t3);
+  font-weight: 500;
+}
+
+/* Ticker horizontal: la card mantiene su alto fijo, los locales solo
+   aparecen y se deslizan al pasar el mouse. */
+.app-card-locales-marquee {
+  height: 20px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+}
+.app-card:hover .app-card-locales-marquee {
+  opacity: 1;
+}
+/* El degradado en los bordes solo tiene sentido cuando hay scroll infinito
+   (disimula el corte); en el caso estático (1-2 locales) tapaba contenido. */
+.app-card-locales-marquee.scrolling {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+.app-card-locales-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+}
+.app-card-locales-marquee.scrolling .app-card-locales-track {
+  animation: appCardLocalesScroll 12s linear infinite;
+  animation-play-state: paused;
+}
+.app-card:hover .app-card-locales-marquee.scrolling .app-card-locales-track {
+  animation-play-state: running;
+}
+@keyframes appCardLocalesScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.app-card-foot .app-card-locale-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: rgba(201, 176, 134, 0.12);
+  border: 1px solid rgba(201, 176, 134, 0.26);
+  color: var(--gold-bright);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .app-card-arrow {
   width: 28px;

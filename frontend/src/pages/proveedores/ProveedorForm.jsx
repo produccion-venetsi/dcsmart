@@ -14,7 +14,8 @@ function IcoBack() {
 const EMPTY = {
   nombre: '', razon_social: '', cuit: '', banco: '', cbu: '', alias: '',
   direccion_url: '', detalle_direc: '', telefono: '', mail_contacto: '',
-  mail_envio: '', tag: '', plazo: '', activo: true
+  mail_envio: '', tag: '', cuenta: '', observaciones: '', tipo_local: '', tipo: '',
+  plazo: '', activo: true
 }
 
 export default function ProveedorForm() {
@@ -124,6 +125,12 @@ export default function ProveedorForm() {
                 <input type="text" placeholder="Alias de transferencia" value={form.alias} onChange={e => set('alias', e.target.value)} />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Cuenta</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Número de cuenta bancaria" value={form.cuenta} onChange={e => set('cuenta', e.target.value)} />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -150,9 +157,9 @@ export default function ProveedorForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">URL Dirección</label>
+              <label className="form-label">Dirección</label>
               <div className="form-input-wrap">
-                <input type="url" placeholder="https://maps.google.com/..." value={form.direccion_url} onChange={e => set('direccion_url', e.target.value)} />
+                <input type="text" placeholder="Calle, número o link de Maps..." value={form.direccion_url} onChange={e => set('direccion_url', e.target.value)} />
               </div>
             </div>
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
@@ -166,6 +173,31 @@ export default function ProveedorForm() {
             <input type="checkbox" checked={form.activo} onChange={e => set('activo', e.target.checked)} />
             <span className="checkbox-label">Proveedor activo</span>
           </label>
+        </div>
+
+        {/* Otros datos */}
+        <div className="form-panel">
+          <div className="form-panel-title">Otros datos</div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label">Tipo</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Ej: PROVEEDOR" value={form.tipo} onChange={e => set('tipo', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Tipo de Local</label>
+              <div className="form-input-wrap">
+                <input type="text" placeholder="Ej: GASTRONOMICO" value={form.tipo_local} onChange={e => set('tipo_local', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">Observaciones</label>
+              <div className="form-input-wrap form-textarea-wrap">
+                <textarea rows={2} placeholder="Notas opcionales..." value={form.observaciones} onChange={e => set('observaciones', e.target.value)} />
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="form-actions">

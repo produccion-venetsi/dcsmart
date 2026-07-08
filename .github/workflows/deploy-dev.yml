@@ -24,9 +24,18 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: frontend
+        env:
+          VITE_GIT_SHA: ${{ github.sha }}
+          VITE_API_URL: ${{ secrets.BACKEND_URL }}/api
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_FRONTEND }}
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Deploy a Firebase Hosting (canal dev)
-        run: npx firebase-tools@latest hosting:channel:deploy dev --project dc-smart-mvp --token ${{ secrets.FIRABASETOKEN }}
+        run: npx firebase-tools@latest hosting:channel:deploy dev --project dc-smart-mvp
 
   deploy-backend:
     runs-on: ubuntu-latest
@@ -55,7 +64,12 @@ jobs:
       - name: Crear env vars file
         env:
           CLOUDRUN_ENV_YAML: ${{ secrets.CLOUDRUN_ENV_YAML }}
-        run: printf '%s' "$CLOUDRUN_ENV_YAML" > backend/.env.cloudrun.yaml
+          GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
+          GCS_PROJECT_ID: ${{ secrets.GCS_PROJECT_ID }}
+        run: |
+          printf '%s\n' "$CLOUDRUN_ENV_YAML" > backend/.env.cloudrun.yaml
+          printf 'GCS_BUCKET_NAME: %s\n' "$GCS_BUCKET_NAME" >> backend/.env.cloudrun.yaml
+          printf 'GCS_PROJECT_ID: %s\n' "$GCS_PROJECT_ID" >> backend/.env.cloudrun.yaml
 
       - name: Deploy a Cloud Run
         run: |

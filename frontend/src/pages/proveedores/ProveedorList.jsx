@@ -58,38 +58,43 @@ export default function ProveedorList() {
 
   const LIMIT = 100
 
-  const [proveedores,  setProveedores]  = useState([])
-  const [search,       setSearch]       = useState('')
-  const [showInac,     setShowInac]     = useState(false)
-  const [loading,      setLoading]      = useState(true)
-  const [page,         setPage]         = useState(1)
-  const [total,        setTotal]        = useState(0)
-  const [panelOpen,    setPanelOpen]    = useState(false)
-  const [selectedProv, setSelectedProv] = useState(null)
+  const [proveedores,     setProveedores]     = useState([])
+  const [search,          setSearch]          = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [showInac,        setShowInac]        = useState(false)
+  const [loading,         setLoading]         = useState(true)
+  const [page,            setPage]            = useState(1)
+  const [total,           setTotal]           = useState(0)
+  const [panelOpen,       setPanelOpen]       = useState(false)
+  const [selectedProv,    setSelectedProv]    = useState(null)
 
-  const totalPages = Math.ceil(total / LIMIT)
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT))
 
   const load = () => {
     setLoading(true)
-    proveedoresApi.list({ activo: showInac ? undefined : 'true', search: search || undefined, page, limit: LIMIT })
+    proveedoresApi.list({ activo: showInac ? undefined : 'true', search: debouncedSearch || undefined, page, limit: LIMIT })
       .then(({ data }) => { setProveedores(data.data); setTotal(data.total) })
       .catch(() => notify('Error al cargar proveedores', 'error'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { setPage(1) }, [search, showInac])
+  // ── Debounce búsqueda ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => { setPage(1) }, [debouncedSearch, showInac])
 
   useEffect(() => {
     const ctrl = new AbortController()
-    const t = setTimeout(() => {
-      setLoading(true)
-      proveedoresApi.list({ activo: showInac ? undefined : 'true', search: search || undefined, page, limit: LIMIT }, ctrl.signal)
-        .then(({ data }) => { setProveedores(data.data); setTotal(data.total) })
-        .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar proveedores', 'error') })
-        .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
-    }, 300)
-    return () => { clearTimeout(t); ctrl.abort() }
-  }, [search, showInac, page])
+    setLoading(true)
+    proveedoresApi.list({ activo: showInac ? undefined : 'true', search: debouncedSearch || undefined, page, limit: LIMIT }, ctrl.signal)
+      .then(({ data }) => { setProveedores(data.data); setTotal(data.total) })
+      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar proveedores', 'error') })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
+    return () => ctrl.abort()
+  }, [debouncedSearch, showInac, page])
 
   const handleDelete = async (id, e) => {
     e.stopPropagation()
@@ -208,11 +213,20 @@ export default function ProveedorList() {
         </table>
       </div>
 
-      {total > LIMIT && (
-        <div className="pagination">
-          <button className="btn btn-sm btn-secondary" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-          <span className="pagination-info">Página {page} de {totalPages} — {total} proveedores</span>
-          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</button>
+      {!loading && total > 0 && (
+        <div className="pagination" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <span className="pagination-info">
+            {`${(page - 1) * LIMIT + 1}–${Math.min(page * LIMIT, total)} de ${total} proveedores`}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button className="btn btn-sm btn-secondary" onClick={() => setPage(1)} disabled={page <= 1} title="Primera página">«</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>‹ Anterior</button>
+            <span style={{ fontSize: 13, color: 'var(--t2)', padding: '0 0.5rem', whiteSpace: 'nowrap' }}>
+              Página {page} de {totalPages}
+            </span>
+            <button className="btn btn-sm btn-secondary" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Siguiente ›</button>
+            <button className="btn btn-sm btn-secondary" onClick={() => setPage(totalPages)} disabled={page >= totalPages} title="Última página">»</button>
+          </div>
         </div>
       )}
 

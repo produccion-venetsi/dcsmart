@@ -9,7 +9,7 @@ const T = true, F = false
 
 const MODULES = [
   'caja', 'caja_movimientos', 'pagos', 'proveedores',
-  'rubros', 'categorias', 'metodos_pago', 'usuarios', 'apps', 'locales'
+  'rubros', 'categorias', 'metodos_pago', 'usuarios', 'apps', 'locales', 'reportes'
 ]
 
 const MATRIX = {
@@ -17,6 +17,7 @@ const MATRIX = {
     caja: [T,T,T,T], caja_movimientos: [T,T,T,T], pagos: [T,T,T,T],
     proveedores: [T,T,T,T], rubros: [T,T,T,T], categorias: [T,T,T,T],
     metodos_pago: [T,T,T,T], usuarios: [T,T,T,T], apps: [T,T,T,T], locales: [T,T,T,T],
+    reportes: [T,T,T,T],
   },
   dcsmart: {
     // Operación total — gestiona datos de todos los grupos pero NO administra la estructura
@@ -24,16 +25,28 @@ const MATRIX = {
     caja: [T,T,T,T], caja_movimientos: [T,T,T,T], pagos: [T,T,T,T],
     proveedores: [T,T,T,T], rubros: [T,F,F,F], categorias: [T,F,F,F],
     metodos_pago: [T,T,T,T], usuarios: [F,F,F,F], apps: [T,F,F,F], locales: [T,F,F,F],
+    reportes: [T,F,F,F],
   },
   admin: {
     caja: [T,T,T,F], caja_movimientos: [T,T,T,F], pagos: [T,T,T,F],
     proveedores: [T,T,T,F], rubros: [T,F,F,F], categorias: [T,F,F,F],
     metodos_pago: [T,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
+    // Reportes deja de ser automático para admin: pasa a ser un permiso
+    // individual, otorgable por usuario desde Admin → Usuarios (Task 7).
+    reportes: [F,F,F,F],
   },
   cajero: {
     caja: [T,T,F,F], caja_movimientos: [T,T,F,F], pagos: [T,T,F,F],
     proveedores: [T,F,F,F], rubros: [T,F,F,F], categorias: [T,F,F,F],
     metodos_pago: [T,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
+    reportes: [F,F,F,F],
+  },
+  reportes: {
+    // Rol restringido: solo ve Reportes, nada más.
+    caja: [F,F,F,F], caja_movimientos: [F,F,F,F], pagos: [F,F,F,F],
+    proveedores: [F,F,F,F], rubros: [F,F,F,F], categorias: [F,F,F,F],
+    metodos_pago: [F,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
+    reportes: [T,F,F,F],
   },
 }
 
@@ -42,6 +55,7 @@ const ROLE_DESC = {
   dcsmart:     'Operación total salvo gestión de usuarios y tabla rubcat',
   admin:       'Crea y edita datos operativos (sin borrar) de su app/locales',
   cajero:      'Ve y crea cajas y pagos de un local',
+  reportes:    'Solo ve Reportes, sin acceso a Cajas/Pagos/Proveedores',
 }
 
 const TEST_PASSWORD = 'Dcsmart2026!'
@@ -135,13 +149,27 @@ async function main() {
   }
   console.log('✓ DetalleTipos por defecto')
 
-  // ─── BORRAR USUARIOS EXISTENTES ───────────────────────────────────────
+  // ─── BORRAR USUARIOS EXISTENTES + RECREAR FIXTURES DE TEST ─────────────
+  // PELIGRO: esta sección borra TODOS los usuarios sin filtro y los
+  // reemplaza por 8 cuentas de prueba fijas. Pensada solo para una base de
+  // desarrollo/test recién creada -- NUNCA correr esto contra una base con
+  // usuarios reales. Requiere la variable de entorno ALLOW_SEED_RESET=true
+  // como confirmación explícita; sin ella, se saltea por completo y el
+  // script solo aplica los upserts de módulos/roles/permisos de arriba
+  // (esos sí son seguros de repetir contra producción).
+  if (process.env.ALLOW_SEED_RESET !== 'true') {
+    console.log('⏭  ALLOW_SEED_RESET no está en "true" — se omite el borrado/recreación de usuarios.')
+    console.log('\nSeed completado (solo módulos/roles/permisos).')
+    return
+  }
+
   // (nulea referencias created_by y limpia roles/accesos/overrides antes de borrar)
   await prisma.caja.updateMany({ where: { created_by: { not: null } }, data: { created_by: null } })
   await prisma.pago.updateMany({ where: { created_by: { not: null } }, data: { created_by: null } })
   await prisma.userPermission.deleteMany({})
   await prisma.userLocalAccess.deleteMany({})
   await prisma.userAppRole.deleteMany({})
+  await prisma.userAppUsage.deleteMany({})
   const deleted = await prisma.user.deleteMany({})
   console.log(`✓ Usuarios anteriores eliminados (${deleted.count})`)
 

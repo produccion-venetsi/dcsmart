@@ -20,20 +20,21 @@ model App {
   user_app_roles UserAppRole[]
   detalle_tipos  DetalleTipo[]
   local_access   UserLocalAccess[]
+  usage          UserAppUsage[]
 
   @@map("apps")
 }
 
 model Local {
-  id             String   @id @default(uuid())
-  nombre         String
-  direccion      String?
-  telefono       String?
-  activo         Boolean  @default(true)
-  id_app         String
-  id_proveedor   String?
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  nombre       String
+  direccion    String?
+  telefono     String?
+  activo       Boolean  @default(true)
+  id_app       String
+  id_proveedor String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
 
   app           App               @relation(fields: [id_app], references: [id])
   proveedor     Proveedor?        @relation(fields: [id_proveedor], references: [id])
@@ -61,6 +62,8 @@ model User {
   cajas_creadas    Caja[]            @relation("CajaCreatedBy")
   pagos_creados    Pago[]            @relation("PagoCreatedBy")
   local_access     UserLocalAccess[]
+  audits           Audit[]           @relation("AuditUser")
+  app_usage        UserAppUsage[]
 
   @@map("users")
 }
@@ -124,12 +127,24 @@ model UserAppRole {
   id_app  String? // null = acceso global (super_admin / dcsmart)
   id_role String
 
-  user  User  @relation(fields: [id_user], references: [id])
-  app   App?  @relation(fields: [id_app], references: [id])
-  role  Role  @relation(fields: [id_role], references: [id])
+  user User @relation(fields: [id_user], references: [id])
+  app  App? @relation(fields: [id_app], references: [id])
+  role Role @relation(fields: [id_role], references: [id])
 
   @@unique([id_user, id_app])
   @@map("user_app_roles")
+}
+
+model UserAppUsage {
+  id_user      String
+  id_app       String
+  last_used_at DateTime @default(now())
+
+  user User @relation(fields: [id_user], references: [id])
+  app  App  @relation(fields: [id_app], references: [id])
+
+  @@id([id_user, id_app])
+  @@map("user_app_usage")
 }
 
 model UserPermission {
@@ -198,15 +213,19 @@ model Proveedor {
   mail_contacto String?
   mail_envio    String?
   tag           String?
+  cuenta        String?
+  observaciones String?
+  tipo_local    String?
+  tipo          String?
   id_rubcat     String?
   plazo         Int?
   activo        Boolean  @default(true)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  rubcat   RubCat? @relation(fields: [id_rubcat], references: [id])
-  pagos    Pago[]
-  locales  Local[]
+  rubcat  RubCat? @relation(fields: [id_rubcat], references: [id])
+  pagos   Pago[]
+  locales Local[]
 
   @@map("proveedores")
 }
@@ -305,7 +324,7 @@ model CajaMovimiento {
   id        String         @id @default(uuid())
   tipo      TipoMovimiento
   id_metodo String?
-  monto     Decimal @db.Decimal(12, 2)
+  monto     Decimal        @db.Decimal(12, 2)
   id_caja   String
   cantidad  Int?
 
@@ -367,9 +386,10 @@ enum TipoPago {
   B
   C
   CM
-  DC_1  @map("DC (1)")
-  DC_2  @map("DC (2)")
+  DC_1 @map("DC (1)")
+  DC_2 @map("DC (2)")
   DDJJ
+  LF
   M
   NCA
   NDA
@@ -380,8 +400,8 @@ enum TipoPago {
 
 enum EstadoOp {
   CAJA
-  CUENTA_CTE  @map("CUENTA CTE")
-  MP_PDP      @map("MP PDP")
+  CUENTA_CTE @map("CUENTA CTE")
+  MP_PDP     @map("MP PDP")
   PDP
 
   @@map("estado_op")
@@ -418,6 +438,7 @@ enum TipoImpuesto {
   IVA10
   RETENCION
   PERCEPCION
+  IMP_INTERNOS
 
   @@map("tipo_impuesto")
 }
@@ -427,12 +448,19 @@ model Audit {
   id_registro   String
   tabla         String
   tipo          String
+  accion        String    @default("auditado")
   aprobado      Boolean?  @default(false)
+  vigente       Boolean   @default(true)
+  audit_dc      Boolean   @default(false)
   id_user       String?
   fecha         DateTime?
   observaciones String?
   created_at    DateTime? @default(now())
   updated_at    DateTime? @default(now())
 
+  user User? @relation("AuditUser", fields: [id_user], references: [id])
+
+  @@index([tabla, id_registro, vigente])
+  @@index([tabla, id_registro, fecha])
   @@map("audits")
 }

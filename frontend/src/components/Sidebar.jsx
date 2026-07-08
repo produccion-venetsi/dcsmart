@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
@@ -121,6 +122,14 @@ function IcoImpuestos() {
     </svg>
   )
 }
+function IcoAuditorias() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  )
+}
 function IcoTag() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -153,7 +162,7 @@ const NAV_MAIN = [
   { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
   { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
-  { to: '/reportes',    label: 'Reportes',    Icon: IcoReportes,  roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/reportes',    label: 'Reportes',    Icon: IcoReportes },
 ]
 
 const NAV_ADMIN = [
@@ -163,6 +172,7 @@ const NAV_ADMIN = [
   { to: '/admin/rubcat',        label: 'Rubros/Cats',   Icon: IcoRubCat,  roles: ['super_admin'] },
   { to: '/admin/metodos-pago',  label: 'Métodos Pago',  Icon: IcoMetodos, roles: ['super_admin', 'dcsmart'] },
   { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
+  { to: '/auditorias',          label: 'Auditorías',    Icon: IcoAuditorias, roles: ['super_admin'] },
 ]
 
 export default function Sidebar() {
@@ -170,9 +180,12 @@ export default function Sidebar() {
   const logout    = useAuthStore((s) => s.logout)
   const user      = useAuthStore((s) => s.user)
   const sidebarOpen    = useUiStore((s) => s.sidebarOpen)
+  const mobileNavOpen  = useUiStore((s) => s.mobileNavOpen)
+  const closeMobileNav = useUiStore((s) => s.closeMobileNav)
   const activeApp      = useAppStore((s) => s.activeApp)
   const activeLocal    = useAppStore((s) => s.activeLocal)
   const setActiveLocal = useAppStore((s) => s.setActiveLocal)
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -180,11 +193,12 @@ export default function Sidebar() {
   }
 
   const handleChangeApp = () => {
+    closeMobileNav()
     useAppStore.getState().clearContext()
     navigate('/select-app')
   }
 
-  if (!sidebarOpen) return null
+  if (!sidebarOpen && !mobileNavOpen) return null
 
   const locales    = activeApp?.locales ?? []
   const multiLocal = locales.length > 1
@@ -192,12 +206,28 @@ export default function Sidebar() {
 
   const role       = activeApp?.role
   const isGlobal   = role === 'super_admin' || role === 'dcsmart'
-  const visibleFor = (item) => !item.roles || item.roles.includes(role)
-  const mainItems  = NAV_MAIN.filter(visibleFor)
-  const adminItems = NAV_ADMIN.filter(visibleFor)
+  const isReportesOnly = role === 'reportes'
+
+  const visibleFor = (item) => {
+    if (item.to === '/reportes') return !!activeApp?.can_reportes
+    return !item.roles || item.roles.includes(role)
+  }
+  const mainItems = isReportesOnly
+    ? NAV_MAIN.filter(i => i.to === '/reportes')
+    : NAV_MAIN.filter(visibleFor)
+
+  // Admin: independiente de la app activa -- evalúa TODAS las asignaciones
+  // de rol del usuario, no la app elegida (para cuando no hay app activa).
+  const globalRoleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
+  const adminItems = NAV_ADMIN.filter(item => !item.roles || item.roles.some(r => globalRoleNames.includes(r)))
 
   return (
-    <aside className="sidebar">
+    <>
+      <div
+        className={'sidebar-mobile-backdrop' + (mobileNavOpen ? ' open' : '')}
+        onClick={closeMobileNav}
+      />
+      <aside className={'sidebar' + (mobileNavOpen ? ' mobile-open' : '')}>
       {/* Brand */}
       <div className="sidebar-brand">
         <AppLogo variant="horizontal" />
@@ -252,6 +282,7 @@ export default function Sidebar() {
             key={to}
             to={to}
             className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+            onClick={closeMobileNav}
           >
             <Icon />
             {label}
@@ -278,8 +309,8 @@ export default function Sidebar() {
       {/* User footer */}
       <div className="sidebar-user">
         <div className="sidebar-user-avatar">
-          {user?.avatar_url
-            ? <img src={user.avatar_url} alt={user.nombre} />
+          {user?.avatar_url && !avatarFailed
+            ? <img src={user.avatar_url} alt={user.nombre} onError={() => setAvatarFailed(true)} />
             : initials(user?.nombre)}
         </div>
         <div className="sidebar-user-info">
@@ -289,6 +320,7 @@ export default function Sidebar() {
           <IcoLogout />
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

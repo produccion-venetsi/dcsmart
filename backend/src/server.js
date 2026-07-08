@@ -22,6 +22,7 @@ import metodosRoutes from './routes/metodos_pago.js'
 import rolesRoutes from './routes/roles.js'
 import impuestosRoutes from './routes/impuestos.js'
 import reportesRoutes from './routes/reportes.js'
+import auditoriasRoutes from './routes/auditorias.js'
 
 // Serializar BigInt como string en JSON (para columnas como pagos.nro con IDs de MP)
 BigInt.prototype.toJSON = function () { return this.toString() }
@@ -29,7 +30,17 @@ BigInt.prototype.toJSON = function () { return this.toString() }
 const app = Fastify({ logger: true })
 
 await app.register(cors, {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, cb) => {
+    const allowed = [
+      process.env.FRONTEND_URL || 'http://localhost:5173',
+      'http://localhost:5173',
+    ]
+    if (!origin || allowed.includes(origin) || /\.web\.app$/.test(origin)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Not allowed by CORS'))
+    }
+  },
   credentials: true
 })
 
@@ -66,6 +77,7 @@ await app.register(metodosRoutes,  { prefix: '/api/metodos-pago' })
 await app.register(rolesRoutes,    { prefix: '/api/roles' })
 await app.register(impuestosRoutes,{ prefix: '/api/impuestos' })
 await app.register(reportesRoutes, { prefix: '/api/reportes' })
+await app.register(auditoriasRoutes, { prefix: '/api/auditorias' })
 
 app.get('/health', async () => ({ status: 'ok' }))
 

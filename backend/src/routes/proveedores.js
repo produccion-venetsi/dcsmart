@@ -3,8 +3,19 @@ export default async function proveedoresRoutes(fastify) {
 
   fastify.get('/', { preHandler: viewHandler }, async (request) => {
     const { activo, search, page = 1, limit = 50 } = request.query
-    const skip = (Number(page) - 1) * Number(limit)
-    const take = Number(limit)
+    const limitNum = Number(limit)
+    const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
+    const take = limitNum > 0 ? limitNum : undefined
+
+    // El CUIT se guarda con o sin guiones según cómo lo haya cargado cada
+    // usuario (el formulario no fuerza una máscara). Para que la búsqueda
+    // encuentre un proveedor sin importar el formato guardado, además del
+    // texto tal cual se buscan los dígitos solos y, si son 11 (CUIT
+    // completo), el formato canónico XX-XXXXXXXX-X.
+    const digits = search ? search.replace(/\D/g, '') : ''
+    const cuitVariants = digits
+      ? [digits, ...(digits.length === 11 ? [`${digits.slice(0, 2)}-${digits.slice(2, 10)}-${digits.slice(10)}`] : [])]
+      : []
 
     const where = {
       ...(activo !== undefined ? { activo: activo === 'true' } : {}),
@@ -12,7 +23,8 @@ export default async function proveedoresRoutes(fastify) {
         OR: [
           { nombre: { contains: search, mode: 'insensitive' } },
           { razon_social: { contains: search, mode: 'insensitive' } },
-          { cuit: { contains: search } }
+          { cuit: { contains: search } },
+          ...cuitVariants.map(v => ({ cuit: { contains: v } }))
         ]
       } : {})
     }
@@ -46,7 +58,8 @@ export default async function proveedoresRoutes(fastify) {
     const {
       nombre, razon_social, cuit, banco, cbu, alias,
       direccion_url, detalle_direc, telefono, mail_contacto,
-      mail_envio, tag, id_rubcat, plazo, activo
+      mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
+      id_rubcat, plazo, activo
     } = request.body
 
     if (!nombre && !razon_social) return reply.code(400).send({ error: 'nombre o razon_social es requerido' })
@@ -55,7 +68,8 @@ export default async function proveedoresRoutes(fastify) {
       data: {
         nombre, razon_social, cuit, banco, cbu, alias,
         direccion_url, detalle_direc, telefono, mail_contacto,
-        mail_envio, tag, id_rubcat: id_rubcat || null,
+        mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
+        id_rubcat: id_rubcat || null,
         plazo: plazo != null ? parseInt(plazo) : null,
         activo: activo ?? true
       }
@@ -69,7 +83,8 @@ export default async function proveedoresRoutes(fastify) {
     const {
       nombre, razon_social, cuit, banco, cbu, alias,
       direccion_url, detalle_direc, telefono, mail_contacto,
-      mail_envio, tag, id_rubcat, plazo, activo
+      mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
+      id_rubcat, plazo, activo
     } = request.body
 
     try {
@@ -78,7 +93,8 @@ export default async function proveedoresRoutes(fastify) {
         data: {
           nombre, razon_social, cuit, banco, cbu, alias,
           direccion_url, detalle_direc, telefono, mail_contacto,
-          mail_envio, tag, id_rubcat,
+          mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
+          id_rubcat,
           plazo: plazo != null ? parseInt(plazo) : null,
           activo
         }

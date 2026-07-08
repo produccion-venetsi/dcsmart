@@ -94,8 +94,15 @@ export default async function rubcatRoutes(fastify) {
   })
 
   // ─── RUBCAT ───────────────────────────────────────
-  fastify.get('/', { preHandler: viewHandler }, async () => {
+  fastify.get('/', { preHandler: viewHandler }, async (request) => {
+    const { search } = request.query
     return fastify.db.rubCat.findMany({
+      where: search ? {
+        OR: [
+          { rubro:     { nombre: { contains: search, mode: 'insensitive' } } },
+          { categoria: { nombre: { contains: search, mode: 'insensitive' } } }
+        ]
+      } : {},
       include: { rubro: true, categoria: true },
       orderBy: [{ rubro: { nombre: 'asc' } }, { categoria: { nombre: 'asc' } }]
     })

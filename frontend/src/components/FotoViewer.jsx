@@ -302,7 +302,7 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
   // Contenedor invisible que ocupa el espacio a la izquierda del drawer,
   // sin backdrop — el drawer sigue visible e interactuable detrás.
   return createPortal(
-    <div style={{
+    <div className="media-panel-frame" style={{
       position: 'fixed', top: 0, left: 0, bottom: 0,
       right: drawerWidth,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -365,7 +365,7 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560 }) {
+export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560, entity = 'pagos', compact = false }) {
   const [photoBlob,    setPhotoBlob]    = useState(null)
   const [pdfBlob,      setPdfBlob]      = useState(null)
   const [loadingPhoto, setLoadingPhoto] = useState(false)
@@ -373,34 +373,37 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560 
   const [errorPhoto,   setErrorPhoto]   = useState(false)
   const [panel,        setPanel]        = useState(null) // null | 'photo' | 'pdf'
 
-  useEffect(() => {
-    if (!fotoUrl || !pagoId) return
-    let cancelled = false
-    setLoadingPhoto(true)
-    setErrorPhoto(false)
-    client.get(`/pagos/${pagoId}/attachment?type=foto`, { responseType: 'blob' })
-      .then((res) => { if (!cancelled) setPhotoBlob(URL.createObjectURL(res.data)) })
-      .catch(() => { if (!cancelled) setErrorPhoto(true) })
-      .finally(() => { if (!cancelled) setLoadingPhoto(false) })
-    return () => { cancelled = true }
-  }, [pagoId, fotoUrl])
-
   useEffect(() => () => { photoBlob && URL.revokeObjectURL(photoBlob) }, [photoBlob])
   useEffect(() => () => { pdfBlob   && URL.revokeObjectURL(pdfBlob)   }, [pdfBlob])
 
   // Cerrar panel al desmontar
   useEffect(() => () => setPanel(null), [])
 
+  // Fotos y PDFs se traen bajo demanda (al abrir el panel), no al montar --
+  // este componente puede vivir en cada fila de una tabla, y traer todos los
+  // adjuntos de golpe sería costosísimo.
+  const openPhoto = useCallback(async () => {
+    setPanel('photo')
+    if (photoBlob || loadingPhoto) return
+    setLoadingPhoto(true)
+    setErrorPhoto(false)
+    try {
+      const res = await client.get(`/${entity}/${pagoId}/attachment?type=foto`, { responseType: 'blob' })
+      setPhotoBlob(URL.createObjectURL(res.data))
+    } catch { setErrorPhoto(true) }
+    finally { setLoadingPhoto(false) }
+  }, [pagoId, photoBlob, loadingPhoto, entity])
+
   const openPdf = useCallback(async () => {
     setPanel('pdf')
     if (pdfBlob || loadingPdf) return
     setLoadingPdf(true)
     try {
-      const res = await client.get(`/pagos/${pagoId}/attachment?type=pdf`, { responseType: 'blob' })
+      const res = await client.get(`/${entity}/${pagoId}/attachment?type=pdf`, { responseType: 'blob' })
       setPdfBlob(URL.createObjectURL(res.data))
     } catch {}
     finally { setLoadingPdf(false) }
-  }, [pagoId, pdfBlob, loadingPdf])
+  }, [pagoId, pdfBlob, loadingPdf, entity])
 
   if (!fotoUrl && !pdfUrl) return null
 
@@ -409,27 +412,29 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560 
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {fotoUrl && (
           <button
-            className={`btn btn-sm ${panel === 'photo' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setPanel(panel === 'photo' ? null : 'photo')}
+            className={`btn btn-sm ${panel === 'photo' ? 'btn-primary' : 'btn-secondary'}${compact ? ' btn-icon' : ''}`}
+            onClick={() => panel === 'photo' ? setPanel(null) : openPhoto()}
             disabled={!photoBlob && loadingPhoto}
             style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+            title="Foto"
           >
             {loadingPhoto
               ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
               : <IcoExpand />}
-            Foto
+            {!compact && 'Foto'}
           </button>
         )}
         {pdfUrl && (
           <button
-            className={`btn btn-sm ${panel === 'pdf' ? 'btn-primary' : 'btn-secondary'}`}
+            className={`btn btn-sm ${panel === 'pdf' ? 'btn-primary' : 'btn-secondary'}${compact ? ' btn-icon' : ''}`}
             onClick={() => panel === 'pdf' ? setPanel(null) : openPdf()}
             style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+            title="PDF"
           >
             {loadingPdf
               ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
               : <IcoPdf />}
-            PDF
+            {!compact && 'PDF'}
           </button>
         )}
       </div>

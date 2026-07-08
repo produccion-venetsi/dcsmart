@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { impuestosApi } from '../../api/impuestos.js'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
@@ -8,6 +8,8 @@ import { metodosApi } from '../../api/metodospago.js'
 import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import Combobox from '../../components/Combobox.jsx'
 
 function IcoBack() {
   return (
@@ -30,14 +32,6 @@ function IcoDown() {
     </svg>
   )
 }
-function IcoPaperclip() {
-  return (
-    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-    </svg>
-  )
-}
-
 function padLeft(val, len) {
   const str = String(val ?? '').replace(/\D/g, '')
   return str ? str.padStart(len, '0') : ''
@@ -65,6 +59,14 @@ function IcoTrash() {
     </svg>
   )
 }
+function IcoEdit() {
+  return (
+    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
 
 export default function PagoForm() {
   const { id }          = useParams()
@@ -74,14 +76,13 @@ export default function PagoForm() {
   const activeLocal     = useAppStore((s) => s.activeLocal)
   const activeApp       = useAppStore((s) => s.activeApp)
   const notify          = useUiStore((s) => s.notify)
+  const showConfirm     = useUiStore((s) => s.showConfirm)
   const isEditing       = Boolean(id)
 
   const locales = activeApp?.locales ?? []
 
   const hoy = new Date().toISOString().slice(0, 10)
 
-  const [proveedores,     setProveedores]     = useState([])
-  const [rubcats,         setRubcats]         = useState([])
   const [metodos,         setMetodos]         = useState([])
   const [loading,         setLoading]         = useState(false)
   const [localProveedor,  setLocalProveedor]  = useState(null)
@@ -90,16 +91,21 @@ export default function PagoForm() {
   const [uploadingFoto,   setUploadingFoto]   = useState(false)
   const [uploadingPdf,    setUploadingPdf]    = useState(false)
 
-  // combobox de proveedor
-  const [provSearch, setProvSearch] = useState('')
-  const [provOpen,   setProvOpen]   = useState(false)
-  const [provPlazo,  setProvPlazo]  = useState(null)
-  const provRef = useRef(null)
+  // proveedor y rubcat seleccionados (objeto completo, para mostrar su label en el Combobox)
+  const [provSelected,   setProvSelected]   = useState(null)
+  const [provPlazo,      setProvPlazo]      = useState(null)
+  const [rubcatSelected, setRubcatSelected] = useState(null)
+  const [previewNroOrd,  setPreviewNroOrd]  = useState(null)
 
-  // impuestos pendientes (solo al crear)
+  // impuestos pendientes (solo al crear, se mandan junto con el pago)
   const [pendingImp, setPendingImp] = useState([])
+  // impuestos ya guardados del pago (solo al editar; cada cambio pega al backend al toque)
+  const [savedImp,      setSavedImp]      = useState([])
+  const [savingImp,     setSavingImp]     = useState(false)
+  const [editingImpId,  setEditingImpId]  = useState(null)
+  const [editImpForm,   setEditImpForm]   = useState({ tipo: 'IVA21', monto: '' })
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
-  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
+  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
 
   // multimoneda (solo al crear — un único registro por pago)
   const [mmForm,  setMmForm]  = useState({ tipo: 'USD', tdc: '', monto: '' })
@@ -123,47 +129,37 @@ export default function PagoForm() {
   ]
 
   const [form, setForm] = useState(() => ({
-    fecha: modoRapido ? hoy : '',
+    fecha: hoy,
     id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? 'STK' : '',
     pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
     pagado: modoRapido, fecha_pago: modoRapido ? hoy : '', periodo: modoRapido ? hoy : '',
-    estado_op: 'CUENTA_CTE', ingresa_egreso: true,
+    estado_op: 'CUENTA_CTE', ingresa_egreso: false,
     periodico: false,
     id_local: activeLocal?.id || '',
     foto_url: '', pdf_url: '',
   }))
 
-  // cerrar dropdown al hacer click fuera
-  useEffect(() => {
-    const handler = (e) => {
-      if (provRef.current && !provRef.current.contains(e.target)) setProvOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
   useEffect(() => {
     const ctrl = new AbortController()
-    const provReq   = proveedoresApi.list({ activo: 'true', limit: 500 }, ctrl.signal)
-    const rubcatReq = rubcatApi.list()
-    const metReq    = metodosApi.list()
-    const pagoReq   = isEditing ? pagosApi.get(id, ctrl.signal) : Promise.resolve(null)
-    const localReq  = (!isEditing && modoRapido && activeLocal) ? localesApi.get(activeLocal.id) : Promise.resolve(null)
+    const metReq   = metodosApi.list()
+    const pagoReq  = isEditing ? pagosApi.get(id, ctrl.signal) : Promise.resolve(null)
+    const localReq = (!isEditing && modoRapido && activeLocal) ? localesApi.get(activeLocal.id) : Promise.resolve(null)
 
-    Promise.all([provReq, rubcatReq, metReq, pagoReq, localReq])
-      .then(([{ data: provs }, { data: rubs }, { data: mets }, pagoRes, localRes]) => {
-        setProveedores(provs.data)
-        setRubcats(rubs)
+    Promise.all([metReq, pagoReq, localReq])
+      .then(async ([{ data: mets }, pagoRes, localRes]) => {
         setMetodos(mets)
         if (pagoRes) {
           const d = pagoRes.data
-          const prov = provs.data.find(p => p.id === d.id_proveedor)
-          if (prov) {
-            setProvSearch(prov.nombre)
-            setProvPlazo(prov.plazo || null)
+          if (d.id_proveedor && d.proveedor) {
+            setProvSelected(d.proveedor)
+            setProvPlazo(d.proveedor.plazo || null)
           }
+          if (d.id_rubcat && d.rubcat) {
+            setRubcatSelected(d.rubcat)
+          }
+          setSavedImp(d.impuestos || [])
           setForm({
             fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
             id_proveedor:   d.id_proveedor   || '',
@@ -186,25 +182,37 @@ export default function PagoForm() {
             id_local:       d.id_local       || '',
             foto_url:       d.foto_url       || '',
             pdf_url:        d.pdf_url        || '',
+            nro_ord:        d.nro_ord        ?? null,
           })
         } else if (localRes?.data?.id_proveedor) {
-          const prov = provs.data.find(p => p.id === localRes.data.id_proveedor)
-          if (prov) {
-            setProvSearch(prov.nombre)
-            setProvPlazo(prov.plazo || null)
-            setForm(f => ({
-              ...f,
-              id_proveedor: prov.id,
-              id_rubcat:    prov.id_rubcat || f.id_rubcat,
-              cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
-            }))
-          }
+          const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
+          setProvSelected(prov)
+          setProvPlazo(prov.plazo || null)
+          if (prov.rubcat) setRubcatSelected(prov.rubcat)
+          setForm(f => ({
+            ...f,
+            id_proveedor: prov.id,
+            id_rubcat:    prov.id_rubcat || f.id_rubcat,
+            cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
+          }))
         }
       })
       .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
 
     return () => ctrl.abort()
   }, [id])
+
+  // preview del próximo número de OP (solo al crear; en edición se muestra form.nro_ord real)
+  useEffect(() => {
+    if (isEditing) return
+    const localId = activeLocal?.id || form.id_local
+    if (!localId) { setPreviewNroOrd(null); return }
+    const ctrl = new AbortController()
+    pagosApi.nextNroOrd(localId, ctrl.signal)
+      .then(({ data }) => setPreviewNroOrd(data.nro_ord))
+      .catch(() => { if (!ctrl.signal.aborted) setPreviewNroOrd(null) })
+    return () => ctrl.abort()
+  }, [isEditing, activeLocal?.id, form.id_local])
 
   // set con efectos encadenados
   const set = (field, value) => setForm(f => {
@@ -218,43 +226,96 @@ export default function PagoForm() {
     return next
   })
 
+  // El importe total es Neto + Impuestos − Descuento; nunca se edita a mano.
+  const impuestosSum = isEditing
+    ? savedImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
+    : pendingImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
+  useEffect(() => {
+    const neto = parseFloat(form.importe_neto) || 0
+    const descuento = parseFloat(form.descuento) || 0
+    if (!form.importe_neto && !impuestosSum && !descuento) { set('importe', ''); return }
+    const total = neto + impuestosSum - descuento
+    set('importe', total.toFixed(2))
+  }, [form.importe_neto, form.descuento, impuestosSum])
+
   // seleccionar proveedor desde el combobox: pre-llena rubcat y recalcula cashflow si hay plazo
   const selectProveedor = (prov) => {
     const plazo = prov.plazo || null
     setProvPlazo(plazo)
+    setProvSelected(prov)
+    if (prov.rubcat) setRubcatSelected(prov.rubcat)
     setForm(f => ({
       ...f,
       id_proveedor: prov.id,
       id_rubcat:    prov.id_rubcat || f.id_rubcat,
       cashflow:     calcCashflow(f.fecha, plazo) || f.cashflow
     }))
-    setProvSearch(prov.nombre)
-    setProvOpen(false)
   }
 
   const clearProveedor = () => {
     setProvPlazo(null)
+    setProvSelected(null)
     setForm(f => ({ ...f, id_proveedor: '', cashflow: '' }))
-    setProvSearch('')
-    setProvOpen(false)
   }
 
-  const filteredProvs = proveedores.filter(p =>
-    p.nombre.toLowerCase().includes(provSearch.toLowerCase())
-  )
+  const fetchProveedores = (search) =>
+    proveedoresApi.list({ search, activo: 'true', limit: 60 }).then(r => r.data.data)
 
-  const visibleRubcats = useMemo(() => {
-    if (modoRapido && form.id_tipo === 'STK') {
-      return rubcats.filter(rc => rc.rubro?.nombre?.toUpperCase().startsWith('CMV'))
-    }
-    return rubcats
-  }, [rubcats, modoRapido, form.id_tipo])
+  const fetchRubcats = (search) =>
+    rubcatApi.list({ search }).then(r => {
+      const data = r.data
+      if (modoRapido && form.id_tipo === 'STK') {
+        return data.filter(rc => rc.rubro?.nombre?.toUpperCase().startsWith('CMV'))
+      }
+      return data
+    })
+
+  // impuestos guardados (edición): cada acción pega directo al backend y
+  // recarga la lista, que a su vez dispara el recálculo del importe total.
+  const handleAddSavedImp = async () => {
+    if (!impForm.monto) return
+    setSavingImp(true)
+    try {
+      await impuestosApi.create({ id_pago: id, tipo: impForm.tipo, monto: parseFloat(impForm.monto) })
+      const { data } = await impuestosApi.list({ id_pago: id, limit: 100 })
+      setSavedImp(data.data || data)
+      setImpForm(f => ({ ...f, monto: '' }))
+      notify('Impuesto agregado', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar el impuesto', 'error') }
+    finally { setSavingImp(false) }
+  }
+
+  const handleEditSavedImp = (imp) => {
+    setEditingImpId(imp.id)
+    setEditImpForm({ tipo: imp.tipo, monto: String(imp.monto) })
+  }
+
+  const handleSaveSavedImp = async (impId) => {
+    if (!editImpForm.monto) return
+    try {
+      await impuestosApi.update(impId, { tipo: editImpForm.tipo, monto: parseFloat(editImpForm.monto) })
+      setSavedImp(prev => prev.map(i => i.id === impId ? { ...i, tipo: editImpForm.tipo, monto: editImpForm.monto } : i))
+      setEditingImpId(null)
+      notify('Impuesto actualizado', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar el impuesto', 'error') }
+  }
+
+  const handleDeleteSavedImp = async (impId) => {
+    if (!(await showConfirm('¿Eliminar este impuesto?'))) return
+    try {
+      await impuestosApi.remove(impId)
+      setSavedImp(prev => prev.filter(i => i.id !== impId))
+      notify('Impuesto eliminado', 'success')
+    } catch (err) { notify(err.response?.data?.error || 'Error al eliminar el impuesto', 'error') }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!activeLocal && !form.id_local) { notify('Seleccioná un local', 'error'); return }
-    if (!form.fecha)   { notify('La fecha es obligatoria', 'error'); return }
-    if (!form.importe) { notify('El importe es obligatorio', 'error'); return }
+    if (!form.fecha)     { notify('La fecha es obligatoria', 'error'); return }
+    if (!form.id_rubcat) { notify('El rubro / categoría es obligatorio', 'error'); return }
+    if (!form.id_metodo) { notify('El método de pago es obligatorio', 'error'); return }
+    if (!form.importe)   { notify('Ingresá el importe neto (o un impuesto) para calcular el total', 'error'); return }
     setLoading(true)
     try {
       let foto_url = form.foto_url
@@ -381,11 +442,23 @@ export default function PagoForm() {
         {/* ── Información del Pago ── */}
         <div className="form-panel">
           <div className="form-panel-title">Información del Pago</div>
-          <div className="form-grid">
+          <div style={{ marginBottom: '0.75rem', fontSize: 13, color: 'var(--t3)' }}>
+            {isEditing
+              ? (form.nro_ord != null && <>N° OP: <strong style={{ color: 'var(--t1)' }}>{form.nro_ord}</strong></>)
+              : (previewNroOrd != null && (
+                <>
+                  N° OP a asignar: <strong style={{ color: 'var(--t1)' }}>{previewNroOrd}</strong>
+                  {' '}<span title="El número final se confirma al guardar; puede variar si se crea otro pago en el mismo local antes de guardar este.">(previsualización)</span>
+                </>
+              ))
+            }
+          </div>
 
-            {/* selector de local — solo cuando no hay local activo */}
+          {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
+          <div className="form-grid form-row">
+
             {!activeLocal && locales.length > 0 && (
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <div className="form-group">
                 <label className="form-label">Local *</label>
                 <div className="form-input-wrap">
                   <select required value={form.id_local} onChange={e => set('id_local', e.target.value)}>
@@ -395,7 +468,6 @@ export default function PagoForm() {
                 </div>
               </div>
             )}
-
             <div className="form-group">
               <label className="form-label">Fecha Factura *</label>
               <div className="form-input-wrap">
@@ -408,97 +480,71 @@ export default function PagoForm() {
                 <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
               </div>
             </div>
-
-            {/* combobox de proveedor */}
-            <div className="form-group combobox-wrap" ref={provRef} style={{ gridColumn: '1 / -1' }}>
-              <label className="form-label">Proveedor</label>
+            <div className="form-group">
+              <label className="form-label">Cashflow</label>
               <div className="form-input-wrap">
                 <input
-                  type="text"
-                  placeholder="Buscar proveedor…"
-                  value={provSearch}
-                  autoComplete="off"
-                  onChange={e => { setProvSearch(e.target.value); setProvOpen(true) }}
-                  onFocus={() => setProvOpen(true)}
+                  type="date"
+                  value={form.cashflow}
+                  onChange={e => set('cashflow', e.target.value)}
+                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
                 />
-                {form.id_proveedor && (
-                  <button
-                    type="button"
-                    onClick={clearProveedor}
-                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', color: 'var(--t3)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
-                    title="Quitar proveedor"
-                  >×</button>
-                )}
               </div>
-              {provOpen && (
-                <div className="combobox-dropdown">
-                  {filteredProvs.length === 0
-                    ? <span className="combobox-option empty">Sin resultados</span>
-                    : filteredProvs.slice(0, 60).map(p => (
-                      <button key={p.id} type="button" className="combobox-option" onClick={() => selectProveedor(p)}>
-                        {p.nombre}
-                      </button>
-                    ))
-                  }
-                </div>
+              {provPlazo && (
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  Plazo: {provPlazo} días
+                </span>
               )}
             </div>
-
             <div className="form-group">
-              <label className="form-label">Rubro / Categoría</label>
+              <label className="form-label">Fecha de Pago</label>
               <div className="form-input-wrap">
-                <select value={form.id_rubcat} onChange={e => set('id_rubcat', e.target.value)}>
-                  <option value="">Sin clasificar</option>
-                  {visibleRubcats.map(rc => (
-                    <option key={rc.id} value={rc.id}>
-                      {rc.rubro?.nombre} / {rc.categoria?.nombre}
-                    </option>
-                  ))}
-                </select>
+                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
               </div>
             </div>
+          </div>
+
+          {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
+          <div className="form-grid form-row">
+            <div className="form-group form-span-2">
+              <label className="form-label">Proveedor</label>
+              <Combobox
+                value={form.id_proveedor}
+                displayValue={provSelected?.nombre || ''}
+                getKey={p => p.id}
+                getLabel={p => p.nombre}
+                onSelect={selectProveedor}
+                onClear={clearProveedor}
+                fetchItems={fetchProveedores}
+                placeholder="Buscar proveedor…"
+              />
+            </div>
             <div className="form-group">
-              <label className="form-label">Método de Pago</label>
+              <label className="form-label">Rubro / Categoría *</label>
+              <Combobox
+                value={form.id_rubcat}
+                displayValue={rubcatSelected ? `${rubcatSelected.rubro?.nombre} / ${rubcatSelected.categoria?.nombre}` : ''}
+                getKey={rc => rc.id}
+                getLabel={rc => `${rc.rubro?.nombre} / ${rc.categoria?.nombre}`}
+                onSelect={rc => { setRubcatSelected(rc); set('id_rubcat', rc.id) }}
+                onClear={() => { setRubcatSelected(null); set('id_rubcat', '') }}
+                fetchItems={fetchRubcats}
+                placeholder="Buscar rubro / categoría…"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Método de Pago *</label>
               <div className="form-input-wrap">
-                <select value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
-                  <option value="">Sin método</option>
+                <select required value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
+                  <option value="">Seleccioná un método…</option>
                   {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                 </select>
               </div>
             </div>
+          </div>
 
-            <div className="form-group">
-              <label className="form-label">Tipo de Comprobante</label>
-              <div className="form-input-wrap">
-                <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
-                  <option value="">—</option>
-                  {['A','B','C','CM','DC_1','DC_2','DDJJ','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Estado</label>
-              <div className="form-input-wrap">
-                <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
-                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-                <input
-                  type="checkbox"
-                  checked={form.periodico}
-                  onChange={e => set('periodico', e.target.checked)}
-                  style={{ width: 15, height: 15, cursor: 'pointer' }}
-                />
-                <span className="form-label" style={{ margin: 0 }}>Pago periódico (recurrente)</span>
-              </label>
-            </div>
-
-            {/* PV y Nro de comprobante */}
+          {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
+          <div className="form-grid form-row">
             <div className="form-group">
               <label className="form-label">Punto de Venta</label>
               <div className="form-input-wrap">
@@ -529,8 +575,35 @@ export default function PagoForm() {
                 />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label">Tipo de Comprobante</label>
+              <div className="form-input-wrap">
+                <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
+                  <option value="">—</option>
+                  {['A','B','C','CM','DC_1','DC_2','DDJJ','LF','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Estado</label>
+              <div className="form-input-wrap">
+                <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
+                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
 
           </div>
+
+          {/* pago periódico: suelto, en su propia card chica */}
+          <label className="periodico-card">
+            <input
+              type="checkbox"
+              checked={form.periodico}
+              onChange={e => set('periodico', e.target.checked)}
+            />
+            <span>Pago periódico (recurrente)</span>
+          </label>
         </div>
 
         {/* ── Montos ── */}
@@ -550,33 +623,14 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Importe Total *</label>
+              <label className="form-label" title="Se calcula solo: Neto + Impuestos − Descuento">Importe Total</label>
               <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" required value={form.importe} onChange={e => set('importe', e.target.value)} />
+                <input type="number" step="0.01" placeholder="0.00" value={form.importe} disabled readOnly style={{ opacity: 0.75 }} />
               </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Cashflow</label>
-              <div className="form-input-wrap">
-                <input
-                  type="date"
-                  value={form.cashflow}
-                  onChange={e => set('cashflow', e.target.value)}
-                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
-                />
-              </div>
-              {provPlazo && (
-                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
-                  Plazo: {provPlazo} días
-                </span>
-              )}
-            </div>
-            <div className="form-group">
-              <label className="form-label">Fecha de Pago</label>
-              <div className="form-input-wrap">
-                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
-              </div>
-            </div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
+            El importe total se calcula automáticamente (Neto + Impuestos − Descuento).
           </div>
           <div style={{ marginTop: '0.5rem' }}>
             <span className={`badge ${form.pagado ? 'badge-green' : 'badge-muted'}`} style={{ fontSize: 12 }}>
@@ -585,13 +639,74 @@ export default function PagoForm() {
           </div>
         </div>
 
-        {/* ── Impuestos (solo al crear) ── */}
-        {!isEditing && (
-          <div className="form-panel">
-            <div className="form-panel-title">Impuestos</div>
+        {/* ── Impuestos ── */}
+        <div className="form-panel">
+          <div className="form-panel-title">Impuestos</div>
 
-            {/* Tabla de impuestos agregados */}
-            {pendingImp.length > 0 && (
+          {/* Tabla de impuestos: al crear son locales (se mandan junto al pago),
+              al editar cada cambio pega directo al backend. */}
+          {isEditing ? (
+            savedImp.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <table className="data-table" style={{ marginBottom: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Monto</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedImp.map((imp) => (
+                      <tr key={imp.id}>
+                        {editingImpId === imp.id ? (
+                          <>
+                            <td>
+                              <select value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                                {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="number" step="0.01" style={{ maxWidth: 110 }}
+                                value={editImpForm.monto}
+                                onChange={e => setEditImpForm(f => ({ ...f, monto: e.target.value }))}
+                              />
+                            </td>
+                            <td style={{ display: 'flex', gap: 4 }}>
+                              <button type="button" className="btn btn-sm btn-primary" onClick={() => handleSaveSavedImp(imp.id)}>Guardar</button>
+                              <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditingImpId(null)}>Cancelar</button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td><span className="badge badge-blue">{imp.tipo}</span></td>
+                            <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                            <td style={{ display: 'flex', gap: 4 }}>
+                              <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditSavedImp(imp)}>
+                                <IcoEdit />
+                              </button>
+                              <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteSavedImp(imp.id)}>
+                                <IcoTrash />
+                              </button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
+                      <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
+                        ${impuestosSum.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : (
+            pendingImp.length > 0 && (
               <div style={{ marginBottom: '1rem' }}>
                 <table className="data-table" style={{ marginBottom: 0 }}>
                   <thead>
@@ -627,44 +742,45 @@ export default function PagoForm() {
                   </tbody>
                 </table>
               </div>
-            )}
+            )
+          )}
 
-            {/* Formulario para agregar un impuesto */}
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
-                <label className="form-label">Tipo</label>
-                <div className="form-input-wrap">
-                  <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
-                    {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
+          {/* Formulario para agregar un impuesto */}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
+              <label className="form-label">Tipo</label>
+              <div className="form-input-wrap">
+                <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                  {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                </select>
               </div>
-              <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
-                <label className="form-label">Monto</label>
-                <div className="form-input-wrap">
-                  <input
-                    type="number" step="0.01" placeholder="0.00"
-                    value={impForm.monto}
-                    onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ whiteSpace: 'nowrap' }}
-                disabled={!impForm.monto}
-                onClick={() => {
-                  if (!impForm.monto) return
-                  setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
-                  setImpForm(f => ({ ...f, monto: '' }))
-                }}
-              >
-                <IcoPlus /> Agregar
-              </button>
             </div>
+            <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+              <label className="form-label">Monto</label>
+              <div className="form-input-wrap">
+                <input
+                  type="number" step="0.01" placeholder="0.00"
+                  value={impForm.monto}
+                  onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ whiteSpace: 'nowrap' }}
+              disabled={!impForm.monto || savingImp}
+              onClick={() => {
+                if (isEditing) { handleAddSavedImp(); return }
+                if (!impForm.monto) return
+                setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
+                setImpForm(f => ({ ...f, monto: '' }))
+              }}
+            >
+              {savingImp ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <IcoPlus />} Agregar
+            </button>
           </div>
-        )}
+        </div>
 
         {/* ── Multimoneda (solo al crear) ── */}
         {!isEditing && (
@@ -704,58 +820,24 @@ export default function PagoForm() {
         <div className="form-panel">
           <div className="form-panel-title">Adjuntos</div>
           <div className="form-grid">
-            <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <IcoPaperclip /> Foto
-              </label>
-              {form.foto_url ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {form.foto_url.split('/').pop()}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-danger btn-icon"
-                    onClick={() => { set('foto_url', ''); setFotoFile(null) }}>
-                    <IcoTrash />
-                  </button>
-                </div>
-              ) : (
-                <div className="form-input-wrap">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => setFotoFile(e.target.files[0] || null)}
-                    style={{ padding: '4px 0' }}
-                  />
-                </div>
-              )}
-              {uploadingFoto && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo foto...</span>}
-            </div>
-            <div className="form-group">
-              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <IcoPaperclip /> PDF
-              </label>
-              {form.pdf_url ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, fontSize: 12, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {form.pdf_url.split('/').pop()}
-                  </span>
-                  <button type="button" className="btn btn-sm btn-danger btn-icon"
-                    onClick={() => { set('pdf_url', ''); setPdfFile(null) }}>
-                    <IcoTrash />
-                  </button>
-                </div>
-              ) : (
-                <div className="form-input-wrap">
-                  <input
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={e => setPdfFile(e.target.files[0] || null)}
-                    style={{ padding: '4px 0' }}
-                  />
-                </div>
-              )}
-              {uploadingPdf && <span style={{ fontSize: 11, color: 'var(--t3)' }}>Subiendo PDF...</span>}
-            </div>
+            <AdjuntoUpload
+              label="Foto"
+              accept="image/*"
+              value={form.foto_url}
+              file={fotoFile}
+              onFileSelected={setFotoFile}
+              onRemove={() => { set('foto_url', ''); setFotoFile(null) }}
+              uploading={uploadingFoto}
+            />
+            <AdjuntoUpload
+              label="PDF"
+              accept=".pdf,application/pdf"
+              value={form.pdf_url}
+              file={pdfFile}
+              onFileSelected={setPdfFile}
+              onRemove={() => { set('pdf_url', ''); setPdfFile(null) }}
+              uploading={uploadingPdf}
+            />
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import Layout from './components/Layout.jsx'
 import { useAuthStore } from './store/authStore.js'
 
 const Login         = lazy(() => import('./pages/Login.jsx'))
+const StartChoice   = lazy(() => import('./pages/StartChoice.jsx'))
 const AppSelector   = lazy(() => import('./pages/AppSelector.jsx'))
 const Dashboard     = lazy(() => import('./pages/Dashboard.jsx'))
 const CajaList      = lazy(() => import('./pages/cajas/CajaList.jsx'))
@@ -15,6 +16,7 @@ const PdpDashboard  = lazy(() => import('./pages/pdp/PdpDashboard.jsx'))
 const ProveedorList = lazy(() => import('./pages/proveedores/ProveedorList.jsx'))
 const ProveedorForm = lazy(() => import('./pages/proveedores/ProveedorForm.jsx'))
 const Reportes      = lazy(() => import('./pages/reportes/Reportes.jsx'))
+const Auditorias    = lazy(() => import('./pages/auditorias/Auditorias.jsx'))
 const Users         = lazy(() => import('./pages/admin/Users.jsx'))
 const Apps          = lazy(() => import('./pages/admin/Apps.jsx'))
 const Locales       = lazy(() => import('./pages/admin/Locales.jsx'))
@@ -38,7 +40,21 @@ const OPERATIVE   = ['super_admin', 'dcsmart', 'admin']
 
 // Guard de rol dentro del Layout: la app ya está garantizada por el ProtectedRoute padre.
 function Guard({ roles, children }) {
-  return <ProtectedRoute requireApp={false} roles={roles}>{children}</ProtectedRoute>
+  return <ProtectedRoute requireApp roles={roles}>{children}</ProtectedRoute>
+}
+// Dashboard/Cajas/Pagos: requieren app activa, pero el rol "reportes"
+// (restringido a Reportes) no puede entrar -- se lo manda a /reportes.
+function OperativeGuard({ children }) {
+  return <ProtectedRoute requireApp excludeRoles={['reportes']}>{children}</ProtectedRoute>
+}
+// Reportes: requiere app activa + el permiso real (no el nombre del rol).
+function ReportesGuard({ children }) {
+  return <ProtectedRoute requireApp reportesOnly>{children}</ProtectedRoute>
+}
+// Zonas globales (Admin): independientes de la app activa -- evalúa TODAS
+// las asignaciones de rol del usuario, no la app elegida.
+function GlobalGuard({ roles, children }) {
+  return <ProtectedRoute requireApp={false} globalRoles={roles}>{children}</ProtectedRoute>
 }
 
 export default function App() {
@@ -55,6 +71,14 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
+          path="/start"
+          element={
+            <ProtectedRoute requireApp={false}>
+              <StartChoice />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/select-app"
           element={
             <ProtectedRoute requireApp={false}>
@@ -65,30 +89,31 @@ export default function App() {
         <Route
           path="/"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requireApp={false}>
               <Layout />
             </ProtectedRoute>
           }
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard"                  element={<Dashboard />} />
-          <Route path="cajas"                      element={<CajaList />} />
-          <Route path="cajas/:id"                  element={<CajaDetail />} />
-          <Route path="pagos"                      element={<PagoList />} />
-          <Route path="pagos/nuevo"                element={<PagoForm />} />
-          <Route path="pagos/:id/editar"           element={<PagoForm />} />
+          <Route path="dashboard"                  element={<OperativeGuard><Dashboard /></OperativeGuard>} />
+          <Route path="cajas"                      element={<OperativeGuard><CajaList /></OperativeGuard>} />
+          <Route path="cajas/:id"                  element={<OperativeGuard><CajaDetail /></OperativeGuard>} />
+          <Route path="pagos"                      element={<OperativeGuard><PagoList /></OperativeGuard>} />
+          <Route path="pagos/nuevo"                element={<OperativeGuard><PagoForm /></OperativeGuard>} />
+          <Route path="pagos/:id/editar"           element={<OperativeGuard><PagoForm /></OperativeGuard>} />
           <Route path="pdp"                        element={<Guard roles={OPERATIVE}><PdpDashboard /></Guard>} />
           <Route path="proveedores"                element={<Guard roles={OPERATIVE}><ProveedorList /></Guard>} />
           <Route path="proveedores/nuevo"          element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
           <Route path="proveedores/:id/editar"     element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
-          <Route path="reportes"                    element={<Guard roles={OPERATIVE}><Reportes /></Guard>} />
-          <Route path="admin/users"                element={<Guard roles={SUPER}><Users /></Guard>} />
-          <Route path="admin/apps"                 element={<Guard roles={ADMIN_PANEL}><Apps /></Guard>} />
-          <Route path="admin/locales"              element={<Guard roles={ADMIN_PANEL}><Locales /></Guard>} />
-          <Route path="admin/rubcat"               element={<Guard roles={SUPER}><RubCat /></Guard>} />
-          <Route path="admin/metodos-pago"         element={<Guard roles={ADMIN_PANEL}><MetodosPago /></Guard>} />
-          <Route path="admin/roles"                element={<Guard roles={SUPER}><Roles /></Guard>} />
-          <Route path="admin/detalle-tipos"        element={<Guard roles={ADMIN_PANEL}><DetalleTipos /></Guard>} />
+          <Route path="reportes"                    element={<ReportesGuard><Reportes /></ReportesGuard>} />
+          <Route path="auditorias"                  element={<GlobalGuard roles={SUPER}><Auditorias /></GlobalGuard>} />
+          <Route path="admin/users"                element={<GlobalGuard roles={SUPER}><Users /></GlobalGuard>} />
+          <Route path="admin/apps"                 element={<GlobalGuard roles={ADMIN_PANEL}><Apps /></GlobalGuard>} />
+          <Route path="admin/locales"              element={<GlobalGuard roles={ADMIN_PANEL}><Locales /></GlobalGuard>} />
+          <Route path="admin/rubcat"               element={<GlobalGuard roles={SUPER}><RubCat /></GlobalGuard>} />
+          <Route path="admin/metodos-pago"         element={<GlobalGuard roles={ADMIN_PANEL}><MetodosPago /></GlobalGuard>} />
+          <Route path="admin/roles"                element={<GlobalGuard roles={SUPER}><Roles /></GlobalGuard>} />
+          <Route path="admin/detalle-tipos"        element={<GlobalGuard roles={ADMIN_PANEL}><DetalleTipos /></GlobalGuard>} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
