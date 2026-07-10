@@ -146,7 +146,7 @@ export default async function cajaRoutes(fastify) {
         movimientos: { include: { metodo_pago: true } },
         detalles: {
           include: {
-            detalle_tipo: { select: { id: true, nombre: true } }
+            detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
           },
           orderBy: { created_at: 'asc' }
         }
@@ -180,7 +180,7 @@ export default async function cajaRoutes(fastify) {
   // ── POST / ────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
     const {
-      nro_turno, fecha_inicio, fecha_cierre, id_local, cajero,
+      nro_turno, tipo_turno, fecha_inicio, fecha_cierre, id_local, cajero,
       total, efectivo, fiscal, comensales, tickets, observaciones, foto_url, origin
     } = request.body
 
@@ -195,6 +195,7 @@ export default async function cajaRoutes(fastify) {
     const caja = await fastify.db.caja.create({
       data: {
         nro_turno:    nro_turno    ? String(parseInt(nro_turno)) : null,
+        tipo_turno:   tipo_turno   || null,
         fecha_inicio: new Date(fecha_inicio),
         fecha_cierre: fecha_cierre ? new Date(fecha_cierre)      : null,
         id_local, cajero,
@@ -224,7 +225,7 @@ export default async function cajaRoutes(fastify) {
     }
 
     const {
-      nro_turno, fecha_cierre, cajero, total, efectivo, fiscal,
+      nro_turno, tipo_turno, fecha_cierre, cajero, total, efectivo, fiscal,
       comensales, tickets, observaciones, foto_url
     } = request.body
 
@@ -232,6 +233,7 @@ export default async function cajaRoutes(fastify) {
       where: { id: request.params.id },
       data: {
         nro_turno,
+        tipo_turno:    tipo_turno    !== undefined ? (tipo_turno || null) : undefined,
         fecha_cierre:  fecha_cierre  ? new Date(fecha_cierre)  : undefined,
         cajero,
         total:         total         !== undefined ? parseFloat(total)         : undefined,

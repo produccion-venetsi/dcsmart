@@ -13,9 +13,11 @@ import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
 
 const EMPTY_CAJA = {
-  nro_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
+  nro_turno: '', tipo_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
   efectivo: '', fiscal: '', comensales: '', tickets: '', observaciones: '', foto_url: ''
 }
+
+const TIPOS_TURNO = ['Mañana', 'Tarde', 'Noche', 'Trasnoche', 'Evento', 'Otros']
 
 function IcoPlus() {
   return (
@@ -288,14 +290,29 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   if (!caja) return <div style={{ color: 'var(--red)', padding: '1rem' }}>No se pudo cargar la caja.</div>
 
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
-  const totalDet = caja.detalles?.reduce((acc, d) => acc + Number(d.monto), 0) || 0
+  // Los detalles siempre se cargan en positivo; la clasificación del tipo
+  // (no el signo del monto) dice si suma o resta -- un "egreso" (ej. Gastos)
+  // resta del total esperado.
+  const totalDet = caja.detalles?.reduce((acc, d) => {
+    const sign = d.detalle_tipo?.clasificacion === 'egreso' ? -1 : 1
+    return acc + sign * Number(d.monto)
+  }, 0) || 0
 
-  const totalEsperado = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0
+  // Si el origen es DCSMART y hay detalles cargados, el total esperado se
+  // valida contra efectivo + detalles (verificado contra datos reales de
+  // producción, el "fiscal" no entra en esta cuenta). Si no hay detalles
+  // (caja cargada solo con movimientos), sigue el chequeo de siempre contra
+  // movimientos.
+  const usaDetalles = caja.origin === 'DCSMART' && caja.detalles?.length > 0
+  const totalEsperado = usaDetalles
+    ? Number(caja.efectivo ?? 0) + totalDet
+    : (caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0)
   const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
   const hayDescuadre = descuadre != null && Math.abs(descuadre) > DESCUADRE_TOLERANCE
 
   const rows = [
     ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
+    ['Tipo Turno', caja.tipo_turno ?? '—'],
     ['Local',      caja.local?.nombre ?? '—'],
     ['Inicio',     fmtDT(caja.fecha_inicio)],
     ['Cierre',     fmtDT(caja.fecha_cierre)],
@@ -319,7 +336,10 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <span className="badge badge-muted">{caja.origin}</span>
         )}
         {hayDescuadre && (
-          <span className="badge badge-red" title="Total de caja vs. inicial + ingresos − egresos de los movimientos">
+          <span
+            className="badge badge-red"
+            title={usaDetalles ? 'Total de caja vs. suma de detalles' : 'Total de caja vs. inicial + ingresos − egresos de los movimientos'}
+          >
             ⚠ Descuadre: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
           </span>
         )}
@@ -694,6 +714,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       const toLocal = (d) => d ? new Date(d).toISOString().slice(0, 16) : ''
       setForm({
         nro_turno:    data.nro_turno    ?? '',
+        tipo_turno:   data.tipo_turno   ?? '',
         fecha_inicio: toLocal(data.fecha_inicio),
         fecha_cierre: toLocal(data.fecha_cierre),
         cajero:       data.cajero       ?? '',
@@ -804,6 +825,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       }
       await cajasApi.update(cajaId, {
         nro_turno:    form.nro_turno    || null,
+        tipo_turno:   form.tipo_turno   || null,
         fecha_cierre: form.fecha_cierre || null,
         cajero:       form.cajero       || null,
         total:        form.total        !== '' ? parseFloat(form.total)      : null,
@@ -849,6 +871,15 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
           <label className="form-label">Nro Turno</label>
           <div className="form-input-wrap">
             <input type="number" min="1" step="1" placeholder="1" value={form.nro_turno} onChange={e => setF('nro_turno', e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Tipo de Turno</label>
+          <div className="form-input-wrap">
+            <select value={form.tipo_turno} onChange={e => setF('tipo_turno', e.target.value)}>
+              <option value="">Sin especificar</option>
+              {TIPOS_TURNO.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
@@ -1259,6 +1290,15 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Tipo de Turno</label>
+          <div className="form-input-wrap">
+            <select value={form.tipo_turno} onChange={e => setF('tipo_turno', e.target.value)}>
+              <option value="">Sin especificar</option>
+              {TIPOS_TURNO.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Cajero</label>
           <div className="form-input-wrap">
             <input placeholder="Nombre del cajero" value={form.cajero} onChange={e => setF('cajero', e.target.value)} />
@@ -1638,7 +1678,7 @@ export default function CajaList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacó la columna de acciones (borrar) de la fila (ahora vive en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 12 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  const colCount = 13 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1740,6 +1780,7 @@ export default function CajaList() {
                 </th>
               )}
               <SortTh field="nro_turno">Nro Turno</SortTh>
+              <th>Tipo</th>
               <th>Auditado</th>
               <SortTh field="fecha_inicio">Inicio</SortTh>
               <SortTh field="fecha_cierre">Cierre</SortTh>
@@ -1782,6 +1823,7 @@ export default function CajaList() {
                       </td>
                     )}
                     <td className="td-primary">{c.nro_turno ? `TRN ${c.nro_turno}` : <span className="td-muted">—</span>}</td>
+                    <td className="td-muted">{c.tipo_turno || '—'}</td>
                     <td style={{ textAlign: 'center' }}>
                       <span style={{ color: c.audit ? 'var(--green)' : 'var(--amber)' }} title={c.audit ? 'Auditado' : 'No auditado'}>
                         {c.audit ? <IcoThumbUp /> : <IcoEye />}
