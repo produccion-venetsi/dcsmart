@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Children, useEffect, useRef, useState } from 'react'
 
 function IcoChevronDown() {
   return (
@@ -35,6 +35,12 @@ export default function ActionsMenu({ label = 'Acciones', children }) {
     ? { onMouseEnter: () => setOpen(true), onMouseLeave: () => setOpen(false) }
     : {}
 
+  // Los llamadores arman children con `{cond && <button>...}` -- si ningun
+  // permiso habilita ninguna accion, children queda lleno de `false`/`null`.
+  // Sin este filtro, el boton se mostraba igual y abria un panel vacio.
+  const visibleChildren = Children.toArray(children).filter(Boolean)
+  if (visibleChildren.length === 0) return null
+
   return (
     <div ref={wrapRef} {...hoverProps}>
       <button
@@ -46,7 +52,7 @@ export default function ActionsMenu({ label = 'Acciones', children }) {
       </button>
       {open && (
         <div className="actions-menu-panel">
-          {children}
+          {visibleChildren}
         </div>
       )}
     </div>

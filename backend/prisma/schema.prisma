@@ -244,6 +244,7 @@ model MetodoPago {
 model Caja {
   id            String    @id @default(uuid())
   nro_turno     String?
+  tipo_turno    TipoTurno?
   fecha_inicio  DateTime
   fecha_cierre  DateTime?
   id_local      String
@@ -307,6 +308,17 @@ enum Origin {
   FFUDO
 
   @@map("origin")
+}
+
+enum TipoTurno {
+  MANANA    @map("Mañana")
+  TARDE     @map("Tarde")
+  NOCHE     @map("Noche")
+  TRASNOCHE @map("Trasnoche")
+  EVENTO    @map("Evento")
+  OTROS     @map("Otros")
+
+  @@map("tipo_turno")
 }
 
 enum TipoMovimiento {
