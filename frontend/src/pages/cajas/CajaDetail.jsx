@@ -168,11 +168,28 @@ export default function CajaDetail() {
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
   const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
-  const totalEsperado = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0
+  // Los detalles siempre se cargan en positivo; la clasificación del tipo
+  // (no el signo del monto) dice si suma o resta -- un "egreso" (ej. Gastos)
+  // resta del total esperado.
+  const totalDet = caja.detalles?.reduce((acc, d) => {
+    const sign = d.detalle_tipo?.clasificacion === 'egreso' ? -1 : 1
+    return acc + sign * Number(d.monto)
+  }, 0) || 0
+
+  // Si el origen es DCSMART y hay detalles cargados, el total esperado se
+  // valida contra efectivo + detalles (verificado contra datos reales de
+  // producción, el "fiscal" no entra en esta cuenta). Si no hay detalles
+  // (caja cargada solo con movimientos), sigue el chequeo de siempre contra
+  // movimientos.
+  const usaDetalles = caja.origin === 'DCSMART' && caja.detalles?.length > 0
+  const totalEsperado = usaDetalles
+    ? Number(caja.efectivo ?? 0) + totalDet
+    : (caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0)
   const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
   const hayDescuadre = descuadre != null && Math.abs(descuadre) > TOLERANCE
 
   const infoRows = [
+    ['Tipo Turno',   caja.tipo_turno ?? '—'],
     ['Local',        caja.local?.nombre ?? '—'],
     ['Inicio',       fmtDT(caja.fecha_inicio)],
     ['Cierre',       fmtDT(caja.fecha_cierre)],
@@ -241,7 +258,11 @@ export default function CajaDetail() {
               ))}
             </div>
             {hayDescuadre && (
-              <div className="badge badge-red" style={{ marginTop: '0.75rem', display: 'inline-block' }} title="Total de caja vs. inicial + ingresos − egresos de los movimientos">
+              <div
+                className="badge badge-red"
+                style={{ marginTop: '0.75rem', display: 'inline-block' }}
+                title={usaDetalles ? 'Total de caja vs. suma de detalles' : 'Total de caja vs. inicial + ingresos − egresos de los movimientos'}
+              >
                 ⚠ Descuadre: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
               </div>
             )}

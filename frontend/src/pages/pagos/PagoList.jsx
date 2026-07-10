@@ -1296,9 +1296,11 @@ export default function PagoList() {
               </div>
             )}
           </div>
-          <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
-            <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
-          </button>
+          {(canEdit || canDelete) && (
+            <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
+              <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido')} title="Carga rápida">
             <IcoPlane /> Carga rápida
           </button>

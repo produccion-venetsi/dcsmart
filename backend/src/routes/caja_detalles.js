@@ -33,7 +33,7 @@ export default async function cajaDetallesRoutes(fastify) {
     return fastify.db.cajaDetalle.findMany({
       where,
       include: {
-        detalle_tipo: { select: { id: true, nombre: true } }
+        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
       },
       orderBy: { created_at: 'asc' }
     })
@@ -80,7 +80,7 @@ export default async function cajaDetallesRoutes(fastify) {
         observaciones: observaciones || null
       },
       include: {
-        detalle_tipo: { select: { id: true, nombre: true } }
+        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
       }
     })
     return reply.code(201).send(detalle)
@@ -129,7 +129,7 @@ export default async function cajaDetallesRoutes(fastify) {
         observaciones: observaciones !== undefined ? (observaciones || null) : undefined
       },
       include: {
-        detalle_tipo: { select: { id: true, nombre: true } }
+        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
       }
     })
     return detalle
