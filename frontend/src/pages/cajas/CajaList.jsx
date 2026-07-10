@@ -1442,7 +1442,7 @@ export default function CajaList() {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const role        = activeApp?.role
-  const canCreate = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canCreate = ['super_admin', 'dcsmart', 'admin', 'cajero'].includes(role)
   const canEdit    = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete  = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
@@ -1697,9 +1697,11 @@ export default function CajaList() {
               </div>
             )}
           </div>
-          <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
-            <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
-          </button>
+          {(canEdit || canDelete) && (
+            <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
+              <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+            </button>
+          )}
           {canCreate && (
             <button className="btn btn-primary" onClick={openCreate}>
               <IcoPlus /> Nueva Caja
