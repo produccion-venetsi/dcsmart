@@ -1,5 +1,47 @@
 import bcrypt from 'bcryptjs'
 
+// dcsmart-analisis es OTRO backend con su propia base (dcsmart_analytics);
+// esto solo llama a su API interna server-to-server, nunca escribe ahí directo.
+function analyticsCreds () {
+  const base = process.env.ANALYTICS_BACKEND_URL
+  const secret = process.env.INTERNAL_SHARED_SECRET
+  if (!base || !secret) {
+    const err = new Error('Integración con Analytics no configurada')
+    err.statusCode = 500
+    throw err
+  }
+  return { base, secret }
+}
+
+async function getAnalyticsAccess (email) {
+  const { base, secret } = analyticsCreds()
+  const resp = await fetch(`${base}/api/internal/access/${encodeURIComponent(email)}`, {
+    headers: { 'X-Internal-Secret': secret }
+  })
+  if (resp.status === 404) return { enabled: null, is_admin: false }
+  if (!resp.ok) {
+    const err = new Error('Error al consultar acceso en Analytics')
+    err.statusCode = resp.status
+    throw err
+  }
+  return resp.json()
+}
+
+async function setAnalyticsAccess (email, { enabled, is_admin }) {
+  const { base, secret } = analyticsCreds()
+  const resp = await fetch(`${base}/api/internal/access`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': secret },
+    body: JSON.stringify({ email, enabled, is_admin })
+  })
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}))
+    const err = new Error(data.error || 'Error al actualizar acceso en Analytics')
+    err.statusCode = resp.status
+    throw err
+  }
+}
+
 export default async function usersRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('usuarios', 'view')]
 
@@ -243,5 +285,36 @@ export default async function usersRoutes(fastify) {
       where: { id_user: request.params.id, id_module: moduleRecord.id }
     })
     return reply.code(204).send()
+  })
+
+  // GET /api/users/:id/analytics-access
+  fastify.get('/:id/analytics-access', {
+    preHandler: [fastify.authenticate, fastify.can('usuarios', 'view')]
+  }, async (request, reply) => {
+    const user = await fastify.db.user.findUnique({ where: { id: request.params.id }, select: { email: true } })
+    if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
+    try {
+      return await getAnalyticsAccess(user.email)
+    } catch (err) {
+      return reply.code(err.statusCode || 500).send({ error: err.message })
+    }
+  })
+
+  // PUT /api/users/:id/analytics-access  { enabled, is_admin }
+  // Habilita/deshabilita el acceso de este usuario a dcsmart-analisis (la
+  // plataforma de reportes). Delegado vía API interna — ver setAnalyticsAccess.
+  fastify.put('/:id/analytics-access', {
+    preHandler: [fastify.authenticate, fastify.can('usuarios', 'edit')]
+  }, async (request, reply) => {
+    const { enabled = true, is_admin = false } = request.body || {}
+    const user = await fastify.db.user.findUnique({ where: { id: request.params.id }, select: { email: true } })
+    if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
+
+    try {
+      await setAnalyticsAccess(user.email, { enabled, is_admin })
+    } catch (err) {
+      return reply.code(err.statusCode || 500).send({ error: err.message })
+    }
+    return { ok: true }
   })
 }

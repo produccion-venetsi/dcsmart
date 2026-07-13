@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { OAuth2Client } from 'google-auth-library'
+import jwt from 'jsonwebtoken'
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
@@ -291,5 +292,19 @@ export default async function authRoutes(fastify) {
   fastify.post('/logout', async (request, reply) => {
     reply.clearCookie('token', { path: '/' })
     return { message: 'Sesión cerrada' }
+  })
+
+  // POST /api/auth/analytics-ticket
+  // Firma un ticket cortísimo (60s, un solo viaje) con el email del usuario
+  // logueado, para que dcsmart-analisis lo canjee por una sesión propia sin
+  // pedir credenciales de nuevo (SSO). No comparte JWT_SECRET ni cookies.
+  fastify.post('/analytics-ticket', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    if (!process.env.INTERNAL_SHARED_SECRET) {
+      return reply.code(500).send({ error: 'Integración con Analytics no configurada' })
+    }
+    const ticket = jwt.sign({ email: request.user.email }, process.env.INTERNAL_SHARED_SECRET, {
+      expiresIn: '60s', issuer: 'dcsmart-gestion', audience: 'dcsmart-analytics'
+    })
+    return { ticket }
   })
 }

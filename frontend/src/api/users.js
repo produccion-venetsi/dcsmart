@@ -12,5 +12,7 @@ export const usersApi = {
   addLocalAccess: (id, data) => client.post(`/users/${id}/local-access`, data),
   removeLocalAccess: (id, data) => client.delete(`/users/${id}/local-access`, { data }),
   setPermission: (id, moduleName, data) => client.put(`/users/${id}/permissions/${moduleName}`, data),
-  removePermission: (id, moduleName) => client.delete(`/users/${id}/permissions/${moduleName}`)
+  removePermission: (id, moduleName) => client.delete(`/users/${id}/permissions/${moduleName}`),
+  getAnalyticsAccess: (id) => client.get(`/users/${id}/analytics-access`),
+  setAnalyticsAccess: (id, data) => client.put(`/users/${id}/analytics-access`, data)
 }
