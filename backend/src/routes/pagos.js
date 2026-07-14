@@ -358,6 +358,9 @@ export default async function pagosRoutes(fastify) {
     if (!id_local) return reply.code(400).send({ error: 'Seleccioná un local' })
     if (!id_rubcat) return reply.code(400).send({ error: 'El rubro / categoría es obligatorio' })
     if (!id_metodo) return reply.code(400).send({ error: 'El método de pago es obligatorio' })
+    if (!pv)        return reply.code(400).send({ error: 'El punto de venta es obligatorio' })
+    if (!nro)       return reply.code(400).send({ error: 'El número de comprobante es obligatorio' })
+    if (!cashflow)  return reply.code(400).send({ error: 'El cashflow es obligatorio' })
 
     if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
@@ -438,6 +441,15 @@ export default async function pagosRoutes(fastify) {
     }
     if (id_metodo !== undefined && !id_metodo) {
       return reply.code(400).send({ error: 'El método de pago es obligatorio' })
+    }
+    if (pv !== undefined && !pv) {
+      return reply.code(400).send({ error: 'El punto de venta es obligatorio' })
+    }
+    if (nro !== undefined && !nro) {
+      return reply.code(400).send({ error: 'El número de comprobante es obligatorio' })
+    }
+    if (cashflow !== undefined && !cashflow) {
+      return reply.code(400).send({ error: 'El cashflow es obligatorio' })
     }
 
     try {
