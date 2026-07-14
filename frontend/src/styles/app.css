@@ -312,6 +312,11 @@ body {
   cursor: pointer;
 }
 
+.nav-item svg:last-child:not(:first-child) {
+  margin-left: auto;
+  opacity: 0.55;
+}
+
 .nav-item svg {
   flex-shrink: 0;
   transition: color 0.18s var(--ease);

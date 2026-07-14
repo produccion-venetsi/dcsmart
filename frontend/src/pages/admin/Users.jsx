@@ -130,6 +130,10 @@ export default function Users() {
   const [localesByApp, setLocalesByApp] = useState({})  // { [id_app]: [{id,nombre}] }
   const [accessBusy,   setAccessBusy]   = useState(false)
 
+  // Acceso a dcsmart-analisis (plataforma de reportes, backend separado)
+  const [analyticsAccess, setAnalyticsAccess] = useState(null) // { enabled, is_admin } | { unavailable: true } | null (cargando)
+  const [analyticsBusy,   setAnalyticsBusy]   = useState(false)
+
   // ── load list ──────────────────────────────────────────────────────────────
 
   const load = () => {
@@ -153,6 +157,16 @@ export default function Users() {
       })
       .catch(() => {})
   }, [panelOpen])
+
+  // ── acceso a dcsmart-analisis (se consulta al vuelo, otro backend/base) ───
+
+  useEffect(() => {
+    if (!panelOpen || !selected?.id) { setAnalyticsAccess(null); return }
+    setAnalyticsAccess(null)
+    usersApi.getAnalyticsAccess(selected.id)
+      .then(({ data }) => setAnalyticsAccess(data))
+      .catch(() => setAnalyticsAccess({ unavailable: true }))
+  }, [panelOpen, selected?.id])
 
   // ── load locales when app is selected in role form ────────────────────────
 
@@ -624,6 +638,70 @@ export default function Users() {
                   </label>
                 </>
               )}
+
+              {/* Acceso a dcsmart-analisis (plataforma de reportes, backend/base separados) */}
+              <div className="drawer-section-title">Analytics (reportes)</div>
+              <div style={{ marginBottom: '1.25rem' }}>
+                {analyticsAccess === null ? (
+                  <div style={{ fontSize: 12.5, color: 'var(--t3)' }}>Consultando acceso…</div>
+                ) : analyticsAccess.unavailable ? (
+                  <div style={{ fontSize: 12.5, color: 'var(--t3)' }}>
+                    No se pudo consultar (¿está corriendo el backend de Analytics?)
+                  </div>
+                ) : (
+                  <>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: analyticsBusy ? 'wait' : 'pointer', userSelect: 'none', marginBottom: 8, fontSize: 13, color: 'var(--t2)' }}>
+                      <input
+                        type="checkbox"
+                        className="select-checkbox"
+                        disabled={analyticsBusy}
+                        checked={!!analyticsAccess.enabled}
+                        onChange={async (e) => {
+                          const enabled = e.target.checked
+                          setAnalyticsBusy(true)
+                          try {
+                            await usersApi.setAnalyticsAccess(selected.id, { enabled, is_admin: analyticsAccess.is_admin })
+                            setAnalyticsAccess({ enabled, is_admin: analyticsAccess.is_admin })
+                          } catch (err) {
+                            notify(err.response?.data?.error || 'Error al actualizar el acceso a Analytics', 'error')
+                          } finally {
+                            setAnalyticsBusy(false)
+                          }
+                        }}
+                      />
+                      Acceso habilitado a dcsmart-analisis
+                    </label>
+                    {analyticsAccess.enabled === null && (
+                      <div style={{ fontSize: 11.5, color: 'var(--t4)', marginBottom: 8 }}>
+                        Sin habilitación individual — hoy entra igual si su rol es super_admin o dcsmart.
+                      </div>
+                    )}
+                    {analyticsAccess.enabled ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: analyticsBusy ? 'wait' : 'pointer', userSelect: 'none', fontSize: 13, color: 'var(--t2)' }}>
+                        <input
+                          type="checkbox"
+                          className="select-checkbox"
+                          disabled={analyticsBusy}
+                          checked={!!analyticsAccess.is_admin}
+                          onChange={async (e) => {
+                            const is_admin = e.target.checked
+                            setAnalyticsBusy(true)
+                            try {
+                              await usersApi.setAnalyticsAccess(selected.id, { enabled: true, is_admin })
+                              setAnalyticsAccess({ enabled: true, is_admin })
+                            } catch (err) {
+                              notify(err.response?.data?.error || 'Error al actualizar el acceso a Analytics', 'error')
+                            } finally {
+                              setAnalyticsBusy(false)
+                            }
+                          }}
+                        />
+                        Administrador en Analytics (puede habilitar a otros)
+                      </label>
+                    ) : null}
+                  </>
+                )}
+              </div>
 
               {/* Roles y Accesos */}
               <div className="drawer-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

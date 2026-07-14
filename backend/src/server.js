@@ -34,6 +34,7 @@ await app.register(cors, {
     const allowed = [
       process.env.FRONTEND_URL || 'http://localhost:5173',
       'http://localhost:5173',
+      'http://localhost:5174', // Vite cae acá cuando 5173 ya está tomado (ej. dcsmart-analisis corriendo en paralelo)
     ]
     if (!origin || allowed.includes(origin) || /\.web\.app$/.test(origin) || /^https?:\/\/([a-z0-9-]+\.)*dcsmart\.app$/i.test(origin)) {
       cb(null, true)
