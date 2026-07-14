@@ -122,7 +122,7 @@ const CAJA_CSV_COLUMNS = [
   { label: 'Observaciones', get: (c) => c.observaciones || '' },
 ]
 
-const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
+const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1, EGRESO: -1 }
 const DESCUADRE_TOLERANCE = 0.01
 
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
