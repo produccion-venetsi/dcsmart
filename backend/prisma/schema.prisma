@@ -405,7 +405,9 @@ enum TipoPago {
   M
   NCA
   NDA
+  ND
   STK
+  X
 
   @@map("tipo_pago")
 }
