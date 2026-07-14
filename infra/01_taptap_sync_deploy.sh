@@ -11,6 +11,9 @@ gcloud iam service-accounts create taptap-sync --project=$PROJECT \
 gcloud projects add-iam-policy-binding $PROJECT \
   --member="serviceAccount:taptap-sync@$PROJECT.iam.gserviceaccount.com" \
   --role=roles/cloudsql.client --condition=None -q
+gcloud projects add-iam-policy-binding $PROJECT \
+  --member="serviceAccount:taptap-sync@$PROJECT.iam.gserviceaccount.com" \
+  --role=roles/run.invoker --condition=None -q
 
 # Build de la imagen (contexto = backend/, usa Dockerfile.taptap-sync)
 gcloud builds submit ../backend --project=$PROJECT \
@@ -30,7 +33,7 @@ gcloud run jobs deploy taptap-sync --project=$PROJECT --region=$REGION \
   --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/taptap-sync:latest \
   --service-account taptap-sync@$PROJECT.iam.gserviceaccount.com \
   --set-cloudsql-instances $INSTANCE \
-  --set-env-vars "DATABASE_URL=postgresql://postgres:~P%29uxFx%5E9oIkt%28xr@localhost/postgres?host=/cloudsql/$INSTANCE&schema=public" \
+  --set-env-vars "DATABASE_URL=postgresql://postgres:REEMPLAZAR_PASSWORD@localhost/postgres?host=/cloudsql/$INSTANCE&schema=public" \
   --max-retries 1 --task-timeout 900
 
 # Scheduler: 5am hora Argentina, todos los días
