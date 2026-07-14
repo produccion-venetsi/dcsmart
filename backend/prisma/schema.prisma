@@ -256,6 +256,7 @@ model Caja {
   tickets       Int?
   observaciones String?
   foto_url      String?
+  id_externo    String?
   origin        Origin    @default(DCSMART)
   created_by    String?
   created_at    DateTime  @default(now())
@@ -267,6 +268,7 @@ model Caja {
   detalles    CajaDetalle[]
 
   @@index([id_local, fecha_inicio])
+  @@index([id_local, id_externo])
   @@map("cajas")
 }
 
@@ -328,6 +330,7 @@ enum TipoMovimiento {
   COBRO
   RETIRO
   VACIADO
+  EGRESO
 
   @@map("tipo_movimiento")
 }
@@ -477,4 +480,14 @@ model Audit {
   @@index([tabla, id_registro, vigente])
   @@index([tabla, id_registro, fecha])
   @@map("audits")
+}
+
+model TapTapSyncRun {
+  id          String    @id @default(uuid())
+  started_at  DateTime  @default(now())
+  finished_at DateTime?
+  resultado   Json?     // { "kjhggtrer": { turnosNuevos: 3, error: null }, ... } por id_local
+  ok          Boolean   @default(true)
+
+  @@map("taptap_sync_runs")
 }

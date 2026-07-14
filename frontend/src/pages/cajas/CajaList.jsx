@@ -122,7 +122,7 @@ const CAJA_CSV_COLUMNS = [
   { label: 'Observaciones', get: (c) => c.observaciones || '' },
 ]
 
-const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
+const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1, EGRESO: -1 }
 const DESCUADRE_TOLERANCE = 0.01
 
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
@@ -326,15 +326,27 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     return acc + sign * Number(d.monto)
   }, 0) || 0
 
+  // Total de movimientos para el resumen (fila debajo de Fiscal): solo
+  // INICIAL + COBRO cuentan -- son los únicos tipos que representan plata
+  // real entrando a la caja en el momento del cierre, el resto (gastos,
+  // retiros, vaciados, ingresos, egresos) son movimientos posteriores/ajustes
+  // que no forman parte del total de venta del turno.
+  const totalMovIniCobro = caja.movimientos?.reduce((acc, m) => {
+    return (m.tipo === 'INICIAL' || m.tipo === 'COBRO') ? acc + Number(m.monto) : acc
+  }, 0) || 0
+
   // Si el origen es DCSMART y hay detalles cargados, el total esperado se
   // valida contra efectivo + detalles (verificado contra datos reales de
   // producción, el "fiscal" no entra en esta cuenta). Si no hay detalles
   // (caja cargada solo con movimientos), sigue el chequeo de siempre contra
-  // movimientos.
+  // movimientos. Las cajas TAPTAP se comprueban distinto: se comparan los
+  // movimientos (inicial + cobro) contra el total, nunca contra detalles.
   const usaDetalles = caja.origin === 'DCSMART' && caja.detalles?.length > 0
-  const totalEsperado = usaDetalles
-    ? Number(caja.efectivo ?? 0) + totalDet
-    : (caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0)
+  const totalEsperado = caja.origin === 'TAPTAP'
+    ? totalMovIniCobro
+    : usaDetalles
+      ? Number(caja.efectivo ?? 0) + totalDet
+      : (caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0)
   const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
   const hayDescuadre = descuadre != null && Math.abs(descuadre) > DESCUADRE_TOLERANCE
 
@@ -348,6 +360,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     ['Total',      fmt$(caja.total)],
     ['Efectivo',   fmt$(caja.efectivo)],
     ['Fiscal',     fmt$(caja.fiscal)],
+    ['Total detalles',    fmt$(totalDet)],
+    ['Total movimientos', fmt$(totalMovIniCobro)],
     ['Comensales', caja.comensales ?? '—'],
     ['Tickets',    caja.tickets ?? '—'],
   ]
