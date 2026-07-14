@@ -11,6 +11,7 @@ import FotoViewer from '../../components/FotoViewer.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
+import { downloadCsv } from '../../lib/csv.js'
 
 const EMPTY_CAJA = {
   nro_turno: '', tipo_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
@@ -88,11 +89,38 @@ function IcoFilter() {
     </svg>
   )
 }
+function IcoDownload() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  )
+}
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
+
+// Mismas columnas que se ven en la tabla; montos como número plano (sin "$")
+// para que Excel/Sheets los reconozca como numéricos al importar el CSV.
+const CAJA_CSV_COLUMNS = [
+  { label: 'Nro Turno',  get: (c) => c.nro_turno ? `TRN ${c.nro_turno}` : '' },
+  { label: 'Tipo',       get: (c) => c.tipo_turno || '' },
+  { label: 'Auditado',   get: (c) => c.audit ? 'Sí' : 'No' },
+  { label: 'Inicio',     get: (c) => c.fecha_inicio ? fmtDate(c.fecha_inicio) : '' },
+  { label: 'Cierre',     get: (c) => c.fecha_cierre ? fmtDate(c.fecha_cierre) : '' },
+  { label: 'Cajero',     get: (c) => c.cajero || '' },
+  { label: 'Total',      get: (c) => c.total ?? '' },
+  { label: 'Efectivo',   get: (c) => c.efectivo ?? '' },
+  { label: 'Fiscal',     get: (c) => c.fiscal ?? '' },
+  { label: 'Comensales', get: (c) => c.comensales ?? '' },
+  { label: 'Tickets',    get: (c) => c.tickets ?? '' },
+  { label: 'Origen',     get: (c) => c.origin || '' },
+  { label: 'Local',      get: (c) => c.local?.nombre || '' },
+  { label: 'Observaciones', get: (c) => c.observaciones || '' },
+]
 
 const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
 const DESCUADRE_TOLERANCE = 0.01
@@ -1486,6 +1514,8 @@ export default function CajaList() {
   const canEdit    = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete  = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
+  const canExport  = ['super_admin', 'dcsmart'].includes(role)
+  const [exporting, setExporting] = useState(false)
 
   const [cajas,      setCajas]      = useState([])
   const [total,      setTotal]      = useState(0)
@@ -1538,6 +1568,21 @@ export default function CajaList() {
 
   // Volver a página 1 cuando cambian filtros / sort / local
   useEffect(() => { setPage(1) }, [cajaListParams])
+
+  // ── Exportar CSV: mismos filtros ya aplicados, pero SIN paginar (limit: 0
+  // → el backend trae todas las filas que matchean el where, no una página) ──
+  const exportCsv = useCallback(async () => {
+    setExporting(true)
+    try {
+      const { data } = await cajasApi.list({ ...cajaListParams(1), limit: 0 })
+      if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
+      downloadCsv(`cajas_${new Date().toISOString().slice(0, 10)}.csv`, data.data, CAJA_CSV_COLUMNS)
+    } catch {
+      notify('Error al exportar CSV', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }, [cajaListParams, notify])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -1740,6 +1785,11 @@ export default function CajaList() {
           {(canEdit || canDelete) && (
             <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
               <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+            </button>
+          )}
+          {canExport && (
+            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a CSV las cajas con los filtros actuales">
+              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
             </button>
           )}
           {canCreate && (

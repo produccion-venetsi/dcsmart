@@ -10,6 +10,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
+import { downloadCsv } from '../../lib/csv.js'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -86,6 +87,22 @@ function IcoPlane() {
     </svg>
   )
 }
+function IcoBox() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+      <path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+    </svg>
+  )
+}
+function IcoDownload() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  )
+}
 function IcoDollar() {
   return (
     <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -136,6 +153,32 @@ function fmtDate(d)  { return d ? new Date(d).toLocaleDateString('es-AR', { time
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short', timeZone: 'UTC' }) : '—' }
 function fmtPV(v)    { return v != null ? String(v).padStart(5, '0') : '—' }
 function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
+
+// Mismas columnas que se ven en la tabla; los montos van como número plano
+// (sin "$" ni separador de miles) para que Excel/Sheets los reconozca como
+// numéricos al importar el CSV, en vez de como texto.
+const PAGO_CSV_COLUMNS = [
+  { label: 'OP',          get: (p) => p.nro_ord != null ? `OP-${p.nro_ord}` : '' },
+  { label: 'Auditado',    get: (p) => p.audit ? 'Sí' : 'No' },
+  { label: 'Fecha',       get: (p) => p.fecha ? fmtDate(p.fecha) : '' },
+  { label: 'Proveedor',   get: (p) => p.proveedor?.nombre || '' },
+  { label: 'Rubro',       get: (p) => p.rubcat?.rubro?.nombre || '' },
+  { label: 'Categoría',   get: (p) => p.rubcat?.categoria?.nombre || '' },
+  { label: 'Tipo',        get: (p) => p.id_tipo || '' },
+  { label: 'PV',          get: (p) => p.pv != null ? fmtPV(p.pv) : '' },
+  { label: 'Nro',         get: (p) => p.nro != null ? fmtNro(p.nro) : '' },
+  { label: 'Neto',        get: (p) => p.importe_neto ?? '' },
+  { label: 'Importe',     get: (p) => p.importe ?? '' },
+  { label: 'Método',      get: (p) => p.metodo_pago?.nombre || '' },
+  { label: 'Cashflow',    get: (p) => p.cashflow ? fmtDate(p.cashflow) : '' },
+  { label: 'Dirección',   get: (p) => p.ingresa_egreso == null ? '' : (p.ingresa_egreso ? 'Ingreso' : 'Egreso') },
+  { label: 'Estado',      get: (p) => ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op ?? '' },
+  { label: 'Pagado',      get: (p) => p.pagado ? 'Sí' : 'No' },
+  { label: 'Fecha Pago',  get: (p) => p.fecha_pago ? fmtDate(p.fecha_pago) : '' },
+  { label: 'Período',     get: (p) => p.periodo ? fmtMonth(p.periodo) : '' },
+  { label: 'Local',       get: (p) => p.local?.nombre || '' },
+  { label: 'Observaciones', get: (p) => p.observaciones || '' },
+]
 
 function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false }) {
   const notify      = useUiStore((s) => s.notify)
@@ -782,6 +825,8 @@ export default function PagoList() {
   const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
   const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
+  const canExport   = ['super_admin', 'dcsmart'].includes(role)
+  const [exporting, setExporting] = useState(false)
 
   const [pagos,           setPagos]           = useState([])
   const [total,           setTotal]           = useState(0)
@@ -850,6 +895,21 @@ export default function PagoList() {
 
   // ── Volver a página 1 cuando cambian filtros / sort / búsqueda ────────────
   useEffect(() => { setPage(1) }, [buildParams])
+
+  // ── Exportar CSV: mismos filtros ya aplicados, pero SIN paginar (limit: 0
+  // → el backend trae todas las filas que matchean el where, no una página) ──
+  const exportCsv = useCallback(async () => {
+    setExporting(true)
+    try {
+      const { data } = await pagosApi.list({ ...buildParams(1), limit: 0 })
+      if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
+      downloadCsv(`pagos_${new Date().toISOString().slice(0, 10)}.csv`, data.data, PAGO_CSV_COLUMNS)
+    } catch {
+      notify('Error al exportar CSV', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }, [buildParams, notify])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -1301,9 +1361,19 @@ export default function PagoList() {
               <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
             </button>
           )}
-          <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido')} title="Carga rápida">
-            <IcoPlane /> Carga rápida
-          </button>
+          <ActionsMenu label="Carga rápida" openOnClick>
+            <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=B')} title="Carga Avión">
+              <IcoPlane /> Carga Avión
+            </button>
+            <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=STK')} title="MovStock">
+              <IcoBox /> MovStock
+            </button>
+          </ActionsMenu>
+          {canExport && (
+            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a CSV los pagos con los filtros actuales">
+              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => navigate('/pagos/nuevo')}>
             <IcoPlus /> Nuevo Pago
           </button>

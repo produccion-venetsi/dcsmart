@@ -73,6 +73,7 @@ export default function PagoForm() {
   const navigate        = useNavigate()
   const [searchParams]  = useSearchParams()
   const modoRapido      = searchParams.get('modo') === 'rapido'
+  const tipoParam       = searchParams.get('tipo') // 'B' (Carga Avión) o 'STK' (MovStock)
   const activeLocal     = useAppStore((s) => s.activeLocal)
   const activeApp       = useAppStore((s) => s.activeApp)
   const notify          = useUiStore((s) => s.notify)
@@ -130,7 +131,7 @@ export default function PagoForm() {
 
   const [form, setForm] = useState(() => ({
     fecha: hoy,
-    id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? 'STK' : '',
+    id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : '',
     pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
@@ -150,6 +151,10 @@ export default function PagoForm() {
     Promise.all([metReq, pagoReq, localReq])
       .then(async ([{ data: mets }, pagoRes, localRes]) => {
         setMetodos(mets)
+        if (!isEditing && modoRapido) {
+          const efectivo = mets.find((m) => m.nombre === 'Efectivo')
+          if (efectivo) setForm((f) => ({ ...f, id_metodo: f.id_metodo || efectivo.id }))
+        }
         if (pagoRes) {
           const d = pagoRes.data
           if (d.id_proveedor && d.proveedor) {
@@ -315,6 +320,9 @@ export default function PagoForm() {
     if (!form.fecha)     { notify('La fecha es obligatoria', 'error'); return }
     if (!form.id_rubcat) { notify('El rubro / categoría es obligatorio', 'error'); return }
     if (!form.id_metodo) { notify('El método de pago es obligatorio', 'error'); return }
+    if (!form.pv)         { notify('El punto de venta es obligatorio', 'error'); return }
+    if (!form.nro)        { notify('El número de comprobante es obligatorio', 'error'); return }
+    if (!form.cashflow)   { notify('El cashflow es obligatorio', 'error'); return }
     if (!form.importe)   { notify('Ingresá el importe neto (o un impuesto) para calcular el total', 'error'); return }
     setLoading(true)
     try {
@@ -481,10 +489,11 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Cashflow</label>
+              <label className="form-label">Cashflow *</label>
               <div className="form-input-wrap">
                 <input
                   type="date"
+                  required
                   value={form.cashflow}
                   onChange={e => set('cashflow', e.target.value)}
                   title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
@@ -546,11 +555,12 @@ export default function PagoForm() {
           {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
           <div className="form-grid form-row">
             <div className="form-group">
-              <label className="form-label">Punto de Venta</label>
+              <label className="form-label">Punto de Venta *</label>
               <div className="form-input-wrap">
                 <input
                   type="text"
                   inputMode="numeric"
+                  required
                   placeholder="00000"
                   maxLength={5}
                   value={form.pv}
@@ -561,11 +571,12 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Nro Comprobante</label>
+              <label className="form-label">Nro Comprobante *</label>
               <div className="form-input-wrap">
                 <input
                   type="text"
                   inputMode="numeric"
+                  required
                   placeholder="00000000"
                   maxLength={8}
                   value={form.nro}

@@ -801,6 +801,24 @@ body {
   animation: fadeUp 0.18s var(--ease) both;
 }
 
+/* Variante openOnClick de ActionsMenu: flota sobre el contenido en vez de
+   empujarlo -- necesario dentro de una fila de botones (page-actions) donde
+   el modo hover/flujo normal rompe el responsive al abrir/cerrar. */
+.actions-menu-panel-float {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 200;
+  min-width: 180px;
+  flex-wrap: nowrap;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+@media (max-width: 640px) {
+  .actions-menu-panel-float { left: auto; right: 0; }
+}
+
 /* Checkbox de selección múltiple (listados) -- acento dorado, no el azul/gris
    por defecto del navegador. */
 .select-checkbox {
