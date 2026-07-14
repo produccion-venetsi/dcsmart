@@ -835,7 +835,7 @@ export default function PagoList() {
   const [filters,         setFilters]         = useState(FILTER_INIT)
   const [panelOpen,       setPanelOpen]       = useState(false)
   const [selectedPago,    setSelectedPago]    = useState(null)
-  const [sortField,       setSortField]       = useState('fecha')
+  const [sortField,       setSortField]       = useState('nro_ord')
   const [sortDir,         setSortDir]         = useState('desc')
   const [search,          setSearch]          = useState(() => searchParams.get('search') || '')
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') || '')
