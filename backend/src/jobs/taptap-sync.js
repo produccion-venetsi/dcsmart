@@ -26,7 +26,7 @@ const LOCALES_TAPTAP = [
   { groupId: 'farmacialezama',   id_local: 'e1bea49b-d306-47f2-bcc8-1ffd9cda41d9' },
   { groupId: 'picsa',            id_local: 'KSYVVXZN' },
   { groupId: 'bebop',            id_local: 'UYPLAVIG' },
-  { groupId: 'casonaazopardo',   id_local: 'POIUYTR' },
+  { groupId: 'casonaazopardo',   id_local: 'OLHGEOYQ' },  // ALDOS — POIUYTR (config original) no existe en la base
 ]
 
 async function obtenerMaxId(id_local) {
