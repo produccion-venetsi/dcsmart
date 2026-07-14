@@ -1,0 +1,66 @@
+{
+  "groupid": "latinopaseocolon",
+  "id": 237719609,
+  "info": {
+    "header": {
+      "secuenciador": 675,
+      "autor": "plataformas",
+      "desde": 1784020409463,
+      "hasta": 1784033303222,
+      "note": ""
+    },
+    "sales": {
+      "totalmonto": 576500,
+      "cobrostotalmonto": 544100,
+      "ventasdeliverymonto": 0,
+      "ventastakeawaymonto": 576500,
+      "ventassalonmonto": 0,
+      "ventaswebmonto": 0,
+      "ventassaloncantidad": 0,
+      "cobrosefectivomonto": 28500,
+      "cobrostarjetasmonto": 515600,
+      "cobrosctactemonto": 0,
+      "abiertasmonto": 0,
+      "cobrarmonto": 32400
+    },
+    "cash": [
+      {
+        "id": 18,
+        "name": "alexis",
+        "inicial": [],
+        "retiros": [],
+        "vaciados": [],
+        "ingresos": [],
+        "egresos": [],
+        "gastos": [],
+        "ajustes": [],
+        "diffs": [],
+        "alivios": [],
+        "transfers": [],
+        "proveedores": [],
+        "empleados": [],
+        "clientes": [],
+        "cobranzas": [
+          { "monedaid": 0, "monto": 22000, "groupCount": 4, "monedaname": "Efectivo" },
+          { "monedaid": 50, "monto": 294900, "groupCount": 40, "monedaname": "MP Point" }
+        ]
+      },
+      {
+        "id": 16,
+        "name": "dylan",
+        "inicial": [], "retiros": [], "vaciados": [], "ingresos": [], "egresos": [],
+        "gastos": [], "ajustes": [], "diffs": [], "alivios": [], "transfers": [],
+        "proveedores": [], "empleados": [], "clientes": [],
+        "cobranzas": [
+          { "monedaid": 50, "monto": 121600, "groupCount": 16, "monedaname": "MP Point" }
+        ]
+      }
+    ],
+    "fiscal": { "totalmonto": 538600, "nofiscal": 37900 },
+    "audit": {
+      "descuentos": { "monto": 0 },
+      "contraordenes": { "monto": 0 },
+      "recargos": { "monto": 0 }
+    }
+  }
+}
