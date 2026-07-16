@@ -13,6 +13,7 @@ model App {
   nombre     String
   slug       String   @unique
   activo     Boolean  @default(true)
+  solo_super_admin Boolean @default(false)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
