@@ -86,19 +86,19 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="form-group">
+      <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
         <label className="form-label">Caja fuerte</label>
         <div className="form-input-wrap">
           <input type="number" step="0.01" required value={cajaFuerte} onChange={e => setCajaFuerte(e.target.value)} />
         </div>
       </div>
-      <div className="form-group">
+      <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
         <label className="form-label">Cofre</label>
         <div className="form-input-wrap">
           <input type="number" step="0.01" required value={cofre} onChange={e => setCofre(e.target.value)} />
         </div>
       </div>
-      <div className="form-group">
+      <div className="form-group" style={{ margin: 0 }}>
         <label className="form-label">Adición</label>
         <div className="form-input-wrap">
           <input type="number" step="0.01" required value={adicion} onChange={e => setAdicion(e.target.value)} />
