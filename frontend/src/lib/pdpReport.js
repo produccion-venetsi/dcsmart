@@ -172,4 +172,5 @@ export async function generarReportePdp({ localNombre, pagosPdp, totalDeuda }) {
   })
 
   doc.save(`${nombreReporte}.pdf`)
+  return { blob: doc.output('blob'), filename: `${nombreReporte}.pdf` }
 }

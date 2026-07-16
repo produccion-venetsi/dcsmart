@@ -7,6 +7,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
+import { pdpApi } from '../../api/pdp.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -429,11 +430,26 @@ export default function PdpDashboard() {
   const handleGenerarReporte = async () => {
     setGeneratingReport(true)
     try {
-      await generarReportePdp({
+      const { blob, filename } = await generarReportePdp({
         localNombre: activeLocal?.nombre,
         pagosPdp: pagar,
         totalDeuda: sumImporte(deuda),
       })
+      try {
+        const formData = new FormData()
+        formData.append('file', blob, filename)
+        const { data: uploadRes } = await pagosApi.upload(formData, activeLocal?.id)
+        await pdpApi.create({
+          id_local: activeLocal.id,
+          pago_ids: pagar.map(p => p.id),
+          pdf_url: uploadRes.url,
+        })
+        loadHistorial()
+      } catch {
+        // El PDF ya se descargó al navegador -- si falla el registro, se
+        // avisa pero no se bloquea nada que el usuario ya haya recibido.
+        notify('El reporte se descargó, pero no se pudo guardar el registro del PDP', 'error')
+      }
     } catch {
       notify('Error al generar el reporte', 'error')
     } finally {
