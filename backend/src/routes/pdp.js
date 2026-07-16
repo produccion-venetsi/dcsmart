@@ -38,8 +38,11 @@ export default async function pdpRoutes(fastify) {
 
     const pagos = await fastify.db.pago.findMany({
       where: { id: { in: pago_ids } },
-      select: { id: true, importe: true }
+      select: { id: true, importe: true, id_local: true }
     })
+    if (pagos.some(p => p.id_local !== id_local)) {
+      return reply.code(400).send({ error: 'Uno o más pagos no pertenecen al local indicado' })
+    }
     const total = pagos.reduce((acc, p) => acc + Number(p.importe ?? 0), 0)
 
     const pdp = await fastify.db.pdp.create({
