@@ -347,7 +347,10 @@ function PdpColumn({
 export default function PdpDashboard() {
   const navigate    = useNavigate()
   const activeLocal = useAppStore((s) => s.activeLocal)
+  const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
+  const role        = activeApp?.role
+  const canVerUltimoUsuario = ['dcsmart', 'super_admin'].includes(role)
 
   const [deuda,   setDeuda]   = useState([])
   const [pagar,   setPagar]   = useState([])
@@ -580,7 +583,7 @@ export default function PdpDashboard() {
         Historial de PDP
       </div>
       {loadingHistorial ? (
-        <div style={{ padding: '1rem' }}><span className="spinner" /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}><span className="spinner" /></div>
       ) : historial.length === 0 ? (
         <div className="pdp-empty">Todavía no se generó ningún PDP para este local.</div>
       ) : (
@@ -588,7 +591,7 @@ export default function PdpDashboard() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Fecha</th><th>Creado por</th><th>Cant. pagos</th><th>Total</th>
+                <th>Fecha</th>{canVerUltimoUsuario && <th>Último usuario</th>}<th>Cant. pagos</th><th>Total</th>
                 <th>Última descarga</th><th></th>
               </tr>
             </thead>
@@ -596,7 +599,7 @@ export default function PdpDashboard() {
               {historial.map((p) => (
                 <tr key={p.id}>
                   <td>{fmtDateTime(p.created_at)}</td>
-                  <td>{p.creador?.nombre || '—'}</td>
+                  {canVerUltimoUsuario && <td>{p.creador?.email || '—'}</td>}
                   <td>{p.cantidad_pagos}</td>
                   <td className="td-number">{fmt$(p.total)}</td>
                   <td>{fmtDateTime(p.ultima_descarga)}</td>

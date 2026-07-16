@@ -16,7 +16,7 @@ export default async function pdpRoutes(fastify) {
     const pdps = await fastify.db.pdp.findMany({
       where: { id_local },
       orderBy: { created_at: 'desc' },
-      include: { creador: { select: { nombre: true } } }
+      include: { creador: { select: { email: true } } }
     })
     return { data: pdps }
   })
