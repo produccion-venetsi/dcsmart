@@ -29,7 +29,9 @@ async function calcularIngresos(fastify, id_local, fechaDesde, fechaHasta) {
 
 // Suma Pago.importe del local, pagado=true, en efectivo, egreso real, en (fechaDesde, fechaHasta].
 async function calcularGastos(fastify, id_local, fechaDesde, fechaHasta) {
-  const metodoEfectivo = await fastify.db.metodoPago.findUnique({ where: { nombre: 'Efectivo' } })
+  const metodoEfectivo = await fastify.db.metodoPago.findFirst({
+    where: { nombre: { equals: 'Efectivo', mode: 'insensitive' } }
+  })
   if (!metodoEfectivo) return 0
   const pagos = await fastify.db.pago.findMany({
     where: {
@@ -114,7 +116,7 @@ export default async function arqueoRoutes(fastify) {
           create: (detalles || []).map((d) => ({
             id_tipo: d.id_tipo || null,
             nombre: d.nombre || null,
-            monto: String(d.monto)
+            monto: String(d.monto ?? 0)
           }))
         }
       },
