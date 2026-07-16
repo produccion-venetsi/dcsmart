@@ -404,9 +404,11 @@ enum TipoPago {
   DC_1 @map("DC (1)")
   DC_2 @map("DC (2)")
   DDJJ
+  FF
   LF
   M
   NCA
+  NCB
   NDA
   ND
   STK
