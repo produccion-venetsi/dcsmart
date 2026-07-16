@@ -112,12 +112,16 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
           <button type="button" className="btn btn-sm btn-secondary" onClick={() => removePendingDetalle(d._key)}>✕</button>
         </div>
       ))}
-      <div style={{ display: 'flex', gap: 8, marginTop: '0.5rem' }}>
-        <select value={detForm.id_tipo} onChange={e => setDetForm({ ...detForm, id_tipo: e.target.value })}>
-          <option value="">Tipo…</option>
-          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-        </select>
-        <input type="number" step="0.01" placeholder="Monto" value={detForm.monto} onChange={e => setDetForm({ ...detForm, monto: e.target.value })} />
+      <div style={{ display: 'flex', gap: 8, marginTop: '0.5rem', alignItems: 'flex-start' }}>
+        <div className="form-input-wrap" style={{ flex: 2 }}>
+          <select value={detForm.id_tipo} onChange={e => setDetForm({ ...detForm, id_tipo: e.target.value })}>
+            <option value="">Tipo…</option>
+            {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+          </select>
+        </div>
+        <div className="form-input-wrap" style={{ flex: 1 }}>
+          <input type="number" step="0.01" placeholder="Monto" value={detForm.monto} onChange={e => setDetForm({ ...detForm, monto: e.target.value })} />
+        </div>
         <button type="button" className="btn btn-sm btn-secondary" onClick={addPendingDetalle}>
           <IcoPlus /> Agregar
         </button>
