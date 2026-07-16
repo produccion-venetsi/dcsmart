@@ -120,7 +120,10 @@ export default async function arqueoRoutes(fastify) {
     const total = Number(caja_fuerte) + Number(cofre) + Number(adicion)
     const ingresos = await calcularIngresos(fastify, id_local, fechaDesde, fechaArqueo)
     const gastos = await calcularGastos(fastify, id_local, fechaDesde, fechaArqueo)
-    const comprobacion = (total + totalUltimoArqueo) - (ingresos + gastos)
+    // Compara cuánto cambió realmente la plata contada (total - total del arqueo
+    // anterior) contra cuánto debería haber cambiado según el sistema (ingresos -
+    // gastos). Si da 0, cuadra.
+    const comprobacion = (total - totalUltimoArqueo) - (ingresos - gastos)
 
     const arqueo = await fastify.db.arqueo.create({
       data: {

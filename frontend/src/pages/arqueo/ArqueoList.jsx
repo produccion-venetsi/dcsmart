@@ -52,7 +52,7 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
 
   const total = (Number(cajaFuerte) || 0) + (Number(cofre) || 0) + (Number(adicion) || 0)
   const comprobacion = preview
-    ? (total + preview.total_ultimo_arqueo) - (preview.ingresos + preview.gastos)
+    ? (total - preview.total_ultimo_arqueo) - (preview.ingresos - preview.gastos)
     : null
 
   const addPendingDetalle = () => {
