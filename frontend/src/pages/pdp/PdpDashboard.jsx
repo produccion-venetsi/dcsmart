@@ -360,6 +360,10 @@ export default function PdpDashboard() {
   const [pagarOpen, setPagarOpen] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
 
+  const [historial, setHistorial] = useState([])
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
+  const [descargandoId, setDescargandoId] = useState(null)
+
   const [panelOpen,    setPanelOpen]    = useState(false)
   const [selectedPago, setSelectedPago] = useState(null)
   const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
@@ -379,11 +383,21 @@ export default function PdpDashboard() {
       .finally(() => setLoading(false))
   }
 
+  const loadHistorial = () => {
+    if (!activeLocal?.id) { setHistorial([]); return }
+    setLoadingHistorial(true)
+    pdpApi.list(activeLocal.id)
+      .then(({ data }) => setHistorial(data.data))
+      .catch(() => notify('Error al cargar el historial de PDP', 'error'))
+      .finally(() => setLoadingHistorial(false))
+  }
+
   useEffect(() => {
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [activeLocal?.id])
+  useEffect(() => { loadHistorial() }, [activeLocal?.id])
 
   const groupsDeuda = useMemo(() => groupByProveedor(deuda), [deuda])
   const groupsPagar = useMemo(() => groupByProveedor(pagar), [pagar])
@@ -470,6 +484,28 @@ export default function PdpDashboard() {
     finally { setWorking(false) }
   }
 
+  function fmtDateTime(d) {
+    return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—'
+  }
+
+  const handleDescargarPdp = async (pdp) => {
+    setDescargandoId(pdp.id)
+    try {
+      const res = await pdpApi.attachment(pdp.id)
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `PDP_${activeLocal?.nombre || 'local'}_${pdp.id.slice(0, 8)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      loadHistorial()
+    } catch {
+      notify('Error al descargar el PDP', 'error')
+    } finally {
+      setDescargandoId(null)
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-head">
@@ -535,6 +571,48 @@ export default function PdpDashboard() {
           generatingReport={generatingReport}
         />
       </div>
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>
+        Historial de PDP
+      </div>
+      {loadingHistorial ? (
+        <div style={{ padding: '1rem' }}><span className="spinner" /></div>
+      ) : historial.length === 0 ? (
+        <div className="pdp-empty">Todavía no se generó ningún PDP para este local.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Creado por</th><th>Cant. pagos</th><th>Total</th>
+                <th>Última descarga</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {historial.map((p) => (
+                <tr key={p.id}>
+                  <td>{fmtDateTime(p.created_at)}</td>
+                  <td>{p.creador?.nombre || '—'}</td>
+                  <td>{p.cantidad_pagos}</td>
+                  <td className="td-number">{fmt$(p.total)}</td>
+                  <td>{fmtDateTime(p.ultima_descarga)}</td>
+                  <td>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleDescargarPdp(p)}
+                      disabled={descargandoId === p.id}
+                    >
+                      {descargandoId === p.id
+                        ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                        : 'Descargar'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {pagarOpen && (
         <PagarModal
