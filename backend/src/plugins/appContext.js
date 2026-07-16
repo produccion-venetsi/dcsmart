@@ -29,6 +29,15 @@ async function appContextPlugin(fastify) {
     }
 
     const roleName = effective.role.nombre
+
+    const app = await fastify.db.app.findUnique({
+      where: { id: appId },
+      select: { solo_super_admin: true }
+    })
+    if (app?.solo_super_admin && roleName !== 'super_admin') {
+      return reply.code(403).send({ error: 'Sin acceso a esta app' })
+    }
+
     request.activeAppId   = appId
     request.activeRole    = roleName
     request.effectiveRoleId = effective.id_role

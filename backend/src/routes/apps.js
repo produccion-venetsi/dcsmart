@@ -1,8 +1,13 @@
 export default async function appsRoutes(fastify) {
   const preHandler = [fastify.authenticate, fastify.can('apps', 'view')]
 
-  fastify.get('/', { preHandler }, async () => {
-    return fastify.db.app.findMany({ orderBy: { nombre: 'asc' } })
+  fastify.get('/', { preHandler }, async (request) => {
+    const superAdminRole = await fastify.db.userAppRole.findFirst({
+      where: { id_user: request.user.id, role: { nombre: 'super_admin' } }
+    })
+    const apps = await fastify.db.app.findMany({ orderBy: { nombre: 'asc' } })
+    if (superAdminRole) return apps
+    return apps.filter((a) => !a.solo_super_admin)
   })
 
   fastify.get('/:id', { preHandler }, async (request, reply) => {
