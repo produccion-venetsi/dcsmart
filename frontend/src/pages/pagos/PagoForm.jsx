@@ -591,7 +591,7 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
                   <option value="">—</option>
-                  {['A','B','C','CM','DC_1','DC_2','DDJJ','LF','M','NCA','NDA','STK'].map(t => <option key={t} value={t}>{t}</option>)}
+                  {['A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'].map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
             </div>
