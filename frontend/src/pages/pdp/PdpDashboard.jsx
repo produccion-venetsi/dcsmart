@@ -17,7 +17,16 @@ function fmt$(n) {
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short', timeZone: 'UTC' }) : '—' }
-function todayISO() { return new Date().toISOString().slice(0, 10) }
+// Fecha+hora local actual en formato para <input type="datetime-local"> ("YYYY-MM-DDTHH:mm").
+// Captura el momento real en que se marca el pago como pagado -- necesario para que Arqueo
+// pueda ordenarlo correctamente contra otros arqueos/cajas del mismo día (con fecha_pago a
+// medianoche, un gasto real quedaba "antes" de cualquier arqueo posterior del mismo día aunque
+// en los hechos se haya pagado después).
+function nowLocalDateTime() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 function provName(p) {
   return p.proveedor?.razon_social || p.proveedor?.nombre || 'Sin proveedor'
@@ -93,7 +102,7 @@ function IcoExpandAll() {
 
 /* ── modal de pago ── */
 function PagarModal({ count, total, metodos, onClose, onConfirm, working }) {
-  const [fecha, setFecha]       = useState(todayISO())
+  const [fecha, setFecha]       = useState(nowLocalDateTime())
   const [idMetodo, setIdMetodo] = useState('')
 
   return (
@@ -109,7 +118,7 @@ function PagarModal({ count, total, metodos, onClose, onConfirm, working }) {
         <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
           <label className="form-label">Fecha de pago</label>
           <div className="form-input-wrap">
-            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+            <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} />
           </div>
         </div>
 
