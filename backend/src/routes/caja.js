@@ -252,22 +252,27 @@ export default async function cajaRoutes(fastify) {
     }
 
     const {
-      nro_turno, tipo_turno, fecha_cierre, cajero, total, efectivo, fiscal,
+      nro_turno, tipo_turno, fecha_inicio, fecha_cierre, cajero, total, efectivo, fiscal,
       comensales, tickets, observaciones, foto_url
     } = request.body
+
+    if (fecha_inicio !== undefined && !fecha_inicio) {
+      return reply.code(400).send({ error: 'fecha_inicio no puede quedar vacía' })
+    }
 
     const caja = await fastify.db.caja.update({
       where: { id: request.params.id },
       data: {
         nro_turno,
         tipo_turno:    tipo_turno    !== undefined ? toTipoTurnoEnum(tipo_turno) : undefined,
-        fecha_cierre:  fecha_cierre  ? new Date(fecha_cierre)  : undefined,
+        fecha_inicio:  fecha_inicio  !== undefined ? new Date(fecha_inicio) : undefined,
+        fecha_cierre:  fecha_cierre  !== undefined ? (fecha_cierre ? new Date(fecha_cierre) : null) : undefined,
         cajero,
-        total:         total         !== undefined ? parseFloat(total)         : undefined,
-        efectivo:      efectivo      !== undefined ? parseFloat(efectivo)      : undefined,
-        fiscal:        fiscal        !== undefined ? parseFloat(fiscal)        : undefined,
-        comensales:    comensales    !== undefined ? parseInt(comensales)      : undefined,
-        tickets:       tickets       !== undefined ? parseInt(tickets)         : undefined,
+        total:         total         !== undefined ? (total       !== null ? parseFloat(total)      : null) : undefined,
+        efectivo:      efectivo      !== undefined ? (efectivo    !== null ? parseFloat(efectivo)   : null) : undefined,
+        fiscal:        fiscal        !== undefined ? (fiscal      !== null ? parseFloat(fiscal)      : null) : undefined,
+        comensales:    comensales    !== undefined ? (comensales  !== null ? parseInt(comensales)    : null) : undefined,
+        tickets:       tickets       !== undefined ? (tickets     !== null ? parseInt(tickets)       : null) : undefined,
         observaciones, foto_url
       }
     })
