@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { arqueoApi } from '../../api/arqueo.js'
+import { detallesApi } from '../../api/detalles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
@@ -19,6 +20,181 @@ function IcoPlus() {
     <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
     </svg>
+  )
+}
+
+/* ── panel de creación (con preview) ── */
+function ArqueoCreatePanel({ activeLocal, onCreated }) {
+  const notify = useUiStore((s) => s.notify)
+  const [saving, setSaving] = useState(false)
+
+  const [cajaFuerte, setCajaFuerte] = useState('')
+  const [cofre,      setCofre]      = useState('')
+  const [adicion,    setAdicion]    = useState('')
+
+  const [preview, setPreview] = useState(null)
+  const [loadingPreview, setLoadingPreview] = useState(true)
+
+  const [tipos, setTipos] = useState([])
+  const [pendingDetalles, setPendingDetalles] = useState([])
+  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '' })
+
+  const fechaArqueo = new Date()
+
+  useEffect(() => {
+    detallesApi.tipos(activeLocal.id).then(r => setTipos(r.data || [])).catch(() => {})
+    setLoadingPreview(true)
+    arqueoApi.preview(activeLocal.id, fechaArqueo.toISOString())
+      .then(({ data }) => setPreview(data))
+      .catch(() => notify('Error al calcular el preview', 'error'))
+      .finally(() => setLoadingPreview(false))
+  }, [activeLocal.id])
+
+  const total = (Number(cajaFuerte) || 0) + (Number(cofre) || 0) + (Number(adicion) || 0)
+  const comprobacion = preview
+    ? (total + preview.total_ultimo_arqueo) - (preview.ingresos + preview.gastos)
+    : null
+
+  const addPendingDetalle = () => {
+    if (!detForm.monto) return
+    setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
+    setDetForm({ id_tipo: '', monto: '' })
+  }
+  const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await arqueoApi.create({
+        id_local: activeLocal.id,
+        fecha: fechaArqueo.toISOString(),
+        caja_fuerte: parseFloat(cajaFuerte) || 0,
+        cofre: parseFloat(cofre) || 0,
+        adicion: parseFloat(adicion) || 0,
+        detalles: pendingDetalles.map(d => ({
+          id_tipo: d.id_tipo || null,
+          monto: parseFloat(d.monto) || 0
+        }))
+      })
+      notify('Arqueo creado', 'success')
+      onCreated()
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al crear el arqueo', 'error')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="form-group">
+        <label className="form-label">Caja fuerte</label>
+        <div className="form-input-wrap">
+          <input type="number" step="0.01" required value={cajaFuerte} onChange={e => setCajaFuerte(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Cofre</label>
+        <div className="form-input-wrap">
+          <input type="number" step="0.01" required value={cofre} onChange={e => setCofre(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Adición</label>
+        <div className="form-input-wrap">
+          <input type="number" step="0.01" required value={adicion} onChange={e => setAdicion(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Detalles (opcional)</div>
+      {pendingDetalles.map(d => (
+        <div key={d._key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+          <span>{tipos.find(t => t.id === d.id_tipo)?.nombre || 'Sin tipo'}: {fmt$(d.monto)}</span>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => removePendingDetalle(d._key)}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: '0.5rem' }}>
+        <select value={detForm.id_tipo} onChange={e => setDetForm({ ...detForm, id_tipo: e.target.value })}>
+          <option value="">Tipo…</option>
+          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+        </select>
+        <input type="number" step="0.01" placeholder="Monto" value={detForm.monto} onChange={e => setDetForm({ ...detForm, monto: e.target.value })} />
+        <button type="button" className="btn btn-sm btn-secondary" onClick={addPendingDetalle}>
+          <IcoPlus /> Agregar
+        </button>
+      </div>
+
+      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Comprobación</div>
+      {loadingPreview ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}><span className="spinner" /></div>
+      ) : (
+        <div className="drawer-detail">
+          <div className="drawer-detail-row"><span className="drawer-detail-key">Total contado</span><span className="drawer-detail-val">{fmt$(total)}</span></div>
+          <div className="drawer-detail-row"><span className="drawer-detail-key">Total arqueo anterior</span><span className="drawer-detail-val">{fmt$(preview?.total_ultimo_arqueo)}</span></div>
+          <div className="drawer-detail-row"><span className="drawer-detail-key">Ingresos</span><span className="drawer-detail-val">{fmt$(preview?.ingresos)}</span></div>
+          <div className="drawer-detail-row"><span className="drawer-detail-key">Gastos</span><span className="drawer-detail-val">{fmt$(preview?.gastos)}</span></div>
+          <div className="drawer-detail-row">
+            <span className="drawer-detail-key">Comprobación</span>
+            <span className={`badge ${Math.abs(comprobacion) < 0.01 ? 'badge-green' : 'badge-red'}`}>{fmt$(comprobacion)}</span>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
+        <button type="submit" className="btn btn-primary" disabled={saving || loadingPreview}>
+          {saving ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : 'Confirmar arqueo'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/* ── panel de detalle ── */
+function ArqueoDetailPanel({ arqueoId }) {
+  const notify = useUiStore((s) => s.notify)
+  const [arqueo, setArqueo] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    arqueoApi.get(arqueoId)
+      .then(({ data }) => setArqueo(data))
+      .catch(() => notify('Error al cargar el arqueo', 'error'))
+      .finally(() => setLoading(false))
+  }, [arqueoId])
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><span className="spinner" /></div>
+  if (!arqueo) return null
+
+  const cuadra = Math.abs(Number(arqueo.comprobacion)) < 0.01
+
+  return (
+    <div>
+      <div className="drawer-detail">
+        <div className="drawer-detail-row"><span className="drawer-detail-key">Fecha</span><span className="drawer-detail-val">{fmtDateTime(arqueo.fecha)}</span></div>
+        <div className="drawer-detail-row"><span className="drawer-detail-key">Caja fuerte</span><span className="drawer-detail-val">{fmt$(arqueo.caja_fuerte)}</span></div>
+        <div className="drawer-detail-row"><span className="drawer-detail-key">Cofre</span><span className="drawer-detail-val">{fmt$(arqueo.cofre)}</span></div>
+        <div className="drawer-detail-row"><span className="drawer-detail-key">Adición</span><span className="drawer-detail-val">{fmt$(arqueo.adicion)}</span></div>
+        <div className="drawer-detail-row"><span className="drawer-detail-key">Total</span><span className="drawer-detail-val">{fmt$(arqueo.total)}</span></div>
+        <div className="drawer-detail-row"><span className="drawer-detail-key">Ingresos</span><span className="drawer-detail-val">{fmt$(arqueo.ingresos)}</span></div>
+        <div className="drawer-detail-row"><span className="drawer-detail-key">Gastos</span><span className="drawer-detail-val">{fmt$(arqueo.gastos)}</span></div>
+        <div className="drawer-detail-row">
+          <span className="drawer-detail-key">Comprobación</span>
+          <span className={`badge ${cuadra ? 'badge-green' : 'badge-red'}`}>{fmt$(arqueo.comprobacion)}</span>
+        </div>
+      </div>
+
+      {arqueo.detalles?.length > 0 && (
+        <>
+          <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Detalles</div>
+          {arqueo.detalles.map(d => (
+            <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+              <span>{d.detalle_tipo?.nombre || d.nombre || 'Sin tipo'}</span>
+              <span>{fmt$(d.monto)}</span>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
   )
 }
 
@@ -111,14 +287,15 @@ export default function ArqueoList() {
 
       <DrawerPanel open={panelOpen} onClose={() => setPanelOpen(false)} title="Nuevo arqueo" width={560}>
         {panelOpen && activeLocal && (
-          <div>Formulario pendiente (Task 4)</div>
+          <ArqueoCreatePanel
+            activeLocal={activeLocal}
+            onCreated={() => { setPanelOpen(false); load() }}
+          />
         )}
       </DrawerPanel>
 
       <DrawerPanel open={detailOpen} onClose={() => setDetailOpen(false)} title="Detalle de arqueo" width={560}>
-        {detailOpen && selectedId && (
-          <div>Detalle pendiente (Task 4)</div>
-        )}
+        {detailOpen && selectedId && <ArqueoDetailPanel arqueoId={selectedId} />}
       </DrawerPanel>
     </div>
   )
