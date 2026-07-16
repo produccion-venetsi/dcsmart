@@ -152,22 +152,158 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
   )
 }
 
+/* ── panel de edición ── */
+function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
+  const notify = useUiStore((s) => s.notify)
+  const [saving, setSaving] = useState(false)
+
+  const [fecha,      setFecha]      = useState(toDateTimeLocal(arqueo.fecha))
+  const [cajaFuerte, setCajaFuerte] = useState(String(arqueo.caja_fuerte))
+  const [cofre,      setCofre]      = useState(String(arqueo.cofre))
+  const [adicion,    setAdicion]    = useState(String(arqueo.adicion))
+  const [detalles,   setDetalles]   = useState(
+    (arqueo.detalles || []).map(d => ({ id_tipo: d.id_tipo || '', monto: String(d.monto), _key: d.id }))
+  )
+  const [tipos, setTipos] = useState([])
+  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '' })
+
+  useEffect(() => {
+    detallesApi.tipos(arqueo.id_local).then(r => setTipos(r.data || [])).catch(() => {})
+  }, [arqueo.id_local])
+
+  const addDetalle = () => {
+    if (!detForm.monto) return
+    setDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
+    setDetForm({ id_tipo: '', monto: '' })
+  }
+  const removeDetalle = (key) => setDetalles(prev => prev.filter(d => d._key !== key))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      await arqueoApi.update(arqueo.id, {
+        fecha: new Date(fecha).toISOString(),
+        caja_fuerte: parseFloat(cajaFuerte) || 0,
+        cofre: parseFloat(cofre) || 0,
+        adicion: parseFloat(adicion) || 0,
+        detalles: detalles.map(d => ({ id_tipo: d.id_tipo || null, monto: parseFloat(d.monto) || 0 }))
+      })
+      notify('Arqueo actualizado', 'success')
+      onSaved()
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al actualizar el arqueo', 'error')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
+        <label className="form-label">Fecha</label>
+        <div className="form-input-wrap">
+          <input type="datetime-local" required value={fecha} onChange={e => setFecha(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
+        <label className="form-label">Caja fuerte</label>
+        <div className="form-input-wrap">
+          <input type="number" step="0.01" required value={cajaFuerte} onChange={e => setCajaFuerte(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
+        <label className="form-label">Cofre</label>
+        <div className="form-input-wrap">
+          <input type="number" step="0.01" required value={cofre} onChange={e => setCofre(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group" style={{ margin: 0 }}>
+        <label className="form-label">Adición</label>
+        <div className="form-input-wrap">
+          <input type="number" step="0.01" required value={adicion} onChange={e => setAdicion(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Detalles (opcional)</div>
+      {detalles.map(d => (
+        <div key={d._key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+          <span>{tipos.find(t => t.id === d.id_tipo)?.nombre || 'Sin tipo'}: {fmt$(d.monto)}</span>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => removeDetalle(d._key)}>✕</button>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: '0.5rem', alignItems: 'flex-start' }}>
+        <div className="form-input-wrap" style={{ flex: 2 }}>
+          <select value={detForm.id_tipo} onChange={e => setDetForm({ ...detForm, id_tipo: e.target.value })}>
+            <option value="">Tipo…</option>
+            {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+          </select>
+        </div>
+        <div className="form-input-wrap" style={{ flex: 1 }}>
+          <input type="number" step="0.01" placeholder="Monto" value={detForm.monto} onChange={e => setDetForm({ ...detForm, monto: e.target.value })} />
+        </div>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={addDetalle}>
+          <IcoPlus /> Agregar
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
+          {saving ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : 'Guardar cambios'}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={saving}>Cancelar</button>
+      </div>
+    </form>
+  )
+}
+
+function toDateTimeLocal(iso) {
+  const d = new Date(iso)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 /* ── panel de detalle ── */
-function ArqueoDetailPanel({ arqueoId }) {
+function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
   const notify = useUiStore((s) => s.notify)
   const [arqueo, setArqueo] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true)
     arqueoApi.get(arqueoId)
       .then(({ data }) => setArqueo(data))
       .catch(() => notify('Error al cargar el arqueo', 'error'))
       .finally(() => setLoading(false))
-  }, [arqueoId])
+  }
+
+  useEffect(() => { load() }, [arqueoId])
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}><span className="spinner" /></div>
   if (!arqueo) return null
+
+  if (editing) {
+    return (
+      <ArqueoEditPanel
+        arqueo={arqueo}
+        onCancel={() => setEditing(false)}
+        onSaved={() => { setEditing(false); load(); onChanged() }}
+      />
+    )
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('¿Borrar este arqueo? Esta acción no se puede deshacer.')) return
+    setDeleting(true)
+    try {
+      await arqueoApi.remove(arqueo.id)
+      notify('Arqueo borrado', 'success')
+      onChanged(true)
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al borrar el arqueo', 'error')
+      setDeleting(false)
+    }
+  }
 
   const cuadra = Math.abs(Number(arqueo.comprobacion)) < 0.01
 
@@ -198,6 +334,19 @@ function ArqueoDetailPanel({ arqueoId }) {
           ))}
         </>
       )}
+
+      {(canEdit || canDelete) && (
+        <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
+          {canEdit && (
+            <button type="button" className="btn btn-secondary" onClick={() => setEditing(true)}>Editar</button>
+          )}
+          {canDelete && (
+            <button type="button" className="btn btn-danger" onClick={handleDelete} disabled={deleting}>
+              {deleting ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : 'Borrar'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -205,7 +354,12 @@ function ArqueoDetailPanel({ arqueoId }) {
 /* ── página ── */
 export default function ArqueoList() {
   const activeLocal = useAppStore((s) => s.activeLocal)
+  const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
+
+  const role       = activeApp?.role
+  const canEdit    = ['super_admin', 'dcsmart'].includes(role)
+  const canDelete  = ['super_admin', 'dcsmart'].includes(role)
 
   const [arqueos, setArqueos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -299,7 +453,14 @@ export default function ArqueoList() {
       </DrawerPanel>
 
       <DrawerPanel open={detailOpen} onClose={() => setDetailOpen(false)} title="Detalle de arqueo" width={560}>
-        {detailOpen && selectedId && <ArqueoDetailPanel arqueoId={selectedId} />}
+        {detailOpen && selectedId && (
+          <ArqueoDetailPanel
+            arqueoId={selectedId}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            onChanged={(closed) => { load(); if (closed) setDetailOpen(false) }}
+          />
+        )}
       </DrawerPanel>
     </div>
   )

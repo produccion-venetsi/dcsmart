@@ -52,6 +52,8 @@ async function calcularGastos(fastify, id_local, fechaDesde, fechaHasta) {
 export default async function arqueoRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('arqueo', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('arqueo', 'create')]
+  const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('arqueo', 'edit')]
+  const deleteHandler = [fastify.authenticate, fastify.appContext, fastify.can('arqueo', 'delete')]
 
   // ── GET / ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
@@ -148,5 +150,71 @@ export default async function arqueoRoutes(fastify) {
       include: { detalles: true }
     })
     return reply.code(201).send(arqueo)
+  })
+
+  // ── PUT /:id ──────────────────────────────────────────────────────────
+  // body: { fecha, caja_fuerte, cofre, adicion, detalles?: [{id_tipo?, nombre?, monto}] }
+  // Recalcula total/ingresos/gastos/comprobacion de ESTE arqueo con la misma
+  // lógica del POST. No recalcula otros arqueos del local.
+  fastify.put('/:id', { preHandler: editHandler }, async (request, reply) => {
+    const existente = await fastify.db.arqueo.findUnique({ where: { id: request.params.id } })
+    if (!existente) return reply.code(404).send({ error: 'Arqueo no encontrado' })
+    if (!request.allowedLocalIds.includes(existente.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { fecha, caja_fuerte, cofre, adicion, detalles } = request.body
+    if (!fecha || caja_fuerte == null || cofre == null || adicion == null) {
+      return reply.code(400).send({ error: 'fecha, caja_fuerte, cofre y adicion son requeridos' })
+    }
+
+    const fechaArqueo = new Date(fecha)
+    const anterior = await fastify.db.arqueo.findFirst({
+      where: { id_local: existente.id_local, fecha: { lt: fechaArqueo }, id: { not: existente.id } },
+      orderBy: { fecha: 'desc' }
+    })
+    const totalUltimoArqueo = anterior ? Number(anterior.total) : 0
+    const fechaDesde = anterior ? anterior.fecha : null
+
+    const total = Number(caja_fuerte) + Number(cofre) + Number(adicion)
+    const ingresos = await calcularIngresos(fastify, existente.id_local, fechaDesde, fechaArqueo)
+    const gastos = await calcularGastos(fastify, existente.id_local, fechaDesde, fechaArqueo)
+    const comprobacion = (ingresos - gastos) - (total - totalUltimoArqueo)
+
+    const arqueo = await fastify.db.arqueo.update({
+      where: { id: existente.id },
+      data: {
+        fecha: fechaArqueo,
+        caja_fuerte: String(caja_fuerte),
+        cofre: String(cofre),
+        adicion: String(adicion),
+        total: String(total),
+        ingresos: String(ingresos),
+        gastos: String(gastos),
+        comprobacion: String(comprobacion),
+        detalles: {
+          deleteMany: {},
+          create: (detalles || []).map((d) => ({
+            id_tipo: d.id_tipo || null,
+            nombre: d.nombre || null,
+            monto: String(d.monto ?? 0)
+          }))
+        }
+      },
+      include: { detalles: true }
+    })
+    return arqueo
+  })
+
+  // ── DELETE /:id ───────────────────────────────────────────────────────
+  fastify.delete('/:id', { preHandler: deleteHandler }, async (request, reply) => {
+    const existente = await fastify.db.arqueo.findUnique({ where: { id: request.params.id } })
+    if (!existente) return reply.code(404).send({ error: 'Arqueo no encontrado' })
+    if (!request.allowedLocalIds.includes(existente.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+    await fastify.db.arqueoDetalle.deleteMany({ where: { id_arqueo: existente.id } })
+    await fastify.db.arqueo.delete({ where: { id: existente.id } })
+    return reply.code(204).send()
   })
 }
