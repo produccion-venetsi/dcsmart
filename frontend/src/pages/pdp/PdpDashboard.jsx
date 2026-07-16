@@ -449,21 +449,25 @@ export default function PdpDashboard() {
         pagosPdp: pagar,
         totalDeuda: sumImporte(deuda),
       })
-      try {
-        const formData = new FormData()
-        formData.append('file', blob, filename)
-        const { data: uploadRes } = await pagosApi.upload(formData, activeLocal?.id)
-        await pdpApi.create({
-          id_local: activeLocal.id,
-          pago_ids: pagar.map(p => p.id),
-          pdf_url: uploadRes.url,
-        })
-        loadHistorial()
-      } catch {
-        // El PDF ya se descargó al navegador -- si falla el registro, se
-        // avisa pero no se bloquea nada que el usuario ya haya recibido.
-        notify('El reporte se descargó, pero no se pudo guardar el registro del PDP', 'error')
+      if (activeLocal?.id) {
+        try {
+          const formData = new FormData()
+          formData.append('file', blob, filename)
+          const { data: uploadRes } = await pagosApi.upload(formData, activeLocal.id)
+          await pdpApi.create({
+            id_local: activeLocal.id,
+            pago_ids: pagar.map(p => p.id),
+            pdf_url: uploadRes.url,
+          })
+          loadHistorial()
+        } catch {
+          // El PDF ya se descargó al navegador -- si falla el registro, se
+          // avisa pero no se bloquea nada que el usuario ya haya recibido.
+          notify('El reporte se descargó, pero no se pudo guardar el registro del PDP', 'error')
+        }
       }
+      // Sin local activo ("Todos los locales") no se sube ni se registra
+      // nada: el usuario ya recibió su PDF, igual que antes de esta feature.
     } catch {
       notify('Error al generar el reporte', 'error')
     } finally {
