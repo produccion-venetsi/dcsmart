@@ -42,6 +42,7 @@ model Local {
   cajas         Caja[]
   pagos         Pago[]
   pdps          Pdp[]
+  arqueos       Arqueo[]
   local_access  UserLocalAccess[]
   detalle_tipos DetalleTipo[]
 
@@ -64,6 +65,7 @@ model User {
   cajas_creadas    Caja[]            @relation("CajaCreatedBy")
   pagos_creados    Pago[]            @relation("PagoCreatedBy")
   pdps_creados     Pdp[]             @relation("PdpCreatedBy")
+  arqueos_creados  Arqueo[]          @relation("ArqueoCreatedBy")
   local_access     UserLocalAccess[]
   audits           Audit[]           @relation("AuditUser")
   app_usage        UserAppUsage[]
@@ -283,12 +285,49 @@ model DetalleTipo {
   clasificacion String  @default("otro")
   activo        Boolean @default(true)
 
-  app      App           @relation(fields: [id_app], references: [id])
-  local    Local?        @relation(fields: [id_local], references: [id])
-  detalles CajaDetalle[]
+  app             App             @relation(fields: [id_app], references: [id])
+  local           Local?          @relation(fields: [id_local], references: [id])
+  detalles        CajaDetalle[]
+  arqueo_detalles ArqueoDetalle[]
 
   @@unique([nombre, id_app])
   @@map("detalle_tipos")
+}
+
+model Arqueo {
+  id           String   @id @default(uuid())
+  id_local     String
+  fecha        DateTime
+  caja_fuerte  Decimal  @db.Decimal(12, 2)
+  cofre        Decimal  @db.Decimal(12, 2)
+  adicion      Decimal  @db.Decimal(12, 2)
+  total        Decimal  @db.Decimal(12, 2)
+  ingresos     Decimal  @db.Decimal(12, 2)
+  gastos       Decimal  @db.Decimal(12, 2)
+  comprobacion Decimal  @db.Decimal(12, 2)
+  created_by   String?
+  created_at   DateTime @default(now())
+
+  local    Local           @relation(fields: [id_local], references: [id])
+  creador  User?           @relation("ArqueoCreatedBy", fields: [created_by], references: [id])
+  detalles ArqueoDetalle[]
+
+  @@index([id_local, fecha])
+  @@map("arqueos")
+}
+
+model ArqueoDetalle {
+  id         String   @id @default(uuid())
+  id_arqueo  String
+  id_tipo    String?
+  nombre     String?
+  monto      Decimal  @db.Decimal(12, 2)
+  created_at DateTime @default(now())
+
+  arqueo       Arqueo       @relation(fields: [id_arqueo], references: [id])
+  detalle_tipo DetalleTipo? @relation(fields: [id_tipo], references: [id])
+
+  @@map("arqueo_detalles")
 }
 
 model CajaDetalle {
