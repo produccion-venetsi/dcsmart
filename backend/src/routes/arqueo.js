@@ -79,6 +79,28 @@ export default async function arqueoRoutes(fastify) {
     return arqueo
   })
 
+  // ── GET /preview ──────────────────────────────────────────────────────
+  // Mismo cálculo que POST /, pero sin persistir nada -- para que el
+  // frontend muestre la comprobación en vivo antes de confirmar.
+  fastify.get('/preview', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local, fecha } = request.query
+    if (!id_local || !fecha) {
+      return reply.code(400).send({ error: 'id_local y fecha son requeridos' })
+    }
+    if (!request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a ese local' })
+    }
+    const fechaArqueo = new Date(fecha)
+    const anterior = await getArqueoAnterior(fastify, id_local, fechaArqueo)
+    const totalUltimoArqueo = anterior ? Number(anterior.total) : 0
+    const fechaDesde = anterior ? anterior.fecha : null
+
+    const ingresos = await calcularIngresos(fastify, id_local, fechaDesde, fechaArqueo)
+    const gastos = await calcularGastos(fastify, id_local, fechaDesde, fechaArqueo)
+
+    return { total_ultimo_arqueo: totalUltimoArqueo, ingresos, gastos }
+  })
+
   // ── POST / ────────────────────────────────────────────────────────────
   // body: { id_local, fecha, caja_fuerte, cofre, adicion, detalles?: [{id_tipo?, nombre?, monto}] }
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
