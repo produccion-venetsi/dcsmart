@@ -24,6 +24,7 @@ const RubCat        = lazy(() => import('./pages/admin/RubCat.jsx'))
 const MetodosPago   = lazy(() => import('./pages/admin/MetodosPago.jsx'))
 const Roles         = lazy(() => import('./pages/admin/Roles.jsx'))
 const DetalleTipos  = lazy(() => import('./pages/admin/DetalleTipos.jsx'))
+const ArqueoList    = lazy(() => import('./pages/arqueo/ArqueoList.jsx'))
 
 function PageFallback() {
   return (
@@ -106,6 +107,7 @@ export default function App() {
           <Route path="proveedores/nuevo"          element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
           <Route path="proveedores/:id/editar"     element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
           <Route path="reportes"                    element={<ReportesGuard><Reportes /></ReportesGuard>} />
+          <Route path="arqueo"                      element={<OperativeGuard><ArqueoList /></OperativeGuard>} />
           <Route path="auditorias"                  element={<GlobalGuard roles={SUPER}><Auditorias /></GlobalGuard>} />
           <Route path="admin/users"                element={<GlobalGuard roles={SUPER}><Users /></GlobalGuard>} />
           <Route path="admin/apps"                 element={<GlobalGuard roles={ADMIN_PANEL}><Apps /></GlobalGuard>} />
