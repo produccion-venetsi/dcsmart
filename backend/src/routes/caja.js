@@ -5,6 +5,32 @@ import { Storage } from '@google-cloud/storage'
 // (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
 // Ver backend/src/routes/pagos.js para la explicación del historial append-only.
 
+// El enum TipoTurno usa @map en el schema (ver prisma/schema.prisma), por lo que
+// Prisma Client espera la clave (MANANA) y no la etiqueta visible ("Mañana") que
+// envía el frontend.
+const TIPO_TURNO_MAP = {
+  'Mañana': 'MANANA',
+  'Tarde': 'TARDE',
+  'Noche': 'NOCHE',
+  'Trasnoche': 'TRASNOCHE',
+  'Evento': 'EVENTO',
+  'Otros': 'OTROS'
+}
+
+function toTipoTurnoEnum(value) {
+  if (!value) return null
+  return TIPO_TURNO_MAP[value] || value
+}
+
+const TIPO_TURNO_REVERSE_MAP = Object.fromEntries(
+  Object.entries(TIPO_TURNO_MAP).map(([label, key]) => [key, label])
+)
+
+function fromTipoTurnoEnum(value) {
+  if (!value) return value
+  return TIPO_TURNO_REVERSE_MAP[value] || value
+}
+
 async function getAuditedCajaSet(fastify, cajaIds) {
   if (!cajaIds.length) return new Set()
   try {
@@ -96,7 +122,7 @@ export default async function cajaRoutes(fastify) {
     ])
 
     const auditedSet = await getAuditedCajaSet(fastify, cajas.map(c => c.id))
-    const data = cajas.map(c => ({ ...c, audit: auditedSet.has(c.id) }))
+    const data = cajas.map(c => ({ ...c, tipo_turno: fromTipoTurnoEnum(c.tipo_turno), audit: auditedSet.has(c.id) }))
 
     return { data, total, page: Number(page), limit: Number(limit) }
   })
@@ -170,6 +196,7 @@ export default async function cajaRoutes(fastify) {
 
     return {
       ...caja,
+      tipo_turno: fromTipoTurnoEnum(caja.tipo_turno),
       audit:      auditRow?.accion === 'auditado',
       audit_by:   auditRow?.user?.nombre ?? null,
       audit_date: auditRow?.fecha ?? null,
@@ -195,7 +222,7 @@ export default async function cajaRoutes(fastify) {
     const caja = await fastify.db.caja.create({
       data: {
         nro_turno:    nro_turno    ? String(parseInt(nro_turno)) : null,
-        tipo_turno:   tipo_turno   || null,
+        tipo_turno:   toTipoTurnoEnum(tipo_turno),
         fecha_inicio: new Date(fecha_inicio),
         fecha_cierre: fecha_cierre ? new Date(fecha_cierre)      : null,
         id_local, cajero,
@@ -209,7 +236,7 @@ export default async function cajaRoutes(fastify) {
         created_by: request.user.id
       }
     })
-    return reply.code(201).send(caja)
+    return reply.code(201).send({ ...caja, tipo_turno: fromTipoTurnoEnum(caja.tipo_turno) })
   })
 
   // ── PUT /:id ──────────────────────────────────────────────────────────
@@ -233,7 +260,7 @@ export default async function cajaRoutes(fastify) {
       where: { id: request.params.id },
       data: {
         nro_turno,
-        tipo_turno:    tipo_turno    !== undefined ? (tipo_turno || null) : undefined,
+        tipo_turno:    tipo_turno    !== undefined ? toTipoTurnoEnum(tipo_turno) : undefined,
         fecha_cierre:  fecha_cierre  ? new Date(fecha_cierre)  : undefined,
         cajero,
         total:         total         !== undefined ? parseFloat(total)         : undefined,
@@ -244,7 +271,7 @@ export default async function cajaRoutes(fastify) {
         observaciones, foto_url
       }
     })
-    return caja
+    return { ...caja, tipo_turno: fromTipoTurnoEnum(caja.tipo_turno) }
   })
 
   // ── POST /upload ───────────────────────────────────────────────────────
