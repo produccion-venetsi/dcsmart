@@ -9,7 +9,7 @@ const T = true, F = false
 
 const MODULES = [
   'caja', 'caja_movimientos', 'pagos', 'proveedores',
-  'rubros', 'categorias', 'metodos_pago', 'usuarios', 'apps', 'locales', 'reportes'
+  'rubros', 'categorias', 'metodos_pago', 'usuarios', 'apps', 'locales', 'reportes', 'arqueo'
 ]
 
 const MATRIX = {
@@ -17,7 +17,7 @@ const MATRIX = {
     caja: [T,T,T,T], caja_movimientos: [T,T,T,T], pagos: [T,T,T,T],
     proveedores: [T,T,T,T], rubros: [T,T,T,T], categorias: [T,T,T,T],
     metodos_pago: [T,T,T,T], usuarios: [T,T,T,T], apps: [T,T,T,T], locales: [T,T,T,T],
-    reportes: [T,T,T,T],
+    reportes: [T,T,T,T], arqueo: [T,T,T,T],
   },
   dcsmart: {
     // Operación total — gestiona datos de todos los grupos pero NO administra la estructura
@@ -25,7 +25,7 @@ const MATRIX = {
     caja: [T,T,T,T], caja_movimientos: [T,T,T,T], pagos: [T,T,T,T],
     proveedores: [T,T,T,T], rubros: [T,F,F,F], categorias: [T,F,F,F],
     metodos_pago: [T,T,T,T], usuarios: [F,F,F,F], apps: [T,F,F,F], locales: [T,F,F,F],
-    reportes: [T,F,F,F],
+    reportes: [T,F,F,F], arqueo: [T,T,T,T],
   },
   admin: {
     caja: [T,T,T,F], caja_movimientos: [T,T,T,F], pagos: [T,T,T,F],
@@ -33,20 +33,20 @@ const MATRIX = {
     metodos_pago: [T,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
     // Reportes deja de ser automático para admin: pasa a ser un permiso
     // individual, otorgable por usuario desde Admin → Usuarios (Task 7).
-    reportes: [F,F,F,F],
+    reportes: [F,F,F,F], arqueo: [T,T,F,F],
   },
   cajero: {
     caja: [T,T,F,F], caja_movimientos: [T,T,F,F], pagos: [T,T,F,F],
     proveedores: [T,F,F,F], rubros: [T,F,F,F], categorias: [T,F,F,F],
     metodos_pago: [T,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
-    reportes: [F,F,F,F],
+    reportes: [F,F,F,F], arqueo: [T,T,F,F],
   },
   reportes: {
     // Rol restringido: solo ve Reportes, nada más.
     caja: [F,F,F,F], caja_movimientos: [F,F,F,F], pagos: [F,F,F,F],
     proveedores: [F,F,F,F], rubros: [F,F,F,F], categorias: [F,F,F,F],
     metodos_pago: [F,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
-    reportes: [T,F,F,F],
+    reportes: [T,F,F,F], arqueo: [F,F,F,F],
   },
 }
 

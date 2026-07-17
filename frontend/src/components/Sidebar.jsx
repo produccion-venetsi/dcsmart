@@ -47,6 +47,15 @@ function IcoPdp() {
     </svg>
   )
 }
+function IcoArqueo() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="10" rx="2"/>
+      <circle cx="12" cy="16" r="2"/>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+  )
+}
 function IcoProveedor() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -171,6 +180,7 @@ const NAV_MAIN = [
   { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja,      roles: ALL },
   { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
   { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/arqueo',      label: 'Arqueo',      Icon: IcoArqueo,    roles: ALL },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
   {
     key: 'reportes',
