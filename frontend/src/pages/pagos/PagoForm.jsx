@@ -83,6 +83,18 @@ export default function PagoForm() {
   const locales = activeApp?.locales ?? []
 
   const hoy = new Date().toISOString().slice(0, 10)
+  // Fecha+hora local para <input type="datetime-local"> -- a diferencia de `hoy`
+  // (solo fecha, usado para "Fecha factura"/"Período"), fecha_pago necesita hora
+  // real para que Arqueo pueda ordenarlo correctamente contra otros arqueos del
+  // mismo día (ver fix de PdpDashboard.jsx: fecha_pago a medianoche exacta hacía
+  // que un gasto pagado más tarde ese día quedara "antes" de un arqueo anterior).
+  function toDateTimeLocal(iso) {
+    if (!iso) return ''
+    const d = new Date(iso)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  const ahoraDateTime = toDateTimeLocal(new Date().toISOString())
 
   const [metodos,         setMetodos]         = useState([])
   const [loading,         setLoading]         = useState(false)
@@ -135,7 +147,7 @@ export default function PagoForm() {
     pv: '', nro: '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
-    pagado: modoRapido, fecha_pago: modoRapido ? hoy : '', periodo: modoRapido ? hoy : '',
+    pagado: modoRapido, fecha_pago: modoRapido ? ahoraDateTime : '', periodo: modoRapido ? hoy : '',
     estado_op: 'CUENTA_CTE', ingresa_egreso: false,
     periodico: false,
     id_local: activeLocal?.id || '',
@@ -179,7 +191,7 @@ export default function PagoForm() {
             cashflow:       d.cashflow   ? d.cashflow.slice(0, 10)   : '',
             observaciones:  d.observaciones  || '',
             pagado:         d.pagado,
-            fecha_pago:     d.fecha_pago ? d.fecha_pago.slice(0, 10) : '',
+            fecha_pago:     toDateTimeLocal(d.fecha_pago),
             periodo:        d.periodo    ? d.periodo.slice(0, 10)    : '',
             estado_op:      d.estado_op      || 'CUENTA CTE',
             ingresa_egreso: d.ingresa_egreso,
@@ -508,7 +520,7 @@ export default function PagoForm() {
             <div className="form-group">
               <label className="form-label">Fecha de Pago</label>
               <div className="form-input-wrap">
-                <input type="date" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
+                <input type="datetime-local" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
               </div>
             </div>
           </div>

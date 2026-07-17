@@ -62,14 +62,6 @@ function IcoAdmin() {
     </svg>
   )
 }
-function IcoReportes() {
-  return (
-    <svg viewBox="0 0 24 24" width={20} height={20} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-4"/>
-    </svg>
-  )
-}
-
 const QUICK_ACTIONS = [
   { to: '/cajas',       label: 'Cajas',       sub: 'Turnos y movimientos',    Icon: IcoCaja,      i: 0 },
   { to: '/pagos',       label: 'Pagos',       sub: 'Facturas y órdenes',      Icon: IcoPagos,     i: 1 },
@@ -114,17 +106,6 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
-
-      {/* ── ver reportes ── */}
-      <button
-        className="btn btn-primary"
-        style={{ marginBottom: '2rem', padding: '0.85rem 1.5rem', fontSize: 15 }}
-        onClick={() => navigate('/reportes')}
-      >
-        <IcoReportes />
-        Ver Reportes
-        <IcoArrow />
-      </button>
 
       {/* ── quick actions ── */}
       <div className="selector-label" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>

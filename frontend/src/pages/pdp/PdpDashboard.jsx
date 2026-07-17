@@ -7,6 +7,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
+import { pdpApi } from '../../api/pdp.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -16,7 +17,16 @@ function fmt$(n) {
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
 function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short', timeZone: 'UTC' }) : '—' }
-function todayISO() { return new Date().toISOString().slice(0, 10) }
+// Fecha+hora local actual en formato para <input type="datetime-local"> ("YYYY-MM-DDTHH:mm").
+// Captura el momento real en que se marca el pago como pagado -- necesario para que Arqueo
+// pueda ordenarlo correctamente contra otros arqueos/cajas del mismo día (con fecha_pago a
+// medianoche, un gasto real quedaba "antes" de cualquier arqueo posterior del mismo día aunque
+// en los hechos se haya pagado después).
+function nowLocalDateTime() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 function provName(p) {
   return p.proveedor?.razon_social || p.proveedor?.nombre || 'Sin proveedor'
@@ -92,7 +102,7 @@ function IcoExpandAll() {
 
 /* ── modal de pago ── */
 function PagarModal({ count, total, metodos, onClose, onConfirm, working }) {
-  const [fecha, setFecha]       = useState(todayISO())
+  const [fecha, setFecha]       = useState(nowLocalDateTime())
   const [idMetodo, setIdMetodo] = useState('')
 
   return (
@@ -108,7 +118,7 @@ function PagarModal({ count, total, metodos, onClose, onConfirm, working }) {
         <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
           <label className="form-label">Fecha de pago</label>
           <div className="form-input-wrap">
-            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+            <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} />
           </div>
         </div>
 
@@ -346,7 +356,10 @@ function PdpColumn({
 export default function PdpDashboard() {
   const navigate    = useNavigate()
   const activeLocal = useAppStore((s) => s.activeLocal)
+  const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
+  const role        = activeApp?.role
+  const canVerUltimoUsuario = ['dcsmart', 'super_admin'].includes(role)
 
   const [deuda,   setDeuda]   = useState([])
   const [pagar,   setPagar]   = useState([])
@@ -358,6 +371,10 @@ export default function PdpDashboard() {
   const [selPagar, setSelPagar] = useState(new Set())
   const [pagarOpen, setPagarOpen] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
+
+  const [historial, setHistorial] = useState([])
+  const [loadingHistorial, setLoadingHistorial] = useState(false)
+  const [descargandoId, setDescargandoId] = useState(null)
 
   const [panelOpen,    setPanelOpen]    = useState(false)
   const [selectedPago, setSelectedPago] = useState(null)
@@ -378,11 +395,21 @@ export default function PdpDashboard() {
       .finally(() => setLoading(false))
   }
 
+  const loadHistorial = () => {
+    if (!activeLocal?.id) { setHistorial([]); return }
+    setLoadingHistorial(true)
+    pdpApi.list(activeLocal.id)
+      .then(({ data }) => setHistorial(data.data))
+      .catch(() => notify('Error al cargar el historial de PDP', 'error'))
+      .finally(() => setLoadingHistorial(false))
+  }
+
   useEffect(() => {
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [])
 
   useEffect(() => { load() }, [activeLocal?.id])
+  useEffect(() => { loadHistorial() }, [activeLocal?.id])
 
   const groupsDeuda = useMemo(() => groupByProveedor(deuda), [deuda])
   const groupsPagar = useMemo(() => groupByProveedor(pagar), [pagar])
@@ -429,11 +456,30 @@ export default function PdpDashboard() {
   const handleGenerarReporte = async () => {
     setGeneratingReport(true)
     try {
-      await generarReportePdp({
+      const { blob, filename } = await generarReportePdp({
         localNombre: activeLocal?.nombre,
         pagosPdp: pagar,
         totalDeuda: sumImporte(deuda),
       })
+      if (activeLocal?.id) {
+        try {
+          const formData = new FormData()
+          formData.append('file', blob, filename)
+          const { data: uploadRes } = await pagosApi.upload(formData, activeLocal.id)
+          await pdpApi.create({
+            id_local: activeLocal.id,
+            pago_ids: pagar.map(p => p.id),
+            pdf_url: uploadRes.url,
+          })
+          loadHistorial()
+        } catch {
+          // El PDF ya se descargó al navegador -- si falla el registro, se
+          // avisa pero no se bloquea nada que el usuario ya haya recibido.
+          notify('El reporte se descargó, pero no se pudo guardar el registro del PDP', 'error')
+        }
+      }
+      // Sin local activo ("Todos los locales") no se sube ni se registra
+      // nada: el usuario ya recibió su PDF, igual que antes de esta feature.
     } catch {
       notify('Error al generar el reporte', 'error')
     } finally {
@@ -452,6 +498,28 @@ export default function PdpDashboard() {
       load()
     } catch { notify('Error al registrar el pago', 'error') }
     finally { setWorking(false) }
+  }
+
+  function fmtDateTime(d) {
+    return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—'
+  }
+
+  const handleDescargarPdp = async (pdp) => {
+    setDescargandoId(pdp.id)
+    try {
+      const res = await pdpApi.attachment(pdp.id)
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `PDP_${activeLocal?.nombre || 'local'}_${pdp.id.slice(0, 8)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      loadHistorial()
+    } catch {
+      notify('Error al descargar el PDP', 'error')
+    } finally {
+      setDescargandoId(null)
+    }
   }
 
   return (
@@ -519,6 +587,48 @@ export default function PdpDashboard() {
           generatingReport={generatingReport}
         />
       </div>
+
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>
+        Historial de PDP
+      </div>
+      {loadingHistorial ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}><span className="spinner" /></div>
+      ) : historial.length === 0 ? (
+        <div className="pdp-empty">Todavía no se generó ningún PDP para este local.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>{canVerUltimoUsuario && <th>Último usuario</th>}<th>Cant. pagos</th><th>Total</th>
+                <th>Última descarga</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {historial.map((p) => (
+                <tr key={p.id}>
+                  <td>{fmtDateTime(p.created_at)}</td>
+                  {canVerUltimoUsuario && <td>{p.creador?.email || '—'}</td>}
+                  <td>{p.cantidad_pagos}</td>
+                  <td className="td-number">{fmt$(p.total)}</td>
+                  <td>{fmtDateTime(p.ultima_descarga)}</td>
+                  <td>
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleDescargarPdp(p)}
+                      disabled={descargandoId === p.id}
+                    >
+                      {descargandoId === p.id
+                        ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                        : 'Descargar'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {pagarOpen && (
         <PagarModal

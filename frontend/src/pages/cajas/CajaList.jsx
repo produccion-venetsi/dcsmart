@@ -868,6 +868,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       await cajasApi.update(cajaId, {
         nro_turno:    form.nro_turno    || null,
         tipo_turno:   form.tipo_turno   || null,
+        fecha_inicio: form.fecha_inicio,
         fecha_cierre: form.fecha_cierre || null,
         cajero:       form.cajero       || null,
         total:        form.total        !== '' ? parseFloat(form.total)      : null,
@@ -900,7 +901,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fecha Inicio</label>
           <div className="form-input-wrap">
-            <input type="datetime-local" value={form.fecha_inicio} readOnly style={{ opacity: 0.6, cursor: 'not-allowed' }} />
+            <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
