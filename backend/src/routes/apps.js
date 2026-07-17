@@ -16,6 +16,12 @@ export default async function appsRoutes(fastify) {
       include: { locales: true }
     })
     if (!app) return reply.code(404).send({ error: 'App no encontrada' })
+    if (app.solo_super_admin) {
+      const superAdminRole = await fastify.db.userAppRole.findFirst({
+        where: { id_user: request.user.id, role: { nombre: 'super_admin' } }
+      })
+      if (!superAdminRole) return reply.code(404).send({ error: 'App no encontrada' })
+    }
     return app
   })
 

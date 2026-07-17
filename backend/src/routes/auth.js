@@ -173,11 +173,13 @@ export default async function authRoutes(fastify) {
     let result
 
     // super_admin / dcsmart: acceso a TODAS las apps y a todos sus locales.
+    // Excepción: apps con solo_super_admin=true son invisibles incluso para
+    // dcsmart (ver spec del grupo de testing) -- solo super_admin las ve.
     const isSuperAdmin = userRoles.some(r => r.role.nombre === 'super_admin')
     const isDcsmart    = !isSuperAdmin && userRoles.some(r => r.role.nombre === 'dcsmart')
     if (isSuperAdmin || isDcsmart) {
       const allApps = await fastify.db.app.findMany({
-        where: { activo: true },
+        where: { activo: true, ...(isSuperAdmin ? {} : { solo_super_admin: false }) },
         include: { locales: { where: { activo: true }, orderBy: { nombre: 'asc' } } },
         orderBy: { nombre: 'asc' }
       })
