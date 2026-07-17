@@ -78,6 +78,7 @@ jobs:
             --region us-central1 \
             --platform managed \
             --env-vars-file backend/.env.cloudrun.yaml \
+            --set-secrets "INTERNAL_SHARED_SECRET=internal-shared-secret:latest" \
             --add-cloudsql-instances dc-smart-mvp:us-central1:dcsmart-mvp-insta \
             --allow-unauthenticated \
             --project dc-smart-mvp \
