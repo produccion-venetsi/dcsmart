@@ -1,11 +1,24 @@
 export default async function localesRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('locales', 'view')]
 
+  async function isSuperAdmin(fastify, userId) {
+    const role = await fastify.db.userAppRole.findFirst({
+      where: { id_user: userId, role: { nombre: 'super_admin' } }
+    })
+    return !!role
+  }
+
   fastify.get('/', { preHandler: viewHandler }, async (request) => {
     const { id_app, page = 1, limit = 100 } = request.query
     const skip = (Number(page) - 1) * Number(limit)
     const take = Number(limit)
-    const where = id_app ? { id_app } : undefined
+    const superAdmin = await isSuperAdmin(fastify, request.user.id)
+    const where = {
+      ...(id_app ? { id_app } : {}),
+      // Apps solo_super_admin (grupo de testing, etc.) son invisibles para
+      // cualquier rol que no sea super_admin -- ni siquiera dcsmart.
+      ...(superAdmin ? {} : { app: { solo_super_admin: false } })
+    }
 
     const [data, total] = await Promise.all([
       fastify.db.local.findMany({
@@ -27,6 +40,9 @@ export default async function localesRoutes(fastify) {
       include: { app: true }
     })
     if (!local) return reply.code(404).send({ error: 'Local no encontrado' })
+    if (local.app.solo_super_admin && !(await isSuperAdmin(fastify, request.user.id))) {
+      return reply.code(404).send({ error: 'Local no encontrado' })
+    }
     return local
   })
 
