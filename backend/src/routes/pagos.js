@@ -97,6 +97,22 @@ function translatePagoError(err) {
   return 'No se pudo guardar el pago. Revisá los campos obligatorios e intentá de nuevo'
 }
 
+// Extensiones aceptadas para adjuntos (fotos de factura / PDF) -- rechaza
+// cualquier otro tipo de archivo en vez de subirlo tal cual a GCS.
+const EXTENSIONES_ADJUNTO = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'pdf'])
+
+// El nombre del local se usa como carpeta en GCS -- se sanitiza para evitar
+// que caracteres raros (o un intento de path traversal via "../") rompan
+// la ruta del archivo dentro del bucket.
+function sanitizeFolderName(nombre) {
+  const limpio = String(nombre || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9 _-]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+  return limpio || 'general'
+}
+
 export default async function pagosRoutes(fastify) {
   await fastify.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } })
   const gcs = new Storage()
@@ -760,18 +776,25 @@ export default async function pagosRoutes(fastify) {
   // ── POST /upload ───────────────────────────────────────────────────────────
   fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
     const { id_local } = request.query
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a ese local' })
+    }
     const data = await request.file()
     if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
     const bucket = process.env.GCS_BUCKET_NAME
     if (!bucket) return reply.code(500).send({ error: 'GCS_BUCKET_NAME no configurado' })
 
+    const ext = data.filename.split('.').pop().toLowerCase()
+    if (!EXTENSIONES_ADJUNTO.has(ext)) {
+      return reply.code(400).send({ error: `Tipo de archivo no permitido (.${ext})` })
+    }
+
     let folder = 'general'
     if (id_local) {
       const local = await fastify.db.local.findUnique({ where: { id: id_local }, select: { nombre: true } })
-      if (local?.nombre) folder = local.nombre
+      if (local?.nombre) folder = sanitizeFolderName(local.nombre)
     }
 
-    const ext      = data.filename.split('.').pop().toLowerCase()
     const type     = ext === 'pdf' ? 'pdf' : 'foto'
     const filename = `${folder}/facturas/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
     const file     = gcs.bucket(bucket).file(filename)
