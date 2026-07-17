@@ -1,6 +1,15 @@
 import { Storage } from '@google-cloud/storage'
 import multipart from '@fastify/multipart'
 
+// parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
+// esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
+// con un campo vacío.
+function toFloatOrNull(v) {
+  if (v === null || v === '') return null
+  const n = parseFloat(v)
+  return Number.isNaN(n) ? null : n
+}
+
 // El estado de auditoría de un pago se guarda en la tabla `audits`
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
 // Cada auditar/desauditar inserta una fila nueva (historial append-only);
@@ -463,9 +472,9 @@ export default async function pagosRoutes(fastify) {
           id_tipo:        id_tipo        !== undefined ? (id_tipo || null)           : undefined,
           pv:             pv             !== undefined ? (parseInt(pv) || null)     : undefined,
           nro:            nro            !== undefined ? (nro ? BigInt(nro) : null) : undefined,
-          importe_neto:   importe_neto   !== undefined ? parseFloat(importe_neto)   : undefined,
-          descuento:      descuento      !== undefined ? parseFloat(descuento)      : undefined,
-          importe:        importe        !== undefined ? parseFloat(importe)        : undefined,
+          importe_neto:   importe_neto   !== undefined ? toFloatOrNull(importe_neto) : undefined,
+          descuento:      descuento      !== undefined ? toFloatOrNull(descuento)    : undefined,
+          importe:        importe        !== undefined ? toFloatOrNull(importe)      : undefined,
           id_metodo:      id_metodo      !== undefined ? id_metodo                  : undefined,
           cashflow:       cashflow                    ? new Date(cashflow)          : undefined,
           observaciones,

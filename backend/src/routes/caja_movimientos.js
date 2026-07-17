@@ -1,5 +1,13 @@
 const TIPOS_MOVIMIENTO = ['INICIAL', 'INGRESO', 'GASTO', 'COBRO', 'RETIRO', 'VACIADO']
 
+// parseInt(null)/parseInt('') dan NaN -- cantidad es opcional (Int?), se
+// guarda null cuando el campo viene vacío en vez de romper con NaN.
+function toIntOrNull(v) {
+  if (v === null || v === '') return null
+  const n = parseInt(v, 10)
+  return Number.isNaN(n) ? null : n
+}
+
 export default async function cajaMoveRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja_movimientos', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja_movimientos', 'create')]
@@ -92,7 +100,7 @@ export default async function cajaMoveRoutes(fastify) {
         tipo,
         id_metodo: id_metodo !== undefined ? id_metodo : undefined,
         monto:     monto     !== undefined ? parseFloat(monto) : undefined,
-        cantidad:  cantidad  !== undefined ? parseInt(cantidad) : undefined
+        cantidad:  cantidad  !== undefined ? toIntOrNull(cantidad) : undefined
       },
       include: { metodo_pago: true }
     })
