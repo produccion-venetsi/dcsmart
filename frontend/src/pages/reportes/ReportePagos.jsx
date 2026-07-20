@@ -179,6 +179,34 @@ export default function ReportePagos({ applied, activeLocal, prettyDate }) {
           <div className="rep-kpi-sub">no pagados del período, excluye NCA/NCB y CMV (mostrado aparte)</div>
         </div>
       </div>
+
+      {/* ── Rubros: Impuestos / Sueldos / Resto ── */}
+      <div className="rep-kpi-grid cols-4">
+        <div className="rep-kpi" style={{ gridColumn: 'span 4' }}>
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Rubros</span>
+          </div>
+          {skel ? (
+            <div className="rep-skel" style={{ width: '70%', height: 32, marginBottom: 12 }} />
+          ) : (
+            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: 8 }}>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Impuestos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 20 }}>{fmt(d.total_impuestos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Sueldos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 20 }}>{fmt(d.total_sueldos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Resto</div>
+                <div className="rep-kpi-value" style={{ fontSize: 20 }}>{fmt(d.total_resto)}</div>
+              </div>
+            </div>
+          )}
+          <div className="rep-kpi-sub">todos los egresos del período (pagados o no), sin CMV</div>
+        </div>
+      </div>
     </>
   )
 }

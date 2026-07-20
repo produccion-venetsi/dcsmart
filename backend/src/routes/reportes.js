@@ -191,8 +191,12 @@ export default async function reportesRoutes(fastify) {
     // rubro "CMV *" del período. Pendientes = egresos impagos del período,
     // excluyendo NCA/NCB (notas de crédito) y CMV (se muestra aparte),
     // desglosados por rubro real: Impositivo, Sueldos, y el resto (Proveedores).
+    // Impuestos/Sueldos/Resto (tarjeta aparte) = mismo desglose que Gastos,
+    // pero sobre TODOS los egresos del período (pagados o no), sin excluir
+    // NCA/NCB -- "Resto" es simplemente Gastos - CMV - Impuestos - Sueldos.
     let totalGastos = 0, totalCmv = 0
     let pendImpuestos = 0, pendSueldos = 0, pendProveedores = 0
+    let totalImpuestos = 0, totalSueldos = 0
     for (const p of pagosEnRango) {
       if (p.ingresa_egreso === true) continue // no es gasto
       const importe = Number(p.importe ?? 0)
@@ -201,6 +205,8 @@ export default async function reportesRoutes(fastify) {
 
       totalGastos += importe
       if (esCmv) totalCmv += importe
+      if (rubroNombre === 'Impositivo') totalImpuestos += importe
+      else if (rubroNombre === 'Sueldos') totalSueldos += importe
 
       if (!p.pagado && !TIPOS_NO_DEUDA.has(p.id_tipo)) {
         if (rubroNombre === 'Impositivo') pendImpuestos += importe
@@ -236,7 +242,10 @@ export default async function reportesRoutes(fastify) {
       total_cmv: totalCmv,
       pendientes_impuestos: pendImpuestos,
       pendientes_sueldos: pendSueldos,
-      pendientes_proveedores: pendProveedores
+      pendientes_proveedores: pendProveedores,
+      total_impuestos: totalImpuestos,
+      total_sueldos: totalSueldos,
+      total_resto: totalGastos - totalCmv - totalImpuestos - totalSueldos
     }
   })
 
