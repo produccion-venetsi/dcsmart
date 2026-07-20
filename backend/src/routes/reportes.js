@@ -155,7 +155,9 @@ export default async function reportesRoutes(fastify) {
       return {
         total_adeudado: 0, count_adeudado: 0,
         count_auditados: 0, count_no_auditados: 0,
-        total_efectivo: 0, count_efectivo: 0
+        total_efectivo: 0, count_efectivo: 0,
+        total_gastos: 0, total_cmv: 0,
+        pendientes_impuestos: 0, pendientes_sueldos: 0, pendientes_proveedores: 0
       }
     }
 
@@ -163,6 +165,7 @@ export default async function reportesRoutes(fastify) {
     const hastaDate = new Date(hasta + 'T23:59:59.999')
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { fecha: { gte: desdeDate, lte: hastaDate } }
+    const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
 
     const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
       fastify.db.pago.aggregate({
@@ -177,9 +180,34 @@ export default async function reportesRoutes(fastify) {
       }),
       fastify.db.pago.findMany({
         where: { ...localFilter, ...fechaWhere },
-        select: { id: true }
+        select: {
+          id: true, importe: true, pagado: true, ingresa_egreso: true, id_tipo: true,
+          rubcat: { select: { rubro: { select: { nombre: true } } } }
+        }
       })
     ])
+
+    // Gastos = egresos del período (pagados o no). CMV total = egresos con
+    // rubro "CMV *" del período. Pendientes = egresos impagos del período,
+    // excluyendo NCA/NCB (notas de crédito) y CMV (se muestra aparte),
+    // desglosados por rubro real: Impositivo, Sueldos, y el resto (Proveedores).
+    let totalGastos = 0, totalCmv = 0
+    let pendImpuestos = 0, pendSueldos = 0, pendProveedores = 0
+    for (const p of pagosEnRango) {
+      if (p.ingresa_egreso === true) continue // no es gasto
+      const importe = Number(p.importe ?? 0)
+      const rubroNombre = p.rubcat?.rubro?.nombre || ''
+      const esCmv = /^CMV/i.test(rubroNombre)
+
+      totalGastos += importe
+      if (esCmv) totalCmv += importe
+
+      if (!p.pagado && !TIPOS_NO_DEUDA.has(p.id_tipo)) {
+        if (rubroNombre === 'Impositivo') pendImpuestos += importe
+        else if (rubroNombre === 'Sueldos') pendSueldos += importe
+        else if (!esCmv) pendProveedores += importe
+      }
+    }
 
     const pagoIds = pagosEnRango.map(p => p.id)
     let countAuditados = 0
@@ -203,7 +231,12 @@ export default async function reportesRoutes(fastify) {
       count_auditados: countAuditados,
       count_no_auditados: countNoAuditados,
       total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
-      count_efectivo: efectivoAgg._count.id
+      count_efectivo: efectivoAgg._count.id,
+      total_gastos: totalGastos,
+      total_cmv: totalCmv,
+      pendientes_impuestos: pendImpuestos,
+      pendientes_sueldos: pendSueldos,
+      pendientes_proveedores: pendProveedores
     }
   })
 
