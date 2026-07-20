@@ -5,9 +5,37 @@ import { useUiStore } from '../../store/uiStore.js'
 const LIMIT = 50
 
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
+function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 
 const ACCION_LABEL = { creado: 'Creado', editado: 'Editado', eliminado: 'Eliminado' }
 const ACCION_BADGE = { creado: 'badge-green', editado: 'badge-blue', eliminado: 'badge-red' }
+
+// Traduce el snapshot crudo del pago (columnas de la tabla, sin joins) a
+// pares label/valor legibles, en vez de mostrar el JSON tal cual.
+function snapshotRows(s) {
+  if (!s) return []
+  return [
+    ['Nro Orden',    s.nro_ord != null ? `OP-${s.nro_ord}` : '—'],
+    ['Fecha',        fmtDate(s.fecha)],
+    ['Proveedor',    s.id_proveedor || '—'],
+    ['Rubro/Cat',    s.id_rubcat || '—'],
+    ['Tipo',         s.id_tipo || '—'],
+    ['PV',           s.pv ?? '—'],
+    ['Nro',          s.nro ?? '—'],
+    ['Neto',         fmt$(s.importe_neto)],
+    ['Descuento',    fmt$(s.descuento)],
+    ['Importe',      fmt$(s.importe)],
+    ['Método',       s.id_metodo || '—'],
+    ['Dirección',    s.ingresa_egreso != null ? (s.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
+    ['Estado Op.',   s.estado_op || '—'],
+    ['Pagado',       s.pagado ? 'Sí' : 'No'],
+    ['Fecha Pago',   fmtDate(s.fecha_pago)],
+    ['Período',      fmtDate(s.periodo)],
+    ['Local',        s.id_local || '—'],
+    ['Observaciones', s.observaciones || '—'],
+  ]
+}
 
 const FILTER_INIT = { desde: '', hasta: '', id_user: '', accion: '' }
 
@@ -143,13 +171,18 @@ export default function ActivityLog() {
                       <tr>
                         <td></td>
                         <td colSpan={4}>
-                          <pre style={{
-                            fontSize: 11.5, background: 'var(--bg-input)', borderRadius: 8,
-                            padding: '0.75rem 1rem', overflowX: 'auto', margin: '0.25rem 0 0.75rem',
-                            maxHeight: 320, overflowY: 'auto',
+                          <div style={{
+                            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem 1.5rem',
+                            background: 'var(--bg-input)', borderRadius: 8,
+                            padding: '0.9rem 1.1rem', margin: '0.25rem 0 0.75rem',
                           }}>
-                            {JSON.stringify(ev.snapshot, null, 2)}
-                          </pre>
+                            {snapshotRows(ev.snapshot).map(([label, val]) => (
+                              <div key={label}>
+                                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</div>
+                                <div style={{ fontSize: 13, color: 'var(--t1)' }}>{val}</div>
+                              </div>
+                            ))}
+                          </div>
                         </td>
                       </tr>
                     )}
