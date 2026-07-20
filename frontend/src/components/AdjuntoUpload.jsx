@@ -22,6 +22,24 @@ function IcoX() {
   )
 }
 
+function IcoCamera() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <circle cx="12" cy="13" r="4" />
+    </svg>
+  )
+}
+function IcoImages() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  )
+}
+
 function fmtSize(bytes) {
   if (bytes == null) return null
   if (bytes < 1024) return `${bytes} B`
@@ -42,7 +60,9 @@ function fmtSize(bytes) {
 // - uploading: true mientras se está subiendo (deshabilita quitar/reemplazar)
 export default function AdjuntoUpload({ label, accept, value, file, onFileSelected, onRemove, uploading }) {
   const inputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const [dragOver, setDragOver] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const hasContent = Boolean(file || value)
   const isImage = file ? file.type.startsWith('image/') : Boolean(accept?.includes('image'))
@@ -61,15 +81,22 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
     : (isImage && value && !value.startsWith('gs://') ? value : null)
   const displayName = file ? file.name : value?.split('/').pop()
 
-  const openPicker = () => inputRef.current?.click()
+  const openGallery = () => inputRef.current?.click()
+  const openCamera  = () => cameraInputRef.current?.click()
 
   const handleFiles = (files) => {
     const f = files?.[0]
     if (f) onFileSelected(f)
+    setMenuOpen(false)
+  }
+
+  const openPicker = () => {
+    if (isImage) setMenuOpen(true)
+    else openGallery()
   }
 
   return (
-    <div className="form-group">
+    <div className="form-group" style={{ position: 'relative' }}>
       <label className="form-label">{label}</label>
       <input
         ref={inputRef}
@@ -78,6 +105,16 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
         style={{ display: 'none' }}
         onChange={(e) => handleFiles(e.target.files)}
       />
+      {isImage && (
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept={accept}
+          capture="environment"
+          style={{ display: 'none' }}
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+      )}
       {!hasContent ? (
         <div
           className={`adjunto-dropzone${dragOver ? ' drag-over' : ''}`}
@@ -110,6 +147,38 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
       )}
       {hasContent && !uploading && (
         <span className="adjunto-replace" onClick={openPicker}>Reemplazar archivo</span>
+      )}
+      {menuOpen && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+            onClick={() => setMenuOpen(false)}
+          />
+          <div
+            className="adjunto-picker-menu"
+            style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 11,
+              background: 'var(--bg2, #1e1e24)', border: '1px solid var(--border, #333)',
+              borderRadius: 10, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+              minWidth: 200,
+            }}
+          >
+            <button
+              type="button"
+              onClick={openCamera}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '0.65rem 1rem', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'inherit' }}
+            >
+              <IcoCamera /> Tomar foto
+            </button>
+            <button
+              type="button"
+              onClick={openGallery}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '0.65rem 1rem', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'inherit', borderTop: '1px solid var(--border, #333)' }}
+            >
+              <IcoImages /> Elegir de galería
+            </button>
+          </div>
+        </>
       )}
     </div>
   )
