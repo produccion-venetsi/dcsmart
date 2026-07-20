@@ -1164,7 +1164,7 @@ export default function PagoList() {
               style={{
                 height: 36, paddingLeft: 32, paddingRight: search ? 28 : 12,
                 background: 'var(--bg-input)', border: '1px solid var(--border-input)',
-                borderRadius: 8, color: 'var(--t1)', fontSize: 13, width: 150,
+                borderRadius: 8, color: 'var(--t1)', fontSize: 13, width: 280,
                 outline: 'none',
               }}
             />
