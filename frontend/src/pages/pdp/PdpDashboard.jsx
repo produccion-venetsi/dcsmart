@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
@@ -304,7 +304,19 @@ function PdpColumn({
   working,
   onGenerateReport, generatingReport,
 }) {
+  // Arranca con todos los grupos colapsados (sin desglosar por proveedor);
+  // el usuario expande el/los que le interesen. `groups` llega vacío en el
+  // primer render (todavía está cargando), así que se colapsa recién cuando
+  // aparecen los grupos por primera vez.
   const [collapsed, setCollapsed] = useState(() => new Set())
+  const initedRef = useRef(false)
+  useEffect(() => {
+    if (!initedRef.current && groups.length > 0) {
+      initedRef.current = true
+      setCollapsed(new Set(groups.map(g => g.key)))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups])
 
   const toggleCollapse = (key) =>
     setCollapsed(prev => {
