@@ -39,7 +39,10 @@ await app.register(cors, {
       'http://localhost:5174', // Vite cae acá cuando 5173 ya está tomado (ej. dcsmart-analisis corriendo en paralelo)
       'http://localhost:5175', // y acá si 5173 y 5174 ya están ocupados
     ]
-    if (!origin || allowed.includes(origin) || /\.web\.app$/.test(origin) || /^https?:\/\/([a-z0-9-]+\.)*dcsmart\.app$/i.test(origin)) {
+    // En desarrollo, permite acceder desde otro dispositivo en la misma red local
+    // (ej. probar en el celular con `vite --host` apuntando a la IP de la PC).
+    const isLocalNetworkDev = process.env.NODE_ENV !== 'production' && /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+$/.test(origin || '')
+    if (!origin || allowed.includes(origin) || isLocalNetworkDev || /\.web\.app$/.test(origin) || /^https?:\/\/([a-z0-9-]+\.)*dcsmart\.app$/i.test(origin)) {
       cb(null, true)
     } else {
       cb(new Error('Not allowed by CORS'))
