@@ -69,6 +69,7 @@ model User {
   local_access     UserLocalAccess[]
   audits           Audit[]           @relation("AuditUser")
   app_usage        UserAppUsage[]
+  activity_logs    ActivityLog[]     @relation("ActivityLogUser")
 
   @@map("users")
 }
@@ -525,6 +526,29 @@ model Audit {
   @@index([tabla, id_registro, vigente])
   @@index([tabla, id_registro, fecha])
   @@map("audits")
+}
+
+// Log de actividad CRUD (crear/editar/eliminar), solo visible para
+// super_admin. Genérico por `tabla` para poder extenderse a otras entidades
+// más adelante; hoy solo se escribe para `tabla = 'pagos'`. `snapshot` guarda
+// el registro completo en formato JSON en el momento de la acción -- para
+// "eliminado" es el último estado antes del hard delete (el borrado en sí no
+// cambia, esto es solo el rastro de auditoría).
+model ActivityLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  tabla       String
+  id_registro String
+  id_local    String
+  accion      String // 'creado' | 'editado' | 'eliminado'
+  id_user     String?
+  fecha       DateTime @default(now())
+  snapshot    Json
+
+  user User? @relation("ActivityLogUser", fields: [id_user], references: [id])
+
+  @@index([tabla, id_local, fecha])
+  @@index([id_registro])
+  @@map("activity_log")
 }
 
 model Pdp {

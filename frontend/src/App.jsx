@@ -17,6 +17,7 @@ const ProveedorList = lazy(() => import('./pages/proveedores/ProveedorList.jsx')
 const ProveedorForm = lazy(() => import('./pages/proveedores/ProveedorForm.jsx'))
 const Reportes      = lazy(() => import('./pages/reportes/Reportes.jsx'))
 const Auditorias    = lazy(() => import('./pages/auditorias/Auditorias.jsx'))
+const ActivityLog   = lazy(() => import('./pages/activity-log/ActivityLog.jsx'))
 const Users         = lazy(() => import('./pages/admin/Users.jsx'))
 const Apps          = lazy(() => import('./pages/admin/Apps.jsx'))
 const Locales       = lazy(() => import('./pages/admin/Locales.jsx'))
@@ -109,6 +110,7 @@ export default function App() {
           <Route path="reportes"                    element={<ReportesGuard><Reportes /></ReportesGuard>} />
           <Route path="arqueo"                      element={<OperativeGuard><ArqueoList /></OperativeGuard>} />
           <Route path="auditorias"                  element={<GlobalGuard roles={SUPER}><Auditorias /></GlobalGuard>} />
+          <Route path="actividad"                   element={<GlobalGuard roles={SUPER}><ActivityLog /></GlobalGuard>} />
           <Route path="admin/users"                element={<GlobalGuard roles={SUPER}><Users /></GlobalGuard>} />
           <Route path="admin/apps"                 element={<GlobalGuard roles={ADMIN_PANEL}><Apps /></GlobalGuard>} />
           <Route path="admin/locales"              element={<GlobalGuard roles={ADMIN_PANEL}><Locales /></GlobalGuard>} />

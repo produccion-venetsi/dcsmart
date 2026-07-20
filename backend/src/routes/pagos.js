@@ -10,6 +10,25 @@ function toFloatOrNull(v) {
   return Number.isNaN(n) ? null : n
 }
 
+// El pago trae campos Decimal/BigInt que Prisma no acepta tal cual dentro de
+// un campo Json -- este roundtrip los deja como string/number planos.
+function toSnapshotSafe(obj) {
+  return JSON.parse(JSON.stringify(obj))
+}
+
+// Registra un evento en el log de actividad CRUD (solo visible para
+// super_admin, ver GET /activity-log en routes/activity-log.js). No debe
+// bloquear la operación principal si falla -- se loguea el error y sigue.
+async function logActivity(fastify, { id_registro, id_local, accion, id_user, snapshot }) {
+  try {
+    await fastify.db.activityLog.create({
+      data: { tabla: 'pagos', id_registro, id_local, accion, id_user, snapshot }
+    })
+  } catch (err) {
+    fastify.log.error({ err }, `No se pudo registrar activity_log (${accion}) para pago ${id_registro}`)
+  }
+}
+
 // El estado de auditoría de un pago se guarda en la tabla `audits`
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
 // Cada auditar/desauditar inserta una fila nueva (historial append-only);
@@ -478,6 +497,10 @@ export default async function pagosRoutes(fastify) {
         },
         include: { impuestos: true }
       })
+      await logActivity(fastify, {
+        id_registro: pago.id, id_local, accion: 'creado',
+        id_user: request.user.id, snapshot: toSnapshotSafe(pago)
+      })
       return reply.code(201).send(pago)
     } catch (err) {
       return reply.code(400).send({ error: translatePagoError(err) })
@@ -551,7 +574,12 @@ export default async function pagosRoutes(fastify) {
           ingresa_egreso,
           periodico:      periodico      !== undefined ? periodico                  : undefined,
           id_local:       id_local       !== undefined ? id_local                  : undefined,
-        }
+        },
+        include: { impuestos: true }
+      })
+      await logActivity(fastify, {
+        id_registro: pago.id, id_local: pago.id_local, accion: 'editado',
+        id_user: request.user.id, snapshot: toSnapshotSafe(pago)
       })
       return pago
     } catch (err) {
@@ -902,13 +930,20 @@ export default async function pagosRoutes(fastify) {
   fastify.delete('/:id', { preHandler: deleteHandler }, async (request, reply) => {
     const existing = await fastify.db.pago.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      include: { impuestos: true }
     })
     if (!existing) return reply.code(404).send({ error: 'Pago no encontrado' })
 
     if (!request.allowedLocalIds.includes(existing.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
+
+    // Se registra el snapshot ANTES de borrar -- es el único rastro que va a
+    // quedar de este pago una vez hecho el hard delete.
+    await logActivity(fastify, {
+      id_registro: existing.id, id_local: existing.id_local, accion: 'eliminado',
+      id_user: request.user.id, snapshot: toSnapshotSafe(existing)
+    })
 
     // Eliminar registros dependientes antes que el pago (FK constraints)
     await fastify.db.impuesto.deleteMany({ where: { id_pago: request.params.id } })
