@@ -127,7 +127,7 @@ export default async function pagosRoutes(fastify) {
     const {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q,
       sort_field = 'fecha', sort_dir = 'desc',
       page = 1, limit = 50
     } = request.query
@@ -159,11 +159,29 @@ export default async function pagosRoutes(fastify) {
 
     const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
 
+    // Búsqueda libre del toolbar: matchea por número de OP, proveedor o rubro/categoría.
+    const qStr = q?.trim()
+    let qFilter = {}
+    if (qStr) {
+      const qNum = parseInt(qStr.replace(/^op[-\s]*/i, ''))
+      qFilter = {
+        OR: [
+          ...(!isNaN(qNum) ? [{ nro_ord: qNum }] : []),
+          { proveedor: { nombre:       { contains: qStr, mode: 'insensitive' } } },
+          { proveedor: { razon_social: { contains: qStr, mode: 'insensitive' } } },
+          { rubcat: { cuenta:               { contains: qStr, mode: 'insensitive' } } },
+          { rubcat: { rubro:     { nombre: { contains: qStr, mode: 'insensitive' } } } },
+          { rubcat: { categoria: { nombre: { contains: qStr, mode: 'insensitive' } } } },
+        ]
+      }
+    }
+
     const where = {
       ...localFilter,
       ...rubcatFilter,
       ...auditFilter,
       ...proveedorFilter,
+      ...qFilter,
       ...(nro_ord        ? { nro_ord: parseInt(nro_ord) }                  : {}),
       ...(id_tipo        ? { id_tipo }                                      : {}),
       ...(id_metodo      ? { id_metodo }                                    : {}),
@@ -383,8 +401,12 @@ export default async function pagosRoutes(fastify) {
     if (!id_local) return reply.code(400).send({ error: 'Seleccioná un local' })
     if (!id_rubcat) return reply.code(400).send({ error: 'El rubro / categoría es obligatorio' })
     if (!id_metodo) return reply.code(400).send({ error: 'El método de pago es obligatorio' })
-    if (!pv)        return reply.code(400).send({ error: 'El punto de venta es obligatorio' })
-    if (!nro)       return reply.code(400).send({ error: 'El número de comprobante es obligatorio' })
+    // Carga Avión (id_tipo 'B') recibe tickets manuscritos de los locales, sin
+    // punto de venta ni número de comprobante fiscal real: quedan opcionales.
+    if (id_tipo !== 'B') {
+      if (!pv)  return reply.code(400).send({ error: 'El punto de venta es obligatorio' })
+      if (!nro) return reply.code(400).send({ error: 'El número de comprobante es obligatorio' })
+    }
     if (!cashflow)  return reply.code(400).send({ error: 'El cashflow es obligatorio' })
 
     if (!request.allowedLocalIds.includes(id_local)) {
@@ -442,7 +464,7 @@ export default async function pagosRoutes(fastify) {
   fastify.put('/:id', { preHandler: editHandler }, async (request, reply) => {
     const existing = await fastify.db.pago.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      select: { id_local: true, id_tipo: true }
     })
     if (!existing) return reply.code(404).send({ error: 'Pago no encontrado' })
 
@@ -467,11 +489,14 @@ export default async function pagosRoutes(fastify) {
     if (id_metodo !== undefined && !id_metodo) {
       return reply.code(400).send({ error: 'El método de pago es obligatorio' })
     }
-    if (pv !== undefined && !pv) {
-      return reply.code(400).send({ error: 'El punto de venta es obligatorio' })
-    }
-    if (nro !== undefined && !nro) {
-      return reply.code(400).send({ error: 'El número de comprobante es obligatorio' })
+    const effectiveTipo = id_tipo !== undefined ? id_tipo : existing.id_tipo
+    if (effectiveTipo !== 'B') {
+      if (pv !== undefined && !pv) {
+        return reply.code(400).send({ error: 'El punto de venta es obligatorio' })
+      }
+      if (nro !== undefined && !nro) {
+        return reply.code(400).send({ error: 'El número de comprobante es obligatorio' })
+      }
     }
     if (cashflow !== undefined && !cashflow) {
       return reply.code(400).send({ error: 'El cashflow es obligatorio' })

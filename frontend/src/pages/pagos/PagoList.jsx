@@ -869,15 +869,14 @@ export default function PagoList() {
 
   // ── Parámetros de query ───────────────────────────────────────────────────
   const buildParams = useCallback((pageNum) => {
-    const nroStr = debouncedSearch.trim().replace(/^op[-\s]*/i, '')
-    const nroNum = parseInt(nroStr)
+    const qStr = debouncedSearch.trim()
     return {
       ...(activeLocal?.id ? { id_local: activeLocal.id } : {}),
       page: pageNum,
       limit: LIMIT,
       sort_field: sortField,
       sort_dir:   sortDir,
-      ...(!isNaN(nroNum) && nroStr ? { nro_ord: nroNum } : {}),
+      ...(qStr ? { q: qStr } : {}),
       ...(filters.pagado         !== '' ? { pagado:          filters.pagado }         : {}),
       ...(filters.estado_op            ? { estado_op:        filters.estado_op }       : {}),
       ...(filters.desde                ? { desde:            filters.desde }           : {}),
@@ -1159,13 +1158,13 @@ export default function PagoList() {
             </span>
             <input
               type="text"
-              placeholder="Buscar OP…"
+              placeholder="Buscar por OP, proveedor o rubro/categoría…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
                 height: 36, paddingLeft: 32, paddingRight: search ? 28 : 12,
                 background: 'var(--bg-input)', border: '1px solid var(--border-input)',
-                borderRadius: 8, color: 'var(--t1)', fontSize: 13, width: 150,
+                borderRadius: 8, color: 'var(--t1)', fontSize: 13, width: 280,
                 outline: 'none',
               }}
             />
