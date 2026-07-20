@@ -7,8 +7,8 @@ const LIMIT = 50
 
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
 
-const MODULO_LABEL = { pagos: 'Pagos', cajas: 'Cajas' }
-const MODULO_BADGE = { pagos: 'badge-blue', cajas: 'badge-muted' }
+const MODULO_LABEL = { pagos: 'Pagos', cajas: 'Cajas', arqueos: 'Arqueos' }
+const MODULO_BADGE = { pagos: 'badge-blue', cajas: 'badge-muted', arqueos: 'badge-purple' }
 
 const FILTER_INIT = { desde: '', hasta: '', tabla: '', id_user: '', accion: '' }
 
@@ -83,6 +83,7 @@ export default function Auditorias() {
             <option value="">Todos</option>
             <option value="pagos">Pagos</option>
             <option value="cajas">Cajas</option>
+            <option value="arqueos">Arqueos</option>
           </select>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
@@ -145,7 +146,9 @@ export default function Auditorias() {
                         className="registro-link"
                         to={ev.tabla === 'pagos'
                           ? `/pagos?search=${encodeURIComponent(ev.registro_label)}`
-                          : `/cajas?turno=${encodeURIComponent(ev.registro_label.replace(/^TRN\s*/, ''))}`}
+                          : ev.tabla === 'cajas'
+                          ? `/cajas?turno=${encodeURIComponent(ev.registro_label.replace(/^TRN\s*/, ''))}`
+                          : '/arqueo'}
                       >
                         {ev.registro_label}
                       </Link>
