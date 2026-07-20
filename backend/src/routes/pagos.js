@@ -354,6 +354,30 @@ export default async function pagosRoutes(fastify) {
     return { nro_ord }
   })
 
+  // ── GET /check-duplicado ─────────────────────────────────────────────────
+  // Chequeo advisory (no bloqueante) de factura duplicada: mismo proveedor +
+  // punto de venta + nro de comprobante, dentro del mismo local. `exclude_id`
+  // se manda al editar un pago existente, para no matchear contra sí mismo.
+  fastify.get('/check-duplicado', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local, id_proveedor, pv, nro, exclude_id } = request.query
+    if (!id_local || !id_proveedor || !pv || !nro) return { duplicado: false }
+    if (!request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+    const pvNum  = parseInt(pv)
+    const nroNum = parseInt(nro)
+    if (isNaN(pvNum) || isNaN(nroNum)) return { duplicado: false }
+
+    const existing = await fastify.db.pago.findFirst({
+      where: {
+        id_local, id_proveedor, pv: pvNum, nro: nroNum,
+        ...(exclude_id ? { id: { not: exclude_id } } : {})
+      },
+      select: { id: true, nro_ord: true, fecha: true }
+    })
+    return { duplicado: Boolean(existing), pago: existing || null }
+  })
+
   // ── GET /:id ───────────────────────────────────────────────────────────
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
     const pago = await fastify.db.pago.findUnique({
