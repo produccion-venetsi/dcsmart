@@ -38,10 +38,11 @@ function groupByProveedor(pagos) {
   const map = new Map()
   for (const p of pagos) {
     const key = p.proveedor?.id ?? '__none__'
-    if (!map.has(key)) map.set(key, { key, nombre: provName(p), total: 0, items: [] })
+    if (!map.has(key)) map.set(key, { key, nombre: provName(p), total: 0, totalTransferencia: 0, items: [] })
     const g = map.get(key)
     g.items.push(p)
     g.total += Number(p.importe ?? 0)
+    if (p.metodo_pago?.nombre === 'Transferencia') g.totalTransferencia += Number(p.importe ?? 0)
   }
   return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
@@ -406,7 +407,10 @@ function PdpColumn({
                     />
                   )}
                   <span className="pdp-group-name">{g.nombre}</span>
-                  <span className="pdp-group-count">{g.items.length}</span>
+                  <span className="pdp-group-count" title="Total de OPs">{g.items.length} OP{g.items.length !== 1 ? 's' : ''}</span>
+                  {g.totalTransferencia > 0 && (
+                    <span className="pdp-group-transfer" title="Total por Transferencia">Transf: {fmt$(g.totalTransferencia)}</span>
+                  )}
                   <span className="pdp-group-total">{fmt$(g.total)}</span>
                 </div>
 
