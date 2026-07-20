@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { impuestosApi } from '../../api/impuestos.js'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
@@ -10,6 +10,7 @@ import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import Combobox from '../../components/Combobox.jsx'
+import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 
 function IcoBack() {
   return (
@@ -79,6 +80,9 @@ export default function PagoForm() {
   const notify          = useUiStore((s) => s.notify)
   const showConfirm     = useUiStore((s) => s.showConfirm)
   const isEditing       = Boolean(id)
+  const draftKey        = `pago-draft:${id || 'nuevo'}${modoRapido ? `:${tipoParam || ''}` : ''}`
+  const restoredFromDraftRef = useRef(false)
+  const draftReadyRef        = useRef(false)
 
   const locales = activeApp?.locales ?? []
 
@@ -154,6 +158,26 @@ export default function PagoForm() {
     foto_url: '', pdf_url: '',
   }))
 
+  // Restaura un borrador guardado (si existe) antes que nada. Cubre el caso
+  // de que la pestaña se haya recargado por completo mientras el usuario
+  // sacaba una foto con la cámara (ver frontend/src/lib/formDraft.js).
+  useEffect(() => {
+    const draft = loadDraft(draftKey)
+    if (draft) {
+      restoredFromDraftRef.current = true
+      if (draft.data.form)           setForm((f) => ({ ...f, ...draft.data.form }))
+      if (draft.data.provSelected)   setProvSelected(draft.data.provSelected)
+      if (draft.data.provPlazo != null) setProvPlazo(draft.data.provPlazo)
+      if (draft.data.rubcatSelected) setRubcatSelected(draft.data.rubcatSelected)
+      if (draft.data.pendingImp)     setPendingImp(draft.data.pendingImp)
+      if (draft.data.mmForm)         setMmForm(draft.data.mmForm)
+      if (draft.files.foto)          setFotoFile(draft.files.foto)
+      if (draft.files.pdf)           setPdfFile(draft.files.pdf)
+      notify('Se recuperó la carga que tenías sin guardar', 'info')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     const ctrl = new AbortController()
     const metReq   = metodosApi.list()
@@ -163,6 +187,13 @@ export default function PagoForm() {
     Promise.all([metReq, pagoReq, localReq])
       .then(async ([{ data: mets }, pagoRes, localRes]) => {
         setMetodos(mets)
+        draftReadyRef.current = true
+        if (restoredFromDraftRef.current) {
+          // Ya se restauró el formulario desde el borrador: no lo pisamos con
+          // lo que vino del servidor, salvo el historial de impuestos guardados.
+          if (pagoRes) setSavedImp(pagoRes.data.impuestos || [])
+          return
+        }
         if (!isEditing && modoRapido) {
           const efectivo = mets.find((m) => m.nombre === 'Efectivo')
           if (efectivo) setForm((f) => ({ ...f, id_metodo: f.id_metodo || efectivo.id }))
@@ -214,10 +245,25 @@ export default function PagoForm() {
           }))
         }
       })
-      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar datos', 'error') })
+      .catch(() => { if (!ctrl.signal.aborted) { draftReadyRef.current = true; notify('Error al cargar datos', 'error') } })
 
     return () => ctrl.abort()
   }, [id])
+
+  // Guarda un borrador (debounced) cada vez que cambia el formulario o los
+  // archivos adjuntos, para poder recuperarlo si la pestaña se recarga (ver
+  // el efecto de restauración más arriba y frontend/src/lib/formDraft.js).
+  useEffect(() => {
+    if (!draftReadyRef.current) return // todavía no terminó de cargar/restaurar: no pisar con datos a medio inicializar
+    const t = setTimeout(() => {
+      saveDraft(
+        draftKey,
+        { form, provSelected, provPlazo, rubcatSelected, pendingImp, mmForm },
+        { foto: fotoFile, pdf: pdfFile }
+      )
+    }, 400)
+    return () => clearTimeout(t)
+  }, [draftKey, form, provSelected, provPlazo, rubcatSelected, pendingImp, mmForm, fotoFile, pdfFile])
 
   // preview del próximo número de OP (solo al crear; en edición se muestra form.nro_ord real)
   useEffect(() => {
@@ -388,6 +434,7 @@ export default function PagoForm() {
         }
         notify('Pago creado', 'success')
       }
+      clearDraft(draftKey)
       navigate('/pagos')
     } catch (err) {
       notify(err.response?.data?.error || 'Error al guardar', 'error')
