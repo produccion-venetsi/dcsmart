@@ -80,6 +80,7 @@ export default function PagoForm() {
   const notify          = useUiStore((s) => s.notify)
   const showConfirm     = useUiStore((s) => s.showConfirm)
   const isEditing       = Boolean(id)
+  const esCargaAvion    = modoRapido && tipoParam === 'B'
   const draftKey        = `pago-draft:${id || 'nuevo'}${modoRapido ? `:${tipoParam || ''}` : ''}`
   const restoredFromDraftRef = useRef(false)
   const draftReadyRef        = useRef(false)
@@ -378,8 +379,11 @@ export default function PagoForm() {
     if (!form.fecha)     { notify('La fecha es obligatoria', 'error'); return }
     if (!form.id_rubcat) { notify('El rubro / categoría es obligatorio', 'error'); return }
     if (!form.id_metodo) { notify('El método de pago es obligatorio', 'error'); return }
-    if (!form.pv)         { notify('El punto de venta es obligatorio', 'error'); return }
-    if (!form.nro)        { notify('El número de comprobante es obligatorio', 'error'); return }
+    // Carga Avión suele cargar tickets manuscritos de los locales, sin punto de
+    // venta ni número de comprobante fiscal real: exigirlos llevaba a que se
+    // inventaran números para poder guardar. Para este modo quedan opcionales.
+    if (!esCargaAvion && !form.pv)  { notify('El punto de venta es obligatorio', 'error'); return }
+    if (!esCargaAvion && !form.nro) { notify('El número de comprobante es obligatorio', 'error'); return }
     if (!form.cashflow)   { notify('El cashflow es obligatorio', 'error'); return }
     if (!form.importe)   { notify('Ingresá el importe neto (o un impuesto) para calcular el total', 'error'); return }
     setLoading(true)
@@ -614,12 +618,12 @@ export default function PagoForm() {
           {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
           <div className="form-grid form-row">
             <div className="form-group">
-              <label className="form-label">Punto de Venta *</label>
+              <label className="form-label">Punto de Venta{esCargaAvion ? '' : ' *'}</label>
               <div className="form-input-wrap">
                 <input
                   type="text"
                   inputMode="numeric"
-                  required
+                  required={!esCargaAvion}
                   placeholder="00000"
                   maxLength={5}
                   value={form.pv}
@@ -630,12 +634,12 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Nro Comprobante *</label>
+              <label className="form-label">Nro Comprobante{esCargaAvion ? '' : ' *'}</label>
               <div className="form-input-wrap">
                 <input
                   type="text"
                   inputMode="numeric"
-                  required
+                  required={!esCargaAvion}
                   placeholder="00000000"
                   maxLength={8}
                   value={form.nro}
