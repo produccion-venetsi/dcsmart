@@ -5,6 +5,7 @@ export const pagosApi = {
   get:        (id,    signal)  => client.get(`/pagos/${id}`,               { signal }),
   stats:      (params, signal) => client.get('/pagos/stats',               { params, signal }),
   nextNroOrd: (id_local, signal) => client.get('/pagos/next-nro-ord',      { params: { id_local }, signal }),
+  checkDuplicado: (params, signal) => client.get('/pagos/check-duplicado', { params, signal }),
   chart:      (params, signal) => client.get('/pagos/chart',               { params, signal }),
   create:     (data)           => client.post('/pagos',                     data),
   update:     (id, data)       => client.put(`/pagos/${id}`,                data),

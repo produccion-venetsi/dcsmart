@@ -2041,8 +2041,8 @@ tr.row-clickable:hover td {
 .pdp-group-name {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   color: var(--t1);
   white-space: nowrap;
   overflow: hidden;
@@ -2057,7 +2057,14 @@ tr.row-clickable:hover td {
   border-radius: 9px;
   padding: 1px 7px;
 }
-.pdp-group-total { font-size: 11.5px; font-weight: 700; color: var(--t2); white-space: nowrap; }
+.pdp-group-total { font-size: 13px; font-weight: 800; color: var(--t1); white-space: nowrap; }
+.pdp-group-transfer {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #38bdf8;
+  white-space: nowrap;
+}
 
 .pdp-collapse-all {
   display: inline-flex;
@@ -2091,7 +2098,32 @@ tr.row-clickable:hover td {
 .pdp-row-ord { font-weight: 600; color: var(--t1); min-width: 64px; }
 .pdp-row-date { color: var(--t3); flex: 1; white-space: nowrap; }
 .pdp-row-amount { font-weight: 600; color: var(--t2); white-space: nowrap; }
-.pdp-check { width: 15px; height: 15px; accent-color: var(--gold); cursor: pointer; flex-shrink: 0; }
+.pdp-check {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-input);
+  border-radius: 4px;
+  background: var(--bg-input);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pdp-check:hover { border-color: var(--gold); }
+.pdp-check:checked { background: var(--gold); border-color: var(--gold); }
+.pdp-check:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #1a1410;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
 
 .pdp-empty {
   padding: 2.5rem 1rem;

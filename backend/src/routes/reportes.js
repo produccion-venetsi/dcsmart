@@ -155,7 +155,9 @@ export default async function reportesRoutes(fastify) {
       return {
         total_adeudado: 0, count_adeudado: 0,
         count_auditados: 0, count_no_auditados: 0,
-        total_efectivo: 0, count_efectivo: 0
+        total_efectivo: 0, count_efectivo: 0,
+        total_gastos: 0, total_cmv: 0,
+        pendientes_impuestos: 0, pendientes_sueldos: 0, pendientes_proveedores: 0
       }
     }
 
@@ -163,6 +165,7 @@ export default async function reportesRoutes(fastify) {
     const hastaDate = new Date(hasta + 'T23:59:59.999')
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { fecha: { gte: desdeDate, lte: hastaDate } }
+    const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
 
     const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
       fastify.db.pago.aggregate({
@@ -177,9 +180,40 @@ export default async function reportesRoutes(fastify) {
       }),
       fastify.db.pago.findMany({
         where: { ...localFilter, ...fechaWhere },
-        select: { id: true }
+        select: {
+          id: true, importe: true, pagado: true, ingresa_egreso: true, id_tipo: true,
+          rubcat: { select: { rubro: { select: { nombre: true } } } }
+        }
       })
     ])
+
+    // Gastos = egresos del período (pagados o no). CMV total = egresos con
+    // rubro "CMV *" del período. Pendientes = egresos impagos del período,
+    // excluyendo NCA/NCB (notas de crédito) y CMV (se muestra aparte),
+    // desglosados por rubro real: Impositivo, Sueldos, y el resto (Proveedores).
+    // Impuestos/Sueldos/Resto (tarjeta aparte) = mismo desglose que Gastos,
+    // pero sobre TODOS los egresos del período (pagados o no), sin excluir
+    // NCA/NCB -- "Resto" es simplemente Gastos - CMV - Impuestos - Sueldos.
+    let totalGastos = 0, totalCmv = 0
+    let pendImpuestos = 0, pendSueldos = 0, pendProveedores = 0
+    let totalImpuestos = 0, totalSueldos = 0
+    for (const p of pagosEnRango) {
+      if (p.ingresa_egreso === true) continue // no es gasto
+      const importe = Number(p.importe ?? 0)
+      const rubroNombre = p.rubcat?.rubro?.nombre || ''
+      const esCmv = /^CMV/i.test(rubroNombre)
+
+      totalGastos += importe
+      if (esCmv) totalCmv += importe
+      if (rubroNombre === 'Impositivo') totalImpuestos += importe
+      else if (rubroNombre === 'Sueldos') totalSueldos += importe
+
+      if (!p.pagado && !TIPOS_NO_DEUDA.has(p.id_tipo)) {
+        if (rubroNombre === 'Impositivo') pendImpuestos += importe
+        else if (rubroNombre === 'Sueldos') pendSueldos += importe
+        else if (!esCmv) pendProveedores += importe
+      }
+    }
 
     const pagoIds = pagosEnRango.map(p => p.id)
     let countAuditados = 0
@@ -203,7 +237,15 @@ export default async function reportesRoutes(fastify) {
       count_auditados: countAuditados,
       count_no_auditados: countNoAuditados,
       total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
-      count_efectivo: efectivoAgg._count.id
+      count_efectivo: efectivoAgg._count.id,
+      total_gastos: totalGastos,
+      total_cmv: totalCmv,
+      pendientes_impuestos: pendImpuestos,
+      pendientes_sueldos: pendSueldos,
+      pendientes_proveedores: pendProveedores,
+      total_impuestos: totalImpuestos,
+      total_sueldos: totalSueldos,
+      total_resto: totalGastos - totalCmv - totalImpuestos - totalSueldos
     }
   })
 
@@ -221,7 +263,7 @@ export default async function reportesRoutes(fastify) {
 
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
-      return { kpis: [], alimentos: [], bebidas: [], ajustes: [], ventas_total: 0 }
+      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ajustes: [], ventas_total: 0 }
     }
 
     const desdeDate = new Date(desde)
@@ -258,18 +300,26 @@ export default async function reportesRoutes(fastify) {
       ORDER BY total DESC
     `, ...costParams)
 
-    // Split into alimentos / bebidas
+    // Split into alimentos / bebidas / movstock. Antes "CMV MovStock" y
+    // "CMV MovStock B2B" (rubros reales, ver seed/base) caían silenciosamente
+    // dentro de "alimentos" porque solo se distinguía BEBIDA vs el resto --
+    // el total general los sumaba bien, pero no se veían como categoría propia.
     const alimentos = []
     const bebidas = []
+    const movstock = []
     let totalAlimentos = 0
     let totalBebidas = 0
+    let totalMovstock = 0
     let totalGeneral = 0
 
     for (const row of costRows) {
       const val = Number(row.total)
       totalGeneral += val
       const rubroUp = row.rubro.toUpperCase()
-      if (rubroUp.includes('BEBIDA')) {
+      if (rubroUp.includes('MOVSTOCK')) {
+        movstock.push({ name: row.categoria, val })
+        totalMovstock += val
+      } else if (rubroUp.includes('BEBIDA')) {
         bebidas.push({ name: row.categoria, val })
         totalBebidas += val
       } else {
@@ -309,11 +359,13 @@ export default async function reportesRoutes(fastify) {
     const cmvTotal = ventasTotal > 0 ? ((totalGeneral / ventasTotal) * 100) : 0
     const cmvAlimentos = ventasTotal > 0 ? ((totalAlimentos / ventasTotal) * 100) : 0
     const cmvBebidas = ventasTotal > 0 ? ((totalBebidas / ventasTotal) * 100) : 0
+    const cmvMovstock = ventasTotal > 0 ? ((totalMovstock / ventasTotal) * 100) : 0
     const cmvStock = ventasTotal > 0 ? ((totalAjustes / ventasTotal) * 100) : 0
 
     // Percentage heights for bar rendering
     const aMax = alimentos.length ? Math.max(...alimentos.map(a => a.val)) : 1
     const bMax = bebidas.length ? Math.max(...bebidas.map(b => b.val)) : 1
+    const mMax = movstock.length ? Math.max(...movstock.map(m => m.val)) : 1
 
     return {
       ventas_total: ventasTotal,
@@ -321,6 +373,7 @@ export default async function reportesRoutes(fastify) {
         { label: 'CMV Total',     val: cmvTotal.toFixed(2) },
         { label: 'CMV Alimentos', val: cmvAlimentos.toFixed(2) },
         { label: 'CMV Bebidas',   val: cmvBebidas.toFixed(2) },
+        { label: 'CMV MovStock',  val: cmvMovstock.toFixed(2) },
         { label: 'CMV Ajustes',   val: cmvStock.toFixed(2) },
       ],
       alimentos: alimentos.map(a => ({
@@ -331,8 +384,13 @@ export default async function reportesRoutes(fastify) {
         ...b,
         h: (b.val / bMax * 100).toFixed(1)
       })),
+      movstock: movstock.map(m => ({
+        ...m,
+        h: (m.val / mMax * 100).toFixed(1)
+      })),
       ajustes,
       total_alimentos: totalAlimentos,
+      total_movstock: totalMovstock,
       total_bebidas: totalBebidas,
       total_ajustes: totalAjustes,
       total_general: totalGeneral

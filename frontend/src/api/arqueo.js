@@ -7,4 +7,5 @@ export const arqueoApi = {
   update:  (id, data)          => client.put(`/arqueo/${id}`, data),
   remove:  (id)                => client.delete(`/arqueo/${id}`),
   preview: (id_local, fecha)   => client.get('/arqueo/preview', { params: { id_local, fecha } }),
+  audit:   (id, data)          => client.patch(`/arqueo/${id}/audit`, data),
 }

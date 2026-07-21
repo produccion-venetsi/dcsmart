@@ -268,6 +268,7 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [auditando, setAuditando] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -307,9 +308,30 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
 
   const cuadra = Math.abs(Number(arqueo.comprobacion)) < 0.01
 
+  const handleAudit = async () => {
+    setAuditando(true)
+    try {
+      const { data } = await arqueoApi.audit(arqueo.id)
+      setArqueo(a => ({ ...a, audit: data.audit }))
+      notify(data.audit ? 'Arqueo auditado' : 'Arqueo desauditado', 'success')
+      onChanged()
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al auditar', 'error')
+    } finally { setAuditando(false) }
+  }
+
   return (
     <div>
       <div className="drawer-detail">
+        <div className="drawer-detail-row">
+          <span className="drawer-detail-key">Auditado</span>
+          <span className={`badge ${arqueo.audit ? 'badge-green' : 'badge-muted'}`}>
+            {arqueo.audit ? '✓ Auditado' : 'No auditado'}
+          </span>
+        </div>
+        {arqueo.audit_by && (
+          <div className="drawer-detail-row"><span className="drawer-detail-key">Auditado por</span><span className="drawer-detail-val">{arqueo.audit_by} · {fmtDateTime(arqueo.audit_date)}</span></div>
+        )}
         <div className="drawer-detail-row"><span className="drawer-detail-key">Fecha</span><span className="drawer-detail-val">{fmtDateTime(arqueo.fecha)}</span></div>
         <div className="drawer-detail-row"><span className="drawer-detail-key">Caja fuerte</span><span className="drawer-detail-val">{fmt$(arqueo.caja_fuerte)}</span></div>
         <div className="drawer-detail-row"><span className="drawer-detail-key">Cofre</span><span className="drawer-detail-val">{fmt$(arqueo.cofre)}</span></div>
@@ -337,6 +359,13 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
 
       {(canEdit || canDelete) && (
         <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
+          {canEdit && (
+            <button type="button" className={`btn ${arqueo.audit ? 'btn-secondary' : 'btn-primary'}`} onClick={handleAudit} disabled={auditando}>
+              {auditando
+                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                : (arqueo.audit ? 'Desauditar' : 'Auditar')}
+            </button>
+          )}
           {canEdit && (
             <button type="button" className="btn btn-secondary" onClick={() => setEditing(true)}>Editar</button>
           )}
@@ -412,7 +441,7 @@ export default function ArqueoList() {
             <thead>
               <tr>
                 <th>Fecha</th><th>Caja fuerte</th><th>Cofre</th><th>Adición</th>
-                <th>Total</th><th>Comprobación</th><th></th>
+                <th>Total</th><th>Comprobación</th><th>Auditado</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -428,6 +457,11 @@ export default function ArqueoList() {
                     <td>
                       <span className={`badge ${cuadra ? 'badge-green' : 'badge-red'}`}>
                         {fmt$(a.comprobacion)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${a.audit ? 'badge-green' : 'badge-muted'}`}>
+                        {a.audit ? '✓ Auditado' : 'No auditado'}
                       </span>
                     </td>
                     <td>

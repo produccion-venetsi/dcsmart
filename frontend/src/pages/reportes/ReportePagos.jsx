@@ -36,6 +36,21 @@ function IcoCash() {
     </svg>
   )
 }
+function IcoWallet() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C9B086" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+      <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+    </svg>
+  )
+}
+function IcoLayers() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5FC98C" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+    </svg>
+  )
+}
 export default function ReportePagos({ applied, activeLocal, prettyDate }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -111,6 +126,85 @@ export default function ReportePagos({ applied, activeLocal, prettyDate }) {
             ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
             : <div className="rep-kpi-value med">{fmt(d.total_efectivo)}</div>}
           <div className="rep-kpi-sub">{d.count_efectivo ?? 0} pagos en efectivo</div>
+        </div>
+      </div>
+
+      {/* ── Gastos, CMV y Pendientes por rubro ── */}
+      <div className="rep-kpi-grid cols-4">
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Gastos</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(201,176,134,.18)' }}><IcoWallet /></span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '60%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{fmt(d.total_gastos)}</div>}
+          <div className="rep-kpi-sub">total de egresos del período</div>
+        </div>
+
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">CMV total</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(95,201,140,.18)' }}><IcoLayers /></span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{fmt(d.total_cmv)}</div>}
+          <div className="rep-kpi-sub">egresos con rubro CMV en el período</div>
+        </div>
+
+        <div className="rep-kpi" style={{ gridColumn: 'span 2' }}>
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Pendientes</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(212,149,42,.18)' }}><IcoAlert /></span>
+          </div>
+          {skel ? (
+            <div className="rep-skel" style={{ width: '70%', height: 32, marginBottom: 12 }} />
+          ) : (
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: 8 }}>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Impuestos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 18 }}>{fmt(d.pendientes_impuestos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Sueldos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 18 }}>{fmt(d.pendientes_sueldos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Proveedores</div>
+                <div className="rep-kpi-value" style={{ fontSize: 18 }}>{fmt(d.pendientes_proveedores)}</div>
+              </div>
+            </div>
+          )}
+          <div className="rep-kpi-sub">no pagados del período, excluye NCA/NCB y CMV (mostrado aparte)</div>
+        </div>
+      </div>
+
+      {/* ── Rubros: Impuestos / Sueldos / Resto ── */}
+      <div className="rep-kpi-grid cols-4">
+        <div className="rep-kpi" style={{ gridColumn: 'span 4' }}>
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Rubros</span>
+          </div>
+          {skel ? (
+            <div className="rep-skel" style={{ width: '70%', height: 32, marginBottom: 12 }} />
+          ) : (
+            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', marginBottom: 8 }}>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Impuestos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 20 }}>{fmt(d.total_impuestos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Sueldos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 20 }}>{fmt(d.total_sueldos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Resto</div>
+                <div className="rep-kpi-value" style={{ fontSize: 20 }}>{fmt(d.total_resto)}</div>
+              </div>
+            </div>
+          )}
+          <div className="rep-kpi-sub">todos los egresos del período (pagados o no), sin CMV</div>
         </div>
       </div>
     </>
