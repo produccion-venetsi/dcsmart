@@ -12,6 +12,7 @@ import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
 import { downloadCsv } from '../../lib/csv.js'
+import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 
 const EMPTY_CAJA = {
   nro_turno: '', tipo_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
@@ -100,8 +101,11 @@ function IcoDownload() {
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
+// fecha_inicio/fecha_cierre son instantes reales (con hora), no fechas de
+// calendario a medianoche UTC -- por eso el "día" y la hora completa se
+// muestran siempre en hora de Argentina, no forzando UTC.
+const fmtDate = fmtDateArg
+const fmtDT = fmtDateTimeArg
 
 // Mismas columnas que se ven en la tabla; montos como número plano (sin "$")
 // para que Excel/Sheets los reconozca como numéricos al importar el CSV.
@@ -753,12 +757,11 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   useEffect(() => {
     if (!cajaId) return
     cajasApi.get(cajaId).then(({ data }) => {
-      const toLocal = (d) => d ? new Date(d).toISOString().slice(0, 16) : ''
       setForm({
         nro_turno:    data.nro_turno    ?? '',
         tipo_turno:   data.tipo_turno   ?? '',
-        fecha_inicio: toLocal(data.fecha_inicio),
-        fecha_cierre: toLocal(data.fecha_cierre),
+        fecha_inicio: toDateTimeLocalInput(data.fecha_inicio),
+        fecha_cierre: toDateTimeLocalInput(data.fecha_cierre),
         cajero:       data.cajero       ?? '',
         total:        data.total        != null ? String(data.total)        : '',
         efectivo:     data.efectivo     != null ? String(data.efectivo)     : '',
@@ -868,8 +871,8 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       await cajasApi.update(cajaId, {
         nro_turno:    form.nro_turno    || null,
         tipo_turno:   form.tipo_turno   || null,
-        fecha_inicio: form.fecha_inicio,
-        fecha_cierre: form.fecha_cierre || null,
+        fecha_inicio: toUtcIsoFromDateTimeLocal(form.fecha_inicio),
+        fecha_cierre: toUtcIsoFromDateTimeLocal(form.fecha_cierre),
         cajero:       form.cajero       || null,
         total:        form.total        !== '' ? parseFloat(form.total)      : null,
         efectivo:     form.efectivo     !== '' ? parseFloat(form.efectivo)   : null,
@@ -1255,7 +1258,12 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
         foto_url = r.data.url
         setUploadingFoto(false)
       }
-      const res = await cajasApi.create({ ...form, foto_url, id_local: targetLocalId })
+      const res = await cajasApi.create({
+        ...form,
+        fecha_inicio: toUtcIsoFromDateTimeLocal(form.fecha_inicio),
+        fecha_cierre: toUtcIsoFromDateTimeLocal(form.fecha_cierre),
+        foto_url, id_local: targetLocalId,
+      })
       const nuevoId = res.data?.id
 
       let detOk = 0, detFail = 0
