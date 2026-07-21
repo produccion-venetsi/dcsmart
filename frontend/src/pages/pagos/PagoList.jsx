@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
@@ -11,6 +11,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { downloadCsv } from '../../lib/csv.js'
+import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -212,7 +213,11 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [savingMM,    setSavingMM]    = useState(false)
   const [addingMM,    setAddingMM]    = useState(false)
   const [pagarOpen,   setPagarOpen]   = useState(false)
-  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: new Date().toISOString().slice(0, 10), id_metodo: '' })
+  // fecha_pago con hora real (no solo el día) -- el arqueo compara fecha_pago
+  // como un instante exacto contra su propio corte de hora, así que un
+  // "pagado hoy" a medianoche (sin hora real) puede caer del lado
+  // equivocado del arqueo. Ver frontend/src/lib/dates.js.
+  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: nowDateTimeLocalInput(), id_metodo: '' })
   const [pagando,     setPagando]     = useState(false)
   const [mandando,    setMandando]    = useState(false)
 
@@ -300,10 +305,11 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     if (!pagarForm.id_metodo) return notify('Seleccioná un método de pago', 'error')
     setPagando(true)
     try {
-      await pagosApi.pagar([pago.id], { fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+      const fechaPagoIso = toUtcIsoFromDateTimeLocal(pagarForm.fecha_pago)
+      await pagosApi.pagar([pago.id], { fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
       notify('Pago registrado', 'success')
       setPagarOpen(false)
-      onPatch?.(pago.id, { pagado: true, fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+      onPatch?.(pago.id, { pagado: true, fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
     } catch { notify('Error al pagar', 'error') }
     finally { setPagando(false) }
   }
@@ -527,7 +533,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             </button>
           )}
           {canEdit && !pago.pagado && (
-            <button className="btn btn-secondary" onClick={() => setPagarOpen(true)} title="Registrar pago">
+            <button className="btn btn-secondary" onClick={() => { setPagarForm(f => ({ ...f, fecha_pago: nowDateTimeLocalInput() })); setPagarOpen(true) }} title="Registrar pago">
               <IcoDollar /> Pagar
             </button>
           )}
@@ -560,7 +566,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Fecha de pago</label>
               <div className="form-input-wrap">
-                <input type="date" value={pagarForm.fecha_pago} onChange={e => setPagarForm(f => ({ ...f, fecha_pago: e.target.value }))} required />
+                <input type="datetime-local" value={pagarForm.fecha_pago} onChange={e => setPagarForm(f => ({ ...f, fecha_pago: e.target.value }))} required />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -726,7 +732,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           <span className="badge badge-amber">{multimoneda[0].tipo}</span>
           <span className="td-mono" style={{ fontSize: 12 }}>TDC {Number(multimoneda[0].tdc).toFixed(4)}</span>
           <span className="td-number" style={{ flex: 1, fontSize: 13 }}>{Number(multimoneda[0].monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
-          <span style={{ fontSize: 11, color: 'var(--t3)' }}>{multimoneda[0].fecha ? new Date(multimoneda[0].fecha).toLocaleDateString('es-AR') : ''}</span>
+          <span style={{ fontSize: 11, color: 'var(--t3)' }}>{multimoneda[0].fecha ? fmtDateArg(multimoneda[0].fecha) : ''}</span>
           <button className="btn btn-sm btn-secondary btn-icon" onClick={handleEditMM}><IcoEdit /></button>
           <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMM(multimoneda[0].id)}><IcoTrash /></button>
         </div>
@@ -782,7 +788,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR', { hour12: false })}</td>
+                  <td className="td-muted">{fmtDateTimeArg(ev.fecha)}</td>
                   <td>{ev.user?.nombre ?? '—'}</td>
                   <td>
                     <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
@@ -912,7 +918,7 @@ export default function PagoList() {
     try {
       const { data } = await pagosApi.list({ ...buildParams(1), limit: 0 })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      downloadCsv(`pagos_${new Date().toISOString().slice(0, 10)}.csv`, data.data, PAGO_CSV_COLUMNS)
+      downloadCsv(`pagos_${todayInputDate()}.csv`, data.data, PAGO_CSV_COLUMNS)
     } catch {
       notify('Error al exportar CSV', 'error')
     } finally {
@@ -1067,6 +1073,43 @@ export default function PagoList() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
   const filterRef = useRef(null)
+
+  // Ancho fijo del panel de Filtros (debe coincidir con el `width: 520` del
+  // style inline del panel) y margen mínimo respecto al sidebar/borde.
+  // Nota: en viewports angostos/zoom alto el panel puede renderizar más
+  // angosto que esto por el `maxWidth: '90vw'` del style inline; eso solo
+  // hace el clamp un poco más conservador, nunca causa overlap.
+  const PANEL_WIDTH  = 520
+  const PANEL_MARGIN = 8
+  const [panelLeft, setPanelLeft] = useState(0)
+
+  // Calcula dónde debe quedar el panel (en vez del `right: 0` fijo de antes)
+  // para que nunca se superponga al sidebar ni se salga de la pantalla,
+  // sin importar el zoom del navegador o el ancho de la ventana.
+  //
+  // getBoundingClientRect()/window.innerWidth devuelven coordenadas de
+  // viewport, pero el panel es `position: absolute` dentro de filterRef
+  // (que es `position: relative`) — su `left` final tiene que ser relativo
+  // a `buttonRect.left`, no una coordenada de viewport cruda.
+  const computePanelLeft = () => {
+    if (!filterRef.current) return
+    const buttonRect  = filterRef.current.getBoundingClientRect()
+    const sidebarEl    = document.querySelector('.sidebar')
+    const sidebarRight = sidebarEl ? sidebarEl.getBoundingClientRect().right : 0
+    const idealLeftViewport = buttonRect.right - PANEL_WIDTH
+    const minLeftViewport   = sidebarRight + PANEL_MARGIN
+    const maxLeftViewport   = window.innerWidth - PANEL_WIDTH - PANEL_MARGIN
+    const clampedLeftViewport = Math.max(minLeftViewport, Math.min(idealLeftViewport, maxLeftViewport))
+    setPanelLeft(clampedLeftViewport - buttonRect.left)
+  }
+
+  useLayoutEffect(() => {
+    if (!filterOpen) return
+    computePanelLeft()
+    window.addEventListener('resize', computePanelLeft)
+    return () => window.removeEventListener('resize', computePanelLeft)
+  }, [filterOpen])
+
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => k !== 'campo_fecha' && (Array.isArray(v) ? v.length > 0 : v !== '')).length
   const hasActiveFilters  = activeFilterCount > 0
 
@@ -1224,7 +1267,7 @@ export default function PagoList() {
 
             {filterOpen && (
               <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+                position: 'absolute', top: 'calc(100% + 8px)', left: panelLeft, zIndex: 200,
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',
                 borderRadius: 12, padding: '1.25rem', width: 520, maxWidth: '90vw',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
@@ -1386,31 +1429,31 @@ export default function PagoList() {
               </div>
             )}
           </div>
-          {(canEdit || canDelete) && (
-            <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
-              <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
-            </button>
-          )}
-          <ActionsMenu label="Carga rápida" openOnClick>
+          <ActionsMenu label="Acciones" float>
+            {(canEdit || canDelete) && (
+              <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
+                <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+              </button>
+            )}
             <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=B')} title="Carga Avión">
               <IcoPlane /> Carga Avión
             </button>
             <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=STK')} title="MovStock">
               <IcoBox /> MovStock
             </button>
+            {canExport && (
+              <button
+                className="btn btn-secondary"
+                onClick={exportCsv}
+                disabled={exporting || !(filters.desde && filters.hasta)}
+                title={filters.desde && filters.hasta
+                  ? 'Exportar a CSV los pagos con los filtros actuales'
+                  : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
+              >
+                {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
+              </button>
+            )}
           </ActionsMenu>
-          {canExport && (
-            <button
-              className="btn btn-secondary"
-              onClick={exportCsv}
-              disabled={exporting || !(filters.desde && filters.hasta)}
-              title={filters.desde && filters.hasta
-                ? 'Exportar a CSV los pagos con los filtros actuales'
-                : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
-            >
-              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
-            </button>
-          )}
           <button className="btn btn-primary" onClick={() => navigate('/pagos/nuevo')}>
             <IcoPlus /> Nuevo Pago
           </button>

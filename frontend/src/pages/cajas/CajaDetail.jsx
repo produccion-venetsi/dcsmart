@@ -4,6 +4,7 @@ import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAppStore } from '../../store/appStore.js'
+import { fmtDateTimeArg, fmtDateArg } from '../../lib/dates.js'
 
 function IcoBack() {
   return (
@@ -44,7 +45,7 @@ function IcoMovs() {
 }
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
+const fmtDT = fmtDateTimeArg
 
 const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
 const TOLERANCE = 0.01
@@ -215,7 +216,7 @@ export default function CajaDetail() {
           <h1 className="page-title">
             {caja.nro_turno ? `Turno ${caja.nro_turno}` : `Caja #${caja.id.slice(0, 8)}`}
           </h1>
-          <p className="page-sub">{caja.local?.nombre} · {new Date(caja.fecha_inicio).toLocaleDateString('es-AR', { timeZone: 'UTC' })}</p>
+          <p className="page-sub">{caja.local?.nombre} · {fmtDateArg(caja.fecha_inicio)}</p>
         </div>
         <div className="page-actions">
           <button

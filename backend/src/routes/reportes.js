@@ -17,8 +17,10 @@ export default async function reportesRoutes(fastify) {
       return { kpi: {}, secondary: [], weekly: [], fiscal: {}, payments: [], pay_total: 0 }
     }
 
-    const desdeDate = new Date(desde)
-    const hastaDate = new Date(hasta + 'T23:59:59.999')
+    // fecha_inicio es un instante real (con hora) -- el rango se interpreta
+    // en hora de Argentina (offset fijo -03:00), no UTC.
+    const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
 
     const localFilter = { id_local: { in: localIds } }
     const cajaWhere = {
@@ -73,16 +75,24 @@ export default async function reportesRoutes(fastify) {
       .filter(p => !p.name.toLowerCase().includes('efectivo'))
       .reduce((s, p) => s + p.val, 0)
 
+    // fecha_inicio es una columna `timestamp` (sin tz) que guarda el instante
+    // en UTC -- para truncar por semana en el día real (Argentina), primero
+    // hay que reinterpretar el valor crudo como UTC (`AT TIME ZONE 'UTC'`,
+    // que lo convierte a timestamptz) y RECIÉN ahí convertirlo a hora
+    // Argentina (`AT TIME ZONE 'America/Argentina/Buenos_Aires'`, que lo
+    // vuelve timestamp local). Aplicar un solo `AT TIME ZONE` sobre el valor
+    // crudo hace el camino inverso (lo trata como si ya fuera hora Argentina)
+    // y da el mismo resultado incorrecto que no convertir nada.
     const weekParams = [...localIds, desdeDate, hastaDate]
     const weekRows = await fastify.db.$queryRawUnsafe(`
       SELECT
-        DATE_TRUNC('week', fecha_inicio)::date AS week_start,
+        DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS week_start,
         SUM(COALESCE(total, 0)) AS total
       FROM cajas
       WHERE id_local IN (${localPlaceholders})
         AND fecha_inicio >= $${localIds.length + 1}
         AND fecha_inicio <= $${localIds.length + 2}
-      GROUP BY DATE_TRUNC('week', fecha_inicio)
+      GROUP BY DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')
       ORDER BY week_start
     `, ...weekParams)
 
@@ -140,7 +150,9 @@ export default async function reportesRoutes(fastify) {
 
   // ── GET /pagos ──────────────────────────────────────────────────────────
   fastify.get('/pagos', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta } = request.query
+    const { id_local, desde, hasta, campo_fecha } = request.query
+    const CAMPOS_FECHA_VALIDOS = ['fecha', 'fecha_pago', 'cashflow', 'periodo']
+    const campoFecha = CAMPOS_FECHA_VALIDOS.includes(campo_fecha) ? campo_fecha : 'fecha'
 
     if (!desde || !hasta) {
       return reply.code(400).send({ error: 'desde y hasta son requeridos' })
@@ -161,10 +173,13 @@ export default async function reportesRoutes(fastify) {
       }
     }
 
-    const desdeDate = new Date(desde)
-    const hastaDate = new Date(hasta + 'T23:59:59.999')
+    // fecha/fecha_pago/cashflow/periodo se guardan como medianoche UTC del
+    // día elegido -- el rango se marca explícitamente en UTC para no
+    // depender del timezone del proceso donde corra Node.
+    const desdeDate = new Date(`${desde}T00:00:00.000Z`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999Z`)
     const localFilter = { id_local: { in: localIds } }
-    const fechaWhere = { fecha: { gte: desdeDate, lte: hastaDate } }
+    const fechaWhere = { [campoFecha]: { gte: desdeDate, lte: hastaDate } }
     const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
 
     const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
@@ -266,8 +281,15 @@ export default async function reportesRoutes(fastify) {
       return { kpis: [], alimentos: [], bebidas: [], movstock: [], ajustes: [], ventas_total: 0 }
     }
 
-    const desdeDate = new Date(desde)
-    const hastaDate = new Date(hasta + 'T23:59:59.999')
+    // fecha_inicio (Caja) es un instante real (con hora) -- rango en hora Argentina.
+    const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
+    // periodo (Pago) se guarda como medianoche UTC del día elegido (misma
+    // convención que Pago.fecha/cashflow) -- NO es un instante real como
+    // fecha_inicio, así que compararlo con el offset de Argentina de arriba
+    // correría el filtro 3 horas. Usa su propio par de fechas en UTC puro.
+    const desdePeriodoUTC = new Date(`${desde}T00:00:00.000Z`)
+    const hastaPeriodoUTC = new Date(`${hasta}T23:59:59.999Z`)
     const localPlaceholders = localIds.map((_, i) => `$${i + 1}`).join(', ')
 
     const ventasAgg = await fastify.db.caja.aggregate({
@@ -282,7 +304,7 @@ export default async function reportesRoutes(fastify) {
 
     // CMV costs: pagos grouped by rubro + categoría
     // Rubros with name LIKE 'CMV%' are CMV rubros
-    const costParams = [...localIds, desdeDate, hastaDate]
+    const costParams = [...localIds, desdePeriodoUTC, hastaPeriodoUTC]
     const costRows = await fastify.db.$queryRawUnsafe(`
       SELECT
         r.nombre AS rubro,
@@ -293,8 +315,8 @@ export default async function reportesRoutes(fastify) {
       JOIN rubros r ON rc.id_rub = r.id
       JOIN categorias c ON rc.id_cat = c.id
       WHERE p.id_local IN (${localPlaceholders})
-        AND p.fecha >= $${localIds.length + 1}
-        AND p.fecha <= $${localIds.length + 2}
+        AND p.periodo >= $${localIds.length + 1}
+        AND p.periodo <= $${localIds.length + 2}
         AND UPPER(r.nombre) LIKE 'CMV%'
       GROUP BY r.nombre, c.nombre
       ORDER BY total DESC

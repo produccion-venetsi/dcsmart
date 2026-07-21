@@ -203,10 +203,13 @@ async function buildPagosWhere(fastify, request, query) {
     ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
     ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
     ...(estado_op      ? { estado_op }                                    : {}),
+    // fecha/periodo/cashflow/fecha_pago se guardan como medianoche UTC del
+    // día elegido -- el rango se marca explícito en UTC para no depender
+    // del timezone del proceso donde corra Node.
     ...(desde || hasta ? {
       [campoFecha]: {
-        ...(desde ? { gte: new Date(desde) } : {}),
-        ...(hasta ? { lte: new Date(hasta + 'T23:59:59.999') } : {})
+        ...(desde ? { gte: new Date(`${desde}T00:00:00.000Z`) } : {}),
+        ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999Z`) } : {})
       }
     } : {})
   }
@@ -346,8 +349,8 @@ export default async function pagosRoutes(fastify) {
       ...(estado_op      ? { estado_op }                                   : {}),
       ...(desde || hasta ? {
         fecha: {
-          ...(desde ? { gte: new Date(desde) } : {}),
-          ...(hasta ? { lte: new Date(hasta + 'T23:59:59.999') } : {})
+          ...(desde ? { gte: new Date(`${desde}T00:00:00.000Z`) } : {}),
+          ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999Z`) } : {})
         }
       } : {})
     }
@@ -396,11 +399,11 @@ export default async function pagosRoutes(fastify) {
     }
 
     if (desde) {
-      params.push(new Date(desde))
+      params.push(new Date(`${desde}T00:00:00.000Z`))
       conditions += ` AND fecha >= $${params.length}`
     }
     if (hasta) {
-      params.push(new Date(hasta + 'T23:59:59.999'))
+      params.push(new Date(`${hasta}T23:59:59.999Z`))
       conditions += ` AND fecha <= $${params.length}`
     }
 
