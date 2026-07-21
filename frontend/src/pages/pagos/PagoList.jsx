@@ -1070,6 +1070,9 @@ export default function PagoList() {
 
   // Ancho fijo del panel de Filtros (debe coincidir con el `width: 520` del
   // style inline del panel) y margen mínimo respecto al sidebar/borde.
+  // Nota: en viewports angostos/zoom alto el panel puede renderizar más
+  // angosto que esto por el `maxWidth: '90vw'` del style inline; eso solo
+  // hace el clamp un poco más conservador, nunca causa overlap.
   const PANEL_WIDTH  = 520
   const PANEL_MARGIN = 8
   const [panelLeft, setPanelLeft] = useState(0)
@@ -1203,7 +1206,7 @@ export default function PagoList() {
           <h1 className="page-title">Pagos</h1>
           {activeLocal && <span className="local-badge">Local: {activeLocal.nombre}</span>}
         </div>
-        <div className="page-actions">
+        <div className="page-actions" style={{ flex: 1, minWidth: 0 }}>
           {/* Buscador OP */}
           <div style={{ position: 'relative' }}>
             <span style={{
