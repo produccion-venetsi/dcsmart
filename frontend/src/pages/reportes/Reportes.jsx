@@ -153,50 +153,56 @@ export default function Reportes() {
 
         {/* ── Filter bar ── */}
         <div className="rep-filters">
-          {tab === 'pagos' && (
-            <div className="rep-filter-col" style={{ maxWidth: 180 }}>
-              <div className="rep-filter-label">Tipo de fecha</div>
-              <div className="rep-date-input">
-                <select
-                  value={campoFecha}
-                  onChange={(e) => setCampoFecha(e.target.value)}
-                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif' }}
-                >
-                  {CAMPO_FECHA_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+          <div className="rep-filters-main">
+            <div className="rep-filters-row">
+              {tab === 'pagos' && (
+                <div className="rep-filter-col" style={{ maxWidth: 180 }}>
+                  <div className="rep-filter-label">Tipo de fecha</div>
+                  <div className="rep-date-input">
+                    <select
+                      value={campoFecha}
+                      onChange={(e) => setCampoFecha(e.target.value)}
+                      style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif' }}
+                    >
+                      {CAMPO_FECHA_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div className="rep-filter-col">
+                <div className="rep-filter-label">Inicio</div>
+                <div className="rep-date-input">
+                  <IcoCalendar />
+                  <input type="date" value={desde} max={hasta}
+                    onChange={(e) => { setDesde(e.target.value); setPreset('') }} />
+                </div>
+              </div>
+              <div className="rep-filter-col">
+                <div className="rep-filter-label">Fin</div>
+                <div className="rep-date-input">
+                  <IcoCalendar />
+                  <input type="date" value={hasta} min={desde}
+                    onChange={(e) => { setHasta(e.target.value); setPreset('') }} />
+                </div>
               </div>
             </div>
-          )}
-          <div className="rep-filter-col">
-            <div className="rep-filter-label">Inicio</div>
-            <div className="rep-date-input">
-              <IcoCalendar />
-              <input type="date" value={desde} max={hasta}
-                onChange={(e) => { setDesde(e.target.value); setPreset('') }} />
+            <div className="rep-presets">
+              {PRESETS.map((p) => (
+                <button key={p.key}
+                  className={'rep-preset-btn' + (preset === p.key ? ' active' : '')}
+                  onClick={() => handlePreset(p.key)}
+                >{p.label}</button>
+              ))}
             </div>
           </div>
-          <div className="rep-filter-col">
-            <div className="rep-filter-label">Fin</div>
-            <div className="rep-date-input">
-              <IcoCalendar />
-              <input type="date" value={hasta} min={desde}
-                onChange={(e) => { setHasta(e.target.value); setPreset('') }} />
-            </div>
+          <div className="rep-filters-side">
+            <button className="rep-generate-btn" onClick={handleGenerate}>
+              <IcoArrowRight />
+              Generar reporte
+            </button>
           </div>
-          <div className="rep-presets">
-            {PRESETS.map((p) => (
-              <button key={p.key}
-                className={'rep-preset-btn' + (preset === p.key ? ' active' : '')}
-                onClick={() => handlePreset(p.key)}
-              >{p.label}</button>
-            ))}
-          </div>
-          <button className="rep-generate-btn" onClick={handleGenerate}>
-            <IcoArrowRight />
-            Generar reporte
-          </button>
         </div>
 
         {/* ── Active report ── */}

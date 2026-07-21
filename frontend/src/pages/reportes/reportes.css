@@ -68,7 +68,11 @@
   color: var(--t2);
 }
 
-/* ── filter bar ── */
+/* ── filter bar ──
+   .rep-filters: fila con dos hijos -- .rep-filters-main (columna, crece) a
+   la izquierda y .rep-filters-side (el botón Generar, quieto) a la derecha.
+   Dentro de .rep-filters-main: .rep-filters-row (fechas, en fila) arriba,
+   .rep-presets (atajos de período, en fila) abajo. */
 .rep-filters {
   display: flex;
   align-items: flex-end;
@@ -78,7 +82,22 @@
   border-radius: 14px;
   padding: 16px 18px;
   margin-bottom: 22px;
+}
+.rep-filters-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.rep-filters-row {
+  display: flex;
   flex-wrap: wrap;
+  gap: 14px;
+}
+.rep-filters-side {
+  display: flex;
+  flex-shrink: 0;
 }
 .rep-filter-col {
   flex: 1 1 160px;
@@ -120,9 +139,7 @@
 .rep-presets {
   display: flex;
   gap: 7px;
-  flex: 1;
   align-items: center;
-  padding-bottom: 1px;
   flex-wrap: wrap;
 }
 .rep-preset-btn {
