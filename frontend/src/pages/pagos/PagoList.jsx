@@ -11,7 +11,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { downloadCsv } from '../../lib/csv.js'
-import { todayInputDate, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
+import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -213,7 +213,11 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [savingMM,    setSavingMM]    = useState(false)
   const [addingMM,    setAddingMM]    = useState(false)
   const [pagarOpen,   setPagarOpen]   = useState(false)
-  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: todayInputDate(), id_metodo: '' })
+  // fecha_pago con hora real (no solo el día) -- el arqueo compara fecha_pago
+  // como un instante exacto contra su propio corte de hora, así que un
+  // "pagado hoy" a medianoche (sin hora real) puede caer del lado
+  // equivocado del arqueo. Ver frontend/src/lib/dates.js.
+  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: nowDateTimeLocalInput(), id_metodo: '' })
   const [pagando,     setPagando]     = useState(false)
   const [mandando,    setMandando]    = useState(false)
 
@@ -301,10 +305,11 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     if (!pagarForm.id_metodo) return notify('Seleccioná un método de pago', 'error')
     setPagando(true)
     try {
-      await pagosApi.pagar([pago.id], { fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+      const fechaPagoIso = toUtcIsoFromDateTimeLocal(pagarForm.fecha_pago)
+      await pagosApi.pagar([pago.id], { fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
       notify('Pago registrado', 'success')
       setPagarOpen(false)
-      onPatch?.(pago.id, { pagado: true, fecha_pago: pagarForm.fecha_pago, id_metodo: pagarForm.id_metodo })
+      onPatch?.(pago.id, { pagado: true, fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
     } catch { notify('Error al pagar', 'error') }
     finally { setPagando(false) }
   }
@@ -528,7 +533,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             </button>
           )}
           {canEdit && !pago.pagado && (
-            <button className="btn btn-secondary" onClick={() => setPagarOpen(true)} title="Registrar pago">
+            <button className="btn btn-secondary" onClick={() => { setPagarForm(f => ({ ...f, fecha_pago: nowDateTimeLocalInput() })); setPagarOpen(true) }} title="Registrar pago">
               <IcoDollar /> Pagar
             </button>
           )}
@@ -561,7 +566,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Fecha de pago</label>
               <div className="form-input-wrap">
-                <input type="date" value={pagarForm.fecha_pago} onChange={e => setPagarForm(f => ({ ...f, fecha_pago: e.target.value }))} required />
+                <input type="datetime-local" value={pagarForm.fecha_pago} onChange={e => setPagarForm(f => ({ ...f, fecha_pago: e.target.value }))} required />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
