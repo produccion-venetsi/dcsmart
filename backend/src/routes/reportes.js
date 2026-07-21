@@ -75,16 +75,24 @@ export default async function reportesRoutes(fastify) {
       .filter(p => !p.name.toLowerCase().includes('efectivo'))
       .reduce((s, p) => s + p.val, 0)
 
+    // fecha_inicio es una columna `timestamp` (sin tz) que guarda el instante
+    // en UTC -- para truncar por semana en el día real (Argentina), primero
+    // hay que reinterpretar el valor crudo como UTC (`AT TIME ZONE 'UTC'`,
+    // que lo convierte a timestamptz) y RECIÉN ahí convertirlo a hora
+    // Argentina (`AT TIME ZONE 'America/Argentina/Buenos_Aires'`, que lo
+    // vuelve timestamp local). Aplicar un solo `AT TIME ZONE` sobre el valor
+    // crudo hace el camino inverso (lo trata como si ya fuera hora Argentina)
+    // y da el mismo resultado incorrecto que no convertir nada.
     const weekParams = [...localIds, desdeDate, hastaDate]
     const weekRows = await fastify.db.$queryRawUnsafe(`
       SELECT
-        DATE_TRUNC('week', fecha_inicio)::date AS week_start,
+        DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS week_start,
         SUM(COALESCE(total, 0)) AS total
       FROM cajas
       WHERE id_local IN (${localPlaceholders})
         AND fecha_inicio >= $${localIds.length + 1}
         AND fecha_inicio <= $${localIds.length + 2}
-      GROUP BY DATE_TRUNC('week', fecha_inicio)
+      GROUP BY DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')
       ORDER BY week_start
     `, ...weekParams)
 

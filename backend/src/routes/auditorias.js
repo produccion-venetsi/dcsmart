@@ -97,7 +97,10 @@ export default async function auditoriasRoutes(fastify) {
     const labelMap = new Map()
     pagos.forEach(p => labelMap.set(p.id, p.nro_ord != null ? `OP-${p.nro_ord}` : '—'))
     cajas.forEach(c => labelMap.set(c.id, c.nro_turno ? `TRN ${c.nro_turno}` : '—'))
-    arqueos.forEach(a => labelMap.set(a.id, `ARQ ${new Date(a.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })}`))
+    // Arqueo.fecha es un instante real (con hora) -- mostrar su día siempre
+    // en hora de Argentina, no UTC (que puede correrlo al día siguiente para
+    // arqueos hechos entre las 21:00 y medianoche hora Argentina).
+    arqueos.forEach(a => labelMap.set(a.id, `ARQ ${new Date(a.fecha).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`))
 
     const data = rows.map(r => ({
       id: r.id,

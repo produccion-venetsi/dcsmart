@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 
 function IcoBack() {
   return (
@@ -37,7 +38,12 @@ export default function CajaForm() {
     if (!targetLocalId) { notify('Seleccioná un local', 'error'); return }
     setSaving(true)
     try {
-      const res = await cajasApi.create({ ...form, id_local: targetLocalId })
+      const res = await cajasApi.create({
+        ...form,
+        fecha_inicio: toUtcIsoFromDateTimeLocal(form.fecha_inicio),
+        fecha_cierre: toUtcIsoFromDateTimeLocal(form.fecha_cierre),
+        id_local: targetLocalId,
+      })
       notify('Caja creada', 'success')
       navigate('/cajas')
     } catch (err) {

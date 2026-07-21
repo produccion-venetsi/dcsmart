@@ -9,6 +9,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
 import { pdpApi } from '../../api/pdp.js'
+import { fmtDateUTC, fmtMonthUTC, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -16,18 +17,8 @@ function fmt$(n) {
     ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
     : '—'
 }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
-function fmtMonth(d) { return d ? new Date(d).toLocaleDateString('es-AR', { year: 'numeric', month: 'short', timeZone: 'UTC' }) : '—' }
-// Fecha+hora local actual en formato para <input type="datetime-local"> ("YYYY-MM-DDTHH:mm").
-// Captura el momento real en que se marca el pago como pagado -- necesario para que Arqueo
-// pueda ordenarlo correctamente contra otros arqueos/cajas del mismo día (con fecha_pago a
-// medianoche, un gasto real quedaba "antes" de cualquier arqueo posterior del mismo día aunque
-// en los hechos se haya pagado después).
-function nowLocalDateTime() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+const fmtDate  = fmtDateUTC
+const fmtMonth = fmtMonthUTC
 
 function provName(p) {
   return p.proveedor?.razon_social || p.proveedor?.nombre || 'Sin proveedor'
@@ -192,7 +183,7 @@ function IcoExpandAll() {
 
 /* ── modal de pago ── */
 function PagarModal({ count, total, metodos, onClose, onConfirm, working }) {
-  const [fecha, setFecha]       = useState(nowLocalDateTime())
+  const [fecha, setFecha]       = useState(nowDateTimeLocalInput())
   const [idMetodo, setIdMetodo] = useState('')
 
   return (
@@ -226,7 +217,7 @@ function PagarModal({ count, total, metodos, onClose, onConfirm, working }) {
           <button className="btn btn-sm btn-secondary" onClick={onClose} disabled={working}>Cancelar</button>
           <button
             className="btn btn-sm btn-primary"
-            onClick={() => onConfirm({ fecha_pago: fecha || null, id_metodo: idMetodo })}
+            onClick={() => onConfirm({ fecha_pago: toUtcIsoFromDateTimeLocal(fecha), id_metodo: idMetodo })}
             disabled={working || !idMetodo}
           >
             {working
@@ -608,9 +599,7 @@ export default function PdpDashboard() {
     finally { setWorking(false) }
   }
 
-  function fmtDateTime(d) {
-    return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—'
-  }
+  const fmtDateTime = fmtDateTimeArg
 
   const handleDescargarPdp = async (pdp) => {
     setDescargandoId(pdp.id)
