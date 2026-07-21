@@ -65,10 +65,12 @@ jobs:
           CLOUDRUN_ENV_YAML: ${{ secrets.CLOUDRUN_ENV_YAML }}
           GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
           GCS_PROJECT_ID: ${{ secrets.GCS_PROJECT_ID }}
+          ANALYTICS_BACKEND_URL: ${{ secrets.ANALYTICS_BACKEND_URL }}
         run: |
           printf '%s\n' "$CLOUDRUN_ENV_YAML" > backend/.env.cloudrun.yaml
           printf 'GCS_BUCKET_NAME: %s\n' "$GCS_BUCKET_NAME" >> backend/.env.cloudrun.yaml
           printf 'GCS_PROJECT_ID: %s\n' "$GCS_PROJECT_ID" >> backend/.env.cloudrun.yaml
+          printf 'ANALYTICS_BACKEND_URL: %s\n' "$ANALYTICS_BACKEND_URL" >> backend/.env.cloudrun.yaml
 
       - name: Deploy a Cloud Run
         run: |
