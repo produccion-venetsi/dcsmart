@@ -2,21 +2,26 @@
 // cuyo local pertenece a la app activa (request.allowedLocalIds, de appContext).
 // Si `tabla` viene fijado a 'pagos' o 'cajas', solo arma esa rama.
 async function buildScopeOr(fastify, allowedLocalIds, tabla) {
-  const wantsPagos = !tabla || tabla === 'pagos'
-  const wantsCajas = !tabla || tabla === 'cajas'
+  const wantsPagos   = !tabla || tabla === 'pagos'
+  const wantsCajas   = !tabla || tabla === 'cajas'
+  const wantsArqueos = !tabla || tabla === 'arqueos'
 
-  const [pagos, cajas] = await Promise.all([
+  const [pagos, cajas, arqueos] = await Promise.all([
     wantsPagos
       ? fastify.db.pago.findMany({ where: { id_local: { in: allowedLocalIds } }, select: { id: true } })
       : [],
     wantsCajas
       ? fastify.db.caja.findMany({ where: { id_local: { in: allowedLocalIds } }, select: { id: true } })
+      : [],
+    wantsArqueos
+      ? fastify.db.arqueo.findMany({ where: { id_local: { in: allowedLocalIds } }, select: { id: true } })
       : []
   ])
 
   const scopeOr = []
-  if (wantsPagos) scopeOr.push({ tabla: 'pagos', id_registro: { in: pagos.map(p => p.id) } })
-  if (wantsCajas) scopeOr.push({ tabla: 'cajas', id_registro: { in: cajas.map(c => c.id) } })
+  if (wantsPagos)   scopeOr.push({ tabla: 'pagos',   id_registro: { in: pagos.map(p => p.id) } })
+  if (wantsCajas)   scopeOr.push({ tabla: 'cajas',   id_registro: { in: cajas.map(c => c.id) } })
+  if (wantsArqueos) scopeOr.push({ tabla: 'arqueos', id_registro: { in: arqueos.map(a => a.id) } })
   return scopeOr
 }
 
@@ -32,8 +37,8 @@ export default async function auditoriasRoutes(fastify) {
       page = 1, limit = 50
     } = request.query
 
-    if (tabla && !['pagos', 'cajas'].includes(tabla)) {
-      return reply.code(400).send({ error: 'tabla debe ser "pagos" o "cajas"' })
+    if (tabla && !['pagos', 'cajas', 'arqueos'].includes(tabla)) {
+      return reply.code(400).send({ error: 'tabla debe ser "pagos", "cajas" o "arqueos"' })
     }
     if (accion && !['auditado', 'desauditado'].includes(accion)) {
       return reply.code(400).send({ error: 'accion debe ser "auditado" o "desauditado"' })
@@ -71,21 +76,26 @@ export default async function auditoriasRoutes(fastify) {
     // Resolver registro_label: Audit es polimórfica (tabla + id_registro),
     // sin relación Prisma a Pago/Caja. Se resuelve con dos queries acotadas
     // a los ids presentes en esta página (no a toda la tabla).
-    const pagoIds = rows.filter(r => r.tabla === 'pagos').map(r => r.id_registro)
-    const cajaIds = rows.filter(r => r.tabla === 'cajas').map(r => r.id_registro)
+    const pagoIds   = rows.filter(r => r.tabla === 'pagos').map(r => r.id_registro)
+    const cajaIds   = rows.filter(r => r.tabla === 'cajas').map(r => r.id_registro)
+    const arqueoIds = rows.filter(r => r.tabla === 'arqueos').map(r => r.id_registro)
 
-    const [pagos, cajas] = await Promise.all([
+    const [pagos, cajas, arqueos] = await Promise.all([
       pagoIds.length
         ? fastify.db.pago.findMany({ where: { id: { in: pagoIds } }, select: { id: true, nro_ord: true } })
         : [],
       cajaIds.length
         ? fastify.db.caja.findMany({ where: { id: { in: cajaIds } }, select: { id: true, nro_turno: true } })
+        : [],
+      arqueoIds.length
+        ? fastify.db.arqueo.findMany({ where: { id: { in: arqueoIds } }, select: { id: true, fecha: true } })
         : []
     ])
 
     const labelMap = new Map()
     pagos.forEach(p => labelMap.set(p.id, p.nro_ord != null ? `OP-${p.nro_ord}` : '—'))
     cajas.forEach(c => labelMap.set(c.id, c.nro_turno ? `TRN ${c.nro_turno}` : '—'))
+    arqueos.forEach(a => labelMap.set(a.id, `ARQ ${new Date(a.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })}`))
 
     const data = rows.map(r => ({
       id: r.id,

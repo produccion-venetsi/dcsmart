@@ -114,6 +114,7 @@ export default function PagoForm() {
   const [provPlazo,      setProvPlazo]      = useState(null)
   const [rubcatSelected, setRubcatSelected] = useState(null)
   const [previewNroOrd,  setPreviewNroOrd]  = useState(null)
+  const [duplicado,      setDuplicado]      = useState(null)
 
   // impuestos pendientes (solo al crear, se mandan junto con el pago)
   const [pendingImp, setPendingImp] = useState([])
@@ -277,6 +278,26 @@ export default function PagoForm() {
       .catch(() => { if (!ctrl.signal.aborted) setPreviewNroOrd(null) })
     return () => ctrl.abort()
   }, [isEditing, activeLocal?.id, form.id_local])
+
+  // Chequeo advisory (no bloqueante) de factura duplicada: mismo proveedor +
+  // punto de venta + nro de comprobante en el mismo local. No aplica a Carga
+  // Avión (esos campos son opcionales ahí, ver esCargaAvion más arriba).
+  useEffect(() => {
+    setDuplicado(null)
+    if (esCargaAvion) return
+    const localId = activeLocal?.id || form.id_local
+    if (!localId || !form.id_proveedor || !form.pv || !form.nro) return
+    const ctrl = new AbortController()
+    const t = setTimeout(() => {
+      pagosApi.checkDuplicado({
+        id_local: localId, id_proveedor: form.id_proveedor, pv: form.pv, nro: form.nro,
+        ...(isEditing ? { exclude_id: id } : {})
+      }, ctrl.signal)
+        .then(({ data }) => { if (data.duplicado) setDuplicado(data.pago) })
+        .catch(() => {})
+    }, 500)
+    return () => { clearTimeout(t); ctrl.abort() }
+  }, [esCargaAvion, activeLocal?.id, form.id_local, form.id_proveedor, form.pv, form.nro, isEditing, id])
 
   // set con efectos encadenados
   const set = (field, value) => setForm(f => {
@@ -614,6 +635,18 @@ export default function PagoForm() {
               </div>
             </div>
           </div>
+
+          {duplicado && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.9rem',
+              marginBottom: '0.9rem', borderRadius: 8,
+              background: 'rgba(212,149,42,.12)', border: '1px solid rgba(212,149,42,.35)',
+              color: 'var(--gold-bright)', fontSize: 12.5,
+            }}>
+              ⚠ Ya existe la <strong>OP-{duplicado.nro_ord ?? '—'}</strong> con este proveedor, punto de venta y número de comprobante
+              {duplicado.fecha ? ` (cargada el ${new Date(duplicado.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })})` : ''}. Podés continuar si es correcto.
+            </div>
+          )}
 
           {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
           <div className="form-grid form-row">

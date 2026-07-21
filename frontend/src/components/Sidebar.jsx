@@ -149,6 +149,13 @@ function IcoAuditorias() {
     </svg>
   )
 }
+function IcoActivity() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+  )
+}
 function IcoTag() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -198,6 +205,7 @@ const NAV_ADMIN = [
   { to: '/admin/metodos-pago',  label: 'Métodos Pago',  Icon: IcoMetodos, roles: ['super_admin', 'dcsmart'] },
   { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
   { to: '/auditorias',          label: 'Auditorías',    Icon: IcoAuditorias, roles: ['super_admin'] },
+  { to: '/actividad',           label: 'Actividad',     Icon: IcoActivity,   roles: ['super_admin'] },
 ]
 
 export default function Sidebar() {

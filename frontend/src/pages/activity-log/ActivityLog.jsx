@@ -1,31 +1,59 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { auditoriasApi } from '../../api/auditorias.js'
+import { Fragment, useState, useEffect, useCallback } from 'react'
+import { activityLogApi } from '../../api/activityLog.js'
 import { useUiStore } from '../../store/uiStore.js'
 
 const LIMIT = 50
 
 function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
+function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 
-const MODULO_LABEL = { pagos: 'Pagos', cajas: 'Cajas', arqueos: 'Arqueos' }
-const MODULO_BADGE = { pagos: 'badge-blue', cajas: 'badge-muted', arqueos: 'badge-purple' }
+const ACCION_LABEL = { creado: 'Creado', editado: 'Editado', eliminado: 'Eliminado' }
+const ACCION_BADGE = { creado: 'badge-green', editado: 'badge-blue', eliminado: 'badge-red' }
 
-const FILTER_INIT = { desde: '', hasta: '', tabla: '', id_user: '', accion: '' }
+// Traduce el snapshot crudo del pago (columnas de la tabla, sin joins) a
+// pares label/valor legibles, en vez de mostrar el JSON tal cual.
+function snapshotRows(s) {
+  if (!s) return []
+  return [
+    ['Nro Orden',    s.nro_ord != null ? `OP-${s.nro_ord}` : '—'],
+    ['Fecha',        fmtDate(s.fecha)],
+    ['Proveedor',    s.id_proveedor || '—'],
+    ['Rubro/Cat',    s.id_rubcat || '—'],
+    ['Tipo',         s.id_tipo || '—'],
+    ['PV',           s.pv ?? '—'],
+    ['Nro',          s.nro ?? '—'],
+    ['Neto',         fmt$(s.importe_neto)],
+    ['Descuento',    fmt$(s.descuento)],
+    ['Importe',      fmt$(s.importe)],
+    ['Método',       s.id_metodo || '—'],
+    ['Dirección',    s.ingresa_egreso != null ? (s.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
+    ['Estado Op.',   s.estado_op || '—'],
+    ['Pagado',       s.pagado ? 'Sí' : 'No'],
+    ['Fecha Pago',   fmtDate(s.fecha_pago)],
+    ['Período',      fmtDate(s.periodo)],
+    ['Local',        s.id_local || '—'],
+    ['Observaciones', s.observaciones || '—'],
+  ]
+}
 
-export default function Auditorias() {
+const FILTER_INIT = { desde: '', hasta: '', id_user: '', accion: '' }
+
+export default function ActivityLog() {
   const notify = useUiStore((s) => s.notify)
 
-  const [rows,     setRows]     = useState([])
-  const [total,    setTotal]    = useState(0)
-  const [loading,  setLoading]  = useState(true)
-  const [page,     setPage]     = useState(1)
-  const [usuarios, setUsuarios] = useState([])
-  const [filters,  setFilters]  = useState(FILTER_INIT)
+  const [rows,      setRows]      = useState([])
+  const [total,     setTotal]     = useState(0)
+  const [loading,   setLoading]   = useState(true)
+  const [page,      setPage]      = useState(1)
+  const [usuarios,  setUsuarios]  = useState([])
+  const [filters,   setFilters]   = useState(FILTER_INIT)
+  const [expandedId, setExpandedId] = useState(null)
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT))
 
   useEffect(() => {
-    auditoriasApi.usuarios()
+    activityLogApi.usuarios()
       .then(({ data }) => setUsuarios(data))
       .catch(() => {})
   }, [])
@@ -35,7 +63,6 @@ export default function Auditorias() {
     limit: LIMIT,
     ...(filters.desde   ? { desde: filters.desde }     : {}),
     ...(filters.hasta   ? { hasta: filters.hasta }     : {}),
-    ...(filters.tabla   ? { tabla: filters.tabla }     : {}),
     ...(filters.id_user ? { id_user: filters.id_user } : {}),
     ...(filters.accion  ? { accion: filters.accion }   : {}),
   }), [filters])
@@ -45,9 +72,9 @@ export default function Auditorias() {
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
-    auditoriasApi.list(buildParams(page), ctrl.signal)
+    activityLogApi.list(buildParams(page), ctrl.signal)
       .then(({ data }) => { setRows(data.data); setTotal(data.total) })
-      .catch(err => { if (!ctrl.signal.aborted) notify('Error al cargar auditorías', 'error') })
+      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar el log de actividad', 'error') })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
   }, [buildParams, page])
@@ -59,8 +86,8 @@ export default function Auditorias() {
     <div className="page">
       <div className="page-head">
         <div className="page-head-left">
-          <h1 className="page-title">Auditorías</h1>
-          <p className="page-sub">Historial completo de auditorías de pagos y cajas</p>
+          <h1 className="page-title">Actividad</h1>
+          <p className="page-sub">Registro de creación, edición y eliminación de pagos por usuario</p>
         </div>
       </div>
 
@@ -78,15 +105,6 @@ export default function Auditorias() {
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Módulo</label>
-          <select className="filter-select" value={filters.tabla} onChange={e => setFilter('tabla', e.target.value)}>
-            <option value="">Todos</option>
-            <option value="pagos">Pagos</option>
-            <option value="cajas">Cajas</option>
-            <option value="arqueos">Arqueos</option>
-          </select>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Usuario</label>
           <select className="filter-select" value={filters.id_user} onChange={e => setFilter('id_user', e.target.value)}>
             <option value="">Todos</option>
@@ -97,8 +115,9 @@ export default function Auditorias() {
           <label className="form-label">Acción</label>
           <select className="filter-select" value={filters.accion} onChange={e => setFilter('accion', e.target.value)}>
             <option value="">Todas</option>
-            <option value="auditado">Auditado</option>
-            <option value="desauditado">Desauditado</option>
+            <option value="creado">Creado</option>
+            <option value="editado">Editado</option>
+            <option value="eliminado">Eliminado</option>
           </select>
         </div>
       </div>
@@ -107,67 +126,69 @@ export default function Auditorias() {
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: 24 }}></th>
               <th>Fecha</th>
-              <th>Módulo</th>
-              <th>Registro</th>
+              <th>OP</th>
               <th>Usuario</th>
               <th>Acción</th>
-              <th>Circuito</th>
-              <th>Observación</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               Array.from({ length: 10 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 7 }, (_, j) => (
+                  {Array.from({ length: 5 }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 9) % 40}%` }} /></td>
                   ))}
                 </tr>
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={5}>
                   <div className="table-empty">
-                    <p>Sin eventos de auditoría para los filtros aplicados.</p>
+                    <p>Sin eventos de actividad para los filtros aplicados.</p>
                   </div>
                 </td>
               </tr>
             ) : (
-              rows.map(ev => (
-                <tr key={ev.id}>
-                  <td className="td-muted">{fmtDT(ev.fecha)}</td>
-                  <td><span className={`badge ${MODULO_BADGE[ev.tabla] ?? 'badge-muted'}`}>{MODULO_LABEL[ev.tabla] ?? ev.tabla}</span></td>
-                  <td>
-                    {ev.registro_label === '—' ? (
-                      <span className="td-muted">—</span>
-                    ) : (
-                      <Link
-                        className="registro-link"
-                        to={ev.tabla === 'pagos'
-                          ? `/pagos?search=${encodeURIComponent(ev.registro_label)}`
-                          : ev.tabla === 'cajas'
-                          ? `/cajas?turno=${encodeURIComponent(ev.registro_label.replace(/^TRN\s*/, ''))}`
-                          : '/arqueo'}
-                      >
-                        {ev.registro_label}
-                      </Link>
+              rows.map(ev => {
+                const isOpen = expandedId === ev.id
+                const opLabel = ev.snapshot?.nro_ord != null ? `OP-${ev.snapshot.nro_ord}` : '—'
+                return (
+                  <Fragment key={ev.id}>
+                    <tr className="row-clickable" onClick={() => setExpandedId(isOpen ? null : ev.id)}>
+                      <td className="td-muted">{isOpen ? '▾' : '▸'}</td>
+                      <td className="td-muted">{fmtDT(ev.fecha)}</td>
+                      <td>{opLabel}</td>
+                      <td>{ev.user?.nombre ?? '—'}</td>
+                      <td>
+                        <span className={`badge ${ACCION_BADGE[ev.accion] ?? 'badge-muted'}`}>
+                          {ACCION_LABEL[ev.accion] ?? ev.accion}
+                        </span>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td></td>
+                        <td colSpan={4}>
+                          <div style={{
+                            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem 1.5rem',
+                            background: 'var(--bg-input)', borderRadius: 8,
+                            padding: '0.9rem 1.1rem', margin: '0.25rem 0 0.75rem',
+                          }}>
+                            {snapshotRows(ev.snapshot).map(([label, val]) => (
+                              <div key={label}>
+                                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</div>
+                                <div style={{ fontSize: 13, color: 'var(--t1)' }}>{val}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td>{ev.user?.nombre ?? '—'}</td>
-                  <td>
-                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
-                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${ev.audit_dc ? 'badge-purple' : 'badge-muted'}`}>
-                      {ev.audit_dc ? 'DC' : 'Normal'}
-                    </span>
-                  </td>
-                  <td className="td-muted">{ev.observaciones || '—'}</td>
-                </tr>
-              ))
+                  </Fragment>
+                )
+              })
             )}
           </tbody>
         </table>

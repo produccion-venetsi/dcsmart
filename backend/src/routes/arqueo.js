@@ -49,6 +49,23 @@ async function calcularGastos(fastify, id_local, fechaDesde, fechaHasta) {
   return pagos.reduce((acc, p) => acc + Number(p.importe ?? 0), 0)
 }
 
+// El estado de auditoría de un arqueo se guarda en la tabla `audits`
+// (modelo Audit) con tabla='arqueos' e id_registro=arqueo.id, igual que
+// pagos y cajas.
+async function getAuditedArqueoSet(fastify, arqueoIds) {
+  if (!arqueoIds.length) return new Set()
+  try {
+    const rows = await fastify.db.audit.findMany({
+      where: { tabla: 'arqueos', id_registro: { in: arqueoIds }, audit_dc: false, vigente: true, accion: 'auditado' },
+      select: { id_registro: true }
+    })
+    return new Set(rows.map(r => r.id_registro))
+  } catch (err) {
+    fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedArqueoSet)')
+    return new Set()
+  }
+}
+
 export default async function arqueoRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('arqueo', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('arqueo', 'create')]
@@ -65,7 +82,9 @@ export default async function arqueoRoutes(fastify) {
       where: { id_local },
       orderBy: { fecha: 'desc' }
     })
-    return { data: arqueos }
+    const auditedSet = await getAuditedArqueoSet(fastify, arqueos.map(a => a.id))
+    const data = arqueos.map(a => ({ ...a, audit: auditedSet.has(a.id) }))
+    return { data }
   })
 
   // ── GET /:id ──────────────────────────────────────────────────────────
@@ -78,7 +97,63 @@ export default async function arqueoRoutes(fastify) {
     if (!request.allowedLocalIds.includes(arqueo.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
-    return arqueo
+    const auditRow = await fastify.db.audit.findFirst({
+      where: { tabla: 'arqueos', id_registro: arqueo.id, vigente: true, audit_dc: false },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
+    return {
+      ...arqueo,
+      audit:      auditRow?.accion === 'auditado',
+      audit_by:   auditRow?.user?.nombre ?? null,
+      audit_date: auditRow?.fecha ?? null,
+    }
+  })
+
+  // ── PATCH /:id/audit ────────────────────────────────────────────────────
+  // Mismo mecanismo de historial append-only que pagos y cajas (ver pagos.js/caja.js).
+  fastify.patch('/:id/audit', { preHandler: editHandler }, async (request, reply) => {
+    const arqueo = await fastify.db.arqueo.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    if (!arqueo) return reply.code(404).send({ error: 'Arqueo no encontrado' })
+    if (!request.allowedLocalIds.includes(arqueo.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const { observaciones } = request.body ?? {}
+
+    const nextAccion = await fastify.db.$transaction(async (tx) => {
+      const current = await tx.audit.findFirst({
+        where: { tabla: 'arqueos', id_registro: request.params.id, audit_dc: false, vigente: true }
+      })
+
+      await tx.audit.updateMany({
+        where: { tabla: 'arqueos', id_registro: request.params.id, audit_dc: false, vigente: true },
+        data: { vigente: false }
+      })
+
+      const accion = current?.accion === 'auditado' ? 'desauditado' : 'auditado'
+
+      await tx.audit.create({
+        data: {
+          id_registro:   request.params.id,
+          tabla:         'arqueos',
+          tipo:          'auditoria_arqueo',
+          accion,
+          aprobado:      accion === 'auditado',
+          vigente:       true,
+          audit_dc:      false,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: accion === 'desauditado' ? (observaciones || null) : null
+        }
+      })
+
+      return accion
+    })
+
+    return { ok: true, audit: nextAccion === 'auditado' }
   })
 
   // ── GET /preview ──────────────────────────────────────────────────────
