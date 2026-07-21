@@ -63,7 +63,7 @@ function PayTooltip({ active, payload }) {
   )
 }
 
-export default function ReporteCajas({ applied, activeLocal, prettyDate }) {
+export default function ReporteCajas({ applied, activeLocal }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -97,11 +97,8 @@ export default function ReporteCajas({ applied, activeLocal, prettyDate }) {
 
   return (
     <>
-      {/* ── Period chip ── */}
       <div className="rep-period">
-        <span className="rep-period-label">Período analizado</span>
-        <span className="rep-period-value">{prettyDate(applied.desde)} — {prettyDate(applied.hasta)}</span>
-        <span className="rep-period-z">· {kpi.count_z ?? 0} cierres Z registrados</span>
+        <span className="rep-period-z">{kpi.count_z ?? 0} cierres Z registrados</span>
       </div>
 
       {/* ── KPI cards ── */}

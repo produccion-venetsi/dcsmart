@@ -109,7 +109,7 @@ function CostChart({ title, items, barColor }) {
   )
 }
 
-export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
+export default function ReporteCMV({ applied, activeLocal }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -146,12 +146,6 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
 
   return (
     <>
-      {/* ── Period chip ── */}
-      <div className="rep-period">
-        <span className="rep-period-label">Período analizado</span>
-        <span className="rep-period-value">{prettyDate(applied.desde)} — {prettyDate(applied.hasta)}</span>
-      </div>
-
       {/* ── KPI cards ── */}
       {skel ? (
         <div className="rep-kpi-grid cols-5">

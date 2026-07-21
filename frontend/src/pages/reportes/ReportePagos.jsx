@@ -51,7 +51,7 @@ function IcoLayers() {
     </svg>
   )
 }
-export default function ReportePagos({ applied, activeLocal, prettyDate }) {
+export default function ReportePagos({ applied, activeLocal, campoFecha }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -62,6 +62,7 @@ export default function ReportePagos({ applied, activeLocal, prettyDate }) {
     const params = {
       desde: applied.desde,
       hasta: applied.hasta,
+      campo_fecha: campoFecha,
       ...(activeLocal ? { id_local: activeLocal.id } : {})
     }
     reportesApi.pagos(params, ctrl.signal)
@@ -69,19 +70,13 @@ export default function ReportePagos({ applied, activeLocal, prettyDate }) {
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [applied.desde, applied.hasta, activeLocal?.id])
+  }, [applied.desde, applied.hasta, campoFecha, activeLocal?.id])
 
   const skel = loading || !data
   const d = data ?? {}
 
   return (
     <>
-      {/* ── Period chip ── */}
-      <div className="rep-period">
-        <span className="rep-period-label">Período analizado</span>
-        <span className="rep-period-value">{prettyDate(applied.desde)} — {prettyDate(applied.hasta)}</span>
-      </div>
-
       {/* ── KPI cards ── */}
       <div className="rep-kpi-grid cols-4">
         <div className="rep-kpi danger">

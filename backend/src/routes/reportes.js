@@ -150,7 +150,9 @@ export default async function reportesRoutes(fastify) {
 
   // ── GET /pagos ──────────────────────────────────────────────────────────
   fastify.get('/pagos', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta } = request.query
+    const { id_local, desde, hasta, campo_fecha } = request.query
+    const CAMPOS_FECHA_VALIDOS = ['fecha', 'fecha_pago', 'cashflow', 'periodo']
+    const campoFecha = CAMPOS_FECHA_VALIDOS.includes(campo_fecha) ? campo_fecha : 'fecha'
 
     if (!desde || !hasta) {
       return reply.code(400).send({ error: 'desde y hasta son requeridos' })
@@ -171,13 +173,13 @@ export default async function reportesRoutes(fastify) {
       }
     }
 
-    // Pago.fecha se guarda como medianoche UTC del día elegido -- el rango
-    // se marca explícitamente en UTC para no depender del timezone del
-    // proceso donde corra Node.
+    // fecha/fecha_pago/cashflow/periodo se guardan como medianoche UTC del
+    // día elegido -- el rango se marca explícitamente en UTC para no
+    // depender del timezone del proceso donde corra Node.
     const desdeDate = new Date(`${desde}T00:00:00.000Z`)
     const hastaDate = new Date(`${hasta}T23:59:59.999Z`)
     const localFilter = { id_local: { in: localIds } }
-    const fechaWhere = { fecha: { gte: desdeDate, lte: hastaDate } }
+    const fechaWhere = { [campoFecha]: { gte: desdeDate, lte: hastaDate } }
     const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
 
     const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
