@@ -1383,7 +1383,14 @@ export default function PagoList() {
             </button>
           </ActionsMenu>
           {canExport && (
-            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a CSV los pagos con los filtros actuales">
+            <button
+              className="btn btn-secondary"
+              onClick={exportCsv}
+              disabled={exporting || !(filters.desde && filters.hasta)}
+              title={filters.desde && filters.hasta
+                ? 'Exportar a CSV los pagos con los filtros actuales'
+                : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
+            >
               {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
             </button>
           )}
