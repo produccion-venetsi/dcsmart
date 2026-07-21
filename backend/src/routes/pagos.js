@@ -281,6 +281,40 @@ export default async function pagosRoutes(fastify) {
     return { data, total, page: Number(page), limit: Number(limit) }
   })
 
+  // ── GET /summary ──────────────────────────────────────────────────────────
+  // Totales agregados (SUM en la base, no en el frontend) para los pagos
+  // que matchean los mismos filtros que la tabla/CSV. Se usa para mostrar
+  // el cuadro resumen sin tener que traer y sumar todas las filas.
+  fastify.get('/summary', { preHandler: viewHandler }, async (request, reply) => {
+    const {
+      id_local, id_proveedor, id_proveedores, pagado, estado_op,
+      desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+    } = request.query
+
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    const where = await buildPagosWhere(fastify, request, {
+      id_local, id_proveedor, id_proveedores, pagado, estado_op,
+      desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+    })
+
+    const [totalAgg, porImpuestoRows] = await Promise.all([
+      fastify.db.pago.aggregate({ where, _sum: { importe: true } }),
+      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: where }, _sum: { monto: true } })
+    ])
+
+    return {
+      total_importe: Number(totalAgg._sum.importe ?? 0),
+      por_impuesto: Object.fromEntries(
+        porImpuestoRows.map(row => [row.tipo, Number(row._sum.monto ?? 0)])
+      )
+    }
+  })
+
   // ── GET /stats ─────────────────────────────────────────────────────────
   fastify.get('/stats', { preHandler: viewHandler }, async (request, reply) => {
     const {
