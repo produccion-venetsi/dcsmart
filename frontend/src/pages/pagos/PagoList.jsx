@@ -1386,6 +1386,7 @@ export default function PagoList() {
               </div>
             )}
           </div>
+          <div style={{ flex: 1 }} />
           {(canEdit || canDelete) && (
             <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
               <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
@@ -1399,6 +1400,7 @@ export default function PagoList() {
               <IcoBox /> MovStock
             </button>
           </ActionsMenu>
+          <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
           {canExport && (
             <button
               className="btn btn-secondary"
