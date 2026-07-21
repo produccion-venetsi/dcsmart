@@ -213,7 +213,13 @@ export default async function usersRoutes(fastify) {
   }, async (request, reply) => {
     const { id, id_app } = request.params
     const appFilter = id_app === 'global' ? null : id_app
-    await fastify.db.userLocalAccess.deleteMany({ where: { id_user: id, id_app: appFilter } })
+    // UserLocalAccess.id_app NO es nullable (a diferencia de UserAppRole.id_app,
+    // que sí acepta null para "acceso global") -- filtrar con id_app: null ahí
+    // hace que Prisma tire un error de validación (500). Un rol global no tiene
+    // accesos a locales puntuales asociados, así que directamente no aplica.
+    if (appFilter !== null) {
+      await fastify.db.userLocalAccess.deleteMany({ where: { id_user: id, id_app: appFilter } })
+    }
     await fastify.db.userAppRole.deleteMany({ where: { id_user: id, id_app: appFilter } })
     return reply.code(204).send()
   })
