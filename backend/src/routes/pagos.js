@@ -132,6 +132,86 @@ function sanitizeFolderName(nombre) {
   return limpio || 'general'
 }
 
+// Campos de fecha filtrables desde el frontend (dropdown "Tipo de fecha").
+// Whitelist estricta: cualquier valor fuera de esta lista cae al default
+// 'fecha', para no interpolar un valor arbitrario como key de Prisma.
+const CAMPOS_FECHA_VALIDOS = ['fecha', 'fecha_pago', 'cashflow', 'periodo']
+function campoFechaValido(campo) {
+  return CAMPOS_FECHA_VALIDOS.includes(campo) ? campo : 'fecha'
+}
+
+// Construye el `where` de Prisma compartido entre GET /pagos (list/export)
+// y GET /pagos/summary, para que el resumen agregado matchee exactamente
+// los mismos pagos que ve la tabla con los mismos filtros.
+async function buildPagosWhere(fastify, request, query) {
+  const {
+    id_local, id_proveedor, id_proveedores, pagado, estado_op,
+    desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+    audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+  } = query
+
+  const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
+
+  // Rubcat: cmv_quick > id_rubcats (multi) > id_rub/id_cat > id_rubcat
+  const rubcatIdsArr = id_rubcats ? id_rubcats.split(',').filter(Boolean) : []
+  let rubcatFilter = {}
+  if (cmv_quick === 'true') {
+    rubcatFilter = { rubcat: { rubro: { nombre: { startsWith: 'CMV', mode: 'insensitive' } } } }
+  } else if (rubcatIdsArr.length > 0) {
+    rubcatFilter = { id_rubcat: { in: rubcatIdsArr } }
+  } else if (id_rub || id_cat) {
+    rubcatFilter = { rubcat: { ...(id_rub ? { id_rub } : {}), ...(id_cat ? { id_cat } : {}) } }
+  } else if (id_rubcat) {
+    rubcatFilter = { id_rubcat }
+  }
+
+  // Proveedor: multi > single
+  const provIdsArr = id_proveedores ? id_proveedores.split(',').filter(Boolean) : []
+  const proveedorFilter = provIdsArr.length > 0
+    ? { id_proveedor: { in: provIdsArr } }
+    : id_proveedor ? { id_proveedor } : {}
+
+  const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
+
+  const qStr = q?.trim()
+  let qFilter = {}
+  if (qStr) {
+    const qNum = parseInt(qStr.replace(/^op[-\s]*/i, ''))
+    qFilter = {
+      OR: [
+        ...(!isNaN(qNum) ? [{ nro_ord: qNum }] : []),
+        { proveedor: { nombre:       { contains: qStr, mode: 'insensitive' } } },
+        { proveedor: { razon_social: { contains: qStr, mode: 'insensitive' } } },
+        { rubcat: { cuenta:               { contains: qStr, mode: 'insensitive' } } },
+        { rubcat: { rubro:     { nombre: { contains: qStr, mode: 'insensitive' } } } },
+        { rubcat: { categoria: { nombre: { contains: qStr, mode: 'insensitive' } } } },
+      ]
+    }
+  }
+
+  const campoFecha = campoFechaValido(campo_fecha)
+
+  return {
+    ...localFilter,
+    ...rubcatFilter,
+    ...auditFilter,
+    ...proveedorFilter,
+    ...qFilter,
+    ...(nro_ord        ? { nro_ord: parseInt(nro_ord) }                  : {}),
+    ...(id_tipo        ? { id_tipo }                                      : {}),
+    ...(id_metodo      ? { id_metodo }                                    : {}),
+    ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
+    ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
+    ...(estado_op      ? { estado_op }                                    : {}),
+    ...(desde || hasta ? {
+      [campoFecha]: {
+        ...(desde ? { gte: new Date(desde) } : {}),
+        ...(hasta ? { lte: new Date(hasta + 'T23:59:59.999') } : {})
+      }
+    } : {})
+  }
+}
+
 export default async function pagosRoutes(fastify) {
   await fastify.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } })
   const gcs = new Storage()
@@ -145,7 +225,7 @@ export default async function pagosRoutes(fastify) {
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
     const {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
-      desde, hasta, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+      desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
       audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q,
       sort_field = 'fecha', sort_dir = 'desc',
       page = 1, limit = 50
@@ -155,65 +235,11 @@ export default async function pagosRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
-    const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
-
-    // Rubcat: cmv_quick > id_rubcats (multi) > id_rub/id_cat > id_rubcat
-    const rubcatIdsArr = id_rubcats ? id_rubcats.split(',').filter(Boolean) : []
-    let rubcatFilter = {}
-    if (cmv_quick === 'true') {
-      rubcatFilter = { rubcat: { rubro: { nombre: { startsWith: 'CMV', mode: 'insensitive' } } } }
-    } else if (rubcatIdsArr.length > 0) {
-      rubcatFilter = { id_rubcat: { in: rubcatIdsArr } }
-    } else if (id_rub || id_cat) {
-      rubcatFilter = { rubcat: { ...(id_rub ? { id_rub } : {}), ...(id_cat ? { id_cat } : {}) } }
-    } else if (id_rubcat) {
-      rubcatFilter = { id_rubcat }
-    }
-
-    // Proveedor: multi > single
-    const provIdsArr = id_proveedores ? id_proveedores.split(',').filter(Boolean) : []
-    const proveedorFilter = provIdsArr.length > 0
-      ? { id_proveedor: { in: provIdsArr } }
-      : id_proveedor ? { id_proveedor } : {}
-
-    const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
-
-    // Búsqueda libre del toolbar: matchea por número de OP, proveedor o rubro/categoría.
-    const qStr = q?.trim()
-    let qFilter = {}
-    if (qStr) {
-      const qNum = parseInt(qStr.replace(/^op[-\s]*/i, ''))
-      qFilter = {
-        OR: [
-          ...(!isNaN(qNum) ? [{ nro_ord: qNum }] : []),
-          { proveedor: { nombre:       { contains: qStr, mode: 'insensitive' } } },
-          { proveedor: { razon_social: { contains: qStr, mode: 'insensitive' } } },
-          { rubcat: { cuenta:               { contains: qStr, mode: 'insensitive' } } },
-          { rubcat: { rubro:     { nombre: { contains: qStr, mode: 'insensitive' } } } },
-          { rubcat: { categoria: { nombre: { contains: qStr, mode: 'insensitive' } } } },
-        ]
-      }
-    }
-
-    const where = {
-      ...localFilter,
-      ...rubcatFilter,
-      ...auditFilter,
-      ...proveedorFilter,
-      ...qFilter,
-      ...(nro_ord        ? { nro_ord: parseInt(nro_ord) }                  : {}),
-      ...(id_tipo        ? { id_tipo }                                      : {}),
-      ...(id_metodo      ? { id_metodo }                                    : {}),
-      ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
-      ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
-      ...(estado_op      ? { estado_op }                                    : {}),
-      ...(desde || hasta ? {
-        fecha: {
-          ...(desde ? { gte: new Date(desde) } : {}),
-          ...(hasta ? { lte: new Date(hasta) } : {})
-        }
-      } : {})
-    }
+    const where = await buildPagosWhere(fastify, request, {
+      id_local, id_proveedor, id_proveedores, pagado, estado_op,
+      desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+    })
 
     const VALID_SORT = ['fecha', 'importe', 'fecha_pago', 'periodo', 'nro_ord']
     const orderField = VALID_SORT.includes(sort_field) ? sort_field : 'fecha'
@@ -253,6 +279,40 @@ export default async function pagosRoutes(fastify) {
     }))
 
     return { data, total, page: Number(page), limit: Number(limit) }
+  })
+
+  // ── GET /summary ──────────────────────────────────────────────────────────
+  // Totales agregados (SUM en la base, no en el frontend) para los pagos
+  // que matchean los mismos filtros que la tabla/CSV. Se usa para mostrar
+  // el cuadro resumen sin tener que traer y sumar todas las filas.
+  fastify.get('/summary', { preHandler: viewHandler }, async (request, reply) => {
+    const {
+      id_local, id_proveedor, id_proveedores, pagado, estado_op,
+      desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+    } = request.query
+
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    const where = await buildPagosWhere(fastify, request, {
+      id_local, id_proveedor, id_proveedores, pagado, estado_op,
+      desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+    })
+
+    const [totalAgg, porImpuestoRows] = await Promise.all([
+      fastify.db.pago.aggregate({ where, _sum: { importe: true } }),
+      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: where }, _sum: { monto: true } })
+    ])
+
+    return {
+      total_importe: Number(totalAgg._sum.importe ?? 0),
+      por_impuesto: Object.fromEntries(
+        porImpuestoRows.map(row => [row.tipo, Number(row._sum.monto ?? 0)])
+      )
+    }
   })
 
   // ── GET /stats ─────────────────────────────────────────────────────────
