@@ -10,6 +10,7 @@ const fmt = (n) => fmtCurrency.format(n)
 const CAT_COLORS = {
   alimentos: { bar: '#4CAF7D', gradient: 'linear-gradient(90deg,rgba(76,175,125,.06),rgba(76,175,125,.34))' },
   bebidas:   { bar: '#C9B086', gradient: 'linear-gradient(90deg,rgba(201,176,134,.06),rgba(201,176,134,.32))' },
+  movstock:  { bar: '#5FA8D9', gradient: 'linear-gradient(90deg,rgba(95,168,217,.06),rgba(95,168,217,.32))' },
 }
 
 function CmvTooltip({ active, payload }) {
@@ -131,9 +132,11 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
   const kpis       = data?.kpis ?? []
   const alimentos  = data?.alimentos ?? []
   const bebidas    = data?.bebidas ?? []
+  const movstock   = data?.movstock ?? []
   const ajustes    = data?.ajustes ?? []
   const totAlim    = data?.total_alimentos ?? 0
   const totBeb     = data?.total_bebidas ?? 0
+  const totMovstock = data?.total_movstock ?? 0
   const totAjustes = data?.total_ajustes ?? 0
 
   const skel = loading || !data
@@ -151,8 +154,8 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
 
       {/* ── KPI cards ── */}
       {skel ? (
-        <div className="rep-kpi-grid cols-4">
-          {[0,1,2,3].map(i => (
+        <div className="rep-kpi-grid cols-5">
+          {[0,1,2,3,4].map(i => (
             <div key={i} className="rep-kpi">
               <div className="rep-skel" style={{ width: '50%', height: 14, marginBottom: 14 }} />
               <div className="rep-skel" style={{ width: '65%', height: 28, marginBottom: 12 }} />
@@ -161,7 +164,7 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
           ))}
         </div>
       ) : (
-        <div className="rep-kpi-grid cols-4">
+        <div className="rep-kpi-grid cols-5">
           {kpis.map((k, i) => (
             <KpiCard key={i} label={k.label} val={k.val} delta={k.delta} />
           ))}
@@ -170,8 +173,8 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
 
       {/* ── Tables row: Alimentos / Bebidas / Ajustes ── */}
       {skel ? (
-        <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
-          {[0,1,2].map(i => (
+        <div className="rep-4col-grid" style={{ marginBottom: 18 }}>
+          {[0,1,2,3].map(i => (
             <div key={i} className="rep-chart-card">
               <div className="rep-skel" style={{ width: '40%', height: 14, marginBottom: 16 }} />
               {[0,1,2,3,4].map(j => (
@@ -181,11 +184,13 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
           ))}
         </div>
       ) : (
-        <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
+        <div className="rep-4col-grid" style={{ marginBottom: 18 }}>
           <CostTable title="Alimentos" dotColor="var(--green)" items={alimentos}
             total={totAlim} gradient={CAT_COLORS.alimentos.gradient} />
           <CostTable title="Bebidas" dotColor="var(--gold)" items={bebidas}
             total={totBeb} gradient={CAT_COLORS.bebidas.gradient} />
+          <CostTable title="MovStock" dotColor="#5FA8D9" items={movstock}
+            total={totMovstock} gradient={CAT_COLORS.movstock.gradient} />
 
           {/* Ajustes */}
           <div className="rep-chart-card">
@@ -230,9 +235,10 @@ export default function ReporteCMV({ applied, activeLocal, prettyDate }) {
 
       {/* ── Charts row ── */}
       {!skel && (
-        <div className="rep-3col-grid">
+        <div className="rep-4col-grid">
           <CostChart title="Alimentos" items={alimentos} barColor="#4CAF7D" />
           <CostChart title="Bebidas" items={bebidas} barColor="#C9B086" />
+          <CostChart title="MovStock" items={movstock} barColor="#5FA8D9" />
           <CostChart title="Ajustes" items={ajustes.map(a => ({
             ...a, val: Math.abs(a.val)
           }))} barColor="#B5A7EA" />
