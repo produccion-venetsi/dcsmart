@@ -19,28 +19,29 @@ function getPresetRange(preset) {
   const now = new Date()
   const hoy = toDateStr(now)
   if (preset === 'hoy') return { desde: hoy, hasta: hoy }
-  if (preset === 'semana') {
+  if (preset === '7d') {
     const d = new Date(now)
-    const day = d.getDay()
-    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+    d.setDate(d.getDate() - 6)
     return { desde: toDateStr(d), hasta: hoy }
   }
-  if (preset === 'mes') {
-    return { desde: toDateStr(new Date(now.getFullYear(), now.getMonth(), 1)), hasta: hoy }
-  }
-  if (preset === 'trimestre') {
+  if (preset === '30d') {
     const d = new Date(now)
-    d.setMonth(d.getMonth() - 3)
+    d.setDate(d.getDate() - 29)
+    return { desde: toDateStr(d), hasta: hoy }
+  }
+  if (preset === '12m') {
+    const d = new Date(now)
+    d.setMonth(d.getMonth() - 12)
     return { desde: toDateStr(d), hasta: hoy }
   }
   return { desde: hoy, hasta: hoy }
 }
 
 const PRESETS = [
-  { key: 'hoy',       label: 'Hoy' },
-  { key: 'semana',    label: 'Semana' },
-  { key: 'mes',       label: 'Mes' },
-  { key: 'trimestre', label: 'Trimestre' },
+  { key: 'hoy', label: 'Hoy' },
+  { key: '7d',  label: 'Últimos 7 días' },
+  { key: '30d', label: 'Últimos 30 días' },
+  { key: '12m', label: 'Últimos 12 meses' },
 ]
 
 const TABS = [
@@ -72,8 +73,8 @@ export default function Reportes() {
 
   const [tab, setTab] = useState('pagos')
 
-  const initial = getPresetRange('mes')
-  const [preset,  setPreset]  = useState('mes')
+  const initial = getPresetRange('30d')
+  const [preset,  setPreset]  = useState('30d')
   const [desde,   setDesde]   = useState(initial.desde)
   const [hasta,   setHasta]   = useState(initial.hasta)
   const [applied, setApplied] = useState({ desde: initial.desde, hasta: initial.hasta })
