@@ -4,6 +4,7 @@ import { detallesApi } from '../../api/detalles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import { toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateTimeArg } from '../../lib/dates.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -11,9 +12,7 @@ function fmt$(n) {
     ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
     : '—'
 }
-function fmtDateTime(d) {
-  return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—'
-}
+const fmtDateTime = fmtDateTimeArg
 
 function IcoPlus() {
   return (
@@ -157,7 +156,7 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
   const notify = useUiStore((s) => s.notify)
   const [saving, setSaving] = useState(false)
 
-  const [fecha,      setFecha]      = useState(toDateTimeLocal(arqueo.fecha))
+  const [fecha,      setFecha]      = useState(toDateTimeLocalInput(arqueo.fecha))
   const [cajaFuerte, setCajaFuerte] = useState(String(arqueo.caja_fuerte))
   const [cofre,      setCofre]      = useState(String(arqueo.cofre))
   const [adicion,    setAdicion]    = useState(String(arqueo.adicion))
@@ -183,7 +182,7 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
     setSaving(true)
     try {
       await arqueoApi.update(arqueo.id, {
-        fecha: new Date(fecha).toISOString(),
+        fecha: toUtcIsoFromDateTimeLocal(fecha),
         caja_fuerte: parseFloat(cajaFuerte) || 0,
         cofre: parseFloat(cofre) || 0,
         adicion: parseFloat(adicion) || 0,
@@ -253,12 +252,6 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
       </div>
     </form>
   )
-}
-
-function toDateTimeLocal(iso) {
-  const d = new Date(iso)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 /* ── panel de detalle ── */

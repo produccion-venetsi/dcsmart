@@ -11,6 +11,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { downloadCsv } from '../../lib/csv.js'
+import { todayInputDate, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -212,7 +213,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [savingMM,    setSavingMM]    = useState(false)
   const [addingMM,    setAddingMM]    = useState(false)
   const [pagarOpen,   setPagarOpen]   = useState(false)
-  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: new Date().toISOString().slice(0, 10), id_metodo: '' })
+  const [pagarForm,   setPagarForm]   = useState({ fecha_pago: todayInputDate(), id_metodo: '' })
   const [pagando,     setPagando]     = useState(false)
   const [mandando,    setMandando]    = useState(false)
 
@@ -726,7 +727,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           <span className="badge badge-amber">{multimoneda[0].tipo}</span>
           <span className="td-mono" style={{ fontSize: 12 }}>TDC {Number(multimoneda[0].tdc).toFixed(4)}</span>
           <span className="td-number" style={{ flex: 1, fontSize: 13 }}>{Number(multimoneda[0].monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
-          <span style={{ fontSize: 11, color: 'var(--t3)' }}>{multimoneda[0].fecha ? new Date(multimoneda[0].fecha).toLocaleDateString('es-AR') : ''}</span>
+          <span style={{ fontSize: 11, color: 'var(--t3)' }}>{multimoneda[0].fecha ? fmtDateArg(multimoneda[0].fecha) : ''}</span>
           <button className="btn btn-sm btn-secondary btn-icon" onClick={handleEditMM}><IcoEdit /></button>
           <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMM(multimoneda[0].id)}><IcoTrash /></button>
         </div>
@@ -782,7 +783,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
             ) : (
               auditHistory.map((ev) => (
                 <tr key={ev.id}>
-                  <td className="td-muted">{new Date(ev.fecha).toLocaleString('es-AR', { hour12: false })}</td>
+                  <td className="td-muted">{fmtDateTimeArg(ev.fecha)}</td>
                   <td>{ev.user?.nombre ?? '—'}</td>
                   <td>
                     <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
@@ -912,7 +913,7 @@ export default function PagoList() {
     try {
       const { data } = await pagosApi.list({ ...buildParams(1), limit: 0 })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      downloadCsv(`pagos_${new Date().toISOString().slice(0, 10)}.csv`, data.data, PAGO_CSV_COLUMNS)
+      downloadCsv(`pagos_${todayInputDate()}.csv`, data.data, PAGO_CSV_COLUMNS)
     } catch {
       notify('Error al exportar CSV', 'error')
     } finally {

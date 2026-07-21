@@ -17,8 +17,10 @@ export default async function reportesRoutes(fastify) {
       return { kpi: {}, secondary: [], weekly: [], fiscal: {}, payments: [], pay_total: 0 }
     }
 
-    const desdeDate = new Date(desde)
-    const hastaDate = new Date(hasta + 'T23:59:59.999')
+    // fecha_inicio es un instante real (con hora) -- el rango se interpreta
+    // en hora de Argentina (offset fijo -03:00), no UTC.
+    const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
 
     const localFilter = { id_local: { in: localIds } }
     const cajaWhere = {
@@ -161,8 +163,11 @@ export default async function reportesRoutes(fastify) {
       }
     }
 
-    const desdeDate = new Date(desde)
-    const hastaDate = new Date(hasta + 'T23:59:59.999')
+    // Pago.fecha se guarda como medianoche UTC del día elegido -- el rango
+    // se marca explícitamente en UTC para no depender del timezone del
+    // proceso donde corra Node.
+    const desdeDate = new Date(`${desde}T00:00:00.000Z`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999Z`)
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { fecha: { gte: desdeDate, lte: hastaDate } }
     const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
@@ -266,8 +271,9 @@ export default async function reportesRoutes(fastify) {
       return { kpis: [], alimentos: [], bebidas: [], movstock: [], ajustes: [], ventas_total: 0 }
     }
 
-    const desdeDate = new Date(desde)
-    const hastaDate = new Date(hasta + 'T23:59:59.999')
+    // fecha_inicio es un instante real (con hora) -- rango en hora Argentina.
+    const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
     const localPlaceholders = localIds.map((_, i) => `$${i + 1}`).join(', ')
 
     const ventasAgg = await fastify.db.caja.aggregate({

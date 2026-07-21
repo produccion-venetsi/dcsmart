@@ -1,11 +1,12 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { activityLogApi } from '../../api/activityLog.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { fmtDateUTC, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const LIMIT = 50
 
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
-function fmtDate(d) { return d ? new Date(d).toLocaleDateString('es-AR', { timeZone: 'UTC' }) : '—' }
+const fmtDT = fmtDateTimeArg
+const fmtDate = fmtDateUTC
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 
 const ACCION_LABEL = { creado: 'Creado', editado: 'Editado', eliminado: 'Eliminado' }
@@ -30,7 +31,7 @@ function snapshotRows(s) {
     ['Dirección',    s.ingresa_egreso != null ? (s.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
     ['Estado Op.',   s.estado_op || '—'],
     ['Pagado',       s.pagado ? 'Sí' : 'No'],
-    ['Fecha Pago',   fmtDate(s.fecha_pago)],
+    ['Fecha Pago',   fmtDateArg(s.fecha_pago)],
     ['Período',      fmtDate(s.periodo)],
     ['Local',        s.id_local || '—'],
     ['Observaciones', s.observaciones || '—'],

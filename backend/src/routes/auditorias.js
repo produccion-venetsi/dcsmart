@@ -50,10 +50,12 @@ export default async function auditoriasRoutes(fastify) {
       OR: scopeOr,
       ...(id_user ? { id_user } : {}),
       ...(accion  ? { accion }  : {}),
+      // Audit.fecha es un instante real -- el rango se interpreta en hora
+      // de Argentina (offset fijo -03:00), no UTC.
       ...(desde || hasta ? {
         fecha: {
-          ...(desde ? { gte: new Date(desde) } : {}),
-          ...(hasta ? { lte: new Date(hasta + 'T23:59:59.999') } : {})
+          ...(desde ? { gte: new Date(`${desde}T00:00:00.000-03:00`) } : {}),
+          ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999-03:00`) } : {})
         }
       } : {})
     }
