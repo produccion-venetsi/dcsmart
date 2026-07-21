@@ -1206,7 +1206,7 @@ export default function PagoList() {
           <h1 className="page-title">Pagos</h1>
           {activeLocal && <span className="local-badge">Local: {activeLocal.nombre}</span>}
         </div>
-        <div className="page-actions" style={{ flex: 1, minWidth: 0 }}>
+        <div className="page-actions">
           {/* Buscador OP */}
           <div style={{ position: 'relative' }}>
             <span style={{
@@ -1423,33 +1423,31 @@ export default function PagoList() {
               </div>
             )}
           </div>
-          <div style={{ flex: 1 }} />
-          {(canEdit || canDelete) && (
-            <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
-              <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
-            </button>
-          )}
-          <ActionsMenu label="Carga rápida" openOnClick>
+          <ActionsMenu label="Acciones">
+            {(canEdit || canDelete) && (
+              <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
+                <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
+              </button>
+            )}
             <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=B')} title="Carga Avión">
               <IcoPlane /> Carga Avión
             </button>
             <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=STK')} title="MovStock">
               <IcoBox /> MovStock
             </button>
+            {canExport && (
+              <button
+                className="btn btn-secondary"
+                onClick={exportCsv}
+                disabled={exporting || !(filters.desde && filters.hasta)}
+                title={filters.desde && filters.hasta
+                  ? 'Exportar a CSV los pagos con los filtros actuales'
+                  : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
+              >
+                {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
+              </button>
+            )}
           </ActionsMenu>
-          <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 4px' }} />
-          {canExport && (
-            <button
-              className="btn btn-secondary"
-              onClick={exportCsv}
-              disabled={exporting || !(filters.desde && filters.hasta)}
-              title={filters.desde && filters.hasta
-                ? 'Exportar a CSV los pagos con los filtros actuales'
-                : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
-            >
-              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
-            </button>
-          )}
           <button className="btn btn-primary" onClick={() => navigate('/pagos/nuevo')}>
             <IcoPlus /> Nuevo Pago
           </button>
