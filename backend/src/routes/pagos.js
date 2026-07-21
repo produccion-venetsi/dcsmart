@@ -206,7 +206,7 @@ async function buildPagosWhere(fastify, request, query) {
     ...(desde || hasta ? {
       [campoFecha]: {
         ...(desde ? { gte: new Date(desde) } : {}),
-        ...(hasta ? { lte: new Date(hasta) } : {})
+        ...(hasta ? { lte: new Date(hasta + 'T23:59:59.999') } : {})
       }
     } : {})
   }
