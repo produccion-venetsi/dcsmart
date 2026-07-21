@@ -834,6 +834,8 @@ export default function PagoList() {
   const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
   const canExport   = ['super_admin', 'dcsmart'].includes(role)
   const [exporting, setExporting] = useState(false)
+  const [summary,        setSummary]        = useState(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   const [pagos,           setPagos]           = useState([])
   const [total,           setTotal]           = useState(0)
@@ -944,6 +946,21 @@ export default function PagoList() {
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
   }, [buildParams, page])
+
+  // ── Resumen agregado (total + impuestos) ───────────────────────────────────
+  // Solo se calcula cuando hay un rango de fecha elegido (mismo gate que el
+  // CSV) — usa los mismos filtros que la tabla pero sin paginar, porque el
+  // total debe ser de TODOS los pagos filtrados, no solo la página visible.
+  useEffect(() => {
+    if (!(filters.desde && filters.hasta)) { setSummary(null); return }
+    const ctrl = new AbortController()
+    setSummaryLoading(true)
+    pagosApi.summary(buildParams(1), ctrl.signal)
+      .then(({ data }) => setSummary(data))
+      .catch(() => { if (!ctrl.signal.aborted) { notify('Error al cargar el resumen', 'error'); setSummary(null) } })
+      .finally(() => { if (!ctrl.signal.aborted) setSummaryLoading(false) })
+    return () => ctrl.abort()
+  }, [buildParams, filters.desde, filters.hasta])
 
   // ── Navegación de páginas ──────────────────────────────────────────────────
   const goToPage = (p) => {
@@ -1399,6 +1416,23 @@ export default function PagoList() {
           </button>
         </div>
       </div>
+
+      {filters.desde && filters.hasta && (summaryLoading || summary) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.6rem 1rem', minWidth: 140 }}>
+            <div style={{ fontSize: 11, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.03em' }}>TOTAL IMPORTE</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>
+              {summaryLoading ? <span className="skel" style={{ width: 80, height: 16, display: 'inline-block' }} /> : fmt$(summary?.total_importe)}
+            </div>
+          </div>
+          {!summaryLoading && summary && Object.entries(summary.por_impuesto).map(([tipo, monto]) => (
+            <div key={tipo} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.6rem 1rem', minWidth: 120 }}>
+              <div style={{ fontSize: 11, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.03em' }}>{tipo}</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{fmt$(monto)}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {selectionMode && selectedIds.size > 0 && (
         <div className="bulk-bar">
