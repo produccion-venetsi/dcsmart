@@ -154,7 +154,7 @@ export default function Reportes() {
         {/* ── Filter bar ── */}
         <div className="rep-filters">
           {tab === 'pagos' && (
-            <div className="rep-filter-col">
+            <div className="rep-filter-col" style={{ maxWidth: 180 }}>
               <div className="rep-filter-label">Tipo de fecha</div>
               <div className="rep-date-input">
                 <select
