@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
@@ -1067,6 +1067,40 @@ export default function PagoList() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
   const filterRef = useRef(null)
+
+  // Ancho fijo del panel de Filtros (debe coincidir con el `width: 520` del
+  // style inline del panel) y margen mínimo respecto al sidebar/borde.
+  const PANEL_WIDTH  = 520
+  const PANEL_MARGIN = 8
+  const [panelLeft, setPanelLeft] = useState(0)
+
+  // Calcula dónde debe quedar el panel (en vez del `right: 0` fijo de antes)
+  // para que nunca se superponga al sidebar ni se salga de la pantalla,
+  // sin importar el zoom del navegador o el ancho de la ventana.
+  //
+  // getBoundingClientRect()/window.innerWidth devuelven coordenadas de
+  // viewport, pero el panel es `position: absolute` dentro de filterRef
+  // (que es `position: relative`) — su `left` final tiene que ser relativo
+  // a `buttonRect.left`, no una coordenada de viewport cruda.
+  const computePanelLeft = () => {
+    if (!filterRef.current) return
+    const buttonRect  = filterRef.current.getBoundingClientRect()
+    const sidebarEl    = document.querySelector('.sidebar')
+    const sidebarRight = sidebarEl ? sidebarEl.getBoundingClientRect().right : 0
+    const idealLeftViewport = buttonRect.right - PANEL_WIDTH
+    const minLeftViewport   = sidebarRight + PANEL_MARGIN
+    const maxLeftViewport   = window.innerWidth - PANEL_WIDTH - PANEL_MARGIN
+    const clampedLeftViewport = Math.max(minLeftViewport, Math.min(idealLeftViewport, maxLeftViewport))
+    setPanelLeft(clampedLeftViewport - buttonRect.left)
+  }
+
+  useLayoutEffect(() => {
+    if (!filterOpen) return
+    computePanelLeft()
+    window.addEventListener('resize', computePanelLeft)
+    return () => window.removeEventListener('resize', computePanelLeft)
+  }, [filterOpen])
+
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => k !== 'campo_fecha' && (Array.isArray(v) ? v.length > 0 : v !== '')).length
   const hasActiveFilters  = activeFilterCount > 0
 
@@ -1224,7 +1258,7 @@ export default function PagoList() {
 
             {filterOpen && (
               <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+                position: 'absolute', top: 'calc(100% + 8px)', left: panelLeft, zIndex: 200,
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',
                 borderRadius: 12, padding: '1.25rem', width: 520, maxWidth: '90vw',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
