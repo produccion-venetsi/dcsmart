@@ -804,7 +804,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
 // ─── Filtros ────────────────────────────────────────────────────────────────
 
 const FILTER_INIT = {
-  pagado: '', estado_op: '', desde: '', hasta: '',
+  pagado: '', estado_op: '', campo_fecha: 'fecha', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
   audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
   id_proveedores: [],
@@ -881,6 +881,7 @@ export default function PagoList() {
       ...(filters.estado_op            ? { estado_op:        filters.estado_op }       : {}),
       ...(filters.desde                ? { desde:            filters.desde }           : {}),
       ...(filters.hasta                ? { hasta:            filters.hasta }           : {}),
+      ...((filters.desde || filters.hasta) ? { campo_fecha:   filters.campo_fecha }    : {}),
       ...(filters.id_tipo              ? { id_tipo:          filters.id_tipo }         : {}),
       ...(filters.id_rub               ? { id_rub:           filters.id_rub }          : {}),
       ...(filters.id_cat               ? { id_cat:           filters.id_cat }          : {}),
@@ -1043,7 +1044,7 @@ export default function PagoList() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
   const filterRef = useRef(null)
-  const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== '').length
+  const activeFilterCount = Object.entries(filters).filter(([k, v]) => k !== 'campo_fecha' && (Array.isArray(v) ? v.length > 0 : v !== '')).length
   const hasActiveFilters  = activeFilterCount > 0
 
   const openFilters = () => { setDraft(filters); setFilterOpen(true) }
