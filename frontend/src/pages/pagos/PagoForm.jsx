@@ -11,6 +11,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
+import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 
 function IcoBack() {
   return (
@@ -87,19 +88,16 @@ export default function PagoForm() {
 
   const locales = activeApp?.locales ?? []
 
-  const hoy = new Date().toISOString().slice(0, 10)
-  // Fecha+hora local para <input type="datetime-local"> -- a diferencia de `hoy`
+  // `hoy`/`ahoraDateTime` siempre en hora de Argentina (ver lib/dates.js) --
+  // nunca usar new Date().toISOString().slice(...), que da el día/hora en
+  // UTC y se corre después de las 21:00 hora Argentina.
+  const hoy = todayInputDate()
+  // Fecha+hora para <input type="datetime-local"> -- a diferencia de `hoy`
   // (solo fecha, usado para "Fecha factura"/"Período"), fecha_pago necesita hora
   // real para que Arqueo pueda ordenarlo correctamente contra otros arqueos del
   // mismo día (ver fix de PdpDashboard.jsx: fecha_pago a medianoche exacta hacía
   // que un gasto pagado más tarde ese día quedara "antes" de un arqueo anterior).
-  function toDateTimeLocal(iso) {
-    if (!iso) return ''
-    const d = new Date(iso)
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-  }
-  const ahoraDateTime = toDateTimeLocal(new Date().toISOString())
+  const ahoraDateTime = nowDateTimeLocalInput()
 
   const [metodos,         setMetodos]         = useState([])
   const [loading,         setLoading]         = useState(false)
@@ -224,7 +222,7 @@ export default function PagoForm() {
             cashflow:       d.cashflow   ? d.cashflow.slice(0, 10)   : '',
             observaciones:  d.observaciones  || '',
             pagado:         d.pagado,
-            fecha_pago:     toDateTimeLocal(d.fecha_pago),
+            fecha_pago:     toDateTimeLocalInput(d.fecha_pago),
             periodo:        d.periodo    ? d.periodo.slice(0, 10)    : '',
             estado_op:      d.estado_op      || 'CUENTA CTE',
             ingresa_egreso: d.ingresa_egreso,
@@ -436,7 +434,7 @@ export default function PagoForm() {
         pdf_url,
         pv:         form.pv       ? parseInt(form.pv,  10) : null,
         nro:        form.nro      ? parseInt(form.nro, 10) : null,
-        fecha_pago: form.fecha_pago || null,
+        fecha_pago: toUtcIsoFromDateTimeLocal(form.fecha_pago),
         periodo:    form.periodo    || null,
         cashflow:   form.cashflow   || null,
         id_local:   activeLocal?.id || form.id_local || null,

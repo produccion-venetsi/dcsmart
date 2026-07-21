@@ -8,13 +8,6 @@ import './reportes.css'
 function pad(n) { return String(n).padStart(2, '0') }
 function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
 
-function prettyDate(iso) {
-  if (!iso) return '—'
-  const [y, m, d] = iso.split('-')
-  const mon = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m - 1]
-  return `${+d} ${mon} ${y}`
-}
-
 function getPresetRange(preset) {
   const now = new Date()
   const hoy = toDateStr(now)
@@ -50,6 +43,16 @@ const TABS = [
   { key: 'cmv',   label: 'CMV' },
 ]
 
+// Solo el reporte de Pagos permite elegir sobre qué campo de fecha se arma
+// (igual que el filtro de la página de Pagos) -- Cajas/CMV siempre usan
+// fecha_inicio, no tienen otro campo de fecha real para elegir.
+const CAMPO_FECHA_OPTIONS = [
+  { value: 'fecha',      label: 'Fecha' },
+  { value: 'fecha_pago', label: 'Fecha de Pago' },
+  { value: 'cashflow',   label: 'Cashflow' },
+  { value: 'periodo',    label: 'Período' },
+]
+
 function IcoCalendar() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3FB6BD" strokeWidth="1.8" strokeLinecap="round">
@@ -72,6 +75,7 @@ export default function Reportes() {
   const multiLocal = locales.length > 1
 
   const [tab, setTab] = useState('pagos')
+  const [campoFecha, setCampoFecha] = useState('fecha')
 
   const initial = getPresetRange('30d')
   const [preset,  setPreset]  = useState('30d')
@@ -149,45 +153,67 @@ export default function Reportes() {
 
         {/* ── Filter bar ── */}
         <div className="rep-filters">
-          <div className="rep-filter-col">
-            <div className="rep-filter-label">Inicio</div>
-            <div className="rep-date-input">
-              <IcoCalendar />
-              <input type="date" value={desde} max={hasta}
-                onChange={(e) => { setDesde(e.target.value); setPreset('') }} />
+          <div className="rep-filters-main">
+            <div className="rep-filters-row">
+              {tab === 'pagos' && (
+                <div className="rep-filter-col" style={{ maxWidth: 180 }}>
+                  <div className="rep-filter-label">Tipo de fecha</div>
+                  <div className="rep-date-input">
+                    <select
+                      value={campoFecha}
+                      onChange={(e) => setCampoFecha(e.target.value)}
+                      style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif' }}
+                    >
+                      {CAMPO_FECHA_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+              <div className="rep-filter-col">
+                <div className="rep-filter-label">Inicio</div>
+                <div className="rep-date-input">
+                  <IcoCalendar />
+                  <input type="date" value={desde} max={hasta}
+                    onChange={(e) => { setDesde(e.target.value); setPreset('') }} />
+                </div>
+              </div>
+              <div className="rep-filter-col">
+                <div className="rep-filter-label">Fin</div>
+                <div className="rep-date-input">
+                  <IcoCalendar />
+                  <input type="date" value={hasta} min={desde}
+                    onChange={(e) => { setHasta(e.target.value); setPreset('') }} />
+                </div>
+              </div>
+            </div>
+            <div className="rep-presets">
+              {PRESETS.map((p) => (
+                <button key={p.key}
+                  className={'rep-preset-btn' + (preset === p.key ? ' active' : '')}
+                  onClick={() => handlePreset(p.key)}
+                >{p.label}</button>
+              ))}
             </div>
           </div>
-          <div className="rep-filter-col">
-            <div className="rep-filter-label">Fin</div>
-            <div className="rep-date-input">
-              <IcoCalendar />
-              <input type="date" value={hasta} min={desde}
-                onChange={(e) => { setHasta(e.target.value); setPreset('') }} />
-            </div>
+          <div className="rep-filters-side">
+            <button className="rep-generate-btn" onClick={handleGenerate}>
+              <IcoArrowRight />
+              Generar reporte
+            </button>
           </div>
-          <div className="rep-presets">
-            {PRESETS.map((p) => (
-              <button key={p.key}
-                className={'rep-preset-btn' + (preset === p.key ? ' active' : '')}
-                onClick={() => handlePreset(p.key)}
-              >{p.label}</button>
-            ))}
-          </div>
-          <button className="rep-generate-btn" onClick={handleGenerate}>
-            <IcoArrowRight />
-            Generar reporte
-          </button>
         </div>
 
         {/* ── Active report ── */}
         {tab === 'pagos' && (
-          <ReportePagos applied={applied} activeLocal={activeLocal} prettyDate={prettyDate} />
+          <ReportePagos applied={applied} activeLocal={activeLocal} campoFecha={campoFecha} />
         )}
         {tab === 'cajas' && (
-          <ReporteCajas applied={applied} activeLocal={activeLocal} prettyDate={prettyDate} />
+          <ReporteCajas applied={applied} activeLocal={activeLocal} />
         )}
         {tab === 'cmv' && (
-          <ReporteCMV applied={applied} activeLocal={activeLocal} prettyDate={prettyDate} />
+          <ReporteCMV applied={applied} activeLocal={activeLocal} />
         )}
 
       </div>

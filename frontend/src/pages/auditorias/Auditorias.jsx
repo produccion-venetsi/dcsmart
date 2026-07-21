@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { auditoriasApi } from '../../api/auditorias.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { fmtDateTimeArg } from '../../lib/dates.js'
 
 const LIMIT = 50
 
-function fmtDT(d) { return d ? new Date(d).toLocaleString('es-AR', { hour12: false }) : '—' }
+const fmtDT = fmtDateTimeArg
 
 const MODULO_LABEL = { pagos: 'Pagos', cajas: 'Cajas', arqueos: 'Arqueos' }
 const MODULO_BADGE = { pagos: 'badge-blue', cajas: 'badge-muted', arqueos: 'badge-purple' }

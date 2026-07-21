@@ -112,9 +112,13 @@ export default async function cajaRoutes(fastify) {
       ...localFilter,
       ...auditFilter,
       ...(desde || hasta ? {
+        // desde/hasta son días de calendario (input type="date") sobre un
+        // campo que es un instante real (fecha_inicio) -- el rango se
+        // interpreta en hora de Argentina (-03:00 fijo), marcado explícito
+        // para no depender del timezone del proceso donde corra Node.
         fecha_inicio: {
-          ...(desde ? { gte: new Date(desde) } : {}),
-          ...(hasta ? { lte: new Date(hasta) } : {})
+          ...(desde ? { gte: new Date(`${desde}T00:00:00.000-03:00`) } : {}),
+          ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999-03:00`) } : {})
         }
       } : {})
     }
@@ -157,8 +161,8 @@ export default async function cajaRoutes(fastify) {
       ...localFilter,
       ...(desde || hasta ? {
         fecha_inicio: {
-          ...(desde && { gte: new Date(desde) }),
-          ...(hasta && { lte: new Date(hasta + 'T23:59:59.999') })
+          ...(desde && { gte: new Date(`${desde}T00:00:00.000-03:00`) }),
+          ...(hasta && { lte: new Date(`${hasta}T23:59:59.999-03:00`) })
         }
       } : {})
     }

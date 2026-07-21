@@ -50,10 +50,12 @@ export default async function auditoriasRoutes(fastify) {
       OR: scopeOr,
       ...(id_user ? { id_user } : {}),
       ...(accion  ? { accion }  : {}),
+      // Audit.fecha es un instante real -- el rango se interpreta en hora
+      // de Argentina (offset fijo -03:00), no UTC.
       ...(desde || hasta ? {
         fecha: {
-          ...(desde ? { gte: new Date(desde) } : {}),
-          ...(hasta ? { lte: new Date(hasta + 'T23:59:59.999') } : {})
+          ...(desde ? { gte: new Date(`${desde}T00:00:00.000-03:00`) } : {}),
+          ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999-03:00`) } : {})
         }
       } : {})
     }
@@ -95,7 +97,10 @@ export default async function auditoriasRoutes(fastify) {
     const labelMap = new Map()
     pagos.forEach(p => labelMap.set(p.id, p.nro_ord != null ? `OP-${p.nro_ord}` : '—'))
     cajas.forEach(c => labelMap.set(c.id, c.nro_turno ? `TRN ${c.nro_turno}` : '—'))
-    arqueos.forEach(a => labelMap.set(a.id, `ARQ ${new Date(a.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })}`))
+    // Arqueo.fecha es un instante real (con hora) -- mostrar su día siempre
+    // en hora de Argentina, no UTC (que puede correrlo al día siguiente para
+    // arqueos hechos entre las 21:00 y medianoche hora Argentina).
+    arqueos.forEach(a => labelMap.set(a.id, `ARQ ${new Date(a.fecha).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`))
 
     const data = rows.map(r => ({
       id: r.id,

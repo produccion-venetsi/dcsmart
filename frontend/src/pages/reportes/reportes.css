@@ -68,7 +68,11 @@
   color: var(--t2);
 }
 
-/* ── filter bar ── */
+/* ── filter bar ──
+   .rep-filters: fila con dos hijos -- .rep-filters-main (columna, crece) a
+   la izquierda y .rep-filters-side (el botón Generar, quieto) a la derecha.
+   Dentro de .rep-filters-main: .rep-filters-row (fechas, en fila) arriba,
+   .rep-presets (atajos de período, en fila) abajo. */
 .rep-filters {
   display: flex;
   align-items: flex-end;
@@ -78,11 +82,26 @@
   border-radius: 14px;
   padding: 16px 18px;
   margin-bottom: 22px;
+}
+.rep-filters-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.rep-filters-row {
+  display: flex;
   flex-wrap: wrap;
+  gap: 14px;
+}
+.rep-filters-side {
+  display: flex;
+  flex-shrink: 0;
 }
 .rep-filter-col {
-  flex: none;
-  width: 230px;
+  flex: 1 1 160px;
+  max-width: 230px;
 }
 .rep-filter-label {
   font-size: 10px;
@@ -120,9 +139,7 @@
 .rep-presets {
   display: flex;
   gap: 7px;
-  flex: 1;
   align-items: center;
-  padding-bottom: 1px;
   flex-wrap: wrap;
 }
 .rep-preset-btn {
@@ -166,26 +183,13 @@
 }
 .rep-generate-btn:hover { opacity: .88; }
 
-/* ── period chip ── */
+/* ── cierres Z (Cajas) ── */
 .rep-period {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 22px;
   flex-wrap: wrap;
-}
-.rep-period-label {
-  font-size: 12px;
-  color: rgba(255,255,255,.45);
-}
-.rep-period-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: #E7CFA6;
-  background: rgba(206,172,129,.12);
-  border: 1px solid rgba(206,172,129,.35);
-  border-radius: 8px;
-  padding: 5px 12px;
 }
 .rep-period-z {
   font-size: 12px;
