@@ -34,6 +34,12 @@ const ESTADO_OP_OPTIONS = [
 const TIPO_PAGO_OPTIONS = [
   'A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'
 ]
+const CAMPO_FECHA_OPTIONS = [
+  { value: 'fecha',      label: 'Fecha' },
+  { value: 'fecha_pago', label: 'Fecha de Pago' },
+  { value: 'cashflow',   label: 'Cashflow' },
+  { value: 'periodo',    label: 'Período' },
+]
 const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
 
 function IcoPlus() {
@@ -1275,6 +1281,12 @@ export default function PagoList() {
                       <option value="">Todos</option>
                       <option value="true">Ingreso</option>
                       <option value="false">Egreso</option>
+                    </select>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={lbl}>Tipo de fecha</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.campo_fecha} onChange={e => setDraftField('campo_fecha', e.target.value)}>
+                      {CAMPO_FECHA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>
