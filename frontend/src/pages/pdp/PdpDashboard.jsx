@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { metodosApi } from '../../api/metodospago.js'
@@ -37,15 +38,104 @@ function groupByProveedor(pagos) {
   const map = new Map()
   for (const p of pagos) {
     const key = p.proveedor?.id ?? '__none__'
-    if (!map.has(key)) map.set(key, { key, nombre: provName(p), total: 0, items: [] })
+    if (!map.has(key)) map.set(key, { key, nombre: provName(p), total: 0, totalTransferencia: 0, items: [] })
     const g = map.get(key)
     g.items.push(p)
     g.total += Number(p.importe ?? 0)
+    if (p.metodo_pago?.nombre === 'Transferencia') g.totalTransferencia += Number(p.importe ?? 0)
   }
   return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
 const sumImporte = (rows) => rows.reduce((acc, p) => acc + Number(p.importe ?? 0), 0)
+
+// NCA/NCB (notas de crédito) e ingresos no son deuda real: se excluyen del
+// todo del "Total Deuda" (no restan ni suman), a diferencia del PDF de PDP
+// que sí los neteo con signo (ver pdpReport.js -- distinto criterio a propósito).
+const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
+function esDeudaReal(p) {
+  return p.ingresa_egreso !== true && !TIPOS_NO_DEUDA.has(p.id_tipo)
+}
+
+// Desglose del total de deuda en categorías fijas (por nombre real de Rubro
+// en la base): Sueldos, CMV (cualquier variante "CMV *"), Impositivo, y el
+// resto sin clasificar en esas tres.
+function desglosarDeuda(rows) {
+  const acc = { Sueldos: 0, CMV: 0, Impositivo: 0, Resto: 0 }
+  for (const p of rows) {
+    const importe = Number(p.importe ?? 0)
+    const rubroNombre = p.rubcat?.rubro?.nombre || ''
+    if (rubroNombre === 'Sueldos') acc.Sueldos += importe
+    else if (/^CMV/i.test(rubroNombre)) acc.CMV += importe
+    else if (rubroNombre === 'Impositivo') acc.Impositivo += importe
+    else acc.Resto += importe
+  }
+  return acc
+}
+
+const DESGLOSE_COLOR = { Sueldos: '#f59e0b', CMV: '#22c55e', Impositivo: '#ef4444', Resto: '#64748b' }
+
+// Modal centrado con barras de proporción por categoría (Sueldos/CMV/Impositivo/Resto).
+function DesgloseModal({ title, rows, total, onClose }) {
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  return createPortal(
+    <>
+      <div className="drawer-backdrop open" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          zIndex: 1011, background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+          borderRadius: 14, padding: '1.5rem 1.75rem', width: 320, maxWidth: '90vw',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.1rem' }}>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>{title}</span>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)', display: 'flex', padding: 2 }}
+          >
+            <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        {rows.map(([label, val]) => {
+          const pct = total > 0 ? (val / total) * 100 : 0
+          return (
+            <div key={label} style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 5 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--t2)' }}>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: DESGLOSE_COLOR[label], flexShrink: 0 }} />
+                  {label}
+                </span>
+                <span style={{ fontWeight: 700 }}>
+                  {fmt$(val)} <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({pct.toFixed(0)}%)</span>
+                </span>
+              </div>
+              <div style={{ height: 7, borderRadius: 4, background: 'var(--bg-input)', overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: DESGLOSE_COLOR[label], borderRadius: 4, transition: 'width 0.3s ease' }} />
+              </div>
+            </div>
+          )
+        })}
+        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.6rem', marginTop: '0.4rem', borderTop: '1px solid var(--border)', fontSize: 13, fontWeight: 700 }}>
+          <span>Total</span>
+          <span>{fmt$(total)}</span>
+        </div>
+      </div>
+    </>,
+    document.body
+  )
+}
 
 /* ── icons ── */
 function IcoArrow() {
@@ -214,7 +304,19 @@ function PdpColumn({
   working,
   onGenerateReport, generatingReport,
 }) {
+  // Arranca con todos los grupos colapsados (sin desglosar por proveedor);
+  // el usuario expande el/los que le interesen. `groups` llega vacío en el
+  // primer render (todavía está cargando), así que se colapsa recién cuando
+  // aparecen los grupos por primera vez.
   const [collapsed, setCollapsed] = useState(() => new Set())
+  const initedRef = useRef(false)
+  useEffect(() => {
+    if (!initedRef.current && groups.length > 0) {
+      initedRef.current = true
+      setCollapsed(new Set(groups.map(g => g.key)))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups])
 
   const toggleCollapse = (key) =>
     setCollapsed(prev => {
@@ -317,7 +419,10 @@ function PdpColumn({
                     />
                   )}
                   <span className="pdp-group-name">{g.nombre}</span>
-                  <span className="pdp-group-count">{g.items.length}</span>
+                  <span className="pdp-group-count" title="Total de OPs">{g.items.length} OP{g.items.length !== 1 ? 's' : ''}</span>
+                  {g.totalTransferencia > 0 && (
+                    <span className="pdp-group-transfer" title="Total por Transferencia">Transf: {fmt$(g.totalTransferencia)}</span>
+                  )}
                   <span className="pdp-group-total">{fmt$(g.total)}</span>
                 </div>
 
@@ -380,6 +485,9 @@ export default function PdpDashboard() {
   const [selectedPago, setSelectedPago] = useState(null)
   const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
 
+  const [desgloseDeudaOpen, setDesgloseDeudaOpen] = useState(false)
+  const [desglosePdpOpen,   setDesglosePdpOpen]   = useState(false)
+
   const load = () => {
     setLoading(true)
     const base = { limit: 1000, ...(activeLocal?.id ? { id_local: activeLocal.id } : {}) }
@@ -388,7 +496,7 @@ export default function PdpDashboard() {
       pagosApi.list({ ...base, estado_op: 'PDP', pagado: 'false' }),
     ])
       .then(([d, p]) => {
-        setDeuda(d.data.data); setPagar(p.data.data)
+        setDeuda(d.data.data.filter(esDeudaReal)); setPagar(p.data.data.filter(esDeudaReal))
         setSelDeuda(new Set()); setSelPagar(new Set())
       })
       .catch(() => notify('Error al cargar el PDP', 'error'))
@@ -539,13 +647,50 @@ export default function PdpDashboard() {
           <span className="pdp-stat-label">Total Deuda</span>
           <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(deuda))}</span>
           <span className="pdp-stat-sub">{loading ? '' : `${deuda.length} orden${deuda.length !== 1 ? 'es' : ''}`}</span>
+          {!loading && deuda.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              style={{ marginTop: 8 }}
+              onClick={() => setDesgloseDeudaOpen(true)}
+            >
+              Ver desglose
+            </button>
+          )}
         </div>
         <div className="pdp-stat-card">
           <span className="pdp-stat-label">Total en PDP</span>
           <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(pagar))}</span>
           <span className="pdp-stat-sub">{loading ? '' : `${pagar.length} orden${pagar.length !== 1 ? 'es' : ''} pendiente${pagar.length !== 1 ? 's' : ''}`}</span>
+          {!loading && pagar.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              style={{ marginTop: 8 }}
+              onClick={() => setDesglosePdpOpen(true)}
+            >
+              Ver desglose
+            </button>
+          )}
         </div>
       </div>
+
+      {desgloseDeudaOpen && (
+        <DesgloseModal
+          title="Desglose · Total Deuda"
+          rows={Object.entries(desglosarDeuda(deuda))}
+          total={sumImporte(deuda)}
+          onClose={() => setDesgloseDeudaOpen(false)}
+        />
+      )}
+      {desglosePdpOpen && (
+        <DesgloseModal
+          title="Desglose · Total en PDP"
+          rows={Object.entries(desglosarDeuda(pagar))}
+          total={sumImporte(pagar)}
+          onClose={() => setDesglosePdpOpen(false)}
+        />
+      )}
 
       <div className="pdp-grid">
         <PdpColumn
