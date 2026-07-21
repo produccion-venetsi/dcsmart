@@ -281,9 +281,15 @@ export default async function reportesRoutes(fastify) {
       return { kpis: [], alimentos: [], bebidas: [], movstock: [], ajustes: [], ventas_total: 0 }
     }
 
-    // fecha_inicio es un instante real (con hora) -- rango en hora Argentina.
+    // fecha_inicio (Caja) es un instante real (con hora) -- rango en hora Argentina.
     const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
     const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
+    // periodo (Pago) se guarda como medianoche UTC del día elegido (misma
+    // convención que Pago.fecha/cashflow) -- NO es un instante real como
+    // fecha_inicio, así que compararlo con el offset de Argentina de arriba
+    // correría el filtro 3 horas. Usa su propio par de fechas en UTC puro.
+    const desdePeriodoUTC = new Date(`${desde}T00:00:00.000Z`)
+    const hastaPeriodoUTC = new Date(`${hasta}T23:59:59.999Z`)
     const localPlaceholders = localIds.map((_, i) => `$${i + 1}`).join(', ')
 
     const ventasAgg = await fastify.db.caja.aggregate({
@@ -298,7 +304,7 @@ export default async function reportesRoutes(fastify) {
 
     // CMV costs: pagos grouped by rubro + categoría
     // Rubros with name LIKE 'CMV%' are CMV rubros
-    const costParams = [...localIds, desdeDate, hastaDate]
+    const costParams = [...localIds, desdePeriodoUTC, hastaPeriodoUTC]
     const costRows = await fastify.db.$queryRawUnsafe(`
       SELECT
         r.nombre AS rubro,
@@ -309,8 +315,8 @@ export default async function reportesRoutes(fastify) {
       JOIN rubros r ON rc.id_rub = r.id
       JOIN categorias c ON rc.id_cat = c.id
       WHERE p.id_local IN (${localPlaceholders})
-        AND p.fecha >= $${localIds.length + 1}
-        AND p.fecha <= $${localIds.length + 2}
+        AND p.periodo >= $${localIds.length + 1}
+        AND p.periodo <= $${localIds.length + 2}
         AND UPPER(r.nombre) LIKE 'CMV%'
       GROUP BY r.nombre, c.nombre
       ORDER BY total DESC
