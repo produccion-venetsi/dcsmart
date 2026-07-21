@@ -34,6 +34,12 @@ const ESTADO_OP_OPTIONS = [
 const TIPO_PAGO_OPTIONS = [
   'A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'
 ]
+const CAMPO_FECHA_OPTIONS = [
+  { value: 'fecha',      label: 'Fecha' },
+  { value: 'fecha_pago', label: 'Fecha de Pago' },
+  { value: 'cashflow',   label: 'Cashflow' },
+  { value: 'periodo',    label: 'Período' },
+]
 const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
 
 function IcoPlus() {
@@ -804,7 +810,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
 // ─── Filtros ────────────────────────────────────────────────────────────────
 
 const FILTER_INIT = {
-  pagado: '', estado_op: '', desde: '', hasta: '',
+  pagado: '', estado_op: '', campo_fecha: 'fecha', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
   audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
   id_proveedores: [],
@@ -828,6 +834,8 @@ export default function PagoList() {
   const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
   const canExport   = ['super_admin', 'dcsmart'].includes(role)
   const [exporting, setExporting] = useState(false)
+  const [summary,        setSummary]        = useState(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   const [pagos,           setPagos]           = useState([])
   const [total,           setTotal]           = useState(0)
@@ -881,6 +889,7 @@ export default function PagoList() {
       ...(filters.estado_op            ? { estado_op:        filters.estado_op }       : {}),
       ...(filters.desde                ? { desde:            filters.desde }           : {}),
       ...(filters.hasta                ? { hasta:            filters.hasta }           : {}),
+      ...((filters.desde || filters.hasta) ? { campo_fecha:   filters.campo_fecha }    : {}),
       ...(filters.id_tipo              ? { id_tipo:          filters.id_tipo }         : {}),
       ...(filters.id_rub               ? { id_rub:           filters.id_rub }          : {}),
       ...(filters.id_cat               ? { id_cat:           filters.id_cat }          : {}),
@@ -937,6 +946,21 @@ export default function PagoList() {
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
   }, [buildParams, page])
+
+  // ── Resumen agregado (total + impuestos) ───────────────────────────────────
+  // Solo se calcula cuando hay un rango de fecha elegido (mismo gate que el
+  // CSV) — usa los mismos filtros que la tabla pero sin paginar, porque el
+  // total debe ser de TODOS los pagos filtrados, no solo la página visible.
+  useEffect(() => {
+    if (!(filters.desde && filters.hasta)) { setSummary(null); return }
+    const ctrl = new AbortController()
+    setSummaryLoading(true)
+    pagosApi.summary(buildParams(1), ctrl.signal)
+      .then(({ data }) => setSummary(data))
+      .catch(() => { if (!ctrl.signal.aborted) { notify('Error al cargar el resumen', 'error'); setSummary(null) } })
+      .finally(() => { if (!ctrl.signal.aborted) setSummaryLoading(false) })
+    return () => ctrl.abort()
+  }, [buildParams, filters.desde, filters.hasta])
 
   // ── Navegación de páginas ──────────────────────────────────────────────────
   const goToPage = (p) => {
@@ -1043,7 +1067,7 @@ export default function PagoList() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
   const filterRef = useRef(null)
-  const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== '').length
+  const activeFilterCount = Object.entries(filters).filter(([k, v]) => k !== 'campo_fecha' && (Array.isArray(v) ? v.length > 0 : v !== '')).length
   const hasActiveFilters  = activeFilterCount > 0
 
   const openFilters = () => { setDraft(filters); setFilterOpen(true) }
@@ -1276,6 +1300,12 @@ export default function PagoList() {
                       <option value="false">Egreso</option>
                     </select>
                   </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={lbl}>Tipo de fecha</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.campo_fecha} onChange={e => setDraftField('campo_fecha', e.target.value)}>
+                      {CAMPO_FECHA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
                   <div>
                     <span style={lbl}>Desde</span>
                     <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} onChange={e => setDraftField('desde', e.target.value)} />
@@ -1370,7 +1400,14 @@ export default function PagoList() {
             </button>
           </ActionsMenu>
           {canExport && (
-            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a CSV los pagos con los filtros actuales">
+            <button
+              className="btn btn-secondary"
+              onClick={exportCsv}
+              disabled={exporting || !(filters.desde && filters.hasta)}
+              title={filters.desde && filters.hasta
+                ? 'Exportar a CSV los pagos con los filtros actuales'
+                : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
+            >
               {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
             </button>
           )}
@@ -1379,6 +1416,23 @@ export default function PagoList() {
           </button>
         </div>
       </div>
+
+      {filters.desde && filters.hasta && (summaryLoading || summary) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.6rem 1rem', minWidth: 140 }}>
+            <div style={{ fontSize: 11, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.03em' }}>TOTAL IMPORTE</div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>
+              {summaryLoading ? <span className="skel" style={{ width: 80, height: 16, display: 'inline-block' }} /> : fmt$(summary?.total_importe)}
+            </div>
+          </div>
+          {!summaryLoading && summary && Object.entries(summary.por_impuesto).map(([tipo, monto]) => (
+            <div key={tipo} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.6rem 1rem', minWidth: 120 }}>
+              <div style={{ fontSize: 11, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.03em' }}>{tipo}</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{fmt$(monto)}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {selectionMode && selectedIds.size > 0 && (
         <div className="bulk-bar">
