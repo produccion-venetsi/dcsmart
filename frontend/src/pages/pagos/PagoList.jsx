@@ -1423,7 +1423,7 @@ export default function PagoList() {
               </div>
             )}
           </div>
-          <ActionsMenu label="Acciones">
+          <ActionsMenu label="Acciones" float>
             {(canEdit || canDelete) && (
               <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
                 <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
