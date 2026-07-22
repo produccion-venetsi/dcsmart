@@ -10,6 +10,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
+import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
 import { downloadCsv } from '../../lib/csv.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
@@ -147,7 +148,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [savingMovEdit, setSavingMovEdit] = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
-  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDetEdit, setSavingDetEdit] = useState(false)
   const [auditando,  setAuditando] = useState(false)
   const [auditandoDc, setAuditandoDc] = useState(false)
@@ -218,6 +219,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       await detallesApi.create({
         id_caja:       cajaId,
         id_tipo:       newDet.id_tipo       || null,
+        nombre:        newDet.id_tipo ? null : (newDet.nombre || null),
         monto:         parseFloat(newDet.monto),
         observaciones: newDet.observaciones || null
       })
@@ -259,7 +261,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
 
   const handleEditDet = (d) => {
     setEditingDetId(d.id)
-    setEditDetForm({ id_tipo: d.id_tipo || '', monto: String(d.monto), observaciones: d.observaciones || '' })
+    setEditDetForm({ id_tipo: d.id_tipo || '', nombre: d.detalle_tipo?.nombre || d.nombre || '', monto: String(d.monto), observaciones: d.observaciones || '' })
   }
 
   const handleSaveDet = async (detId) => {
@@ -268,6 +270,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     try {
       await detallesApi.update(detId, {
         id_tipo:       editDetForm.id_tipo || null,
+        nombre:        editDetForm.id_tipo ? null : (editDetForm.nombre || null),
         monto:         parseFloat(editDetForm.monto),
         observaciones: editDetForm.observaciones || null
       })
@@ -477,10 +480,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   {editingDetId === d.id ? (
                     <>
                       <td colSpan={2}>
-                        <select className="filter-select" style={{ width: '100%' }} value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
-                          <option value="">Ver opciones</option>
-                          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                        </select>
+                        <TipoDetalleCombo
+                          tipos={tipos}
+                          idTipo={editDetForm.id_tipo}
+                          nombre={editDetForm.nombre}
+                          onChange={(id_tipo, nombre) => setEditDetForm(f => ({ ...f, id_tipo, nombre }))}
+                        />
                       </td>
                       <td>
                         <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
@@ -537,12 +542,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Nombre</label>
-            <div className="form-input-wrap">
-              <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
-                <option value="">Ver opciones</option>
-                {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-              </select>
-            </div>
+            <TipoDetalleCombo
+              tipos={tipos}
+              idTipo={newDet.id_tipo}
+              nombre={newDet.nombre}
+              onChange={(id_tipo, nombre) => setNewDet(d => ({ ...d, id_tipo, nombre }))}
+            />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
@@ -734,10 +739,10 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const [metodos,     setMetodos]     = useState([])
 
   const [addingDet,  setAddingDet]  = useState(false)
-  const [newDet,     setNewDet]     = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [newDet,     setNewDet]     = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDet,  setSavingDet]  = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
-  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDetEdit, setSavingDetEdit] = useState(false)
 
   const [addingMov,  setAddingMov]  = useState(false)
@@ -789,9 +794,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     if (!newDet.monto) return
     setSavingDet(true)
     try {
-      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null })
+      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null })
       notify('Detalle agregado', 'success')
-      setNewDet({ id_tipo: '', monto: '', observaciones: '' })
+      setNewDet({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
       setAddingDet(false)
       loadRelacionales(form?.id_local)
     } catch (err) { notify(err.response?.data?.error || 'Error al agregar detalle', 'error') }
@@ -806,14 +811,14 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
 
   const handleEditDet = (d) => {
     setEditingDetId(d.id)
-    setEditDetForm({ id_tipo: d.id_tipo || '', monto: String(d.monto), observaciones: d.observaciones || '' })
+    setEditDetForm({ id_tipo: d.id_tipo || '', nombre: d.detalle_tipo?.nombre || d.nombre || '', monto: String(d.monto), observaciones: d.observaciones || '' })
   }
 
   const handleSaveDet = async (detId) => {
     if (!editDetForm.monto) return
     setSavingDetEdit(true)
     try {
-      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null })
+      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null })
       notify('Detalle actualizado', 'success')
       setEditingDetId(null)
       loadRelacionales(form?.id_local)
@@ -1003,10 +1008,12 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   {editingDetId === d.id ? (
                     <>
                       <td colSpan={2}>
-                        <select className="filter-select" style={{ width: '100%' }} value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
-                          <option value="">Ver opciones</option>
-                          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                        </select>
+                        <TipoDetalleCombo
+                          tipos={tipos}
+                          idTipo={editDetForm.id_tipo}
+                          nombre={editDetForm.nombre}
+                          onChange={(id_tipo, nombre) => setEditDetForm(f => ({ ...f, id_tipo, nombre }))}
+                        />
                       </td>
                       <td>
                         <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
@@ -1045,12 +1052,12 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Nombre</label>
-              <div className="form-input-wrap">
-                <select value={newDet.id_tipo} onChange={e => setNewDet(f => ({ ...f, id_tipo: e.target.value }))}>
-                  <option value="">Ver opciones</option>
-                  {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                </select>
-              </div>
+              <TipoDetalleCombo
+                tipos={tipos}
+                idTipo={newDet.id_tipo}
+                nombre={newDet.nombre}
+                onChange={(id_tipo, nombre) => setNewDet(f => ({ ...f, id_tipo, nombre }))}
+              />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
