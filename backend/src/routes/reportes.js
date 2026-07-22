@@ -53,6 +53,7 @@ export default async function reportesRoutes(fastify) {
     const totalFiscal   = Number(cajaAgg._sum.fiscal   ?? 0)
     const totalTickets  = Number(cajaAgg._sum.tickets  ?? 0)
     const totalComens   = Number(cajaAgg._sum.comensales ?? 0)
+    const totalEfectivo = Number(cajaAgg._sum.efectivo ?? 0)
     const countZ        = cajaAgg._count.id
 
     const ticketProm = totalTickets > 0 ? Math.round(totalVentas / totalTickets) : 0
@@ -188,6 +189,7 @@ export default async function reportesRoutes(fastify) {
         cubiertos: totalComens,
         count_z: countZ,
         total_tickets: totalTickets,
+        efectivo: totalEfectivo,
         pct_z: pctZ,
         pct_no_fiscal: pctNoFisc
       },
