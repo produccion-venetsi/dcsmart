@@ -456,11 +456,14 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
-        {canEdit && !addingDet && (
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
-            <IcoPlus /> Añadir
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalDet)}</span>
+          {canEdit && !addingDet && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
+              <IcoPlus /> Añadir
+            </button>
+          )}
+        </div>
       </div>
       {caja.detalles && caja.detalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
