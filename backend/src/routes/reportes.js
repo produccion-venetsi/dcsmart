@@ -167,10 +167,13 @@ export default async function reportesRoutes(fastify) {
       total: Number(r.total)
     }))
 
-    // Clasificación real de detalle_tipos (ver frontend/src/lib/clasificaciones.js):
-    // solo existen 'canal' | 'medio_pago' | 'calculo' | 'otro' -- 'desperdicio'/
-    // 'invitacion' nunca existieron en el catálogo, así que ese desglose
-    // siempre daba $0 sin ningún error visible.
+    // "Desglose de detalles": los caja_detalles cargados a mano (ej. "MP Point
+    // Crédito", "MP QR", "Transferencia", "Rappi") son la forma real en que
+    // las cajas DCSMART registran sus cobros -- mucho más útil que agrupar por
+    // la clasificación genérica (canal/medio_pago/calculo/otro/legacy
+    // ingreso-egreso), que no dice nada de qué medio fue. Se agrupa por el
+    // nombre real del detalle (el de su tipo si tiene uno asignado, si no el
+    // nombre libre cargado en el propio detalle).
     const detParams = [...localIds, desdeDate, hastaDate, request.activeAppId]
     let detTipoClause = ''
     if (tipoTurnoEnum) {
@@ -178,34 +181,33 @@ export default async function reportesRoutes(fastify) {
       detTipoClause = `AND c.tipo_turno::text = $${detParams.length}`
     }
     const detRows = await fastify.db.$queryRawUnsafe(`
-      SELECT dt.clasificacion, SUM(cd.monto) AS total
+      SELECT
+        COALESCE(dt.nombre, cd.nombre, 'Sin nombre') AS nombre,
+        BOOL_OR(dt.clasificacion = 'egreso') AS egreso,
+        SUM(cd.monto) AS total
       FROM caja_detalles cd
       JOIN cajas c ON cd.id_caja = c.id
       LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
       WHERE c.id_local IN (${localPlaceholders})
         AND c.fecha_inicio >= $${localIds.length + 1}
         AND c.fecha_inicio <= $${localIds.length + 2}
-        AND dt.id_app = $${localIds.length + 3}
+        AND (dt.id_app = $${localIds.length + 3} OR dt.id_app IS NULL)
         ${detTipoClause}
-      GROUP BY dt.clasificacion
+      GROUP BY COALESCE(dt.nombre, cd.nombre, 'Sin nombre')
+      ORDER BY total DESC
     `, ...detParams)
 
-    // Clasificaciones "oficiales" del catálogo (ver frontend/src/lib/clasificaciones.js):
-    // canal | medio_pago | calculo | otro. Pero hay locales migrados con
-    // valores legacy (ej. "ingreso"/"egreso") que no pasan por ese catálogo y
-    // representan buena parte de los datos reales -- el desglose es dinámico
-    // (muestra lo que exista de verdad) en vez de limitarse a esas 4 claves,
-    // que dejaría afuera silenciosamente cualquier valor legacy o futuro.
-    const CLASIFICACION_LABELS = { canal: 'Canal', medio_pago: 'Medio de pago', calculo: 'Cálculo', otro: 'Otro' }
-    const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
-    const detalleClasificaciones = detRows
-      .filter(r => r.clasificacion != null && Number(r.total) !== 0)
-      .map(r => ({
-        key: r.clasificacion,
-        label: CLASIFICACION_LABELS[r.clasificacion] ?? capitalize(r.clasificacion),
-        total: Number(r.total)
+    const DET_COLORS = ['#3FA9DE', '#7FD49B', '#EF6F8E', '#4BC4CC', '#F4C152', '#F08A5D', '#B98CD8', '#9b958c', '#E0938C', '#5FA8D9']
+    const detallesTotal = detRows.reduce((s, r) => s + Number(r.total), 0)
+    const detalles = detRows
+      .filter(r => Number(r.total) !== 0)
+      .map((r, i) => ({
+        name: r.nombre,
+        val: Number(r.total),
+        egreso: Boolean(r.egreso),
+        pct: detallesTotal > 0 ? ((Number(r.total) / detallesTotal) * 100).toFixed(1) : '0.0',
+        color: DET_COLORS[i % DET_COLORS.length]
       }))
-      .sort((a, b) => b.total - a.total)
 
     const pctZ      = totalVentas > 0 ? ((totalFiscal / totalVentas) * 100).toFixed(0) : '0'
     const pctNoFisc = totalVentas > 0 ? ((noFiscal / totalVentas) * 100).toFixed(0) : '0'
@@ -224,17 +226,14 @@ export default async function reportesRoutes(fastify) {
       secondary: [
         { label: 'Porc Z',    val: pctZ + '%',      color: '#EFEDE8' },
         { label: 'Z Digitales', val: digital,         color: '#3FB6BD' },
-        { label: 'Porc Avión', val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' },
-        ...detalleClasificaciones.map((d, i) => ({
-          label: d.label,
-          val: d.total,
-          color: ['#E0938C', '#D8B98C', '#B98CD8', '#5FA8D9'][i % 4]
-        }))
+        { label: 'Porc Avión', val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' }
       ],
       weekly,
       fiscal: { fiscal: totalFiscal, no_fiscal: noFiscal, digital },
       payments: paymentsFinal,
-      pay_total: payTotalFinal
+      pay_total: payTotalFinal,
+      detalles,
+      detalles_total: detallesTotal
     }
   })
 

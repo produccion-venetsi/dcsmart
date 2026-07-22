@@ -84,12 +84,14 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
     return () => ctrl.abort()
   }, [applied.desde, applied.hasta, activeLocal?.id, tipoTurno])
 
-  const kpi       = data?.kpi ?? {}
-  const secondary = data?.secondary ?? []
-  const weekly    = data?.weekly ?? []
-  const fiscal    = data?.fiscal ?? {}
-  const payments  = data?.payments ?? []
-  const payTotal  = data?.pay_total ?? 0
+  const kpi           = data?.kpi ?? {}
+  const secondary     = data?.secondary ?? []
+  const weekly        = data?.weekly ?? []
+  const fiscal        = data?.fiscal ?? {}
+  const payments      = data?.payments ?? []
+  const payTotal      = data?.pay_total ?? 0
+  const detalles      = data?.detalles ?? []
+  const detallesTotal = data?.detalles_total ?? 0
 
   const fiscalPct = kpi.total_ventas > 0
     ? Math.round((fiscal.fiscal / kpi.total_ventas) * 100) : 0
@@ -288,6 +290,66 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
               <div className="rep-pay-total">
                 <span>Total cobrado</span>
                 <span>{fmt(payTotal)}</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Desglose de detalles (caja_detalles cargados a mano: MP Point,
+           MP QR, Transferencia, Rappi, etc. -- no la clasificación genérica) ── */}
+      <div className="rep-charts-row mid">
+        <div className="rep-chart-card">
+          <div className="rep-chart-title">Desglose de detalles</div>
+          <div className="rep-chart-sub">Monto por detalle cargado en el período</div>
+          {skel ? (
+            <div className="rep-skel" style={{ width: '100%', height: 220 }} />
+          ) : detalles.length === 0 ? (
+            <div style={{ height: 220, display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,.35)', fontSize: 13 }}>
+              Sin datos
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={detalles} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+                <XAxis dataKey="name" tickLine={false} axisLine={false}
+                  tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 9, fontFamily: 'Montserrat' }}
+                  interval={0} angle={-20} textAnchor="end" height={50} />
+                <YAxis tickLine={false} axisLine={false} width={60}
+                  tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
+                  tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
+                <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(255,255,255,.04)', radius: 6 }} />
+                <Bar dataKey="val" radius={[5, 5, 0, 0]}>
+                  {detalles.map((d, i) => (
+                    <Cell key={i} fill={d.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        <div className="rep-chart-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por tipo</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
+          </div>
+          {skel ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rep-skel" style={{ width: '100%', height: 36, marginBottom: 2 }} />
+            ))
+          ) : (
+            <>
+              {detalles.map((d, i) => (
+                <div className="rep-pay-row" key={i}>
+                  <span className="rep-pay-dot" style={{ background: d.color }} />
+                  <span className="rep-pay-name">{d.name}{d.egreso ? ' (egreso)' : ''}</span>
+                  <span className="rep-pay-amount">{d.egreso ? '-' : ''}{fmt(d.val)}</span>
+                  <span className="rep-pay-pct">{d.pct}%</span>
+                </div>
+              ))}
+              <div className="rep-pay-total">
+                <span>Total detalles</span>
+                <span>{fmt(detallesTotal)}</span>
               </div>
             </>
           )}
