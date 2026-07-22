@@ -39,11 +39,13 @@ function padLeft(val, len) {
   return str ? str.padStart(len, '0') : ''
 }
 
+// cashflow = fecha + plazo (días). Aritmética de día calendario en UTC para
+// no depender del huso del navegador: `new Date(fecha + 'T00:00:00')` se
+// interpretaba en hora local y, fuera de Argentina, corría el día resultante.
 function calcCashflow(fecha, plazo) {
   if (!fecha || !plazo) return ''
-  const d = new Date(fecha + 'T00:00:00')
-  d.setDate(d.getDate() + Number(plazo))
-  return d.toISOString().slice(0, 10)
+  const [y, m, d] = fecha.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + Number(plazo))).toISOString().slice(0, 10)
 }
 
 function IcoPlus() {

@@ -79,7 +79,7 @@ const QUICK_ACTIONS = [
 
 function fmtDate() {
   const d = new Date()
-  return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
 export default function Dashboard() {

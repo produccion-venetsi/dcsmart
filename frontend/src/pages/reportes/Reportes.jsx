@@ -1,32 +1,28 @@
 import { useState, useCallback } from 'react'
 import { useAppStore } from '../../store/appStore.js'
+import { todayInputDate } from '../../lib/dates.js'
 import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
 import './reportes.css'
 
-function pad(n) { return String(n).padStart(2, '0') }
-function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+// Aritmética de día calendario sobre un 'YYYY-MM-DD', operando en UTC para no
+// depender del huso del navegador de quien mira (el "hoy" ya viene en hora
+// Argentina desde todayInputDate()).
+function addDaysStr(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+}
+function addMonthsStr(dateStr, months) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1 + months, d)).toISOString().slice(0, 10)
+}
 
 function getPresetRange(preset) {
-  const now = new Date()
-  const hoy = toDateStr(now)
-  if (preset === 'hoy') return { desde: hoy, hasta: hoy }
-  if (preset === '7d') {
-    const d = new Date(now)
-    d.setDate(d.getDate() - 6)
-    return { desde: toDateStr(d), hasta: hoy }
-  }
-  if (preset === '30d') {
-    const d = new Date(now)
-    d.setDate(d.getDate() - 29)
-    return { desde: toDateStr(d), hasta: hoy }
-  }
-  if (preset === '12m') {
-    const d = new Date(now)
-    d.setMonth(d.getMonth() - 12)
-    return { desde: toDateStr(d), hasta: hoy }
-  }
+  const hoy = todayInputDate()
+  if (preset === '7d')  return { desde: addDaysStr(hoy, -6),   hasta: hoy }
+  if (preset === '30d') return { desde: addDaysStr(hoy, -29),  hasta: hoy }
+  if (preset === '12m') return { desde: addMonthsStr(hoy, -12), hasta: hoy }
   return { desde: hoy, hasta: hoy }
 }
 
