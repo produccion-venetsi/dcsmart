@@ -240,7 +240,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
       {/* ── Charts row 2: los dos graficos de barra, uno al lado del otro ── */}
       <div className="rep-charts-row mid">
         <div className="rep-chart-card">
-          <div className="rep-chart-title">Medios de pago</div>
+          <div className="rep-chart-title">Desglose de movimientos</div>
           <div className="rep-chart-sub">Monto cobrado por medio en el período</div>
           {skel ? (
             <div className="rep-skel" style={{ width: '100%', height: 220 }} />
@@ -304,7 +304,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
       <div className="rep-charts-row mid">
         <div className="rep-chart-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por medio</span>
+            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por movimiento</span>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
           </div>
           {skel ? (
