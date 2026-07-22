@@ -192,11 +192,18 @@ export default function Users() {
   // ── open / close detail drawer ────────────────────────────────────────────
 
   const openDetail = (u) => {
+    // `u` viene de la lista (GET /users), que no trae google_id ni
+    // user_permissions -- se abre el panel ya mismo con esos datos parciales
+    // (respuesta instantánea) y se reemplaza por el detalle completo
+    // (GET /users/:id) apenas llega, para que "Google" y "Puede ver
+    // Reportes" reflejen el estado real en vez de quedar siempre en el
+    // valor por default de los campos que la lista no incluye.
     setSelected(u)
     setShowRoleForm(false)
     setRoleForm(EMPTY_ROLE)
     setEditingNombre(false)
     setPanelOpen(true)
+    usersApi.get(u.id).then(({ data }) => setSelected(data)).catch(() => {})
   }
 
   const closeDetail = () => {
