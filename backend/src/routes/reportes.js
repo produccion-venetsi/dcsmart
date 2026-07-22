@@ -1,8 +1,20 @@
+// El enum TipoTurno usa @map en el schema (ver prisma/schema.prisma) --
+// Prisma Client / SQL crudo espera la clave (MANANA), no la etiqueta visible
+// ("Mañana") que envía el frontend. Mismo mapeo que backend/src/routes/caja.js.
+const TIPO_TURNO_MAP = {
+  'Mañana': 'MANANA', 'Tarde': 'TARDE', 'Noche': 'NOCHE',
+  'Trasnoche': 'TRASNOCHE', 'Evento': 'EVENTO', 'Otros': 'OTROS'
+}
+function toTipoTurnoEnum(value) {
+  if (!value) return null
+  return TIPO_TURNO_MAP[value] || value
+}
+
 export default async function reportesRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.appContext, fastify.can('reportes', 'view')]
 
   fastify.get('/cajas', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta } = request.query
+    const { id_local, desde, hasta, tipo_turno } = request.query
 
     if (!desde || !hasta) {
       return reply.code(400).send({ error: 'desde y hasta son requeridos' })
@@ -22,9 +34,12 @@ export default async function reportesRoutes(fastify) {
     const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
     const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
 
+    const tipoTurnoEnum = toTipoTurnoEnum(tipo_turno)
+
     const localFilter = { id_local: { in: localIds } }
     const cajaWhere = {
       ...localFilter,
+      ...(tipoTurnoEnum ? { tipo_turno: tipoTurnoEnum } : {}),
       fecha_inicio: { gte: desdeDate, lte: hastaDate }
     }
 
@@ -48,17 +63,29 @@ export default async function reportesRoutes(fastify) {
     payParams.push(...localIds)
     payParams.push(desdeDate)
     payParams.push(hastaDate)
+    // Nota: el enum de Postgres guarda el label visible (@map), ej. "Tarde" --
+    // no la clave interna de Prisma ("TARDE"). Para SQL crudo se compara
+    // contra el valor tal cual llega del frontend (tipo_turno), NO contra
+    // tipoTurnoEnum (ese es solo para el `where` de Prisma más abajo).
+    let payTipoClause = ''
+    if (tipoTurnoEnum) {
+      payParams.push(tipo_turno)
+      payTipoClause = `AND c.tipo_turno::text = $${payParams.length}`
+    }
 
+    // LEFT JOIN (no INNER) -- un movimiento COBRO sin id_metodo asignado no
+    // debe desaparecer silenciosamente de la suma, solo queda sin nombre.
     const payRows = await fastify.db.$queryRawUnsafe(`
-      SELECT mp.nombre, SUM(cm.monto) AS total
+      SELECT COALESCE(mp.nombre, 'Sin especificar') AS nombre, SUM(cm.monto) AS total
       FROM caja_movimientos cm
       JOIN cajas c ON cm.id_caja = c.id
-      JOIN metodos_pago mp ON cm.id_metodo = mp.id
+      LEFT JOIN metodos_pago mp ON cm.id_metodo = mp.id
       WHERE c.id_local IN (${localPlaceholders})
         AND c.fecha_inicio >= $${localIds.length + 1}
         AND c.fecha_inicio <= $${localIds.length + 2}
         AND cm.tipo = 'COBRO'
-      GROUP BY mp.nombre
+        ${payTipoClause}
+      GROUP BY COALESCE(mp.nombre, 'Sin especificar')
       ORDER BY total DESC
     `, ...payParams)
 
@@ -84,6 +111,11 @@ export default async function reportesRoutes(fastify) {
     // crudo hace el camino inverso (lo trata como si ya fuera hora Argentina)
     // y da el mismo resultado incorrecto que no convertir nada.
     const weekParams = [...localIds, desdeDate, hastaDate]
+    let weekTipoClause = ''
+    if (tipoTurnoEnum) {
+      weekParams.push(tipo_turno)
+      weekTipoClause = `AND tipo_turno::text = $${weekParams.length}`
+    }
     const weekRows = await fastify.db.$queryRawUnsafe(`
       SELECT
         DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS week_start,
@@ -92,6 +124,7 @@ export default async function reportesRoutes(fastify) {
       WHERE id_local IN (${localPlaceholders})
         AND fecha_inicio >= $${localIds.length + 1}
         AND fecha_inicio <= $${localIds.length + 2}
+        ${weekTipoClause}
       GROUP BY DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')
       ORDER BY week_start
     `, ...weekParams)
@@ -102,7 +135,16 @@ export default async function reportesRoutes(fastify) {
       total: Number(r.total)
     }))
 
+    // Clasificación real de detalle_tipos (ver frontend/src/lib/clasificaciones.js):
+    // solo existen 'canal' | 'medio_pago' | 'calculo' | 'otro' -- 'desperdicio'/
+    // 'invitacion' nunca existieron en el catálogo, así que ese desglose
+    // siempre daba $0 sin ningún error visible.
     const detParams = [...localIds, desdeDate, hastaDate, request.activeAppId]
+    let detTipoClause = ''
+    if (tipoTurnoEnum) {
+      detParams.push(tipo_turno)
+      detTipoClause = `AND c.tipo_turno::text = $${detParams.length}`
+    }
     const detRows = await fastify.db.$queryRawUnsafe(`
       SELECT dt.clasificacion, SUM(cd.monto) AS total
       FROM caja_detalles cd
@@ -112,13 +154,26 @@ export default async function reportesRoutes(fastify) {
         AND c.fecha_inicio >= $${localIds.length + 1}
         AND c.fecha_inicio <= $${localIds.length + 2}
         AND dt.id_app = $${localIds.length + 3}
+        ${detTipoClause}
       GROUP BY dt.clasificacion
     `, ...detParams)
 
-    const detMap = {}
-    for (const r of detRows) detMap[r.clasificacion] = Number(r.total)
-    const desperdicios  = detMap['desperdicio']  ?? 0
-    const invitaciones  = detMap['invitacion']   ?? 0
+    // Clasificaciones "oficiales" del catálogo (ver frontend/src/lib/clasificaciones.js):
+    // canal | medio_pago | calculo | otro. Pero hay locales migrados con
+    // valores legacy (ej. "ingreso"/"egreso") que no pasan por ese catálogo y
+    // representan buena parte de los datos reales -- el desglose es dinámico
+    // (muestra lo que exista de verdad) en vez de limitarse a esas 4 claves,
+    // que dejaría afuera silenciosamente cualquier valor legacy o futuro.
+    const CLASIFICACION_LABELS = { canal: 'Canal', medio_pago: 'Medio de pago', calculo: 'Cálculo', otro: 'Otro' }
+    const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+    const detalleClasificaciones = detRows
+      .filter(r => r.clasificacion != null && Number(r.total) !== 0)
+      .map(r => ({
+        key: r.clasificacion,
+        label: CLASIFICACION_LABELS[r.clasificacion] ?? capitalize(r.clasificacion),
+        total: Number(r.total)
+      }))
+      .sort((a, b) => b.total - a.total)
 
     const pctZ      = totalVentas > 0 ? ((totalFiscal / totalVentas) * 100).toFixed(0) : '0'
     const pctNoFisc = totalVentas > 0 ? ((noFiscal / totalVentas) * 100).toFixed(0) : '0'
@@ -135,11 +190,14 @@ export default async function reportesRoutes(fastify) {
         pct_no_fiscal: pctNoFisc
       },
       secondary: [
-        { label: 'Porc Z',          val: pctZ + '%',      color: '#EFEDE8' },
-        { label: 'Z Digitales',      val: digital,         color: '#3FB6BD' },
-        { label: 'Porc Avión',       val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' },
-        { label: 'Desperdicios',     val: desperdicios,    color: '#E0938C' },
-        { label: 'Invitaciones',     val: invitaciones,    color: '#D8B98C' }
+        { label: 'Porc Z',    val: pctZ + '%',      color: '#EFEDE8' },
+        { label: 'Z Digitales', val: digital,         color: '#3FB6BD' },
+        { label: 'Porc Avión', val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' },
+        ...detalleClasificaciones.map((d, i) => ({
+          label: d.label,
+          val: d.total,
+          color: ['#E0938C', '#D8B98C', '#B98CD8', '#5FA8D9'][i % 4]
+        }))
       ],
       weekly,
       fiscal: { fiscal: totalFiscal, no_fiscal: noFiscal, digital },

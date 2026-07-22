@@ -63,7 +63,7 @@ function PayTooltip({ active, payload }) {
   )
 }
 
-export default function ReporteCajas({ applied, activeLocal }) {
+export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -74,14 +74,15 @@ export default function ReporteCajas({ applied, activeLocal }) {
     const params = {
       desde: applied.desde,
       hasta: applied.hasta,
-      ...(activeLocal ? { id_local: activeLocal.id } : {})
+      ...(activeLocal ? { id_local: activeLocal.id } : {}),
+      ...(tipoTurno ? { tipo_turno: tipoTurno } : {})
     }
     reportesApi.cajas(params, ctrl.signal)
       .then((res) => setData(res.data))
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [applied.desde, applied.hasta, activeLocal?.id])
+  }, [applied.desde, applied.hasta, activeLocal?.id, tipoTurno])
 
   const kpi       = data?.kpi ?? {}
   const secondary = data?.secondary ?? []

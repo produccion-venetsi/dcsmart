@@ -53,6 +53,10 @@ const CAMPO_FECHA_OPTIONS = [
   { value: 'periodo',    label: 'Período' },
 ]
 
+// Mismas 6 opciones que el filtro de Tipo en la tabla de Cajas (ver
+// frontend/src/pages/cajas/CajaList.jsx, TIPOS_TURNO).
+const TIPOS_TURNO = ['Mañana', 'Tarde', 'Noche', 'Trasnoche', 'Evento', 'Otros']
+
 function IcoCalendar() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3FB6BD" strokeWidth="1.8" strokeLinecap="round">
@@ -76,6 +80,7 @@ export default function Reportes() {
 
   const [tab, setTab] = useState('pagos')
   const [campoFecha, setCampoFecha] = useState('fecha')
+  const [tipoTurno, setTipoTurno] = useState('')
 
   const initial = getPresetRange('30d')
   const [preset,  setPreset]  = useState('30d')
@@ -171,6 +176,23 @@ export default function Reportes() {
                   </div>
                 </div>
               )}
+              {tab === 'cajas' && (
+                <div className="rep-filter-col" style={{ maxWidth: 180 }}>
+                  <div className="rep-filter-label">Tipo de turno</div>
+                  <div className="rep-date-input">
+                    <select
+                      value={tipoTurno}
+                      onChange={(e) => setTipoTurno(e.target.value)}
+                      style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif' }}
+                    >
+                      <option value="">Todos</option>
+                      {TIPOS_TURNO.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
               <div className="rep-filter-col">
                 <div className="rep-filter-label">Inicio</div>
                 <div className="rep-date-input">
@@ -210,7 +232,7 @@ export default function Reportes() {
           <ReportePagos applied={applied} activeLocal={activeLocal} campoFecha={campoFecha} />
         )}
         {tab === 'cajas' && (
-          <ReporteCajas applied={applied} activeLocal={activeLocal} />
+          <ReporteCajas applied={applied} activeLocal={activeLocal} tipoTurno={tipoTurno} />
         )}
         {tab === 'cmv' && (
           <ReporteCMV applied={applied} activeLocal={activeLocal} />
