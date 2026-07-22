@@ -339,7 +339,7 @@ export default async function reportesRoutes(fastify) {
 
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
-      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ajustes: [], ventas_total: 0 }
+      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00' }
     }
 
     // fecha_inicio (Caja) es un instante real (con hora) -- rango en hora Argentina.
@@ -411,39 +411,11 @@ export default async function reportesRoutes(fastify) {
       }
     }
 
-    // Ajustes from caja_detalles (invitaciones, consumo personal, comercial)
-    const detParams = [...localIds, desdeDate, hastaDate, request.activeAppId]
-    const detRows = await fastify.db.$queryRawUnsafe(`
-      SELECT
-        COALESCE(dt.nombre, cd.nombre, 'Otros') AS nombre,
-        dt.clasificacion,
-        SUM(cd.monto) AS total
-      FROM caja_detalles cd
-      JOIN cajas ca ON cd.id_caja = ca.id
-      LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
-      WHERE ca.id_local IN (${localPlaceholders})
-        AND ca.fecha_inicio >= $${localIds.length + 1}
-        AND ca.fecha_inicio <= $${localIds.length + 2}
-        AND (dt.id_app = $${localIds.length + 3} OR dt.id_app IS NULL)
-        AND (dt.clasificacion IN ('invitacion', 'consumo_personal', 'comercial', 'desperdicio')
-             OR dt.clasificacion IS NULL)
-      GROUP BY dt.nombre, cd.nombre, dt.clasificacion
-      ORDER BY total DESC
-    `, ...detParams)
-
-    const ajustes = detRows.map(r => ({
-      name: r.nombre,
-      val: Number(r.total),
-      negative: r.clasificacion === 'comercial'
-    }))
-    const totalAjustes = ajustes.reduce((s, a) => s + (a.negative ? -a.val : a.val), 0)
-
     // KPIs
     const cmvTotal = ventasTotal > 0 ? ((totalGeneral / ventasTotal) * 100) : 0
     const cmvAlimentos = ventasTotal > 0 ? ((totalAlimentos / ventasTotal) * 100) : 0
     const cmvBebidas = ventasTotal > 0 ? ((totalBebidas / ventasTotal) * 100) : 0
     const cmvMovstock = ventasTotal > 0 ? ((totalMovstock / ventasTotal) * 100) : 0
-    const cmvStock = ventasTotal > 0 ? ((totalAjustes / ventasTotal) * 100) : 0
 
     // Percentage heights for bar rendering
     const aMax = alimentos.length ? Math.max(...alimentos.map(a => a.val)) : 1
@@ -452,12 +424,13 @@ export default async function reportesRoutes(fastify) {
 
     return {
       ventas_total: ventasTotal,
+      cmv_total_monto: totalGeneral,
+      cmv_total_pct: cmvTotal.toFixed(2),
       kpis: [
         { label: 'CMV Total',     val: cmvTotal.toFixed(2) },
         { label: 'CMV Alimentos', val: cmvAlimentos.toFixed(2) },
         { label: 'CMV Bebidas',   val: cmvBebidas.toFixed(2) },
         { label: 'CMV MovStock',  val: cmvMovstock.toFixed(2) },
-        { label: 'CMV Ajustes',   val: cmvStock.toFixed(2) },
       ],
       alimentos: alimentos.map(a => ({
         ...a,
@@ -471,11 +444,9 @@ export default async function reportesRoutes(fastify) {
         ...m,
         h: (m.val / mMax * 100).toFixed(1)
       })),
-      ajustes,
       total_alimentos: totalAlimentos,
       total_movstock: totalMovstock,
       total_bebidas: totalBebidas,
-      total_ajustes: totalAjustes,
       total_general: totalGeneral
     }
   })
