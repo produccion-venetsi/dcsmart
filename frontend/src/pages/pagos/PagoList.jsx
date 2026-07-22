@@ -182,7 +182,7 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Dirección',   get: (p) => p.ingresa_egreso == null ? '' : (p.ingresa_egreso ? 'Ingreso' : 'Egreso') },
   { label: 'Estado',      get: (p) => ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op ?? '' },
   { label: 'Pagado',      get: (p) => p.pagado ? 'Sí' : 'No' },
-  { label: 'Fecha Pago',  get: (p) => p.fecha_pago ? fmtDate(p.fecha_pago) : '' },
+  { label: 'Fecha Pago',  get: (p) => p.fecha_pago ? fmtDateArg(p.fecha_pago) : '' },
   { label: 'Período',     get: (p) => p.periodo ? fmtMonth(p.periodo) : '' },
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
   { label: 'Observaciones', get: (p) => p.observaciones || '' },
@@ -464,7 +464,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     ['Método',      pago.metodo_pago?.nombre || '—'],
     ['Cashflow',    fmtDate(pago.cashflow)],
     ['Pagado',      pago.pagado ? 'Sí' : 'No'],
-    ['Fecha Pago',  fmtDate(pago.fecha_pago)],
+    ['Fecha Pago',  fmtDateArg(pago.fecha_pago)],
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
     ['Periódico',   periodico ? 'Sí' : 'No'],
@@ -1596,7 +1596,7 @@ export default function PagoList() {
                   <td style={{ minWidth: 70, textAlign: 'center' }}>
                     <span className={p.pagado ? 'bool-yes' : 'bool-no'}>{p.pagado ? '✓' : '✗'}</span>
                   </td>
-                  <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
+                  <td style={{ minWidth: 90 }}>{fmtDateArg(p.fecha_pago)}</td>
                   <td style={{ minWidth: 80 }}>{fmtMonth(p.periodo)}</td>
                   <td style={{ minWidth: 40, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                     {p.foto_url

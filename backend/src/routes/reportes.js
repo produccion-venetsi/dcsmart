@@ -232,11 +232,13 @@ export default async function reportesRoutes(fastify) {
       }
     }
 
-    // fecha/fecha_pago/cashflow/periodo se guardan como medianoche UTC del
-    // día elegido -- el rango se marca explícitamente en UTC para no
-    // depender del timezone del proceso donde corra Node.
-    const desdeDate = new Date(`${desde}T00:00:00.000Z`)
-    const hastaDate = new Date(`${hasta}T23:59:59.999Z`)
+    // fecha/cashflow/periodo son "día calendario" (medianoche UTC) -> rango en
+    // UTC. fecha_pago es un instante real en hora Argentina (se carga con hora,
+    // el arqueo lo compara como instante) -> rango con offset -03:00, si no los
+    // pagos hechos de noche (21-24hs ART) caen en el día UTC siguiente.
+    const sufFecha = campoFecha === 'fecha_pago' ? '-03:00' : 'Z'
+    const desdeDate = new Date(`${desde}T00:00:00.000${sufFecha}`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999${sufFecha}`)
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { [campoFecha]: { gte: desdeDate, lte: hastaDate } }
     const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
