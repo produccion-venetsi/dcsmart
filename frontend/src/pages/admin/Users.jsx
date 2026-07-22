@@ -627,6 +627,10 @@ export default function Users() {
                       checked={(selected.user_permissions ?? []).some(p => p.module?.nombre === 'reportes' && p.can_view)}
                       onChange={async (e) => {
                         const checked = e.target.checked
+                        const msg = checked
+                          ? '¿Dar acceso a Reportes a este usuario?'
+                          : '¿Quitar el acceso a Reportes a este usuario?'
+                        if (!(await showConfirm(msg))) return
                         try {
                           if (checked) {
                             await usersApi.setPermission(selected.id, 'reportes', { can_view: true })
@@ -665,6 +669,10 @@ export default function Users() {
                         checked={!!analyticsAccess.enabled}
                         onChange={async (e) => {
                           const enabled = e.target.checked
+                          const msg = enabled
+                            ? '¿Habilitar el acceso a dcsmart-analisis para este usuario?'
+                            : '¿Deshabilitar el acceso a dcsmart-analisis para este usuario?'
+                          if (!(await showConfirm(msg))) return
                           setAnalyticsBusy(true)
                           try {
                             await usersApi.setAnalyticsAccess(selected.id, { enabled, is_admin: analyticsAccess.is_admin })
@@ -692,6 +700,10 @@ export default function Users() {
                           checked={!!analyticsAccess.is_admin}
                           onChange={async (e) => {
                             const is_admin = e.target.checked
+                            const msg = is_admin
+                              ? '¿Convertir a este usuario en administrador de Analytics (podrá habilitar a otros)?'
+                              : '¿Quitarle el rol de administrador de Analytics a este usuario?'
+                            if (!(await showConfirm(msg))) return
                             setAnalyticsBusy(true)
                             try {
                               await usersApi.setAnalyticsAccess(selected.id, { enabled: true, is_admin })
