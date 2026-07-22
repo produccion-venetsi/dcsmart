@@ -786,6 +786,7 @@ export default function Users() {
                               <span style={{ fontStyle: 'italic' }}>Todos los locales del grupo</span>
                               {amISuperAdmin && available.length > 0 && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
@@ -833,6 +834,7 @@ export default function Users() {
                               {/* Admin: agregar más locales (quitar todos = vuelve a "todos los locales") */}
                               {amISuperAdmin && isAdmin && available.length > 0 && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
@@ -846,6 +848,7 @@ export default function Users() {
                               {/* Cajero: cambiar local (reemplaza el existente) */}
                               {amISuperAdmin && isCajero && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}

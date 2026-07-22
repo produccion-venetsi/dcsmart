@@ -474,7 +474,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   {editingDetId === d.id ? (
                     <>
                       <td colSpan={2}>
-                        <select value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
                           <option value="">Ver opciones</option>
                           {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                         </select>
@@ -586,7 +586,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
                           <option>INGRESO</option>
                           <option>EGRESO</option>
                           <option>APERTURA</option>
@@ -594,7 +594,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                         </select>
                       </td>
                       <td>
-                        <select value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
                           {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>
@@ -1000,7 +1000,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   {editingDetId === d.id ? (
                     <>
                       <td colSpan={2}>
-                        <select value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
                           <option value="">Ver opciones</option>
                           {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                         </select>
@@ -1090,7 +1090,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
                           <option>INGRESO</option>
                           <option>EGRESO</option>
                           <option>APERTURA</option>
@@ -1098,7 +1098,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                         </select>
                       </td>
                       <td>
-                        <select value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
                           {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>

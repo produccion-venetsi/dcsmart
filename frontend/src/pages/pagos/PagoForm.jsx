@@ -769,7 +769,7 @@ export default function PagoForm() {
                         {editingImpId === imp.id ? (
                           <>
                             <td>
-                              <select value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                              <select className="filter-select" style={{ width: '100%' }} value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
                                 {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
                               </select>
                             </td>
