@@ -102,38 +102,6 @@ export default async function reportesRoutes(fastify) {
       .filter(p => !p.name.toLowerCase().includes('efectivo'))
       .reduce((s, p) => s + p.val, 0)
 
-    // Caja.efectivo es un campo directo en Caja (no pasa por caja_movimientos).
-    // Para cajas TAPTAP es un espejo exacto del monto ya sumado como "Efectivo"
-    // en caja_movimientos (verificado contra la base: ambas sumas coinciden al
-    // centavo) -- sumarlo siempre duplicaría ese monto. Para cajas DCSMART
-    // (carga manual, sin caja_movimientos en absoluto) es la ÚNICA fuente real
-    // de cuánto efectivo se cobró, y sin esto quedaba invisible en el reporte.
-    // Se suma solo el efectivo de cajas que no tienen NINGÚN movimiento COBRO,
-    // para no duplicar el de las que ya lo tienen desglosado.
-    const cajaIdsConCobro = await fastify.db.cajaMovimiento.findMany({
-      where: { tipo: 'COBRO', caja: cajaWhere },
-      select: { id_caja: true },
-      distinct: ['id_caja']
-    })
-    const efectivoSinMovAgg = await fastify.db.caja.aggregate({
-      where: { ...cajaWhere, id: { notIn: cajaIdsConCobro.map(r => r.id_caja) } },
-      _sum: { efectivo: true }
-    })
-    const efectivoSinMov = Number(efectivoSinMovAgg._sum.efectivo ?? 0)
-
-    let paymentsFinal = payments
-    if (efectivoSinMov > 0) {
-      const idx = paymentsFinal.findIndex(p => p.name === 'Efectivo')
-      paymentsFinal = idx >= 0
-        ? paymentsFinal.map((p, i) => i === idx ? { ...p, val: p.val + efectivoSinMov } : p)
-        : [...paymentsFinal, { name: 'Efectivo', val: efectivoSinMov, color: PAY_COLORS[paymentsFinal.length % PAY_COLORS.length] }]
-      const nuevoTotal = paymentsFinal.reduce((s, p) => s + p.val, 0)
-      paymentsFinal = paymentsFinal
-        .map(p => ({ ...p, pct: nuevoTotal > 0 ? ((p.val / nuevoTotal) * 100).toFixed(1) : '0.0' }))
-        .sort((a, b) => b.val - a.val)
-    }
-    const payTotalFinal = paymentsFinal.reduce((s, p) => s + p.val, 0)
-
     // fecha_inicio es una columna `timestamp` (sin tz) que guarda el instante
     // en UTC -- para truncar por semana en el día real (Argentina), primero
     // hay que reinterpretar el valor crudo como UTC (`AT TIME ZONE 'UTC'`,
@@ -230,8 +198,8 @@ export default async function reportesRoutes(fastify) {
       ],
       weekly,
       fiscal: { fiscal: totalFiscal, no_fiscal: noFiscal, digital },
-      payments: paymentsFinal,
-      pay_total: payTotalFinal,
+      payments,
+      pay_total: payTotal,
       detalles,
       detalles_total: detallesTotal
     }
