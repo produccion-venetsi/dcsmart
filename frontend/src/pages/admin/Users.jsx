@@ -192,11 +192,18 @@ export default function Users() {
   // ── open / close detail drawer ────────────────────────────────────────────
 
   const openDetail = (u) => {
+    // `u` viene de la lista (GET /users), que no trae google_id ni
+    // user_permissions -- se abre el panel ya mismo con esos datos parciales
+    // (respuesta instantánea) y se reemplaza por el detalle completo
+    // (GET /users/:id) apenas llega, para que "Google" y "Puede ver
+    // Reportes" reflejen el estado real en vez de quedar siempre en el
+    // valor por default de los campos que la lista no incluye.
     setSelected(u)
     setShowRoleForm(false)
     setRoleForm(EMPTY_ROLE)
     setEditingNombre(false)
     setPanelOpen(true)
+    usersApi.get(u.id).then(({ data }) => setSelected(data)).catch(() => {})
   }
 
   const closeDetail = () => {
@@ -620,6 +627,10 @@ export default function Users() {
                       checked={(selected.user_permissions ?? []).some(p => p.module?.nombre === 'reportes' && p.can_view)}
                       onChange={async (e) => {
                         const checked = e.target.checked
+                        const msg = checked
+                          ? '¿Dar acceso a Reportes a este usuario?'
+                          : '¿Quitar el acceso a Reportes a este usuario?'
+                        if (!(await showConfirm(msg))) return
                         try {
                           if (checked) {
                             await usersApi.setPermission(selected.id, 'reportes', { can_view: true })
@@ -658,6 +669,10 @@ export default function Users() {
                         checked={!!analyticsAccess.enabled}
                         onChange={async (e) => {
                           const enabled = e.target.checked
+                          const msg = enabled
+                            ? '¿Habilitar el acceso a dcsmart-analisis para este usuario?'
+                            : '¿Deshabilitar el acceso a dcsmart-analisis para este usuario?'
+                          if (!(await showConfirm(msg))) return
                           setAnalyticsBusy(true)
                           try {
                             await usersApi.setAnalyticsAccess(selected.id, { enabled, is_admin: analyticsAccess.is_admin })
@@ -685,6 +700,10 @@ export default function Users() {
                           checked={!!analyticsAccess.is_admin}
                           onChange={async (e) => {
                             const is_admin = e.target.checked
+                            const msg = is_admin
+                              ? '¿Convertir a este usuario en administrador de Analytics (podrá habilitar a otros)?'
+                              : '¿Quitarle el rol de administrador de Analytics a este usuario?'
+                            if (!(await showConfirm(msg))) return
                             setAnalyticsBusy(true)
                             try {
                               await usersApi.setAnalyticsAccess(selected.id, { enabled: true, is_admin })
