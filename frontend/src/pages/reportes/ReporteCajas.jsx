@@ -237,7 +237,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
         </div>
       </div>
 
-      {/* ── Charts row 2 ── */}
+      {/* ── Charts row 2: los dos graficos de barra, uno al lado del otro ── */}
       <div className="rep-charts-row mid">
         <div className="rep-chart-card">
           <div className="rep-chart-title">Medios de pago</div>
@@ -268,37 +268,8 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
           )}
         </div>
 
-        <div className="rep-chart-card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por medio</span>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
-          </div>
-          {skel ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="rep-skel" style={{ width: '100%', height: 36, marginBottom: 2 }} />
-            ))
-          ) : (
-            <>
-              {payments.map((p, i) => (
-                <div className="rep-pay-row" key={i}>
-                  <span className="rep-pay-dot" style={{ background: p.color }} />
-                  <span className="rep-pay-name">{p.name}</span>
-                  <span className="rep-pay-amount">{fmt(p.val)}</span>
-                  <span className="rep-pay-pct">{p.pct}%</span>
-                </div>
-              ))}
-              <div className="rep-pay-total">
-                <span>Total cobrado</span>
-                <span>{fmt(payTotal)}</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── Desglose de detalles (caja_detalles cargados a mano: MP Point,
-           MP QR, Transferencia, Rappi, etc. -- no la clasificación genérica) ── */}
-      <div className="rep-charts-row mid">
+        {/* Desglose de detalles (caja_detalles cargados a mano: MP Point,
+            MP QR, Transferencia, Rappi, etc. -- no la clasificación genérica) */}
         <div className="rep-chart-card">
           <div className="rep-chart-title">Desglose de detalles</div>
           <div className="rep-chart-sub">Monto por detalle cargado en el período</div>
@@ -325,6 +296,36 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* ── Charts row 3: las dos tablas de detalle, una al lado de la otra ── */}
+      <div className="rep-charts-row mid">
+        <div className="rep-chart-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por medio</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
+          </div>
+          {skel ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="rep-skel" style={{ width: '100%', height: 36, marginBottom: 2 }} />
+            ))
+          ) : (
+            <>
+              {payments.map((p, i) => (
+                <div className="rep-pay-row" key={i}>
+                  <span className="rep-pay-dot" style={{ background: p.color }} />
+                  <span className="rep-pay-name">{p.name}</span>
+                  <span className="rep-pay-amount">{fmt(p.val)}</span>
+                  <span className="rep-pay-pct">{p.pct}%</span>
+                </div>
+              ))}
+              <div className="rep-pay-total">
+                <span>Total cobrado</span>
+                <span>{fmt(payTotal)}</span>
+              </div>
+            </>
           )}
         </div>
 
