@@ -37,23 +37,15 @@ async function permissionsPlugin(fastify) {
       // super_admin: bypass total (lo marca appContext en rutas con contexto de app).
       if (request.isSuperAdmin) return
 
-      // Override por usuario (autoritativo si existe).
-      const userPerm = await fastify.db.userPermission.findUnique({
-        where: { id_user_id_module: { id_user: userId, id_module: moduleRecord.id } }
-      })
-      if (userPerm) {
-        if (userPerm[permKey]) return
-        return reply.code(403).send({ error: 'Acceso denegado' })
-      }
-
       // Roles a evaluar:
       //  - Si appContext corrió, usa el rol efectivo de la app (incluye el rol elevado
       //    global de super_admin/dcsmart).
       //  - Si no (rutas globales: apps/locales/usuarios/rubcat/...), evalúa TODOS los
       //    roles del usuario (OR), evitando depender de un findFirst arbitrario.
-      let roleIds
+      let roleIds, roleNames
       if (request.effectiveRoleId) {
         roleIds = [request.effectiveRoleId]
+        roleNames = request.activeRole ? [request.activeRole] : []
       } else {
         const appRoles = await fastify.db.userAppRole.findMany({
           where: { id_user: userId },
@@ -64,14 +56,30 @@ async function permissionsPlugin(fastify) {
           return reply.code(403).send({ error: 'Sin rol asignado' })
         }
         roleIds = [...new Set(appRoles.map(ar => ar.id_role))]
+        roleNames = [...new Set(appRoles.map(ar => ar.role.nombre))]
       }
 
       // Permiso por rol: se concede si CUALQUIERA de los roles a evaluar lo permite.
       const rolePerms = await fastify.db.rolePermission.findMany({
         where: { id_role: { in: roleIds }, id_module: moduleRecord.id }
       })
+      const roleGrants = rolePerms.some(rp => rp[permKey])
 
-      if (!rolePerms.some(rp => rp[permKey])) {
+      // dcsmart: igual que super_admin, nunca queda bloqueado por un override
+      // individual si su rol ya concede el permiso -- solo un override que
+      // AMPLÍE (nunca uno que restrinja) tiene sentido para este rol.
+      if (roleGrants && roleNames.includes('dcsmart')) return
+
+      // Override por usuario (autoritativo si existe, salvo el caso dcsmart de arriba).
+      const userPerm = await fastify.db.userPermission.findUnique({
+        where: { id_user_id_module: { id_user: userId, id_module: moduleRecord.id } }
+      })
+      if (userPerm) {
+        if (userPerm[permKey]) return
+        return reply.code(403).send({ error: 'Acceso denegado' })
+      }
+
+      if (!roleGrants) {
         return reply.code(403).send({ error: 'Acceso denegado' })
       }
     }
