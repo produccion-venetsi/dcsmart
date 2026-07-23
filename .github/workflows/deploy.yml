@@ -26,6 +26,7 @@ jobs:
         working-directory: frontend
         env:
           VITE_GIT_SHA: ${{ github.sha }}
+          VITE_APP_ENV: production
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_FRONTEND }}
 
       - name: Autenticar en Google Cloud
