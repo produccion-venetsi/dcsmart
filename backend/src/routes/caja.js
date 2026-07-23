@@ -248,7 +248,9 @@ export default async function cajaRoutes(fastify) {
         nro_turno:    nro_turno    ? String(parseInt(nro_turno)) : null,
         tipo_turno:   toTipoTurnoEnum(tipo_turno),
         fecha_inicio: new Date(fecha_inicio),
-        fecha_cierre: fecha_cierre ? new Date(fecha_cierre)      : null,
+        // Si no se carga cierre, se asume igual a la apertura (evita cajas
+        // con fecha_cierre vacía).
+        fecha_cierre: fecha_cierre ? new Date(fecha_cierre)      : new Date(fecha_inicio),
         id_local, cajero,
         total:        total        ? parseFloat(total)           : null,
         efectivo:     efectivo     ? parseFloat(efectivo)        : null,
@@ -267,7 +269,7 @@ export default async function cajaRoutes(fastify) {
   fastify.put('/:id', { preHandler: editHandler }, async (request, reply) => {
     const existing = await fastify.db.caja.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      select: { id_local: true, fecha_inicio: true }
     })
     if (!existing) return reply.code(404).send({ error: 'Caja no encontrada' })
 
@@ -290,7 +292,8 @@ export default async function cajaRoutes(fastify) {
         nro_turno,
         tipo_turno:    tipo_turno    !== undefined ? toTipoTurnoEnum(tipo_turno) : undefined,
         fecha_inicio:  fecha_inicio  !== undefined ? new Date(fecha_inicio) : undefined,
-        fecha_cierre:  fecha_cierre  !== undefined ? (fecha_cierre ? new Date(fecha_cierre) : null) : undefined,
+        // Si se envía cierre vacío, se asume igual a la apertura (nunca queda vacío).
+        fecha_cierre:  fecha_cierre  !== undefined ? (fecha_cierre ? new Date(fecha_cierre) : new Date(fecha_inicio || existing.fecha_inicio)) : undefined,
         cajero,
         total:         total         !== undefined ? (total       !== null ? parseFloat(total)      : null) : undefined,
         efectivo:      efectivo      !== undefined ? (efectivo    !== null ? parseFloat(efectivo)   : null) : undefined,
