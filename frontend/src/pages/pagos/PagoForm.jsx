@@ -3,7 +3,7 @@ import { impuestosApi } from '../../api/impuestos.js'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
-import { rubcatApi } from '../../api/rubcat.js'
+import { rubcatApi, rubrosApi, categoriasApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
@@ -102,6 +102,8 @@ export default function PagoForm() {
   const ahoraDateTime = nowDateTimeLocalInput()
 
   const [metodos,         setMetodos]         = useState([])
+  const [rubros,          setRubros]          = useState([])
+  const [categorias,      setCategorias]      = useState([])
   const [loading,         setLoading]         = useState(false)
   const [localProveedor,  setLocalProveedor]  = useState(null)
   const [fotoFile,        setFotoFile]        = useState(null)
@@ -113,6 +115,10 @@ export default function PagoForm() {
   const [provSelected,   setProvSelected]   = useState(null)
   const [provPlazo,      setProvPlazo]      = useState(null)
   const [rubcatSelected, setRubcatSelected] = useState(null)
+  // Rubro y categoría se eligen por separado (cada uno se puede crear); al
+  // tener ambos se busca/crea el RubCat que combina los dos y se asigna al pago.
+  const [rubroSel, setRubroSel] = useState(null)
+  const [catSel,   setCatSel]   = useState(null)
   const [previewNroOrd,  setPreviewNroOrd]  = useState(null)
   const [duplicado,      setDuplicado]      = useState(null)
 
@@ -170,7 +176,11 @@ export default function PagoForm() {
       if (draft.data.form)           setForm((f) => ({ ...f, ...draft.data.form }))
       if (draft.data.provSelected)   setProvSelected(draft.data.provSelected)
       if (draft.data.provPlazo != null) setProvPlazo(draft.data.provPlazo)
-      if (draft.data.rubcatSelected) setRubcatSelected(draft.data.rubcatSelected)
+      if (draft.data.rubcatSelected) {
+        setRubcatSelected(draft.data.rubcatSelected)
+        setRubroSel(draft.data.rubcatSelected.rubro || null)
+        setCatSel(draft.data.rubcatSelected.categoria || null)
+      }
       if (draft.data.pendingImp)     setPendingImp(draft.data.pendingImp)
       if (draft.data.mmForm)         setMmForm(draft.data.mmForm)
       if (draft.files.foto)          setFotoFile(draft.files.foto)
@@ -178,6 +188,12 @@ export default function PagoForm() {
       notify('Se recuperó la carga que tenías sin guardar', 'info')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Catálogos de rubros y categorías (para los buscadores con opción de crear).
+  useEffect(() => {
+    rubrosApi.list().then(r => setRubros(r.data || [])).catch(() => {})
+    categoriasApi.list().then(r => setCategorias(r.data || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -208,6 +224,8 @@ export default function PagoForm() {
           }
           if (d.id_rubcat && d.rubcat) {
             setRubcatSelected(d.rubcat)
+            setRubroSel(d.rubcat.rubro || null)
+            setCatSel(d.rubcat.categoria || null)
           }
           setSavedImp(d.impuestos || [])
           setForm({
@@ -238,7 +256,11 @@ export default function PagoForm() {
           const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
           setProvSelected(prov)
           setProvPlazo(prov.plazo || null)
-          if (prov.rubcat) setRubcatSelected(prov.rubcat)
+          if (prov.rubcat) {
+            setRubcatSelected(prov.rubcat)
+            setRubroSel(prov.rubcat.rubro || null)
+            setCatSel(prov.rubcat.categoria || null)
+          }
           setForm(f => ({
             ...f,
             id_proveedor: prov.id,
@@ -328,7 +350,11 @@ export default function PagoForm() {
     const plazo = prov.plazo || null
     setProvPlazo(plazo)
     setProvSelected(prov)
-    if (prov.rubcat) setRubcatSelected(prov.rubcat)
+    if (prov.rubcat) {
+      setRubcatSelected(prov.rubcat)
+      setRubroSel(prov.rubcat.rubro || null)
+      setCatSel(prov.rubcat.categoria || null)
+    }
     setForm(f => ({
       ...f,
       id_proveedor: prov.id,
@@ -354,6 +380,72 @@ export default function PagoForm() {
       }
       return data
     })
+
+  // ── Proveedor: crear inline con solo el nombre (el resto de los datos se
+  // completa luego en la pantalla de Proveedores). ──
+  const handleCreateProveedor = async (nombre) => {
+    try {
+      const { data } = await proveedoresApi.create({ nombre })
+      notify('Proveedor creado', 'success')
+      selectProveedor(data)
+    } catch (err) { notify(err.response?.data?.error || 'Error al crear proveedor', 'error') }
+  }
+
+  // ── Rubro / Categoría: buscadores locales (listas ya cargadas) con opción
+  // de crear. Al tener ambos se busca/crea el RubCat que los combina. ──
+  const fetchRubros = (search) => Promise.resolve(
+    (search ? rubros.filter(r => r.nombre.toLowerCase().includes(search.toLowerCase())) : rubros).slice(0, 60)
+  )
+  const fetchCategorias = (search) => Promise.resolve(
+    (search ? categorias.filter(c => c.nombre.toLowerCase().includes(search.toLowerCase())) : categorias).slice(0, 60)
+  )
+
+  const handleCreateRubro = async (nombre) => {
+    try {
+      const { data } = await rubrosApi.create({ nombre })
+      setRubros(rs => [...rs, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setRubroSel(data)
+    } catch (err) { notify(err.response?.data?.error || 'Error al crear rubro', 'error') }
+  }
+  const handleCreateCat = async (nombre) => {
+    try {
+      const { data } = await categoriasApi.create({ nombre })
+      setCategorias(cs => [...cs, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setCatSel(data)
+    } catch (err) { notify(err.response?.data?.error || 'Error al crear categoría', 'error') }
+  }
+
+  const clearRubro = () => { setRubroSel(null); setRubcatSelected(null); set('id_rubcat', '') }
+  const clearCat   = () => { setCatSel(null);   setRubcatSelected(null); set('id_rubcat', '') }
+
+  // Busca el RubCat que combina rubro+categoría; si no existe, lo crea.
+  const resolveRubcat = async (rub, cat) => {
+    try {
+      const listRes = await rubcatApi.list({ search: rub.nombre })
+      const list = Array.isArray(listRes.data) ? listRes.data : (listRes.data?.data || [])
+      let rc = list.find(x => x.id_rub === rub.id && x.id_cat === cat.id)
+      if (!rc) {
+        try {
+          const res = await rubcatApi.create({ id_rub: rub.id, id_cat: cat.id })
+          rc = res.data
+        } catch (err) {
+          if (err.response?.status === 409) {
+            const retry = await rubcatApi.list({ search: rub.nombre })
+            const l2 = Array.isArray(retry.data) ? retry.data : (retry.data?.data || [])
+            rc = l2.find(x => x.id_rub === rub.id && x.id_cat === cat.id)
+          } else throw err
+        }
+      }
+      if (rc) { setRubcatSelected(rc); set('id_rubcat', rc.id) }
+    } catch (err) { notify(err.response?.data?.error || 'Error al asignar rubro/categoría', 'error') }
+  }
+
+  useEffect(() => {
+    if (!rubroSel || !catSel) return
+    if (rubcatSelected && rubcatSelected.id_rub === rubroSel.id && rubcatSelected.id_cat === catSel.id) return
+    resolveRubcat(rubroSel, catSel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rubroSel, catSel])
 
   // impuestos guardados (edición): cada acción pega directo al backend y
   // recarga la lista, que a su vez dispara el recálculo del importe total.
@@ -609,20 +701,39 @@ export default function PagoForm() {
                 onSelect={selectProveedor}
                 onClear={clearProveedor}
                 fetchItems={fetchProveedores}
-                placeholder="Buscar proveedor…"
+                onCreate={handleCreateProveedor}
+                createLabel="crear proveedor"
+                placeholder="Buscar o crear proveedor…"
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Rubro / Categoría *</label>
+              <label className="form-label">Rubro *</label>
               <Combobox
-                value={form.id_rubcat}
-                displayValue={rubcatSelected ? `${rubcatSelected.rubro?.nombre} / ${rubcatSelected.categoria?.nombre}` : ''}
-                getKey={rc => rc.id}
-                getLabel={rc => `${rc.rubro?.nombre} / ${rc.categoria?.nombre}`}
-                onSelect={rc => { setRubcatSelected(rc); set('id_rubcat', rc.id) }}
-                onClear={() => { setRubcatSelected(null); set('id_rubcat', '') }}
-                fetchItems={fetchRubcats}
-                placeholder="Buscar rubro / categoría…"
+                value={rubroSel?.id || ''}
+                displayValue={rubroSel?.nombre || ''}
+                getKey={r => r.id}
+                getLabel={r => r.nombre}
+                onSelect={setRubroSel}
+                onClear={clearRubro}
+                fetchItems={fetchRubros}
+                onCreate={handleCreateRubro}
+                createLabel="crear rubro"
+                placeholder="Buscar o crear rubro…"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Categoría *</label>
+              <Combobox
+                value={catSel?.id || ''}
+                displayValue={catSel?.nombre || ''}
+                getKey={c => c.id}
+                getLabel={c => c.nombre}
+                onSelect={setCatSel}
+                onClear={clearCat}
+                fetchItems={fetchCategorias}
+                onCreate={handleCreateCat}
+                createLabel="crear categoría"
+                placeholder="Buscar o crear categoría…"
               />
             </div>
             <div className="form-group">
