@@ -10,7 +10,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
-import { downloadCsv } from '../../lib/csv.js'
+import { downloadExcel } from '../../lib/excel.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
@@ -911,16 +911,16 @@ export default function PagoList() {
   // ── Volver a página 1 cuando cambian filtros / sort / búsqueda ────────────
   useEffect(() => { setPage(1) }, [buildParams])
 
-  // ── Exportar CSV: mismos filtros ya aplicados, pero SIN paginar (limit: 0
+  // ── Exportar Excel: mismos filtros ya aplicados, pero SIN paginar (limit: 0
   // → el backend trae todas las filas que matchean el where, no una página) ──
   const exportCsv = useCallback(async () => {
     setExporting(true)
     try {
       const { data } = await pagosApi.list({ ...buildParams(1), limit: 0 })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      downloadCsv(`pagos_${todayInputDate()}.csv`, data.data, PAGO_CSV_COLUMNS)
+      await downloadExcel(`pagos_${todayInputDate()}.xlsx`, data.data, PAGO_CSV_COLUMNS, 'Pagos')
     } catch {
-      notify('Error al exportar CSV', 'error')
+      notify('Error al exportar Excel', 'error')
     } finally {
       setExporting(false)
     }
@@ -1447,10 +1447,10 @@ export default function PagoList() {
                 onClick={exportCsv}
                 disabled={exporting || !(filters.desde && filters.hasta)}
                 title={filters.desde && filters.hasta
-                  ? 'Exportar a CSV los pagos con los filtros actuales'
+                  ? 'Exportar a Excel los pagos con los filtros actuales'
                   : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
               >
-                {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
+                {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
               </button>
             )}
           </ActionsMenu>

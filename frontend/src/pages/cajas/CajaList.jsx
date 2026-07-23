@@ -12,7 +12,7 @@ import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
-import { downloadCsv } from '../../lib/csv.js'
+import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 
 const EMPTY_CAJA = {
@@ -1610,9 +1610,9 @@ export default function CajaList() {
     try {
       const { data } = await cajasApi.list({ ...cajaListParams(1), limit: 0 })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      downloadCsv(`cajas_${todayInputDate()}.csv`, data.data, CAJA_CSV_COLUMNS)
+      await downloadExcel(`cajas_${todayInputDate()}.xlsx`, data.data, CAJA_CSV_COLUMNS, 'Cajas')
     } catch {
-      notify('Error al exportar CSV', 'error')
+      notify('Error al exportar Excel', 'error')
     } finally {
       setExporting(false)
     }
@@ -1847,8 +1847,8 @@ export default function CajaList() {
             </button>
           )}
           {canExport && (
-            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a CSV las cajas con los filtros actuales">
-              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
+            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a Excel las cajas con los filtros actuales">
+              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
             </button>
           )}
           {canCreate && (
