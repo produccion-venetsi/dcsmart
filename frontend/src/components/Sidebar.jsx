@@ -3,7 +3,6 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
-import { authApi } from '../api/auth.js'
 import AppLogo from './AppLogo.jsx'
 
 /* ── SVG icons ── */
@@ -71,15 +70,6 @@ function IcoReportes() {
       <line x1="12" y1="20" x2="12" y2="4"/>
       <line x1="6" y1="20" x2="6" y2="14"/>
       <line x1="2" y1="20" x2="22" y2="20"/>
-    </svg>
-  )
-}
-function IcoExternal() {
-  return (
-    <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-      <polyline points="15 3 21 3 21 9"/>
-      <line x1="10" y1="14" x2="21" y2="3"/>
     </svg>
   )
 }
@@ -189,11 +179,9 @@ const NAV_MAIN = [
   { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
   { to: '/arqueo',      label: 'Arqueo',      Icon: IcoArqueo,    roles: ALL },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
-  {
-    key: 'reportes',
-    to: import.meta.env.VITE_ANALYTICS_URL || 'https://analisis.dcsmart.app',
-    label: 'Reportes', Icon: IcoReportes, external: true
-  },
+  // Reportes internos de la app de gestión (/reportes). El Analytics externo
+  // se abre desde un botón dentro de esa pantalla, no desde el sidebar.
+  { key: 'reportes', to: '/reportes', label: 'Reportes', Icon: IcoReportes },
 ]
 
 const NAV_ADMIN = [
@@ -219,26 +207,6 @@ export default function Sidebar() {
   const activeLocal    = useAppStore((s) => s.activeLocal)
   const setActiveLocal = useAppStore((s) => s.setActiveLocal)
   const [avatarFailed, setAvatarFailed] = useState(false)
-  const [analyticsLoading, setAnalyticsLoading] = useState(false)
-
-  // Abre dcsmart-analisis con un ticket de SSO de un solo uso (60s) para que
-  // el usuario no tenga que loguearse de nuevo ahí. Si falla (p. ej. el
-  // usuario no tiene acceso habilitado), igual abre el link normal para que
-  // vea el mensaje de error del login de esa plataforma.
-  const openAnalytics = async (url) => {
-    if (analyticsLoading) return
-    setAnalyticsLoading(true)
-    try {
-      const { data } = await authApi.analyticsTicket()
-      const dest = new URL('/sso', url)
-      dest.searchParams.set('ticket', data.ticket)
-      window.open(dest.toString(), '_blank', 'noopener')
-    } catch {
-      window.open(url, '_blank', 'noopener')
-    } finally {
-      setAnalyticsLoading(false)
-    }
-  }
 
   const handleLogout = async () => {
     await logout()
@@ -332,33 +300,17 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {mainItems.map(({ to, label, Icon, external }) => (
-          external ? (
-            <a
-              key={to}
-              href={to}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="nav-item"
-              onClick={(e) => { e.preventDefault(); closeMobileNav(); openAnalytics(to) }}
-              title={collapsed ? label : undefined}
-            >
-              <Icon />
-              <span className="nav-item-label">{label}</span>
-              {!collapsed && <IcoExternal />}
-            </a>
-          ) : (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-              onClick={closeMobileNav}
-              title={collapsed ? label : undefined}
-            >
-              <Icon />
-              <span className="nav-item-label">{label}</span>
-            </NavLink>
-          )
+        {mainItems.map(({ to, label, Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+            onClick={closeMobileNav}
+            title={collapsed ? label : undefined}
+          >
+            <Icon />
+            <span className="nav-item-label">{label}</span>
+          </NavLink>
         ))}
 
         {adminItems.length > 0 && (
