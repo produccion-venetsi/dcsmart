@@ -5,10 +5,13 @@ import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
 import AppLogo from './AppLogo.jsx'
 
-// Versión visible de la app: version de package.json (__APP_VERSION__, inyectada
-// en build) + los primeros 7 chars del commit (VITE_GIT_SHA, que setea el CI).
+// Versión visible de la app. En producción se muestra solo la version de
+// package.json (__APP_VERSION__); el commit corto (VITE_GIT_SHA) se agrega
+// SOLO fuera de producción (dev/preview) para identificar el build exacto.
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '?'
+const IS_PROD = import.meta.env.VITE_APP_ENV === 'production'
 const GIT_SHA = import.meta.env.VITE_GIT_SHA ? String(import.meta.env.VITE_GIT_SHA).slice(0, 7) : ''
-const APP_VERSION_LABEL = `v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '?'}${GIT_SHA ? ' · ' + GIT_SHA : ''}`
+const APP_VERSION_LABEL = `v${APP_VERSION}${(!IS_PROD && GIT_SHA) ? ' · ' + GIT_SHA : ''}`
 
 /* ── SVG icons ── */
 function IcoDashboard() {
