@@ -203,14 +203,19 @@ async function buildPagosWhere(fastify, request, query) {
     ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
     ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
     ...(estado_op      ? { estado_op }                                    : {}),
-    // fecha/periodo/cashflow/fecha_pago se guardan como medianoche UTC del
-    // día elegido -- el rango se marca explícito en UTC para no depender
-    // del timezone del proceso donde corra Node.
+    // fecha/periodo/cashflow son "día calendario" (medianoche UTC), su rango
+    // se marca en UTC. fecha_pago es un instante real en hora Argentina
+    // (se carga con hora, el arqueo lo compara como instante), así que su
+    // rango se marca con el offset de Argentina (-03:00) -- si no, los pagos
+    // hechos de noche (21-24hs ART) caen en el día UTC siguiente y se corren.
     ...(desde || hasta ? {
-      [campoFecha]: {
-        ...(desde ? { gte: new Date(`${desde}T00:00:00.000Z`) } : {}),
-        ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999Z`) } : {})
-      }
+      [campoFecha]: (() => {
+        const suf = campoFecha === 'fecha_pago' ? '-03:00' : 'Z'
+        return {
+          ...(desde ? { gte: new Date(`${desde}T00:00:00.000${suf}`) } : {}),
+          ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999${suf}`) } : {})
+        }
+      })()
     } : {})
   }
 }

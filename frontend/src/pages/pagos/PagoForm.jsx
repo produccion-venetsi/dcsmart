@@ -3,7 +3,7 @@ import { impuestosApi } from '../../api/impuestos.js'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
-import { rubcatApi } from '../../api/rubcat.js'
+import { rubcatApi, rubrosApi, categoriasApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
@@ -39,11 +39,13 @@ function padLeft(val, len) {
   return str ? str.padStart(len, '0') : ''
 }
 
+// cashflow = fecha + plazo (días). Aritmética de día calendario en UTC para
+// no depender del huso del navegador: `new Date(fecha + 'T00:00:00')` se
+// interpretaba en hora local y, fuera de Argentina, corría el día resultante.
 function calcCashflow(fecha, plazo) {
   if (!fecha || !plazo) return ''
-  const d = new Date(fecha + 'T00:00:00')
-  d.setDate(d.getDate() + Number(plazo))
-  return d.toISOString().slice(0, 10)
+  const [y, m, d] = fecha.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + Number(plazo))).toISOString().slice(0, 10)
 }
 
 function IcoPlus() {
@@ -100,6 +102,8 @@ export default function PagoForm() {
   const ahoraDateTime = nowDateTimeLocalInput()
 
   const [metodos,         setMetodos]         = useState([])
+  const [rubros,          setRubros]          = useState([])
+  const [categorias,      setCategorias]      = useState([])
   const [loading,         setLoading]         = useState(false)
   const [localProveedor,  setLocalProveedor]  = useState(null)
   const [fotoFile,        setFotoFile]        = useState(null)
@@ -111,6 +115,11 @@ export default function PagoForm() {
   const [provSelected,   setProvSelected]   = useState(null)
   const [provPlazo,      setProvPlazo]      = useState(null)
   const [rubcatSelected, setRubcatSelected] = useState(null)
+  // Modalcitos para crear proveedor / rubcat cuando no existen (se abren desde
+  // el "+ crear" de cada buscador).
+  const [provModal,   setProvModal]   = useState(null)  // { nombre, razon_social, cuit }
+  const [rubcatModal, setRubcatModal] = useState(null)  // { rubroSel, catSel }
+  const [savingModal, setSavingModal] = useState(false)
   const [previewNroOrd,  setPreviewNroOrd]  = useState(null)
   const [duplicado,      setDuplicado]      = useState(null)
 
@@ -176,6 +185,12 @@ export default function PagoForm() {
       notify('Se recuperó la carga que tenías sin guardar', 'info')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Catálogos de rubros y categorías (para los buscadores con opción de crear).
+  useEffect(() => {
+    rubrosApi.list().then(r => setRubros(r.data || [])).catch(() => {})
+    categoriasApi.list().then(r => setCategorias(r.data || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -352,6 +367,86 @@ export default function PagoForm() {
       }
       return data
     })
+
+  // ── Proveedor: al no existir, se abre un modalcito con nombre / razón
+  // social / CUIT (el resto de los datos se completan luego en Proveedores). ──
+  const openProvModal = (nombre) => setProvModal({ nombre: nombre || '', razon_social: '', cuit: '' })
+
+  const submitProvModal = async () => {
+    if (!provModal.nombre && !provModal.razon_social) {
+      notify('Ingresá al menos el nombre o la razón social', 'error'); return
+    }
+    setSavingModal(true)
+    try {
+      const { data } = await proveedoresApi.create({
+        nombre:       provModal.nombre       || null,
+        razon_social: provModal.razon_social || null,
+        cuit:         provModal.cuit         || null
+      })
+      notify('Proveedor creado', 'success')
+      setProvModal(null)
+      selectProveedor(data)
+    } catch (err) { notify(err.response?.data?.error || 'Error al crear proveedor', 'error') }
+    finally { setSavingModal(false) }
+  }
+
+  // ── Rubro / Categoría: al no existir, se abre un modalcito que pide rubro y
+  // categoría (cada uno se puede elegir o crear) y se crea la combinación. ──
+  const fetchRubros = (search) => Promise.resolve(
+    (search ? rubros.filter(r => r.nombre.toLowerCase().includes(search.toLowerCase())) : rubros).slice(0, 60)
+  )
+  const fetchCategorias = (search) => Promise.resolve(
+    (search ? categorias.filter(c => c.nombre.toLowerCase().includes(search.toLowerCase())) : categorias).slice(0, 60)
+  )
+
+  const openRubcatModal = () => setRubcatModal({ rubroSel: null, catSel: null })
+
+  // Crear rubro / categoría desde dentro del modal (setea la selección del modal)
+  const createRubroInModal = async (nombre) => {
+    try {
+      const { data } = await rubrosApi.create({ nombre })
+      setRubros(rs => [...rs, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setRubcatModal(m => ({ ...m, rubroSel: data }))
+    } catch (err) { notify(err.response?.data?.error || 'Error al crear rubro', 'error') }
+  }
+  const createCatInModal = async (nombre) => {
+    try {
+      const { data } = await categoriasApi.create({ nombre })
+      setCategorias(cs => [...cs, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setRubcatModal(m => ({ ...m, catSel: data }))
+    } catch (err) { notify(err.response?.data?.error || 'Error al crear categoría', 'error') }
+  }
+
+  // Confirmar el modal: busca el RubCat que combina rubro+categoría; si no
+  // existe, lo crea, y lo asigna al pago.
+  const submitRubcatModal = async () => {
+    const { rubroSel, catSel } = rubcatModal
+    if (!rubroSel || !catSel) { notify('Elegí rubro y categoría', 'error'); return }
+    setSavingModal(true)
+    try {
+      const listRes = await rubcatApi.list({ search: rubroSel.nombre })
+      const list = Array.isArray(listRes.data) ? listRes.data : (listRes.data?.data || [])
+      let rc = list.find(x => x.id_rub === rubroSel.id && x.id_cat === catSel.id)
+      if (!rc) {
+        try {
+          const res = await rubcatApi.create({ id_rub: rubroSel.id, id_cat: catSel.id })
+          rc = res.data
+        } catch (err) {
+          if (err.response?.status === 409) {
+            const retry = await rubcatApi.list({ search: rubroSel.nombre })
+            const l2 = Array.isArray(retry.data) ? retry.data : (retry.data?.data || [])
+            rc = l2.find(x => x.id_rub === rubroSel.id && x.id_cat === catSel.id)
+          } else throw err
+        }
+      }
+      if (rc) {
+        setRubcatSelected(rc)
+        set('id_rubcat', rc.id)
+        setRubcatModal(null)
+      }
+    } catch (err) { notify(err.response?.data?.error || 'Error al asignar rubro/categoría', 'error') }
+    finally { setSavingModal(false) }
+  }
 
   // impuestos guardados (edición): cada acción pega directo al backend y
   // recarga la lista, que a su vez dispara el recálculo del importe total.
@@ -607,7 +702,9 @@ export default function PagoForm() {
                 onSelect={selectProveedor}
                 onClear={clearProveedor}
                 fetchItems={fetchProveedores}
-                placeholder="Buscar proveedor…"
+                onCreate={openProvModal}
+                createLabel="crear proveedor"
+                placeholder="Buscar o crear proveedor…"
               />
             </div>
             <div className="form-group">
@@ -620,7 +717,9 @@ export default function PagoForm() {
                 onSelect={rc => { setRubcatSelected(rc); set('id_rubcat', rc.id) }}
                 onClear={() => { setRubcatSelected(null); set('id_rubcat', '') }}
                 fetchItems={fetchRubcats}
-                placeholder="Buscar rubro / categoría…"
+                onCreate={openRubcatModal}
+                createLabel="crear rubro / categoría"
+                placeholder="Buscar o crear rubro / categoría…"
               />
             </div>
             <div className="form-group">
@@ -767,7 +866,7 @@ export default function PagoForm() {
                         {editingImpId === imp.id ? (
                           <>
                             <td>
-                              <select value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                              <select className="filter-select" style={{ width: '100%' }} value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
                                 {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
                               </select>
                             </td>
@@ -968,6 +1067,88 @@ export default function PagoForm() {
           </button>
         </div>
       </form>
+
+      {/* ── Modalcito: nuevo proveedor ── */}
+      {provModal && (
+        <div className="confirm-backdrop" onMouseDown={() => !savingModal && setProvModal(null)}>
+          <div className="confirm-modal" onMouseDown={e => e.stopPropagation()} style={{ width: 'min(440px, 92vw)' }}>
+            <div className="form-panel-title" style={{ marginBottom: 18 }}>Nuevo proveedor</div>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Nombre</label>
+                <div className="form-input-wrap">
+                  <input type="text" autoFocus value={provModal.nombre} onChange={e => setProvModal(m => ({ ...m, nombre: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Razón social</label>
+                <div className="form-input-wrap">
+                  <input type="text" value={provModal.razon_social} onChange={e => setProvModal(m => ({ ...m, razon_social: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">CUIT</label>
+                <div className="form-input-wrap">
+                  <input type="text" placeholder="Opcional" value={provModal.cuit} onChange={e => setProvModal(m => ({ ...m, cuit: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div className="confirm-foot" style={{ marginTop: 20 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setProvModal(null)} disabled={savingModal}>Cancelar</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={submitProvModal} disabled={savingModal}>
+                {savingModal ? 'Creando…' : 'Crear proveedor'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modalcito: nueva combinación rubro / categoría ── */}
+      {rubcatModal && (
+        <div className="confirm-backdrop" onMouseDown={() => !savingModal && setRubcatModal(null)}>
+          <div className="confirm-modal" onMouseDown={e => e.stopPropagation()} style={{ width: 'min(440px, 92vw)', overflow: 'visible' }}>
+            <div className="form-panel-title" style={{ marginBottom: 18 }}>Nueva combinación rubro / categoría</div>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Rubro</label>
+                <Combobox
+                  value={rubcatModal.rubroSel?.id || ''}
+                  displayValue={rubcatModal.rubroSel?.nombre || ''}
+                  getKey={r => r.id}
+                  getLabel={r => r.nombre}
+                  onSelect={r => setRubcatModal(m => ({ ...m, rubroSel: r }))}
+                  onClear={() => setRubcatModal(m => ({ ...m, rubroSel: null }))}
+                  fetchItems={fetchRubros}
+                  onCreate={createRubroInModal}
+                  createLabel="crear rubro"
+                  placeholder="Buscar o crear rubro…"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Categoría</label>
+                <Combobox
+                  value={rubcatModal.catSel?.id || ''}
+                  displayValue={rubcatModal.catSel?.nombre || ''}
+                  getKey={c => c.id}
+                  getLabel={c => c.nombre}
+                  onSelect={c => setRubcatModal(m => ({ ...m, catSel: c }))}
+                  onClear={() => setRubcatModal(m => ({ ...m, catSel: null }))}
+                  fetchItems={fetchCategorias}
+                  onCreate={createCatInModal}
+                  createLabel="crear categoría"
+                  placeholder="Buscar o crear categoría…"
+                />
+              </div>
+            </div>
+            <div className="confirm-foot" style={{ marginTop: 20 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRubcatModal(null)} disabled={savingModal}>Cancelar</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={submitRubcatModal} disabled={savingModal || !rubcatModal.rubroSel || !rubcatModal.catSel}>
+                {savingModal ? 'Creando…' : 'Crear y asignar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

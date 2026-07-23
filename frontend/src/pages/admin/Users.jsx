@@ -5,6 +5,7 @@ import { localesApi } from '../../api/locales.js'
 import { rolesApi }  from '../../api/roles.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAuthStore } from '../../store/authStore.js'
+import { fmtDateArg } from '../../lib/dates.js'
 import DrawerPanel   from '../../components/DrawerPanel.jsx'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -192,11 +193,18 @@ export default function Users() {
   // ── open / close detail drawer ────────────────────────────────────────────
 
   const openDetail = (u) => {
+    // `u` viene de la lista (GET /users), que no trae google_id ni
+    // user_permissions -- se abre el panel ya mismo con esos datos parciales
+    // (respuesta instantánea) y se reemplaza por el detalle completo
+    // (GET /users/:id) apenas llega, para que "Google" y "Puede ver
+    // Reportes" reflejen el estado real en vez de quedar siempre en el
+    // valor por default de los campos que la lista no incluye.
     setSelected(u)
     setShowRoleForm(false)
     setRoleForm(EMPTY_ROLE)
     setEditingNombre(false)
     setPanelOpen(true)
+    usersApi.get(u.id).then(({ data }) => setSelected(data)).catch(() => {})
   }
 
   const closeDetail = () => {
@@ -582,7 +590,7 @@ export default function Users() {
                   <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{selected.email}</div>
                   {selected.created_at && (
                     <div style={{ fontSize: 11, color: 'var(--t4)', marginTop: 3 }}>
-                      Alta: {new Date(selected.created_at).toLocaleDateString('es-AR')}
+                      Alta: {fmtDateArg(selected.created_at)}
                     </div>
                   )}
                 </div>
@@ -620,6 +628,10 @@ export default function Users() {
                       checked={(selected.user_permissions ?? []).some(p => p.module?.nombre === 'reportes' && p.can_view)}
                       onChange={async (e) => {
                         const checked = e.target.checked
+                        const msg = checked
+                          ? '¿Dar acceso a Reportes a este usuario?'
+                          : '¿Quitar el acceso a Reportes a este usuario?'
+                        if (!(await showConfirm(msg))) return
                         try {
                           if (checked) {
                             await usersApi.setPermission(selected.id, 'reportes', { can_view: true })
@@ -658,6 +670,10 @@ export default function Users() {
                         checked={!!analyticsAccess.enabled}
                         onChange={async (e) => {
                           const enabled = e.target.checked
+                          const msg = enabled
+                            ? '¿Habilitar el acceso a dcsmart-analisis para este usuario?'
+                            : '¿Deshabilitar el acceso a dcsmart-analisis para este usuario?'
+                          if (!(await showConfirm(msg))) return
                           setAnalyticsBusy(true)
                           try {
                             await usersApi.setAnalyticsAccess(selected.id, { enabled, is_admin: analyticsAccess.is_admin })
@@ -685,6 +701,10 @@ export default function Users() {
                           checked={!!analyticsAccess.is_admin}
                           onChange={async (e) => {
                             const is_admin = e.target.checked
+                            const msg = is_admin
+                              ? '¿Convertir a este usuario en administrador de Analytics (podrá habilitar a otros)?'
+                              : '¿Quitarle el rol de administrador de Analytics a este usuario?'
+                            if (!(await showConfirm(msg))) return
                             setAnalyticsBusy(true)
                             try {
                               await usersApi.setAnalyticsAccess(selected.id, { enabled: true, is_admin })
@@ -766,6 +786,7 @@ export default function Users() {
                               <span style={{ fontStyle: 'italic' }}>Todos los locales del grupo</span>
                               {amISuperAdmin && available.length > 0 && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
@@ -813,6 +834,7 @@ export default function Users() {
                               {/* Admin: agregar más locales (quitar todos = vuelve a "todos los locales") */}
                               {amISuperAdmin && isAdmin && available.length > 0 && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
@@ -826,6 +848,7 @@ export default function Users() {
                               {/* Cajero: cambiar local (reemplaza el existente) */}
                               {amISuperAdmin && isCajero && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}

@@ -10,9 +10,10 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
+import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
-import { downloadCsv } from '../../lib/csv.js'
-import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
+import { downloadExcel } from '../../lib/excel.js'
+import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 
 const EMPTY_CAJA = {
   nro_turno: '', tipo_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
@@ -147,7 +148,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [savingMovEdit, setSavingMovEdit] = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
-  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDetEdit, setSavingDetEdit] = useState(false)
   const [auditando,  setAuditando] = useState(false)
   const [auditandoDc, setAuditandoDc] = useState(false)
@@ -218,6 +219,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       await detallesApi.create({
         id_caja:       cajaId,
         id_tipo:       newDet.id_tipo       || null,
+        nombre:        newDet.id_tipo ? null : (newDet.nombre || null),
         monto:         parseFloat(newDet.monto),
         observaciones: newDet.observaciones || null
       })
@@ -259,7 +261,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
 
   const handleEditDet = (d) => {
     setEditingDetId(d.id)
-    setEditDetForm({ id_tipo: d.id_tipo || '', monto: String(d.monto), observaciones: d.observaciones || '' })
+    setEditDetForm({ id_tipo: d.id_tipo || '', nombre: d.detalle_tipo?.nombre || d.nombre || '', monto: String(d.monto), observaciones: d.observaciones || '' })
   }
 
   const handleSaveDet = async (detId) => {
@@ -268,6 +270,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     try {
       await detallesApi.update(detId, {
         id_tipo:       editDetForm.id_tipo || null,
+        nombre:        editDetForm.id_tipo ? null : (editDetForm.nombre || null),
         monto:         parseFloat(editDetForm.monto),
         observaciones: editDetForm.observaciones || null
       })
@@ -456,11 +459,14 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
-        {canEdit && !addingDet && (
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
-            <IcoPlus /> Añadir
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalDet)}</span>
+          {canEdit && !addingDet && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
+              <IcoPlus /> Añadir
+            </button>
+          )}
+        </div>
       </div>
       {caja.detalles && caja.detalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
@@ -474,10 +480,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   {editingDetId === d.id ? (
                     <>
                       <td colSpan={2}>
-                        <select value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
-                          <option value="">Ver opciones</option>
-                          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                        </select>
+                        <TipoDetalleCombo
+                          tipos={tipos}
+                          idTipo={editDetForm.id_tipo}
+                          nombre={editDetForm.nombre}
+                          onChange={(id_tipo, nombre) => setEditDetForm(f => ({ ...f, id_tipo, nombre }))}
+                        />
                       </td>
                       <td>
                         <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
@@ -534,12 +542,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Nombre</label>
-            <div className="form-input-wrap">
-              <select value={newDet.id_tipo} onChange={e => setNewDet({ ...newDet, id_tipo: e.target.value })}>
-                <option value="">Ver opciones</option>
-                {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-              </select>
-            </div>
+            <TipoDetalleCombo
+              tipos={tipos}
+              idTipo={newDet.id_tipo}
+              nombre={newDet.nombre}
+              onChange={(id_tipo, nombre) => setNewDet(d => ({ ...d, id_tipo, nombre }))}
+            />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
@@ -586,7 +594,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
                           <option>INGRESO</option>
                           <option>EGRESO</option>
                           <option>APERTURA</option>
@@ -594,7 +602,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                         </select>
                       </td>
                       <td>
-                        <select value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
                           {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>
@@ -731,10 +739,10 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const [metodos,     setMetodos]     = useState([])
 
   const [addingDet,  setAddingDet]  = useState(false)
-  const [newDet,     setNewDet]     = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [newDet,     setNewDet]     = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDet,  setSavingDet]  = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
-  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', monto: '', observaciones: '' })
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
   const [savingDetEdit, setSavingDetEdit] = useState(false)
 
   const [addingMov,  setAddingMov]  = useState(false)
@@ -786,9 +794,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     if (!newDet.monto) return
     setSavingDet(true)
     try {
-      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null })
+      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null })
       notify('Detalle agregado', 'success')
-      setNewDet({ id_tipo: '', monto: '', observaciones: '' })
+      setNewDet({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
       setAddingDet(false)
       loadRelacionales(form?.id_local)
     } catch (err) { notify(err.response?.data?.error || 'Error al agregar detalle', 'error') }
@@ -803,14 +811,14 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
 
   const handleEditDet = (d) => {
     setEditingDetId(d.id)
-    setEditDetForm({ id_tipo: d.id_tipo || '', monto: String(d.monto), observaciones: d.observaciones || '' })
+    setEditDetForm({ id_tipo: d.id_tipo || '', nombre: d.detalle_tipo?.nombre || d.nombre || '', monto: String(d.monto), observaciones: d.observaciones || '' })
   }
 
   const handleSaveDet = async (detId) => {
     if (!editDetForm.monto) return
     setSavingDetEdit(true)
     try {
-      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null })
+      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null })
       notify('Detalle actualizado', 'success')
       setEditingDetId(null)
       loadRelacionales(form?.id_local)
@@ -1000,10 +1008,12 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   {editingDetId === d.id ? (
                     <>
                       <td colSpan={2}>
-                        <select value={editDetForm.id_tipo} onChange={e => setEditDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
-                          <option value="">Ver opciones</option>
-                          {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                        </select>
+                        <TipoDetalleCombo
+                          tipos={tipos}
+                          idTipo={editDetForm.id_tipo}
+                          nombre={editDetForm.nombre}
+                          onChange={(id_tipo, nombre) => setEditDetForm(f => ({ ...f, id_tipo, nombre }))}
+                        />
                       </td>
                       <td>
                         <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
@@ -1042,12 +1052,12 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Nombre</label>
-              <div className="form-input-wrap">
-                <select value={newDet.id_tipo} onChange={e => setNewDet(f => ({ ...f, id_tipo: e.target.value }))}>
-                  <option value="">Ver opciones</option>
-                  {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-                </select>
-              </div>
+              <TipoDetalleCombo
+                tipos={tipos}
+                idTipo={newDet.id_tipo}
+                nombre={newDet.nombre}
+                onChange={(id_tipo, nombre) => setNewDet(f => ({ ...f, id_tipo, nombre }))}
+              />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
@@ -1090,7 +1100,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
                           <option>INGRESO</option>
                           <option>EGRESO</option>
                           <option>APERTURA</option>
@@ -1098,7 +1108,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                         </select>
                       </td>
                       <td>
-                        <select value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
                           {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>
@@ -1549,7 +1559,7 @@ export default function CajaList() {
   const [selectedId, setSelectedId] = useState(null)
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
-  const FILTER_INIT_CAJAS = { desde: '', hasta: '', audit: '' }
+  const FILTER_INIT_CAJAS = { desde: '', hasta: '', audit: '', tipo_turno: '' }
   const [filters, setFilters] = useState(FILTER_INIT_CAJAS)
   const [draft,   setDraft]   = useState(FILTER_INIT_CAJAS)
   const [filterOpen, setFilterOpen] = useState(false)
@@ -1585,6 +1595,7 @@ export default function CajaList() {
     sort_field: sortField,
     sort_dir: sortDir,
     ...(filters.audit !== '' ? { audit: filters.audit } : {}),
+    ...(filters.tipo_turno !== '' ? { tipo_turno: filters.tipo_turno } : {}),
     ...(filters.desde !== '' ? { desde: filters.desde } : {}),
     ...(filters.hasta !== '' ? { hasta: filters.hasta } : {})
   }), [activeLocal?.id, sortField, sortDir, filters])
@@ -1599,9 +1610,9 @@ export default function CajaList() {
     try {
       const { data } = await cajasApi.list({ ...cajaListParams(1), limit: 0 })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      downloadCsv(`cajas_${new Date().toISOString().slice(0, 10)}.csv`, data.data, CAJA_CSV_COLUMNS)
+      await downloadExcel(`cajas_${todayInputDate()}.xlsx`, data.data, CAJA_CSV_COLUMNS, 'Cajas')
     } catch {
-      notify('Error al exportar CSV', 'error')
+      notify('Error al exportar Excel', 'error')
     } finally {
       setExporting(false)
     }
@@ -1636,6 +1647,24 @@ export default function CajaList() {
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
   }, [cajaListParams, page])
+
+  // ── Totales (solo con rango de fecha aplicado) ──────────────────────────
+  // Usa los mismos filtros que ya arma la tabla (fecha, auditado, tipo), sin
+  // paginar, porque el total debe ser de TODAS las cajas filtradas, no solo
+  // la página visible.
+  const [stats, setStats] = useState(null)
+  const [statsLoading, setStatsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!(filters.desde && filters.hasta)) { setStats(null); return }
+    const ctrl = new AbortController()
+    setStatsLoading(true)
+    cajasApi.stats(cajaListParams(1), ctrl.signal)
+      .then(({ data }) => setStats(data))
+      .catch(() => { if (!ctrl.signal.aborted) { notify('Error al cargar los totales', 'error'); setStats(null) } })
+      .finally(() => { if (!ctrl.signal.aborted) setStatsLoading(false) })
+    return () => ctrl.abort()
+  }, [cajaListParams, filters.desde, filters.hasta])
 
   const goToPage = (p) => {
     const next = Math.min(Math.max(1, p), totalPages)
@@ -1793,6 +1822,13 @@ export default function CajaList() {
                       <option value="true">Auditado</option>
                     </select>
                   </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Tipo de turno</span>
+                    <select className="filter-select" style={{ width: '100%' }} value={draft.tipo_turno} onChange={e => setDraftField('tipo_turno', e.target.value)}>
+                      <option value="">Todos</option>
+                      {TIPOS_TURNO.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
                   <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
@@ -1811,8 +1847,8 @@ export default function CajaList() {
             </button>
           )}
           {canExport && (
-            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a CSV las cajas con los filtros actuales">
-              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
+            <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a Excel las cajas con los filtros actuales">
+              {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
             </button>
           )}
           {canCreate && (
@@ -1822,6 +1858,25 @@ export default function CajaList() {
           )}
         </div>
       </div>
+
+      {filters.desde && filters.hasta && (statsLoading || stats) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+          {[
+            ['TOTAL RECAUDADO', stats ? fmt$2(stats.total_recaudado) : null],
+            ['EFECTIVO',         stats ? fmt$2(stats.total_efectivo)  : null],
+            ['TURNOS',           stats ? stats.count_turnos           : null],
+            ['TICKETS',          stats ? stats.total_tickets          : null],
+            ['COMENSALES',       stats ? stats.total_comensales       : null],
+          ].map(([label, value]) => (
+            <div key={label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.6rem 1rem', minWidth: 120 }}>
+              <div style={{ fontSize: 11, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.03em' }}>{label}</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>
+                {value == null ? <span className="skel" style={{ width: 60, height: 16, display: 'inline-block' }} /> : value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {selectionMode && selectedIds.size > 0 && (
         <div className="bulk-bar">

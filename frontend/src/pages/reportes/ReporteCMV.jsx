@@ -129,27 +129,62 @@ export default function ReporteCMV({ applied, activeLocal }) {
     return () => ctrl.abort()
   }, [applied.desde, applied.hasta, activeLocal?.id])
 
-  const kpis       = data?.kpis ?? []
-  const alimentos  = data?.alimentos ?? []
-  const bebidas    = data?.bebidas ?? []
-  const movstock   = data?.movstock ?? []
-  const ajustes    = data?.ajustes ?? []
-  const totAlim    = data?.total_alimentos ?? 0
-  const totBeb     = data?.total_bebidas ?? 0
+  const kpis        = data?.kpis ?? []
+  const alimentos   = data?.alimentos ?? []
+  const bebidas     = data?.bebidas ?? []
+  const movstock    = data?.movstock ?? []
+  const totAlim     = data?.total_alimentos ?? 0
+  const totBeb      = data?.total_bebidas ?? 0
   const totMovstock = data?.total_movstock ?? 0
-  const totAjustes = data?.total_ajustes ?? 0
+  const ventasTotal = data?.ventas_total ?? 0
+  const cmvMonto    = data?.cmv_total_monto ?? 0
+  const cmvPct      = data?.cmv_total_pct ?? '0.00'
+
+  // Los KPIs de categoría (Alimentos/Bebidas/MovStock). El CMV Total va en la
+  // tarjeta de fórmula de arriba, no como KPI suelto.
+  const kpisCat = kpis.filter(k => k.label !== 'CMV Total')
 
   const skel = loading || !data
 
-  // Ajustes bar heights
-  const ajMax = ajustes.length ? Math.max(...ajustes.map(a => Math.abs(a.val))) : 1
-
   return (
     <>
-      {/* ── KPI cards ── */}
+      {/* ── Fórmula del CMV Total: Ventas y CMV ($ de pagos) -> CMV Total % ── */}
       {skel ? (
-        <div className="rep-kpi-grid cols-5">
-          {[0,1,2,3,4].map(i => (
+        <div className="rep-chart-card" style={{ marginBottom: 18 }}>
+          <div className="rep-skel" style={{ width: '25%', height: 14, marginBottom: 18 }} />
+          <div className="rep-skel" style={{ width: '70%', height: 34 }} />
+        </div>
+      ) : (
+        <div className="rep-chart-card" style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 18 }}>
+            CMV Total
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 28 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 4 }}>Ventas</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--t1)', fontVariantNumeric: 'tabular-nums' }}>{fmt(ventasTotal)}</div>
+            </div>
+            <span style={{ fontSize: 24, color: 'var(--t4)', fontWeight: 300 }}>·</span>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 4 }}>CMV (pagos)</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--t1)', fontVariantNumeric: 'tabular-nums' }}>{fmt(cmvMonto)}</div>
+            </div>
+            <span style={{ fontSize: 24, color: 'var(--t4)', fontWeight: 300, marginLeft: 'auto' }}>=</span>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 11, color: 'var(--t3)', marginBottom: 4 }}>CMV Total <span style={{ color: 'var(--t4)' }}>(CMV / Ventas)</span></div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, justifyContent: 'flex-end' }}>
+                <span style={{ fontSize: 30, fontWeight: 700, color: 'var(--gold-bright)', fontVariantNumeric: 'tabular-nums' }}>{cmvPct}</span>
+                <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--gold-bright)' }}>%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── KPI cards por categoría ── */}
+      {skel ? (
+        <div className="rep-kpi-grid cols-3">
+          {[0,1,2].map(i => (
             <div key={i} className="rep-kpi">
               <div className="rep-skel" style={{ width: '50%', height: 14, marginBottom: 14 }} />
               <div className="rep-skel" style={{ width: '65%', height: 28, marginBottom: 12 }} />
@@ -158,17 +193,17 @@ export default function ReporteCMV({ applied, activeLocal }) {
           ))}
         </div>
       ) : (
-        <div className="rep-kpi-grid cols-5">
-          {kpis.map((k, i) => (
-            <KpiCard key={i} label={k.label} val={k.val} delta={k.delta} />
+        <div className="rep-kpi-grid cols-3">
+          {kpisCat.map((k, i) => (
+            <KpiCard key={i} label={k.label} val={k.val} />
           ))}
         </div>
       )}
 
-      {/* ── Tables row: Alimentos / Bebidas / Ajustes ── */}
+      {/* ── Tables row: Alimentos / Bebidas / MovStock ── */}
       {skel ? (
-        <div className="rep-4col-grid" style={{ marginBottom: 18 }}>
-          {[0,1,2,3].map(i => (
+        <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
+          {[0,1,2].map(i => (
             <div key={i} className="rep-chart-card">
               <div className="rep-skel" style={{ width: '40%', height: 14, marginBottom: 16 }} />
               {[0,1,2,3,4].map(j => (
@@ -178,64 +213,22 @@ export default function ReporteCMV({ applied, activeLocal }) {
           ))}
         </div>
       ) : (
-        <div className="rep-4col-grid" style={{ marginBottom: 18 }}>
+        <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
           <CostTable title="Alimentos" dotColor="var(--green)" items={alimentos}
             total={totAlim} gradient={CAT_COLORS.alimentos.gradient} />
           <CostTable title="Bebidas" dotColor="var(--gold)" items={bebidas}
             total={totBeb} gradient={CAT_COLORS.bebidas.gradient} />
           <CostTable title="MovStock" dotColor="#5FA8D9" items={movstock}
             total={totMovstock} gradient={CAT_COLORS.movstock.gradient} />
-
-          {/* Ajustes */}
-          <div className="rep-chart-card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--t3)', flexShrink: 0 }} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>Ajustes</span>
-              <span style={{ fontSize: 11, color: 'var(--t3)', marginLeft: 'auto' }}>$</span>
-            </div>
-            {ajustes.map((r, i) => (
-              <div key={i} style={{
-                display: 'grid', gridTemplateColumns: '1fr 168px', alignItems: 'center',
-                height: 33, borderBottom: '1px solid var(--border)'
-              }}>
-                <span style={{ fontSize: 13, color: 'var(--t2)' }}>{r.name}</span>
-                <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
-                  <div style={{
-                    position: 'absolute', top: 5, bottom: 5, right: 0,
-                    width: `${(Math.abs(r.val) / ajMax * 100).toFixed(1)}%`,
-                    background: r.negative
-                      ? 'linear-gradient(90deg,rgba(224,92,92,.06),rgba(224,92,92,.34))'
-                      : 'linear-gradient(90deg,rgba(76,175,125,.06),rgba(76,175,125,.34))',
-                    borderRadius: 4
-                  }} />
-                  <span style={{
-                    position: 'relative', fontSize: 13, fontWeight: 500,
-                    color: r.negative ? 'var(--red)' : 'var(--t1)',
-                    paddingRight: 8, fontVariantNumeric: 'tabular-nums'
-                  }}>{r.negative ? '-' : ''}{fmt(r.val)}</span>
-                </div>
-              </div>
-            ))}
-            <div style={{
-              display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center',
-              height: 40, marginTop: 4, borderTop: '1px solid var(--border-hi)'
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Total</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>{fmt(totAjustes)}</span>
-            </div>
-          </div>
         </div>
       )}
 
       {/* ── Charts row ── */}
       {!skel && (
-        <div className="rep-4col-grid">
+        <div className="rep-3col-grid">
           <CostChart title="Alimentos" items={alimentos} barColor="#4CAF7D" />
           <CostChart title="Bebidas" items={bebidas} barColor="#C9B086" />
           <CostChart title="MovStock" items={movstock} barColor="#5FA8D9" />
-          <CostChart title="Ajustes" items={ajustes.map(a => ({
-            ...a, val: Math.abs(a.val)
-          }))} barColor="#B5A7EA" />
         </div>
       )}
     </>

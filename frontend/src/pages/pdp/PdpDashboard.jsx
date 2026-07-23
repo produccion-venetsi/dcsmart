@@ -9,7 +9,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
 import { pdpApi } from '../../api/pdp.js'
-import { fmtDateUTC, fmtMonthUTC, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
+import { fmtDateUTC, fmtMonthUTC, fmtDateArg, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -247,7 +247,7 @@ function PagoDetailPdp({ pago, navigate }) {
     ['Dirección',   pago.ingresa_egreso != null ? (pago.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
     ['Estado Op.',  pago.estado_op || '—'],
     ['Pagado',      pago.pagado ? 'Sí' : 'No'],
-    ['Fecha Pago',  fmtDate(pago.fecha_pago)],
+    ['Fecha Pago',  pago.fecha_pago ? fmtDateArg(pago.fecha_pago) : '—'],
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
   ]

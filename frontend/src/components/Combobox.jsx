@@ -10,6 +10,8 @@ export default function Combobox({
   fetchItems,
   placeholder,
   wrapClassName = '',
+  onCreate,            // opcional: (texto) => void. Si se define, muestra
+  createLabel = 'crear', // "+ crear «texto»" cuando el texto no matchea nada.
 }) {
   const [search, setSearch]     = useState(displayValue || '')
   const [open, setOpen]         = useState(false)
@@ -88,25 +90,40 @@ export default function Combobox({
           >×</button>
         )}
       </div>
-      {open && (
-        <div className="combobox-dropdown">
-          {loading
-            ? <div className="combobox-inline-empty">Buscando…</div>
-            : items.length === 0
-              ? <div className="combobox-inline-empty">Sin resultados</div>
-              : items.map(item => (
-                <button
-                  key={getKey(item)}
-                  type="button"
-                  className="combobox-option"
-                  onClick={() => handleSelect(item)}
-                >
-                  {getLabel(item)}
-                </button>
-              ))
-          }
-        </div>
-      )}
+      {open && (() => {
+        const trimmed = search.trim()
+        const hasExact = items.some(it => getLabel(it).toLowerCase() === trimmed.toLowerCase())
+        const showCreate = onCreate && trimmed && !loading && !hasExact
+        return (
+          <div className="combobox-dropdown">
+            {loading
+              ? <div className="combobox-inline-empty">Buscando…</div>
+              : items.length === 0 && !showCreate
+                ? <div className="combobox-inline-empty">Sin resultados</div>
+                : items.map(item => (
+                  <button
+                    key={getKey(item)}
+                    type="button"
+                    className="combobox-option"
+                    onClick={() => handleSelect(item)}
+                  >
+                    {getLabel(item)}
+                  </button>
+                ))
+            }
+            {showCreate && (
+              <button
+                type="button"
+                className="combobox-option"
+                onClick={() => { onCreate(trimmed); setOpen(false) }}
+                style={{ fontStyle: 'italic', color: 'var(--gold-bright)' }}
+              >
+                + {createLabel} “{trimmed}”
+              </button>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -62,10 +62,15 @@ export async function generarReportePdp({ localNombre, pagosPdp, totalDeuda }) {
   doc.setTextColor(...TEAL)
   doc.text('REPORTE PDP', pageWidth / 2, 40, { align: 'center' })
 
+  // Sello de fecha/hora y slug del nombre SIEMPRE en hora de Argentina, no en
+  // el huso del navegador de quien genera el reporte (podría estar de viaje /
+  // con VPN / TZ mal configurada y el documento saldría con fecha corrida).
+  const TZ = 'America/Argentina/Buenos_Aires'
   const now = new Date()
-  const fechaHora = now.toLocaleString('es-AR', { hour12: false })
+  const fechaHora = now.toLocaleString('es-AR', { hour12: false, timeZone: TZ })
   const slug = (localNombre || 'LOCAL').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]+/g, '')
-  const ddmmyy = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`
+  const [yyyy, mm, dd] = now.toLocaleDateString('en-CA', { timeZone: TZ }).split('-')
+  const ddmmyy = `${dd}${mm}${yyyy.slice(-2)}`
   const nombreReporte = `${slug}_PDP_${ddmmyy}`
 
   const totalPdp = pagosPdp.reduce((acc, p) => acc + signedImporte(p), 0)

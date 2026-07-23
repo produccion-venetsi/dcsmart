@@ -1,8 +1,20 @@
+// El enum TipoTurno usa @map en el schema (ver prisma/schema.prisma) --
+// Prisma Client / SQL crudo espera la clave (MANANA), no la etiqueta visible
+// ("Mañana") que envía el frontend. Mismo mapeo que backend/src/routes/caja.js.
+const TIPO_TURNO_MAP = {
+  'Mañana': 'MANANA', 'Tarde': 'TARDE', 'Noche': 'NOCHE',
+  'Trasnoche': 'TRASNOCHE', 'Evento': 'EVENTO', 'Otros': 'OTROS'
+}
+function toTipoTurnoEnum(value) {
+  if (!value) return null
+  return TIPO_TURNO_MAP[value] || value
+}
+
 export default async function reportesRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.appContext, fastify.can('reportes', 'view')]
 
   fastify.get('/cajas', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta } = request.query
+    const { id_local, desde, hasta, tipo_turno } = request.query
 
     if (!desde || !hasta) {
       return reply.code(400).send({ error: 'desde y hasta son requeridos' })
@@ -22,9 +34,12 @@ export default async function reportesRoutes(fastify) {
     const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
     const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
 
+    const tipoTurnoEnum = toTipoTurnoEnum(tipo_turno)
+
     const localFilter = { id_local: { in: localIds } }
     const cajaWhere = {
       ...localFilter,
+      ...(tipoTurnoEnum ? { tipo_turno: tipoTurnoEnum } : {}),
       fecha_inicio: { gte: desdeDate, lte: hastaDate }
     }
 
@@ -38,6 +53,7 @@ export default async function reportesRoutes(fastify) {
     const totalFiscal   = Number(cajaAgg._sum.fiscal   ?? 0)
     const totalTickets  = Number(cajaAgg._sum.tickets  ?? 0)
     const totalComens   = Number(cajaAgg._sum.comensales ?? 0)
+    const totalEfectivo = Number(cajaAgg._sum.efectivo ?? 0)
     const countZ        = cajaAgg._count.id
 
     const ticketProm = totalTickets > 0 ? Math.round(totalVentas / totalTickets) : 0
@@ -48,17 +64,29 @@ export default async function reportesRoutes(fastify) {
     payParams.push(...localIds)
     payParams.push(desdeDate)
     payParams.push(hastaDate)
+    // Nota: el enum de Postgres guarda el label visible (@map), ej. "Tarde" --
+    // no la clave interna de Prisma ("TARDE"). Para SQL crudo se compara
+    // contra el valor tal cual llega del frontend (tipo_turno), NO contra
+    // tipoTurnoEnum (ese es solo para el `where` de Prisma más abajo).
+    let payTipoClause = ''
+    if (tipoTurnoEnum) {
+      payParams.push(tipo_turno)
+      payTipoClause = `AND c.tipo_turno::text = $${payParams.length}`
+    }
 
+    // LEFT JOIN (no INNER) -- un movimiento COBRO sin id_metodo asignado no
+    // debe desaparecer silenciosamente de la suma, solo queda sin nombre.
     const payRows = await fastify.db.$queryRawUnsafe(`
-      SELECT mp.nombre, SUM(cm.monto) AS total
+      SELECT COALESCE(mp.nombre, 'Sin especificar') AS nombre, SUM(cm.monto) AS total
       FROM caja_movimientos cm
       JOIN cajas c ON cm.id_caja = c.id
-      JOIN metodos_pago mp ON cm.id_metodo = mp.id
+      LEFT JOIN metodos_pago mp ON cm.id_metodo = mp.id
       WHERE c.id_local IN (${localPlaceholders})
         AND c.fecha_inicio >= $${localIds.length + 1}
         AND c.fecha_inicio <= $${localIds.length + 2}
         AND cm.tipo = 'COBRO'
-      GROUP BY mp.nombre
+        ${payTipoClause}
+      GROUP BY COALESCE(mp.nombre, 'Sin especificar')
       ORDER BY total DESC
     `, ...payParams)
 
@@ -84,6 +112,11 @@ export default async function reportesRoutes(fastify) {
     // crudo hace el camino inverso (lo trata como si ya fuera hora Argentina)
     // y da el mismo resultado incorrecto que no convertir nada.
     const weekParams = [...localIds, desdeDate, hastaDate]
+    let weekTipoClause = ''
+    if (tipoTurnoEnum) {
+      weekParams.push(tipo_turno)
+      weekTipoClause = `AND tipo_turno::text = $${weekParams.length}`
+    }
     const weekRows = await fastify.db.$queryRawUnsafe(`
       SELECT
         DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS week_start,
@@ -92,6 +125,7 @@ export default async function reportesRoutes(fastify) {
       WHERE id_local IN (${localPlaceholders})
         AND fecha_inicio >= $${localIds.length + 1}
         AND fecha_inicio <= $${localIds.length + 2}
+        ${weekTipoClause}
       GROUP BY DATE_TRUNC('week', fecha_inicio AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')
       ORDER BY week_start
     `, ...weekParams)
@@ -102,23 +136,47 @@ export default async function reportesRoutes(fastify) {
       total: Number(r.total)
     }))
 
+    // "Desglose de detalles": los caja_detalles cargados a mano (ej. "MP Point
+    // Crédito", "MP QR", "Transferencia", "Rappi") son la forma real en que
+    // las cajas DCSMART registran sus cobros -- mucho más útil que agrupar por
+    // la clasificación genérica (canal/medio_pago/calculo/otro/legacy
+    // ingreso-egreso), que no dice nada de qué medio fue. Se agrupa por el
+    // nombre real del detalle (el de su tipo si tiene uno asignado, si no el
+    // nombre libre cargado en el propio detalle).
     const detParams = [...localIds, desdeDate, hastaDate, request.activeAppId]
+    let detTipoClause = ''
+    if (tipoTurnoEnum) {
+      detParams.push(tipo_turno)
+      detTipoClause = `AND c.tipo_turno::text = $${detParams.length}`
+    }
     const detRows = await fastify.db.$queryRawUnsafe(`
-      SELECT dt.clasificacion, SUM(cd.monto) AS total
+      SELECT
+        COALESCE(dt.nombre, cd.nombre, 'Sin nombre') AS nombre,
+        BOOL_OR(dt.clasificacion = 'egreso') AS egreso,
+        SUM(cd.monto) AS total
       FROM caja_detalles cd
       JOIN cajas c ON cd.id_caja = c.id
       LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
       WHERE c.id_local IN (${localPlaceholders})
         AND c.fecha_inicio >= $${localIds.length + 1}
         AND c.fecha_inicio <= $${localIds.length + 2}
-        AND dt.id_app = $${localIds.length + 3}
-      GROUP BY dt.clasificacion
+        AND (dt.id_app = $${localIds.length + 3} OR dt.id_app IS NULL)
+        ${detTipoClause}
+      GROUP BY COALESCE(dt.nombre, cd.nombre, 'Sin nombre')
+      ORDER BY total DESC
     `, ...detParams)
 
-    const detMap = {}
-    for (const r of detRows) detMap[r.clasificacion] = Number(r.total)
-    const desperdicios  = detMap['desperdicio']  ?? 0
-    const invitaciones  = detMap['invitacion']   ?? 0
+    const DET_COLORS = ['#3FA9DE', '#7FD49B', '#EF6F8E', '#4BC4CC', '#F4C152', '#F08A5D', '#B98CD8', '#9b958c', '#E0938C', '#5FA8D9']
+    const detallesTotal = detRows.reduce((s, r) => s + Number(r.total), 0)
+    const detalles = detRows
+      .filter(r => Number(r.total) !== 0)
+      .map((r, i) => ({
+        name: r.nombre,
+        val: Number(r.total),
+        egreso: Boolean(r.egreso),
+        pct: detallesTotal > 0 ? ((Number(r.total) / detallesTotal) * 100).toFixed(1) : '0.0',
+        color: DET_COLORS[i % DET_COLORS.length]
+      }))
 
     const pctZ      = totalVentas > 0 ? ((totalFiscal / totalVentas) * 100).toFixed(0) : '0'
     const pctNoFisc = totalVentas > 0 ? ((noFiscal / totalVentas) * 100).toFixed(0) : '0'
@@ -131,20 +189,21 @@ export default async function reportesRoutes(fastify) {
         cubiertos: totalComens,
         count_z: countZ,
         total_tickets: totalTickets,
+        efectivo: totalEfectivo,
         pct_z: pctZ,
         pct_no_fiscal: pctNoFisc
       },
       secondary: [
-        { label: 'Porc Z',          val: pctZ + '%',      color: '#EFEDE8' },
-        { label: 'Z Digitales',      val: digital,         color: '#3FB6BD' },
-        { label: 'Porc Avión',       val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' },
-        { label: 'Desperdicios',     val: desperdicios,    color: '#E0938C' },
-        { label: 'Invitaciones',     val: invitaciones,    color: '#D8B98C' }
+        { label: 'Porc Z',    val: pctZ + '%',      color: '#EFEDE8' },
+        { label: 'Z Digitales', val: digital,         color: '#3FB6BD' },
+        { label: 'Porc Avión', val: pctNoFisc + '%', color: 'rgba(255,255,255,.55)' }
       ],
       weekly,
       fiscal: { fiscal: totalFiscal, no_fiscal: noFiscal, digital },
       payments,
-      pay_total: payTotal
+      pay_total: payTotal,
+      detalles,
+      detalles_total: detallesTotal
     }
   })
 
@@ -173,11 +232,13 @@ export default async function reportesRoutes(fastify) {
       }
     }
 
-    // fecha/fecha_pago/cashflow/periodo se guardan como medianoche UTC del
-    // día elegido -- el rango se marca explícitamente en UTC para no
-    // depender del timezone del proceso donde corra Node.
-    const desdeDate = new Date(`${desde}T00:00:00.000Z`)
-    const hastaDate = new Date(`${hasta}T23:59:59.999Z`)
+    // fecha/cashflow/periodo son "día calendario" (medianoche UTC) -> rango en
+    // UTC. fecha_pago es un instante real en hora Argentina (se carga con hora,
+    // el arqueo lo compara como instante) -> rango con offset -03:00, si no los
+    // pagos hechos de noche (21-24hs ART) caen en el día UTC siguiente.
+    const sufFecha = campoFecha === 'fecha_pago' ? '-03:00' : 'Z'
+    const desdeDate = new Date(`${desde}T00:00:00.000${sufFecha}`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999${sufFecha}`)
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { [campoFecha]: { gte: desdeDate, lte: hastaDate } }
     const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
@@ -278,7 +339,7 @@ export default async function reportesRoutes(fastify) {
 
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
-      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ajustes: [], ventas_total: 0 }
+      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00' }
     }
 
     // fecha_inicio (Caja) es un instante real (con hora) -- rango en hora Argentina.
@@ -350,39 +411,11 @@ export default async function reportesRoutes(fastify) {
       }
     }
 
-    // Ajustes from caja_detalles (invitaciones, consumo personal, comercial)
-    const detParams = [...localIds, desdeDate, hastaDate, request.activeAppId]
-    const detRows = await fastify.db.$queryRawUnsafe(`
-      SELECT
-        COALESCE(dt.nombre, cd.nombre, 'Otros') AS nombre,
-        dt.clasificacion,
-        SUM(cd.monto) AS total
-      FROM caja_detalles cd
-      JOIN cajas ca ON cd.id_caja = ca.id
-      LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
-      WHERE ca.id_local IN (${localPlaceholders})
-        AND ca.fecha_inicio >= $${localIds.length + 1}
-        AND ca.fecha_inicio <= $${localIds.length + 2}
-        AND (dt.id_app = $${localIds.length + 3} OR dt.id_app IS NULL)
-        AND (dt.clasificacion IN ('invitacion', 'consumo_personal', 'comercial', 'desperdicio')
-             OR dt.clasificacion IS NULL)
-      GROUP BY dt.nombre, cd.nombre, dt.clasificacion
-      ORDER BY total DESC
-    `, ...detParams)
-
-    const ajustes = detRows.map(r => ({
-      name: r.nombre,
-      val: Number(r.total),
-      negative: r.clasificacion === 'comercial'
-    }))
-    const totalAjustes = ajustes.reduce((s, a) => s + (a.negative ? -a.val : a.val), 0)
-
     // KPIs
     const cmvTotal = ventasTotal > 0 ? ((totalGeneral / ventasTotal) * 100) : 0
     const cmvAlimentos = ventasTotal > 0 ? ((totalAlimentos / ventasTotal) * 100) : 0
     const cmvBebidas = ventasTotal > 0 ? ((totalBebidas / ventasTotal) * 100) : 0
     const cmvMovstock = ventasTotal > 0 ? ((totalMovstock / ventasTotal) * 100) : 0
-    const cmvStock = ventasTotal > 0 ? ((totalAjustes / ventasTotal) * 100) : 0
 
     // Percentage heights for bar rendering
     const aMax = alimentos.length ? Math.max(...alimentos.map(a => a.val)) : 1
@@ -391,12 +424,13 @@ export default async function reportesRoutes(fastify) {
 
     return {
       ventas_total: ventasTotal,
+      cmv_total_monto: totalGeneral,
+      cmv_total_pct: cmvTotal.toFixed(2),
       kpis: [
         { label: 'CMV Total',     val: cmvTotal.toFixed(2) },
         { label: 'CMV Alimentos', val: cmvAlimentos.toFixed(2) },
         { label: 'CMV Bebidas',   val: cmvBebidas.toFixed(2) },
         { label: 'CMV MovStock',  val: cmvMovstock.toFixed(2) },
-        { label: 'CMV Ajustes',   val: cmvStock.toFixed(2) },
       ],
       alimentos: alimentos.map(a => ({
         ...a,
@@ -410,11 +444,9 @@ export default async function reportesRoutes(fastify) {
         ...m,
         h: (m.val / mMax * 100).toFixed(1)
       })),
-      ajustes,
       total_alimentos: totalAlimentos,
       total_movstock: totalMovstock,
       total_bebidas: totalBebidas,
-      total_ajustes: totalAjustes,
       total_general: totalGeneral
     }
   })

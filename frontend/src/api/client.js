@@ -4,6 +4,10 @@ import { useAppStore } from '../store/appStore'
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
   withCredentials: true,
+  // Timeout generoso (cubre el cold start de Cloud Run pero evita que una
+  // request quede colgada para siempre y deje la app en una pantalla de carga
+  // infinita). 45s para no cortar subidas de archivos en conexiones lentas.
+  timeout: 45000,
   headers: { 'Content-Type': 'application/json' }
 })
 

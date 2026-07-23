@@ -380,7 +380,14 @@
 .rep-charts-row.mid  { grid-template-columns: 1.65fr 1fr; }
 @media (max-width: 900px) {
   .rep-charts-row.wide,
-  .rep-charts-row.mid { grid-template-columns: 1fr; }
+  .rep-charts-row.mid,
+  .rep-charts-row.paired { grid-template-columns: 1fr !important; }
+}
+
+.rep-paired-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .rep-chart-card {
@@ -514,4 +521,67 @@
   color: #57534e;
   text-transform: uppercase;
   margin-bottom: 14px;
+}
+
+/* ── Botón "Analytics App (beta)" — acceso destacado al Analytics externo ── */
+.rep-analytics-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rep-analytics-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 11px;
+  border: 1px solid rgba(126, 170, 255, 0.45);
+  background: linear-gradient(120deg, rgba(63, 110, 220, 0.28), rgba(160, 90, 220, 0.28));
+  color: #eaf0ff;
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 0 0 rgba(126, 170, 255, 0);
+  animation: rep-analytics-glow 2.6s ease-in-out infinite;
+  transition: transform 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.rep-analytics-btn:hover:not(:disabled) { transform: translateY(-1px); border-color: rgba(126, 170, 255, 0.8); }
+.rep-analytics-btn:disabled { opacity: 0.6; cursor: default; animation: none; }
+/* barrido de brillo tipo "IA" */
+.rep-analytics-btn::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -60%;
+  width: 45%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-18deg);
+  animation: rep-analytics-sheen 3.2s ease-in-out infinite;
+}
+@keyframes rep-analytics-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(126, 170, 255, 0); }
+  50%      { box-shadow: 0 0 18px rgba(126, 170, 255, 0.45); }
+}
+@keyframes rep-analytics-sheen {
+  0%   { left: -60%; }
+  55%  { left: 120%; }
+  100% { left: 120%; }
+}
+.rep-analytics-beta {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a9b8d8;
+  background: rgba(126, 170, 255, 0.14);
+  border: 1px solid rgba(126, 170, 255, 0.3);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rep-analytics-btn { animation: none; }
+  .rep-analytics-btn::after { animation: none; display: none; }
 }

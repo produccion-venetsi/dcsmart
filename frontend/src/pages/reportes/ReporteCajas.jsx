@@ -10,6 +10,13 @@ const fmtCurrency = new Intl.NumberFormat('es-AR', {
 })
 const fmt = (n) => fmtCurrency.format(n)
 
+// week_start es una fecha de calendario (lunes de la semana, guardada a
+// medianoche UTC) -> se formatea forzando timeZone UTC para que no se corra.
+function fmtSemana(week) {
+  if (!week) return ''
+  return new Date(week).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
+}
+
 function IcoTrendUp() {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5FC98C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -31,6 +38,13 @@ function IcoTicket() {
     </svg>
   )
 }
+function IcoCash() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5FC98C" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="3"/>
+    </svg>
+  )
+}
 
 function SalesTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
@@ -41,7 +55,7 @@ function SalesTooltip({ active, payload }) {
       borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#F0EDE8',
       boxShadow: '0 8px 24px rgba(0,0,0,.5)'
     }}>
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>{d?.label}</div>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Semana del {d?.label}</div>
       <div style={{ color: '#3FB6BD', fontWeight: 600 }}>{fmt(d?.total ?? 0)}</div>
     </div>
   )
@@ -63,7 +77,7 @@ function PayTooltip({ active, payload }) {
   )
 }
 
-export default function ReporteCajas({ applied, activeLocal }) {
+export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -74,26 +88,32 @@ export default function ReporteCajas({ applied, activeLocal }) {
     const params = {
       desde: applied.desde,
       hasta: applied.hasta,
-      ...(activeLocal ? { id_local: activeLocal.id } : {})
+      ...(activeLocal ? { id_local: activeLocal.id } : {}),
+      ...(tipoTurno ? { tipo_turno: tipoTurno } : {})
     }
     reportesApi.cajas(params, ctrl.signal)
       .then((res) => setData(res.data))
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [applied.desde, applied.hasta, activeLocal?.id])
+  }, [applied.desde, applied.hasta, activeLocal?.id, tipoTurno])
 
-  const kpi       = data?.kpi ?? {}
-  const secondary = data?.secondary ?? []
-  const weekly    = data?.weekly ?? []
-  const fiscal    = data?.fiscal ?? {}
-  const payments  = data?.payments ?? []
-  const payTotal  = data?.pay_total ?? 0
+  const kpi           = data?.kpi ?? {}
+  const secondary     = data?.secondary ?? []
+  const weekly        = (data?.weekly ?? []).map(w => ({ ...w, label: w.week ? fmtSemana(w.week) : w.label }))
+  const fiscal        = data?.fiscal ?? {}
+  const payments      = data?.payments ?? []
+  const payTotal      = data?.pay_total ?? 0
+  const detalles      = data?.detalles ?? []
+  const detallesTotal = data?.detalles_total ?? 0
 
   const fiscalPct = kpi.total_ventas > 0
     ? Math.round((fiscal.fiscal / kpi.total_ventas) * 100) : 0
 
   const skel = loading || !data
+
+  const showMovimientos = skel || payments.length > 0
+  const showDetalles    = skel || detalles.length > 0
 
   return (
     <>
@@ -102,7 +122,7 @@ export default function ReporteCajas({ applied, activeLocal }) {
       </div>
 
       {/* ── KPI cards ── */}
-      <div className="rep-kpi-grid cols-3">
+      <div className="rep-kpi-grid cols-4">
         <div className="rep-kpi hero">
           <div className="rep-kpi-head">
             <span className="rep-kpi-label">Total de ventas</span>
@@ -133,6 +153,16 @@ export default function ReporteCajas({ applied, activeLocal }) {
             ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
             : <div className="rep-kpi-value med">{fmt(kpi.ticket_promedio)}</div>}
           <div className="rep-kpi-sub">{kpi.cubiertos ?? 0} cubiertos servidos</div>
+        </div>
+
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Efectivo</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(95,201,140,.18)' }}><IcoCash /></span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{fmt(kpi.efectivo)}</div>}
         </div>
       </div>
 
@@ -234,64 +264,127 @@ export default function ReporteCajas({ applied, activeLocal }) {
         </div>
       </div>
 
-      {/* ── Charts row 2 ── */}
-      <div className="rep-charts-row mid">
-        <div className="rep-chart-card">
-          <div className="rep-chart-title">Medios de pago</div>
-          <div className="rep-chart-sub">Monto cobrado por medio en el período</div>
-          {skel ? (
-            <div className="rep-skel" style={{ width: '100%', height: 220 }} />
-          ) : payments.length === 0 ? (
-            <div style={{ height: 220, display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,.35)', fontSize: 13 }}>
-              Sin datos
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={payments} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
-                <XAxis dataKey="name" tickLine={false} axisLine={false}
-                  tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 9, fontFamily: 'Montserrat' }}
-                  interval={0} angle={-20} textAnchor="end" height={50} />
-                <YAxis tickLine={false} axisLine={false} width={60}
-                  tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
-                  tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
-                <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(255,255,255,.04)', radius: 6 }} />
-                <Bar dataKey="val" radius={[5, 5, 0, 0]}>
-                  {payments.map((p, i) => (
-                    <Cell key={i} fill={p.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+      {/* ── Movimientos / Detalles: gráfico + tabla emparejados por bloque,
+          cada bloque desaparece entero si esa fuente no tiene datos ── */}
+      {(showMovimientos || showDetalles) && (
+        <div className="rep-charts-row paired"
+          style={{ gridTemplateColumns: showMovimientos && showDetalles ? '1fr 1fr' : '1fr' }}>
 
-        <div className="rep-chart-card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por medio</span>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
-          </div>
-          {skel ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="rep-skel" style={{ width: '100%', height: 36, marginBottom: 2 }} />
-            ))
-          ) : (
-            <>
-              {payments.map((p, i) => (
-                <div className="rep-pay-row" key={i}>
-                  <span className="rep-pay-dot" style={{ background: p.color }} />
-                  <span className="rep-pay-name">{p.name}</span>
-                  <span className="rep-pay-amount">{fmt(p.val)}</span>
-                  <span className="rep-pay-pct">{p.pct}%</span>
-                </div>
-              ))}
-              <div className="rep-pay-total">
-                <span>Total cobrado</span>
-                <span>{fmt(payTotal)}</span>
+          {showMovimientos && (
+            <div className="rep-paired-col">
+              <div className="rep-chart-card">
+                <div className="rep-chart-title">Desglose de movimientos</div>
+                <div className="rep-chart-sub">Monto cobrado por medio en el período</div>
+                {skel ? (
+                  <div className="rep-skel" style={{ width: '100%', height: 220 }} />
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={payments} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+                      <XAxis dataKey="name" tickLine={false} axisLine={false}
+                        tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 9, fontFamily: 'Montserrat' }}
+                        interval={0} angle={-20} textAnchor="end" height={50} />
+                      <YAxis tickLine={false} axisLine={false} width={60}
+                        tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
+                        tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
+                      <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(255,255,255,.04)', radius: 6 }} />
+                      <Bar dataKey="val" radius={[5, 5, 0, 0]}>
+                        {payments.map((p, i) => (
+                          <Cell key={i} fill={p.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
-            </>
+
+              <div className="rep-chart-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por movimiento</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
+                </div>
+                {skel ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="rep-skel" style={{ width: '100%', height: 36, marginBottom: 2 }} />
+                  ))
+                ) : (
+                  <>
+                    {payments.map((p, i) => (
+                      <div className="rep-pay-row" key={i}>
+                        <span className="rep-pay-dot" style={{ background: p.color }} />
+                        <span className="rep-pay-name">{p.name}</span>
+                        <span className="rep-pay-amount">{fmt(p.val)}</span>
+                        <span className="rep-pay-pct">{p.pct}%</span>
+                      </div>
+                    ))}
+                    <div className="rep-pay-total">
+                      <span>Total cobrado</span>
+                      <span>{fmt(payTotal)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Desglose de detalles (caja_detalles cargados a mano: MP Point,
+              MP QR, Transferencia, Rappi, etc. -- no la clasificación genérica) */}
+          {showDetalles && (
+            <div className="rep-paired-col">
+              <div className="rep-chart-card">
+                <div className="rep-chart-title">Desglose de detalles</div>
+                <div className="rep-chart-sub">Monto por detalle cargado en el período</div>
+                {skel ? (
+                  <div className="rep-skel" style={{ width: '100%', height: 220 }} />
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={detalles} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+                      <XAxis dataKey="name" tickLine={false} axisLine={false}
+                        tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 9, fontFamily: 'Montserrat' }}
+                        interval={0} angle={-20} textAnchor="end" height={50} />
+                      <YAxis tickLine={false} axisLine={false} width={60}
+                        tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
+                        tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
+                      <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(255,255,255,.04)', radius: 6 }} />
+                      <Bar dataKey="val" radius={[5, 5, 0, 0]}>
+                        {detalles.map((d, i) => (
+                          <Cell key={i} fill={d.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className="rep-chart-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por tipo</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
+                </div>
+                {skel ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="rep-skel" style={{ width: '100%', height: 36, marginBottom: 2 }} />
+                  ))
+                ) : (
+                  <>
+                    {detalles.map((d, i) => (
+                      <div className="rep-pay-row" key={i}>
+                        <span className="rep-pay-dot" style={{ background: d.color }} />
+                        <span className="rep-pay-name">{d.name}{d.egreso ? ' (egreso)' : ''}</span>
+                        <span className="rep-pay-amount">{d.egreso ? '-' : ''}{fmt(d.val)}</span>
+                        <span className="rep-pay-pct">{d.pct}%</span>
+                      </div>
+                    ))}
+                    <div className="rep-pay-total">
+                      <span>Total detalles</span>
+                      <span>{fmt(detallesTotal)}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </div>
-      </div>
+      )}
     </>
   )
 }

@@ -70,16 +70,10 @@ function IcoReportes() {
   )
 }
 
-const QUICK_ACTIONS = [
-  { to: '/cajas',       label: 'Cajas',       sub: 'Turnos y movimientos',    Icon: IcoCaja,      i: 0 },
-  { to: '/pagos',       label: 'Pagos',       sub: 'Facturas y órdenes',      Icon: IcoPagos,     i: 1 },
-  { to: '/proveedores', label: 'Proveedores', sub: 'Directorio de cuentas',   Icon: IcoProveedor, i: 2 },
-  { to: '/admin/apps',  label: 'Administrar', sub: 'Apps, locales, usuarios', Icon: IcoAdmin,     i: 3 },
-]
 
 function fmtDate() {
   const d = new Date()
-  return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' })
 }
 
 export default function Dashboard() {
@@ -89,6 +83,15 @@ export default function Dashboard() {
 
   const appNombre = activeApp?.app?.nombre ?? '—'
   const firstName = user?.nombre?.split(' ')[0] ?? ''
+
+  // Acceso rápido. "Reportes" solo si la app activa tiene el permiso.
+  const quickActions = [
+    { to: '/cajas',       label: 'Cajas',       sub: 'Turnos y movimientos',    Icon: IcoCaja },
+    { to: '/pagos',       label: 'Pagos',       sub: 'Facturas y órdenes',      Icon: IcoPagos },
+    { to: '/proveedores', label: 'Proveedores', sub: 'Directorio de cuentas',   Icon: IcoProveedor },
+    ...(activeApp?.can_reportes ? [{ to: '/reportes', label: 'Reportes', sub: 'Pagos, cajas y CMV', Icon: IcoReportes }] : []),
+    { to: '/admin/apps',  label: 'Administrar', sub: 'Apps, locales, usuarios', Icon: IcoAdmin },
+  ]
 
   return (
     <div className="page">
@@ -115,24 +118,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── ver reportes ── */}
-      <button
-        className="btn btn-primary"
-        style={{ marginBottom: '2rem', padding: '0.85rem 1.5rem', fontSize: 15 }}
-        onClick={() => navigate('/reportes')}
-      >
-        <IcoReportes />
-        Ver Reportes
-        <IcoArrow />
-      </button>
-
       {/* ── quick actions ── */}
       <div className="selector-label" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
         <IcoMapPin />
         Acceso rápido
       </div>
       <div className="quick-actions-grid">
-        {QUICK_ACTIONS.map(({ to, label, sub, Icon, i }) => (
+        {quickActions.map(({ to, label, sub, Icon }, i) => (
           <button
             key={to}
             className="quick-action-card"
