@@ -10,6 +10,13 @@ const fmtCurrency = new Intl.NumberFormat('es-AR', {
 })
 const fmt = (n) => fmtCurrency.format(n)
 
+// week_start es una fecha de calendario (lunes de la semana, guardada a
+// medianoche UTC) -> se formatea forzando timeZone UTC para que no se corra.
+function fmtSemana(week) {
+  if (!week) return ''
+  return new Date(week).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
+}
+
 function IcoTrendUp() {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5FC98C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -48,7 +55,7 @@ function SalesTooltip({ active, payload }) {
       borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#F0EDE8',
       boxShadow: '0 8px 24px rgba(0,0,0,.5)'
     }}>
-      <div style={{ fontWeight: 700, marginBottom: 4 }}>{d?.label}</div>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Semana del {d?.label}</div>
       <div style={{ color: '#3FB6BD', fontWeight: 600 }}>{fmt(d?.total ?? 0)}</div>
     </div>
   )
@@ -93,7 +100,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
 
   const kpi           = data?.kpi ?? {}
   const secondary     = data?.secondary ?? []
-  const weekly        = data?.weekly ?? []
+  const weekly        = (data?.weekly ?? []).map(w => ({ ...w, label: w.week ? fmtSemana(w.week) : w.label }))
   const fiscal        = data?.fiscal ?? {}
   const payments      = data?.payments ?? []
   const payTotal      = data?.pay_total ?? 0
