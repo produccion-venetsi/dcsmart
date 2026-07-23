@@ -2416,3 +2416,13 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   margin: 0 0 20px;
   line-height: 1.5;
 }
+
+/* Versión de la app en el footer del sidebar */
+.sidebar-version {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--t4);
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}

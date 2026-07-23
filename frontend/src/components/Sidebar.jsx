@@ -5,6 +5,11 @@ import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
 import AppLogo from './AppLogo.jsx'
 
+// Versión visible de la app: version de package.json (__APP_VERSION__, inyectada
+// en build) + los primeros 7 chars del commit (VITE_GIT_SHA, que setea el CI).
+const GIT_SHA = import.meta.env.VITE_GIT_SHA ? String(import.meta.env.VITE_GIT_SHA).slice(0, 7) : ''
+const APP_VERSION_LABEL = `v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '?'}${GIT_SHA ? ' · ' + GIT_SHA : ''}`
+
 /* ── SVG icons ── */
 function IcoDashboard() {
   return (
@@ -340,6 +345,7 @@ export default function Sidebar() {
         </div>
         <div className="sidebar-user-info">
           <div className="sidebar-user-name">{user?.nombre}</div>
+          {!collapsed && <div className="sidebar-version" title="Versión de la app">{APP_VERSION_LABEL}</div>}
         </div>
         <button className="sidebar-logout" onClick={handleLogout} title="Cerrar sesión">
           <IcoLogout />
