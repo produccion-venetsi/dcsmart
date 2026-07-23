@@ -1,31 +1,52 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import Layout from './components/Layout.jsx'
 import { useAuthStore } from './store/authStore.js'
 
-const Login         = lazy(() => import('./pages/Login.jsx'))
-const StartChoice   = lazy(() => import('./pages/StartChoice.jsx'))
-const AppSelector   = lazy(() => import('./pages/AppSelector.jsx'))
-const Dashboard     = lazy(() => import('./pages/Dashboard.jsx'))
-const CajaList      = lazy(() => import('./pages/cajas/CajaList.jsx'))
-const CajaDetail    = lazy(() => import('./pages/cajas/CajaDetail.jsx'))
-const PagoList      = lazy(() => import('./pages/pagos/PagoList.jsx'))
-const PagoForm      = lazy(() => import('./pages/pagos/PagoForm.jsx'))
-const PdpDashboard  = lazy(() => import('./pages/pdp/PdpDashboard.jsx'))
-const ProveedorList = lazy(() => import('./pages/proveedores/ProveedorList.jsx'))
-const ProveedorForm = lazy(() => import('./pages/proveedores/ProveedorForm.jsx'))
-const Reportes      = lazy(() => import('./pages/reportes/Reportes.jsx'))
-const Auditorias    = lazy(() => import('./pages/auditorias/Auditorias.jsx'))
-const ActivityLog   = lazy(() => import('./pages/activity-log/ActivityLog.jsx'))
-const Users         = lazy(() => import('./pages/admin/Users.jsx'))
-const Apps          = lazy(() => import('./pages/admin/Apps.jsx'))
-const Locales       = lazy(() => import('./pages/admin/Locales.jsx'))
-const RubCat        = lazy(() => import('./pages/admin/RubCat.jsx'))
-const MetodosPago   = lazy(() => import('./pages/admin/MetodosPago.jsx'))
-const Roles         = lazy(() => import('./pages/admin/Roles.jsx'))
-const DetalleTipos  = lazy(() => import('./pages/admin/DetalleTipos.jsx'))
-const ArqueoList    = lazy(() => import('./pages/arqueo/ArqueoList.jsx'))
+// Carga perezosa que se recupera del típico fallo post-deploy: el index.html
+// viejo referencia un chunk hasheado que el build nuevo ya borró (404), el
+// import() rechaza y -- sin esto -- se desmontaba todo dejando la pantalla en
+// blanco/azul. Ante el fallo recargamos UNA vez (máx. cada 10s) para traer el
+// index.html nuevo; si aun así falla, el error sube al ErrorBoundary.
+function lazyWithReload(factory) {
+  return lazy(() =>
+    factory().catch((err) => {
+      const KEY = 'chunk-reload-at'
+      const last = Number(sessionStorage.getItem(KEY) || 0)
+      if (Date.now() - last > 10000) {
+        sessionStorage.setItem(KEY, String(Date.now()))
+        window.location.reload()
+        return new Promise(() => {}) // no resuelve: la página se está recargando
+      }
+      throw err
+    })
+  )
+}
+
+const Login         = lazyWithReload(() => import('./pages/Login.jsx'))
+const StartChoice   = lazyWithReload(() => import('./pages/StartChoice.jsx'))
+const AppSelector   = lazyWithReload(() => import('./pages/AppSelector.jsx'))
+const Dashboard     = lazyWithReload(() => import('./pages/Dashboard.jsx'))
+const CajaList      = lazyWithReload(() => import('./pages/cajas/CajaList.jsx'))
+const CajaDetail    = lazyWithReload(() => import('./pages/cajas/CajaDetail.jsx'))
+const PagoList      = lazyWithReload(() => import('./pages/pagos/PagoList.jsx'))
+const PagoForm      = lazyWithReload(() => import('./pages/pagos/PagoForm.jsx'))
+const PdpDashboard  = lazyWithReload(() => import('./pages/pdp/PdpDashboard.jsx'))
+const ProveedorList = lazyWithReload(() => import('./pages/proveedores/ProveedorList.jsx'))
+const ProveedorForm = lazyWithReload(() => import('./pages/proveedores/ProveedorForm.jsx'))
+const Reportes      = lazyWithReload(() => import('./pages/reportes/Reportes.jsx'))
+const Auditorias    = lazyWithReload(() => import('./pages/auditorias/Auditorias.jsx'))
+const ActivityLog   = lazyWithReload(() => import('./pages/activity-log/ActivityLog.jsx'))
+const Users         = lazyWithReload(() => import('./pages/admin/Users.jsx'))
+const Apps          = lazyWithReload(() => import('./pages/admin/Apps.jsx'))
+const Locales       = lazyWithReload(() => import('./pages/admin/Locales.jsx'))
+const RubCat        = lazyWithReload(() => import('./pages/admin/RubCat.jsx'))
+const MetodosPago   = lazyWithReload(() => import('./pages/admin/MetodosPago.jsx'))
+const Roles         = lazyWithReload(() => import('./pages/admin/Roles.jsx'))
+const DetalleTipos  = lazyWithReload(() => import('./pages/admin/DetalleTipos.jsx'))
+const ArqueoList    = lazyWithReload(() => import('./pages/arqueo/ArqueoList.jsx'))
 
 function PageFallback() {
   return (
@@ -69,7 +90,8 @@ export default function App() {
   }, [])
 
   return (
-    <Suspense fallback={<PageFallback />}>
+    <ErrorBoundary>
+      <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
@@ -121,6 +143,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </Suspense>
+      </Suspense>
+    </ErrorBoundary>
   )
 }
