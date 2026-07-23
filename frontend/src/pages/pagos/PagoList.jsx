@@ -10,7 +10,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
-import { downloadCsv } from '../../lib/csv.js'
+import { downloadExcel } from '../../lib/excel.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
@@ -182,7 +182,7 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Dirección',   get: (p) => p.ingresa_egreso == null ? '' : (p.ingresa_egreso ? 'Ingreso' : 'Egreso') },
   { label: 'Estado',      get: (p) => ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op ?? '' },
   { label: 'Pagado',      get: (p) => p.pagado ? 'Sí' : 'No' },
-  { label: 'Fecha Pago',  get: (p) => p.fecha_pago ? fmtDate(p.fecha_pago) : '' },
+  { label: 'Fecha Pago',  get: (p) => p.fecha_pago ? fmtDateArg(p.fecha_pago) : '' },
   { label: 'Período',     get: (p) => p.periodo ? fmtMonth(p.periodo) : '' },
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
   { label: 'Observaciones', get: (p) => p.observaciones || '' },
@@ -464,7 +464,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     ['Método',      pago.metodo_pago?.nombre || '—'],
     ['Cashflow',    fmtDate(pago.cashflow)],
     ['Pagado',      pago.pagado ? 'Sí' : 'No'],
-    ['Fecha Pago',  fmtDate(pago.fecha_pago)],
+    ['Fecha Pago',  fmtDateArg(pago.fecha_pago)],
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
     ['Periódico',   periodico ? 'Sí' : 'No'],
@@ -911,16 +911,16 @@ export default function PagoList() {
   // ── Volver a página 1 cuando cambian filtros / sort / búsqueda ────────────
   useEffect(() => { setPage(1) }, [buildParams])
 
-  // ── Exportar CSV: mismos filtros ya aplicados, pero SIN paginar (limit: 0
+  // ── Exportar Excel: mismos filtros ya aplicados, pero SIN paginar (limit: 0
   // → el backend trae todas las filas que matchean el where, no una página) ──
   const exportCsv = useCallback(async () => {
     setExporting(true)
     try {
       const { data } = await pagosApi.list({ ...buildParams(1), limit: 0 })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      downloadCsv(`pagos_${todayInputDate()}.csv`, data.data, PAGO_CSV_COLUMNS)
+      await downloadExcel(`pagos_${todayInputDate()}.xlsx`, data.data, PAGO_CSV_COLUMNS, 'Pagos')
     } catch {
-      notify('Error al exportar CSV', 'error')
+      notify('Error al exportar Excel', 'error')
     } finally {
       setExporting(false)
     }
@@ -1203,7 +1203,7 @@ export default function PagoList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 19 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  const colCount = 18 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1447,10 +1447,10 @@ export default function PagoList() {
                 onClick={exportCsv}
                 disabled={exporting || !(filters.desde && filters.hasta)}
                 title={filters.desde && filters.hasta
-                  ? 'Exportar a CSV los pagos con los filtros actuales'
+                  ? 'Exportar a Excel los pagos con los filtros actuales'
                   : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
               >
-                {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar CSV
+                {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
               </button>
             )}
           </ActionsMenu>
@@ -1507,19 +1507,18 @@ export default function PagoList() {
                   <input type="checkbox" className="select-checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
                 </th>
               )}
+              <th style={{ width: 44, textAlign: 'center' }} title="Auditado">Aud</th>
               <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
-              <th style={{ minWidth: 100 }}>Auditado</th>
               <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
               <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
               <th style={{ minWidth: 160 }}>Rubro / Cat</th>
               <th style={{ minWidth: 80 }}>Tipo</th>
-              <th>PV</th>
-              <th>Nro</th>
+              <th style={{ minWidth: 90 }}>PV / Nro</th>
               <th>Neto</th>
               <SortTh field="importe" minWidth={90}>Importe</SortTh>
               <th>Método</th>
               <th>Cashflow</th>
-              <th>Dirección</th>
+              <th style={{ width: 44, textAlign: 'center' }} title="Ingreso / Egreso">E/I</th>
               <th>Estado</th>
               <th>Pagado</th>
               <SortTh field="fecha_pago" minWidth={90}>Fecha Pago</SortTh>
@@ -1555,12 +1554,12 @@ export default function PagoList() {
                       <input type="checkbox" className="select-checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
                     </td>
                   )}
-                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
-                  <td style={{ minWidth: 40, textAlign: 'center' }}>
+                  <td style={{ width: 44, textAlign: 'center' }}>
                     <span style={{ color: p.audit ? 'var(--green)' : 'var(--amber)' }} title={p.audit ? 'Auditado' : 'No auditado'}>
                       {p.audit ? <IcoThumbUp /> : <IcoEye />}
                     </span>
                   </td>
+                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                   <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 160, fontSize: 12 }}>
@@ -1573,8 +1572,11 @@ export default function PagoList() {
                       ? <span className={`badge ${TIPO_BADGE[p.id_tipo] ?? 'badge-muted'}`}>{p.id_tipo}</span>
                       : <span className="td-muted">—</span>}
                   </td>
-                  <td className="td-mono" style={{ textAlign: 'right', minWidth: 60 }}>{fmtPV(p.pv)}</td>
-                  <td className="td-mono" style={{ minWidth: 80 }}>{fmtNro(p.nro)}</td>
+                  <td className="td-mono" style={{ minWidth: 90, whiteSpace: 'nowrap' }}>
+                    {(p.pv != null || p.nro != null)
+                      ? <span>{fmtPV(p.pv)}<span className="td-muted">-</span>{fmtNro(p.nro)}</span>
+                      : <span className="td-muted">—</span>}
+                  </td>
                   <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
                   <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
                   <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
@@ -1596,7 +1598,7 @@ export default function PagoList() {
                   <td style={{ minWidth: 70, textAlign: 'center' }}>
                     <span className={p.pagado ? 'bool-yes' : 'bool-no'}>{p.pagado ? '✓' : '✗'}</span>
                   </td>
-                  <td style={{ minWidth: 90 }}>{fmtDate(p.fecha_pago)}</td>
+                  <td style={{ minWidth: 90 }}>{fmtDateArg(p.fecha_pago)}</td>
                   <td style={{ minWidth: 80 }}>{fmtMonth(p.periodo)}</td>
                   <td style={{ minWidth: 40, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                     {p.foto_url

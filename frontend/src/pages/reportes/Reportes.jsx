@@ -1,32 +1,28 @@
 import { useState, useCallback } from 'react'
 import { useAppStore } from '../../store/appStore.js'
+import { todayInputDate } from '../../lib/dates.js'
 import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
 import './reportes.css'
 
-function pad(n) { return String(n).padStart(2, '0') }
-function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` }
+// Aritmética de día calendario sobre un 'YYYY-MM-DD', operando en UTC para no
+// depender del huso del navegador de quien mira (el "hoy" ya viene en hora
+// Argentina desde todayInputDate()).
+function addDaysStr(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+}
+function addMonthsStr(dateStr, months) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1 + months, d)).toISOString().slice(0, 10)
+}
 
 function getPresetRange(preset) {
-  const now = new Date()
-  const hoy = toDateStr(now)
-  if (preset === 'hoy') return { desde: hoy, hasta: hoy }
-  if (preset === '7d') {
-    const d = new Date(now)
-    d.setDate(d.getDate() - 6)
-    return { desde: toDateStr(d), hasta: hoy }
-  }
-  if (preset === '30d') {
-    const d = new Date(now)
-    d.setDate(d.getDate() - 29)
-    return { desde: toDateStr(d), hasta: hoy }
-  }
-  if (preset === '12m') {
-    const d = new Date(now)
-    d.setMonth(d.getMonth() - 12)
-    return { desde: toDateStr(d), hasta: hoy }
-  }
+  const hoy = todayInputDate()
+  if (preset === '7d')  return { desde: addDaysStr(hoy, -6),   hasta: hoy }
+  if (preset === '30d') return { desde: addDaysStr(hoy, -29),  hasta: hoy }
+  if (preset === '12m') return { desde: addMonthsStr(hoy, -12), hasta: hoy }
   return { desde: hoy, hasta: hoy }
 }
 
@@ -53,6 +49,10 @@ const CAMPO_FECHA_OPTIONS = [
   { value: 'periodo',    label: 'Período' },
 ]
 
+// Mismas 6 opciones que el filtro de Tipo en la tabla de Cajas (ver
+// frontend/src/pages/cajas/CajaList.jsx, TIPOS_TURNO).
+const TIPOS_TURNO = ['Mañana', 'Tarde', 'Noche', 'Trasnoche', 'Evento', 'Otros']
+
 function IcoCalendar() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3FB6BD" strokeWidth="1.8" strokeLinecap="round">
@@ -76,6 +76,7 @@ export default function Reportes() {
 
   const [tab, setTab] = useState('pagos')
   const [campoFecha, setCampoFecha] = useState('fecha')
+  const [tipoTurno, setTipoTurno] = useState('')
 
   const initial = getPresetRange('30d')
   const [preset,  setPreset]  = useState('30d')
@@ -162,10 +163,27 @@ export default function Reportes() {
                     <select
                       value={campoFecha}
                       onChange={(e) => setCampoFecha(e.target.value)}
-                      style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif' }}
+                      style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif', appearance: 'none', WebkitAppearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='rgba(240,237,232,0.55)' stroke-width='1.5' stroke-linecap='round' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right center', paddingRight: 16, cursor: 'pointer' }}
                     >
                       {CAMPO_FECHA_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+              {tab === 'cajas' && (
+                <div className="rep-filter-col" style={{ maxWidth: 180 }}>
+                  <div className="rep-filter-label">Tipo de turno</div>
+                  <div className="rep-date-input">
+                    <select
+                      value={tipoTurno}
+                      onChange={(e) => setTipoTurno(e.target.value)}
+                      style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif', appearance: 'none', WebkitAppearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='rgba(240,237,232,0.55)' stroke-width='1.5' stroke-linecap='round' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right center', paddingRight: 16, cursor: 'pointer' }}
+                    >
+                      <option value="">Todos</option>
+                      {TIPOS_TURNO.map((t) => (
+                        <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
                   </div>
@@ -210,7 +228,7 @@ export default function Reportes() {
           <ReportePagos applied={applied} activeLocal={activeLocal} campoFecha={campoFecha} />
         )}
         {tab === 'cajas' && (
-          <ReporteCajas applied={applied} activeLocal={activeLocal} />
+          <ReporteCajas applied={applied} activeLocal={activeLocal} tipoTurno={tipoTurno} />
         )}
         {tab === 'cmv' && (
           <ReporteCMV applied={applied} activeLocal={activeLocal} />

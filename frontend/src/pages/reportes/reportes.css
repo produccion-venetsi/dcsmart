@@ -380,7 +380,14 @@
 .rep-charts-row.mid  { grid-template-columns: 1.65fr 1fr; }
 @media (max-width: 900px) {
   .rep-charts-row.wide,
-  .rep-charts-row.mid { grid-template-columns: 1fr; }
+  .rep-charts-row.mid,
+  .rep-charts-row.paired { grid-template-columns: 1fr !important; }
+}
+
+.rep-paired-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .rep-chart-card {

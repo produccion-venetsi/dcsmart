@@ -5,6 +5,7 @@ import { localesApi } from '../../api/locales.js'
 import { rolesApi }  from '../../api/roles.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAuthStore } from '../../store/authStore.js'
+import { fmtDateArg } from '../../lib/dates.js'
 import DrawerPanel   from '../../components/DrawerPanel.jsx'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -589,7 +590,7 @@ export default function Users() {
                   <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: 2 }}>{selected.email}</div>
                   {selected.created_at && (
                     <div style={{ fontSize: 11, color: 'var(--t4)', marginTop: 3 }}>
-                      Alta: {new Date(selected.created_at).toLocaleDateString('es-AR')}
+                      Alta: {fmtDateArg(selected.created_at)}
                     </div>
                   )}
                 </div>
@@ -785,6 +786,7 @@ export default function Users() {
                               <span style={{ fontStyle: 'italic' }}>Todos los locales del grupo</span>
                               {amISuperAdmin && available.length > 0 && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
@@ -832,6 +834,7 @@ export default function Users() {
                               {/* Admin: agregar más locales (quitar todos = vuelve a "todos los locales") */}
                               {amISuperAdmin && isAdmin && available.length > 0 && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}
@@ -845,6 +848,7 @@ export default function Users() {
                               {/* Cajero: cambiar local (reemplaza el existente) */}
                               {amISuperAdmin && isCajero && (
                                 <select
+                                  className="filter-select"
                                   value=""
                                   disabled={accessBusy}
                                   onChange={(e) => handleAddLocal(r.id_app, e.target.value, r.role?.nombre)}

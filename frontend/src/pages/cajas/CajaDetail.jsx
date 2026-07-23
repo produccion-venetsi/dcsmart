@@ -298,7 +298,7 @@ export default function CajaDetail() {
                     {editingMovId === m.id ? (
                       <>
                         <td>
-                          <select value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
+                          <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
                             <option>INGRESO</option>
                             <option>EGRESO</option>
                             <option>APERTURA</option>
