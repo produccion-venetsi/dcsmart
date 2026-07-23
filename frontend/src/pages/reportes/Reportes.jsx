@@ -1,10 +1,31 @@
 import { useState, useCallback } from 'react'
 import { useAppStore } from '../../store/appStore.js'
+import { authApi } from '../../api/auth.js'
 import { todayInputDate } from '../../lib/dates.js'
 import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
 import './reportes.css'
+
+const ANALYTICS_URL = import.meta.env.VITE_ANALYTICS_URL || 'https://analisis.dcsmart.app'
+
+function IcoSparkles() {
+  return (
+    <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/>
+      <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z"/>
+    </svg>
+  )
+}
+function IcoExternal() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+      <polyline points="15 3 21 3 21 9"/>
+      <line x1="10" y1="14" x2="21" y2="3"/>
+    </svg>
+  )
+}
 
 // Aritmética de día calendario sobre un 'YYYY-MM-DD', operando en UTC para no
 // depender del huso del navegador de quien mira (el "hoy" ya viene en hora
@@ -77,6 +98,24 @@ export default function Reportes() {
   const [tab, setTab] = useState('pagos')
   const [campoFecha, setCampoFecha] = useState('fecha')
   const [tipoTurno, setTipoTurno] = useState('')
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+
+  // Abre la Analytics App (dcsmart-analisis) con un ticket SSO de un solo uso
+  // para no volver a loguearse. Si falla, abre el link igual para ver el error.
+  const openAnalytics = async () => {
+    if (analyticsLoading) return
+    setAnalyticsLoading(true)
+    try {
+      const { data } = await authApi.analyticsTicket()
+      const dest = new URL('/sso', ANALYTICS_URL)
+      dest.searchParams.set('ticket', data.ticket)
+      window.open(dest.toString(), '_blank', 'noopener')
+    } catch {
+      window.open(ANALYTICS_URL, '_blank', 'noopener')
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }
 
   const initial = getPresetRange('30d')
   const [preset,  setPreset]  = useState('30d')
@@ -115,6 +154,16 @@ export default function Reportes() {
               ))}
             </div>
           </div>
+          {activeApp?.can_reportes && (
+            <div className="rep-analytics-wrap">
+              <button className="rep-analytics-btn" onClick={openAnalytics} disabled={analyticsLoading}>
+                <IcoSparkles />
+                <span>Analytics App</span>
+                <IcoExternal />
+              </button>
+              <span className="rep-analytics-beta">beta</span>
+            </div>
+          )}
         </div>
 
         {/* ── Local selector ── */}

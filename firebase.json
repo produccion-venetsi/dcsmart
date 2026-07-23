@@ -3,6 +3,18 @@
     "site": "dc-smart-mvp",
     "public": "frontend/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "//": "Assets con hash en el nombre -> cachear fuerte (inmutable).",
+        "source": "/assets/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      },
+      {
+        "//": "Shell y SW -> revalidar siempre para que el deploy nuevo se vea sin Ctrl+Shift+R.",
+        "source": "/{index.html,sw.js,registerSW.js,manifest.webmanifest}",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ],
     "rewrites": [
       {
         "source": "/api/**",

@@ -2385,3 +2385,44 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   background: var(--red-bg);
   color: var(--red);
 }
+
+/* ── ErrorBoundary (pantalla de recuperación ante error de render) ── */
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: var(--bg-app);
+}
+.error-boundary-card {
+  max-width: 420px;
+  text-align: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hi);
+  border-radius: 16px;
+  padding: 2rem 2.25rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.error-boundary-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--t1);
+  margin: 0 0 10px;
+}
+.error-boundary-msg {
+  font-size: 14px;
+  color: var(--t2);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+/* Versión de la app en el footer del sidebar */
+.sidebar-version {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--t4);
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
