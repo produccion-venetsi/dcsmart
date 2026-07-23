@@ -25,7 +25,27 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // El SW nuevo toma control apenas se instala, sin esperar a que se
+        // cierren todas las pestañas -> los usuarios ven la versión nueva sin
+        // tener que hacer Ctrl+Shift+R. cleanupOutdatedCaches borra los
+        // precaches viejos para no servir assets obsoletos.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        // El shell (index.html) NUNCA se sirve desde el precache: siempre se
+        // pide a la red (con fallback al cache si no hay conexión). Es lo que
+        // ancla los bundles hasheados, así que servir uno viejo dejaba la app
+        // cargando JS/CSS obsoletos tras un deploy.
+        navigateFallback: 'index.html',
         runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-shell',
+              networkTimeoutSeconds: 3
+            }
+          },
           {
             urlPattern: /^https?:\/\/.*\/api\/.*/i,
             handler: 'NetworkFirst',
