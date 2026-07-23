@@ -1072,26 +1072,28 @@ export default function PagoForm() {
       {provModal && (
         <div className="confirm-backdrop" onMouseDown={() => !savingModal && setProvModal(null)}>
           <div className="confirm-modal" onMouseDown={e => e.stopPropagation()} style={{ width: 'min(440px, 92vw)' }}>
-            <div className="form-panel-title" style={{ marginBottom: 14 }}>Nuevo proveedor</div>
-            <div className="form-group">
-              <label className="form-label">Nombre</label>
-              <div className="form-input-wrap">
-                <input type="text" autoFocus value={provModal.nombre} onChange={e => setProvModal(m => ({ ...m, nombre: e.target.value }))} />
+            <div className="form-panel-title" style={{ marginBottom: 18 }}>Nuevo proveedor</div>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Nombre</label>
+                <div className="form-input-wrap">
+                  <input type="text" autoFocus value={provModal.nombre} onChange={e => setProvModal(m => ({ ...m, nombre: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Razón social</label>
+                <div className="form-input-wrap">
+                  <input type="text" value={provModal.razon_social} onChange={e => setProvModal(m => ({ ...m, razon_social: e.target.value }))} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">CUIT</label>
+                <div className="form-input-wrap">
+                  <input type="text" placeholder="Opcional" value={provModal.cuit} onChange={e => setProvModal(m => ({ ...m, cuit: e.target.value }))} />
+                </div>
               </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Razón social</label>
-              <div className="form-input-wrap">
-                <input type="text" value={provModal.razon_social} onChange={e => setProvModal(m => ({ ...m, razon_social: e.target.value }))} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">CUIT</label>
-              <div className="form-input-wrap">
-                <input type="text" placeholder="Opcional" value={provModal.cuit} onChange={e => setProvModal(m => ({ ...m, cuit: e.target.value }))} />
-              </div>
-            </div>
-            <div className="confirm-foot" style={{ marginTop: 8 }}>
+            <div className="confirm-foot" style={{ marginTop: 20 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setProvModal(null)} disabled={savingModal}>Cancelar</button>
               <button type="button" className="btn btn-primary btn-sm" onClick={submitProvModal} disabled={savingModal}>
                 {savingModal ? 'Creando…' : 'Crear proveedor'}
@@ -1105,38 +1107,40 @@ export default function PagoForm() {
       {rubcatModal && (
         <div className="confirm-backdrop" onMouseDown={() => !savingModal && setRubcatModal(null)}>
           <div className="confirm-modal" onMouseDown={e => e.stopPropagation()} style={{ width: 'min(440px, 92vw)', overflow: 'visible' }}>
-            <div className="form-panel-title" style={{ marginBottom: 14 }}>Nueva combinación rubro / categoría</div>
-            <div className="form-group">
-              <label className="form-label">Rubro</label>
-              <Combobox
-                value={rubcatModal.rubroSel?.id || ''}
-                displayValue={rubcatModal.rubroSel?.nombre || ''}
-                getKey={r => r.id}
-                getLabel={r => r.nombre}
-                onSelect={r => setRubcatModal(m => ({ ...m, rubroSel: r }))}
-                onClear={() => setRubcatModal(m => ({ ...m, rubroSel: null }))}
-                fetchItems={fetchRubros}
-                onCreate={createRubroInModal}
-                createLabel="crear rubro"
-                placeholder="Buscar o crear rubro…"
-              />
+            <div className="form-panel-title" style={{ marginBottom: 18 }}>Nueva combinación rubro / categoría</div>
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div className="form-group">
+                <label className="form-label">Rubro</label>
+                <Combobox
+                  value={rubcatModal.rubroSel?.id || ''}
+                  displayValue={rubcatModal.rubroSel?.nombre || ''}
+                  getKey={r => r.id}
+                  getLabel={r => r.nombre}
+                  onSelect={r => setRubcatModal(m => ({ ...m, rubroSel: r }))}
+                  onClear={() => setRubcatModal(m => ({ ...m, rubroSel: null }))}
+                  fetchItems={fetchRubros}
+                  onCreate={createRubroInModal}
+                  createLabel="crear rubro"
+                  placeholder="Buscar o crear rubro…"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Categoría</label>
+                <Combobox
+                  value={rubcatModal.catSel?.id || ''}
+                  displayValue={rubcatModal.catSel?.nombre || ''}
+                  getKey={c => c.id}
+                  getLabel={c => c.nombre}
+                  onSelect={c => setRubcatModal(m => ({ ...m, catSel: c }))}
+                  onClear={() => setRubcatModal(m => ({ ...m, catSel: null }))}
+                  fetchItems={fetchCategorias}
+                  onCreate={createCatInModal}
+                  createLabel="crear categoría"
+                  placeholder="Buscar o crear categoría…"
+                />
+              </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Categoría</label>
-              <Combobox
-                value={rubcatModal.catSel?.id || ''}
-                displayValue={rubcatModal.catSel?.nombre || ''}
-                getKey={c => c.id}
-                getLabel={c => c.nombre}
-                onSelect={c => setRubcatModal(m => ({ ...m, catSel: c }))}
-                onClear={() => setRubcatModal(m => ({ ...m, catSel: null }))}
-                fetchItems={fetchCategorias}
-                onCreate={createCatInModal}
-                createLabel="crear categoría"
-                placeholder="Buscar o crear categoría…"
-              />
-            </div>
-            <div className="confirm-foot" style={{ marginTop: 8 }}>
+            <div className="confirm-foot" style={{ marginTop: 20 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRubcatModal(null)} disabled={savingModal}>Cancelar</button>
               <button type="button" className="btn btn-primary btn-sm" onClick={submitRubcatModal} disabled={savingModal || !rubcatModal.rubroSel || !rubcatModal.catSel}>
                 {savingModal ? 'Creando…' : 'Crear y asignar'}
