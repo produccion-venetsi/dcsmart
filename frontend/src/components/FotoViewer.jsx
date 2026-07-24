@@ -335,24 +335,28 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
           </button>
         </div>
 
-        <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+        {/* Centrado con margin:auto en el hijo, NO con align/justify center en
+            el contenedor: centrar un contenedor con overflow recorta la parte
+            superior de una imagen más alta que el panel y la deja inaccesible
+            incluso con scroll (bug clásico de flexbox). */}
+        <div style={{ flex: 1, overflow: 'auto', display: 'flex', padding: '1rem' }}>
           {type === 'photo' && (
             <>
               {photoBlob
-                ? <img src={photoBlob} alt="Foto factura" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+                ? <img src={photoBlob} alt="Foto factura" style={{ maxWidth: '100%', margin: 'auto', display: 'block', borderRadius: 8 }} />
                 : errorPhoto
-                  ? <span style={{ color: 'var(--t2)', fontSize: 13 }}>No disponible</span>
-                  : <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+                  ? <span style={{ color: 'var(--t2)', fontSize: 13, margin: 'auto' }}>No disponible</span>
+                  : <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3, margin: 'auto' }} />
               }
             </>
           )}
           {type === 'pdf' && (
             <>
               {loadingPdf
-                ? <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+                ? <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3, margin: 'auto' }} />
                 : pdfBlob
                   ? <iframe src={pdfBlob} title="PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
-                  : <span style={{ color: 'var(--t2)', fontSize: 13 }}>No se pudo cargar el PDF.</span>
+                  : <span style={{ color: 'var(--t2)', fontSize: 13, margin: 'auto' }}>No se pudo cargar el PDF.</span>
               }
             </>
           )}
