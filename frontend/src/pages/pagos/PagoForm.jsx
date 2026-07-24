@@ -317,7 +317,14 @@ export default function PagoForm() {
     const next = { ...f, [field]: value }
     if (field === 'fecha') {
       next.periodo = value
-      next.cashflow = calcCashflow(value, provPlazo)
+      // Solo recalcular el cashflow si estaba vacío o si todavía era el
+      // auto-calculado (fecha anterior + plazo). Un valor puesto a mano
+      // NUNCA se pisa en silencio: el cliente carga vencimientos pactados
+      // que no coinciden con el plazo genérico del proveedor.
+      const autoAnterior = calcCashflow(f.fecha, provPlazo)
+      if (!f.cashflow || f.cashflow === autoAnterior) {
+        next.cashflow = calcCashflow(value, provPlazo) || f.cashflow
+      }
     }
     if (field === 'fecha_pago') next.pagado = Boolean(value)
     if (field === 'pagado' && !value) next.fecha_pago = ''
@@ -342,12 +349,19 @@ export default function PagoForm() {
     setProvPlazo(plazo)
     setProvSelected(prov)
     if (prov.rubcat) setRubcatSelected(prov.rubcat)
-    setForm(f => ({
-      ...f,
-      id_proveedor: prov.id,
-      id_rubcat:    prov.id_rubcat || f.id_rubcat,
-      cashflow:     calcCashflow(f.fecha, plazo) || f.cashflow
-    }))
+    setForm(f => {
+      // Igual que en set('fecha'): solo pisar el cashflow si estaba vacío o
+      // si era el auto-calculado con el plazo del proveedor anterior. Si el
+      // usuario lo puso a mano, se respeta.
+      const autoAnterior = calcCashflow(f.fecha, provPlazo)
+      const esManual = f.cashflow && f.cashflow !== autoAnterior
+      return {
+        ...f,
+        id_proveedor: prov.id,
+        id_rubcat:    prov.id_rubcat || f.id_rubcat,
+        cashflow:     esManual ? f.cashflow : (calcCashflow(f.fecha, plazo) || f.cashflow),
+      }
+    })
   }
 
   const clearProveedor = () => {
@@ -679,6 +693,20 @@ export default function PagoForm() {
               {provPlazo && (
                 <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
                   Plazo: {provPlazo} días
+                  {form.fecha && form.cashflow && form.cashflow !== calcCashflow(form.fecha, provPlazo) && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, cashflow: calcCashflow(f.fecha, provPlazo) }))}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, marginLeft: 6,
+                        color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
+                        textDecoration: 'underline',
+                      }}
+                      title={`Volver a fecha + ${provPlazo} días`}
+                    >
+                      recalcular por plazo
+                    </button>
+                  )}
                 </span>
               )}
             </div>
