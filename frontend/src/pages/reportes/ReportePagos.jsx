@@ -124,7 +124,7 @@ export default function ReportePagos({ applied, activeLocal, campoFecha }) {
         </div>
       </div>
 
-      {/* ── Gastos, CMV y Pendientes por rubro ── */}
+      {/* ── Gastos y Pendientes por rubro ── */}
       <div className="rep-kpi-grid cols-4">
         <div className="rep-kpi">
           <div className="rep-kpi-head">
@@ -137,18 +137,7 @@ export default function ReportePagos({ applied, activeLocal, campoFecha }) {
           <div className="rep-kpi-sub">total de egresos del período</div>
         </div>
 
-        <div className="rep-kpi">
-          <div className="rep-kpi-head">
-            <span className="rep-kpi-label">CMV total</span>
-            <span className="rep-kpi-icon" style={{ background: 'rgba(95,201,140,.18)' }}><IcoLayers /></span>
-          </div>
-          {skel
-            ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
-            : <div className="rep-kpi-value med">{fmt(d.total_cmv)}</div>}
-          <div className="rep-kpi-sub">egresos con rubro CMV en el período</div>
-        </div>
-
-        <div className="rep-kpi" style={{ gridColumn: 'span 2' }}>
+        <div className="rep-kpi" style={{ gridColumn: 'span 3' }}>
           <div className="rep-kpi-head">
             <span className="rep-kpi-label">Pendientes</span>
             <span className="rep-kpi-icon" style={{ background: 'rgba(212,149,42,.18)' }}><IcoAlert /></span>
@@ -171,7 +160,7 @@ export default function ReportePagos({ applied, activeLocal, campoFecha }) {
               </div>
             </div>
           )}
-          <div className="rep-kpi-sub">no pagados del período, excluye NCA/NCB y CMV (mostrado aparte)</div>
+          <div className="rep-kpi-sub">no pagados del período, excluye NCA/NCB y CMV</div>
         </div>
       </div>
 
