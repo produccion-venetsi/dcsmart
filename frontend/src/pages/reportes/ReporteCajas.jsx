@@ -152,7 +152,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
           {skel
             ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
             : <div className="rep-kpi-value med">{fmt(kpi.ticket_promedio)}</div>}
-          <div className="rep-kpi-sub">{kpi.cubiertos ?? 0} cubiertos servidos</div>
+          <div className="rep-kpi-sub">ventas / tickets del período</div>
         </div>
 
         <div className="rep-kpi">
@@ -168,7 +168,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
 
       {/* ── Secondary strip ── */}
       <div className="rep-secondary">
-        {secondary.map((s, i) => (
+        {[{ label: 'Cubiertos', val: String(kpi.cubiertos ?? 0) }, ...secondary].map((s, i) => (
           <div className="rep-secondary-item" key={i}>
             <span className="rep-secondary-label">{s.label}</span>
             <span className="rep-secondary-val" style={{ color: s.color }}>
