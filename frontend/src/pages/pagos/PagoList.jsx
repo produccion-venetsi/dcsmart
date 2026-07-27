@@ -11,6 +11,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { downloadExcel } from '../../lib/excel.js'
+import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
@@ -175,9 +176,10 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Tipo',        get: (p) => p.id_tipo || '' },
   { label: 'PV',          get: (p) => p.pv != null ? fmtPV(p.pv) : '' },
   { label: 'Nro',         get: (p) => p.nro != null ? fmtNro(p.nro) : '' },
-  { label: 'Neto',        get: (p) => p.importe_neto ?? '' },
-  { label: 'Importe',     get: (p) => p.importe ?? '' },
+  { label: 'Neto',        get: (p) => p.importe_neto ?? '', total: true },
+  { label: 'Importe',     get: (p) => p.importe ?? '', total: true },
   { label: 'Método',      get: (p) => p.metodo_pago?.nombre || '' },
+  { label: 'Observaciones', get: (p) => p.observaciones || '' },
   { label: 'Cashflow',    get: (p) => p.cashflow ? fmtDate(p.cashflow) : '' },
   { label: 'Dirección',   get: (p) => p.ingresa_egreso == null ? '' : (p.ingresa_egreso ? 'Ingreso' : 'Egreso') },
   { label: 'Estado',      get: (p) => ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op ?? '' },
@@ -185,7 +187,6 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Fecha Pago',  get: (p) => p.fecha_pago ? fmtDateArg(p.fecha_pago) : '' },
   { label: 'Período',     get: (p) => p.periodo ? fmtMonth(p.periodo) : '' },
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
-  { label: 'Observaciones', get: (p) => p.observaciones || '' },
 ]
 
 function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false }) {
@@ -306,10 +307,15 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     setPagando(true)
     try {
       const fechaPagoIso = toUtcIsoFromDateTimeLocal(pagarForm.fecha_pago)
-      await pagosApi.pagar([pago.id], { fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
+      const { data } = await pagosApi.pagar([pago.id], { fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
       notify('Pago registrado', 'success')
       setPagarOpen(false)
-      onPatch?.(pago.id, { pagado: true, fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
+      onPatch?.(pago.id, {
+        pagado: true,
+        fecha_pago: fechaPagoIso,
+        id_metodo: pagarForm.id_metodo,
+        ...(data?.ids_caja?.includes(pago.id) ? { estado_op: 'CAJA' } : {}),
+      })
     } catch { notify('Error al pagar', 'error') }
     finally { setPagando(false) }
   }
@@ -819,6 +825,7 @@ const FILTER_INIT = {
   pagado: '', estado_op: '', campo_fecha: 'fecha', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
   audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
+  observaciones: '',
   id_proveedores: [],
   id_rubcats: [],
 }
@@ -903,6 +910,7 @@ export default function PagoList() {
       ...(filters.ingresa_egreso !== '' ? { ingresa_egreso:   filters.ingresa_egreso } : {}),
       ...(filters.id_metodo            ? { id_metodo:        filters.id_metodo }       : {}),
       ...(filters.cmv_quick === 'true' ? { cmv_quick: 'true' }                        : {}),
+      ...(filters.observaciones.trim()  ? { observaciones:   filters.observaciones.trim() } : {}),
       ...(filters.id_proveedores.length > 0 ? { id_proveedores: filters.id_proveedores.map(p => p.id).join(',') } : {}),
       ...(filters.id_rubcats.length    > 0 ? { id_rubcats:    filters.id_rubcats.join(',') }    : {}),
     }
@@ -916,9 +924,25 @@ export default function PagoList() {
   const exportCsv = useCallback(async () => {
     setExporting(true)
     try {
-      const { data } = await pagosApi.list({ ...buildParams(1), limit: 0 })
+      const { data } = await pagosApi.list({ ...buildParams(1), limit: 0, include_impuestos: 'true' })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      await downloadExcel(`pagos_${todayInputDate()}.xlsx`, data.data, PAGO_CSV_COLUMNS, 'Pagos')
+
+      const pagos = data.data
+      // Las columnas de impuesto van entre Neto e Importe.
+      const idxImporte = PAGO_CSV_COLUMNS.findIndex(c => c.label === 'Importe')
+      const columns = [
+        ...PAGO_CSV_COLUMNS.slice(0, idxImporte),
+        ...columnasImpuesto(tiposImpuestoPresentes(pagos)),
+        ...PAGO_CSV_COLUMNS.slice(idxImporte),
+      ]
+
+      await downloadExcel(
+        `pagos_${todayInputDate()}.xlsx`,
+        pagos,
+        columns,
+        'Pagos',
+        filaTotales(pagos, columns),
+      )
     } catch {
       notify('Error al exportar Excel', 'error')
     } finally {
@@ -1203,7 +1227,7 @@ export default function PagoList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 18 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  const colCount = 19 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1342,6 +1366,16 @@ export default function PagoList() {
                       <option value="true">Ingreso</option>
                       <option value="false">Egreso</option>
                     </select>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={lbl}>Observaciones</span>
+                    <div className="form-input-wrap">
+                      <input
+                        placeholder="Contiene el texto..."
+                        value={draft.observaciones}
+                        onChange={e => setDraftField('observaciones', e.target.value)}
+                      />
+                    </div>
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <span style={lbl}>Tipo de fecha</span>
@@ -1517,6 +1551,7 @@ export default function PagoList() {
               <th>Neto</th>
               <SortTh field="importe" minWidth={90}>Importe</SortTh>
               <th>Método</th>
+              <th style={{ minWidth: 140 }}>Observaciones</th>
               <th>Cashflow</th>
               <th style={{ width: 44, textAlign: 'center' }} title="Ingreso / Egreso">E/I</th>
               <th>Estado</th>
@@ -1580,6 +1615,17 @@ export default function PagoList() {
                   <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
                   <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
                   <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
+                  {/* El truncado va en un span inline-block y no en el td:
+                      .data-table es width 100% sin table-layout fixed, y el
+                      max-width de una celda de tabla no se respeta de forma
+                      confiable en layout automatico. */}
+                  <td style={{ fontSize: 12 }} title={p.observaciones || ''}>
+                    {p.observaciones
+                      ? <span style={{ display: 'inline-block', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
+                          {p.observaciones}
+                        </span>
+                      : <span className="td-muted">—</span>}
+                  </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.cashflow)}</td>
                   <td style={{ minWidth: 40, textAlign: 'center' }}>
                     {p.ingresa_egreso != null

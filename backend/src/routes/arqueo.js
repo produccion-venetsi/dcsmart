@@ -181,7 +181,7 @@ export default async function arqueoRoutes(fastify) {
   // ── POST / ────────────────────────────────────────────────────────────
   // body: { id_local, fecha, caja_fuerte, cofre, adicion, detalles?: [{id_tipo?, nombre?, monto}] }
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
-    const { id_local, fecha, caja_fuerte, cofre, adicion, detalles } = request.body
+    const { id_local, fecha, caja_fuerte, cofre, adicion, detalles, observaciones } = request.body
     if (!id_local || !fecha || caja_fuerte == null || cofre == null || adicion == null) {
       return reply.code(400).send({ error: 'id_local, fecha, caja_fuerte, cofre y adicion son requeridos' })
     }
@@ -213,6 +213,7 @@ export default async function arqueoRoutes(fastify) {
         ingresos: String(ingresos),
         gastos: String(gastos),
         comprobacion: String(comprobacion),
+        observaciones: observaciones?.trim() || null,
         created_by: request.user.id,
         detalles: {
           create: (detalles || []).map((d) => ({
@@ -238,7 +239,7 @@ export default async function arqueoRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    const { fecha, caja_fuerte, cofre, adicion, detalles } = request.body
+    const { fecha, caja_fuerte, cofre, adicion, detalles, observaciones } = request.body
     if (!fecha || caja_fuerte == null || cofre == null || adicion == null) {
       return reply.code(400).send({ error: 'fecha, caja_fuerte, cofre y adicion son requeridos' })
     }
@@ -267,6 +268,7 @@ export default async function arqueoRoutes(fastify) {
         ingresos: String(ingresos),
         gastos: String(gastos),
         comprobacion: String(comprobacion),
+        observaciones: observaciones?.trim() || null,
         detalles: {
           deleteMany: {},
           create: (detalles || []).map((d) => ({

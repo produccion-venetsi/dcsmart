@@ -1,5 +1,7 @@
 import { Storage } from '@google-cloud/storage'
 import multipart from '@fastify/multipart'
+import { parseNroOrd } from '../lib/nroOrd.js'
+import { partirIdsPorEstado } from '../lib/estadoOp.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -147,7 +149,7 @@ async function buildPagosWhere(fastify, request, query) {
   const {
     id_local, id_proveedor, id_proveedores, pagado, estado_op,
     desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-    audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+    audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
   } = query
 
   const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
@@ -176,10 +178,10 @@ async function buildPagosWhere(fastify, request, query) {
   const qStr = q?.trim()
   let qFilter = {}
   if (qStr) {
-    const qNum = parseInt(qStr.replace(/^op[-\s]*/i, ''))
+    const qNum = parseNroOrd(qStr)
     qFilter = {
       OR: [
-        ...(!isNaN(qNum) ? [{ nro_ord: qNum }] : []),
+        ...(qNum != null ? [{ nro_ord: qNum }] : []),
         { proveedor: { nombre:       { contains: qStr, mode: 'insensitive' } } },
         { proveedor: { razon_social: { contains: qStr, mode: 'insensitive' } } },
         { rubcat: { cuenta:               { contains: qStr, mode: 'insensitive' } } },
@@ -203,6 +205,9 @@ async function buildPagosWhere(fastify, request, query) {
     ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
     ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
     ...(estado_op      ? { estado_op }                                    : {}),
+    ...(observaciones?.trim()
+      ? { observaciones: { contains: observaciones.trim(), mode: 'insensitive' } }
+      : {}),
     // fecha/periodo/cashflow son "día calendario" (medianoche UTC), su rango
     // se marca en UTC. fecha_pago es un instante real en hora Argentina
     // (se carga con hora, el arqueo lo compara como instante), así que su
@@ -234,7 +239,8 @@ export default async function pagosRoutes(fastify) {
     const {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones,
+      include_impuestos,
       sort_field = 'fecha', sort_dir = 'desc',
       page = 1, limit = 50
     } = request.query
@@ -246,7 +252,7 @@ export default async function pagosRoutes(fastify) {
     const where = await buildPagosWhere(fastify, request, {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     })
 
     const VALID_SORT = ['fecha', 'importe', 'fecha_pago', 'periodo', 'nro_ord']
@@ -268,7 +274,12 @@ export default async function pagosRoutes(fastify) {
           rubcat:      { include: { rubro: true, categoria: true } },
           metodo_pago: true,
           local:       { select: { id: true, nombre: true } },
-          creador:     { select: { id: true, nombre: true } }
+          creador:     { select: { id: true, nombre: true } },
+          // Solo para el export: la tabla no los necesita y son N filas mas
+          // por pago en cada pagina.
+          ...(include_impuestos === 'true'
+            ? { impuestos: { select: { id: true, tipo: true, monto: true } } }
+            : {}),
         },
         orderBy,
         skip,
@@ -297,7 +308,7 @@ export default async function pagosRoutes(fastify) {
     const {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     } = request.query
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
@@ -307,7 +318,7 @@ export default async function pagosRoutes(fastify) {
     const where = await buildPagosWhere(fastify, request, {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     })
 
     const [totalAgg, porImpuestoRows] = await Promise.all([
@@ -843,6 +854,10 @@ export default async function pagosRoutes(fastify) {
   // ── POST /pagar ────────────────────────────────────────────────────────
   // Flujo PDP, etapa 2: marca los pagos seleccionados como pagados,
   // registrando fecha de pago y forma de pago (método).
+  //
+  // Un pago que NO venia del flujo PDP queda en estado_op = CAJA: la plata
+  // salio de la caja. Los que venian de PDP/MP_PDP conservan su estado.
+  // Ver lib/estadoOp.js.
   fastify.post('/pagar', { preHandler: editHandler }, async (request, reply) => {
     const { ids, fecha_pago, id_metodo } = request.body
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -851,15 +866,34 @@ export default async function pagosRoutes(fastify) {
     if (!id_metodo) {
       return reply.code(400).send({ error: 'Forma de pago requerida' })
     }
-    const result = await fastify.db.pago.updateMany({
-      where: { id: { in: ids }, id_local: { in: request.allowedLocalIds } },
-      data: {
-        pagado:     true,
-        fecha_pago: fecha_pago ? new Date(fecha_pago) : new Date(),
-        id_metodo
-      }
+
+    // Se leen antes para decidir el estado de cada uno y para devolverle al
+    // frontend que ids quedaron en CAJA (asi no duplica la regla).
+    const afectados = await fastify.db.pago.findMany({
+      where:  { id: { in: ids }, id_local: { in: request.allowedLocalIds } },
+      select: { id: true, estado_op: true }
     })
-    return { ok: true, count: result.count }
+    if (afectados.length === 0) return { ok: true, count: 0, ids_caja: [] }
+
+    const { idsCaja, idsConservan } = partirIdsPorEstado(afectados)
+    const datosComunes = {
+      pagado:     true,
+      fecha_pago: fecha_pago ? new Date(fecha_pago) : new Date(),
+      id_metodo
+    }
+
+    await fastify.db.$transaction([
+      ...(idsCaja.length ? [fastify.db.pago.updateMany({
+        where: { id: { in: idsCaja } },
+        data:  { ...datosComunes, estado_op: 'CAJA' }
+      })] : []),
+      ...(idsConservan.length ? [fastify.db.pago.updateMany({
+        where: { id: { in: idsConservan } },
+        data:  datosComunes
+      })] : []),
+    ])
+
+    return { ok: true, count: afectados.length, ids_caja: idsCaja }
   })
 
   // ── GET /:id/attachment ────────────────────────────────────────────────

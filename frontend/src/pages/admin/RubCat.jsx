@@ -31,8 +31,14 @@ function NombreSection({ title, items, onSave, onDelete }) {
   const [form,    setForm]    = useState('')
   const [editing, setEditing] = useState(null)
   const [saving,  setSaving]  = useState(false)
+  const [filtro,  setFiltro]  = useState('')
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+
+  const q = filtro.trim().toLowerCase()
+  const visibles = q
+    ? items.filter(i => (i.nombre || '').toLowerCase().includes(q))
+    : items
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -64,15 +70,27 @@ function NombreSection({ title, items, onSave, onDelete }) {
       </form>
 
       <div className="table-wrap">
-        <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 13 }}>
-          {title}s <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({items.length})</span>
+        <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
+            {title}s{' '}
+            <span style={{ color: 'var(--t3)', fontWeight: 400 }}>
+              ({q ? `${visibles.length} de ${items.length}` : items.length})
+            </span>
+          </span>
+          <div className="form-input-wrap" style={{ marginLeft: 'auto', maxWidth: 220 }}>
+            <input
+              placeholder={`Buscar ${title.toLowerCase()}...`}
+              value={filtro}
+              onChange={e => setFiltro(e.target.value)}
+            />
+          </div>
         </div>
         <table className="data-table">
           <thead>
             <tr><th>Nombre</th><th></th></tr>
           </thead>
           <tbody>
-            {items.map(item => (
+            {visibles.map(item => (
               <tr key={item.id} className="row-clickable" onClick={() => { setEditing(item.id); setForm(item.nombre) }}>
                 <td className="td-primary">{item.nombre}</td>
                 <td>
@@ -82,8 +100,10 @@ function NombreSection({ title, items, onSave, onDelete }) {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
-              <tr><td colSpan={2} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>Sin datos</td></tr>
+            {visibles.length === 0 && (
+              <tr><td colSpan={2} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>
+                {q ? 'Sin resultados para la búsqueda' : 'Sin datos'}
+              </td></tr>
             )}
           </tbody>
         </table>
@@ -107,6 +127,7 @@ export default function RubCat() {
   const [selectedRc, setSelectedRc] = useState(null)
   const [rcForm,     setRcForm]     = useState(RC_EMPTY)
   const [rcSaving,   setRcSaving]   = useState(false)
+  const [rcFiltro,   setRcFiltro]   = useState('')
 
   const load = () => {
     setLoading(true)
@@ -177,6 +198,14 @@ export default function RubCat() {
     { key: 'categorias', label: 'Categorías' },
   ]
 
+  const rcQ = rcFiltro.trim().toLowerCase()
+  const rubcatVisible = rcQ
+    ? rubcat.filter(rc => [
+        rc.rubro?.nombre, rc.categoria?.nombre, rc.cuenta,
+        rc.tipo, rc.costo, rc.clasificacion,
+      ].some(v => (v || '').toLowerCase().includes(rcQ)))
+    : rubcat
+
   return (
     <div className="page">
       <div className="page-head">
@@ -234,8 +263,20 @@ export default function RubCat() {
           )}
           {tab === 'rubcat' && (
             <div className="table-wrap" style={{ overflowX: 'auto' }}>
-              <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 13 }}>
-                RubCat <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({rubcat.length})</span>
+              <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap' }}>
+                  RubCat{' '}
+                  <span style={{ color: 'var(--t3)', fontWeight: 400 }}>
+                    ({rcQ ? `${rubcatVisible.length} de ${rubcat.length}` : rubcat.length})
+                  </span>
+                </span>
+                <div className="form-input-wrap" style={{ marginLeft: 'auto', maxWidth: 260 }}>
+                  <input
+                    placeholder="Buscar rubro, categoría, cuenta, tipo..."
+                    value={rcFiltro}
+                    onChange={e => setRcFiltro(e.target.value)}
+                  />
+                </div>
               </div>
               <table className="data-table">
                 <thead>
@@ -250,7 +291,7 @@ export default function RubCat() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rubcat.map((rc) => (
+                  {rubcatVisible.map((rc) => (
                     <tr key={rc.id} className="row-clickable" onClick={() => openEdit(rc)}>
                       <td className="td-primary">{rc.rubro?.nombre || '—'}</td>
                       <td>{rc.categoria?.nombre || '—'}</td>
@@ -265,8 +306,10 @@ export default function RubCat() {
                       </td>
                     </tr>
                   ))}
-                  {rubcat.length === 0 && (
-                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>Sin combinaciones</td></tr>
+                  {rubcatVisible.length === 0 && (
+                    <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--t3)' }}>
+                      {rcQ ? 'Sin resultados para la búsqueda' : 'Sin combinaciones'}
+                    </td></tr>
                   )}
                 </tbody>
               </table>

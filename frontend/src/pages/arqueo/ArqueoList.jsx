@@ -30,6 +30,7 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
   const [cajaFuerte, setCajaFuerte] = useState('')
   const [cofre,      setCofre]      = useState('')
   const [adicion,    setAdicion]    = useState('')
+  const [observaciones, setObservaciones] = useState('')
 
   const [preview, setPreview] = useState(null)
   const [loadingPreview, setLoadingPreview] = useState(true)
@@ -71,6 +72,7 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
         caja_fuerte: parseFloat(cajaFuerte) || 0,
         cofre: parseFloat(cofre) || 0,
         adicion: parseFloat(adicion) || 0,
+        observaciones: observaciones.trim() || null,
         detalles: pendingDetalles.map(d => ({
           id_tipo: d.id_tipo || null,
           monto: parseFloat(d.monto) || 0
@@ -97,10 +99,21 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
           <input type="number" step="0.01" required value={cofre} onChange={e => setCofre(e.target.value)} />
         </div>
       </div>
-      <div className="form-group" style={{ margin: 0 }}>
+      <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
         <label className="form-label">Adición</label>
         <div className="form-input-wrap">
           <input type="number" step="0.01" required value={adicion} onChange={e => setAdicion(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group" style={{ margin: 0 }}>
+        <label className="form-label">Observaciones</label>
+        <div className="form-input-wrap form-textarea-wrap">
+          <textarea
+            rows={3}
+            placeholder="Notas opcionales..."
+            value={observaciones}
+            onChange={e => setObservaciones(e.target.value)}
+          />
         </div>
       </div>
 
@@ -160,6 +173,7 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
   const [cajaFuerte, setCajaFuerte] = useState(String(arqueo.caja_fuerte))
   const [cofre,      setCofre]      = useState(String(arqueo.cofre))
   const [adicion,    setAdicion]    = useState(String(arqueo.adicion))
+  const [observaciones, setObservaciones] = useState(arqueo.observaciones ?? '')
   const [detalles,   setDetalles]   = useState(
     (arqueo.detalles || []).map(d => ({ id_tipo: d.id_tipo || '', monto: String(d.monto), _key: d.id }))
   )
@@ -186,6 +200,7 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
         caja_fuerte: parseFloat(cajaFuerte) || 0,
         cofre: parseFloat(cofre) || 0,
         adicion: parseFloat(adicion) || 0,
+        observaciones: observaciones.trim() || null,
         detalles: detalles.map(d => ({ id_tipo: d.id_tipo || null, monto: parseFloat(d.monto) || 0 }))
       })
       notify('Arqueo actualizado', 'success')
@@ -215,10 +230,21 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
           <input type="number" step="0.01" required value={cofre} onChange={e => setCofre(e.target.value)} />
         </div>
       </div>
-      <div className="form-group" style={{ margin: 0 }}>
+      <div className="form-group" style={{ margin: '0 0 0.9rem' }}>
         <label className="form-label">Adición</label>
         <div className="form-input-wrap">
           <input type="number" step="0.01" required value={adicion} onChange={e => setAdicion(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-group" style={{ margin: 0 }}>
+        <label className="form-label">Observaciones</label>
+        <div className="form-input-wrap form-textarea-wrap">
+          <textarea
+            rows={3}
+            placeholder="Notas opcionales..."
+            value={observaciones}
+            onChange={e => setObservaciones(e.target.value)}
+          />
         </div>
       </div>
 
@@ -338,6 +364,28 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
         </div>
       </div>
 
+      {/* Las observaciones van en su propia seccion y no como fila clave/valor:
+          .drawer-detail-row es flex con la clave fija en 110px, asi que un
+          texto de varias lineas queda angosto y desalineado ahi adentro. */}
+      {arqueo.observaciones && (
+        <>
+          <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Observaciones</div>
+          <div style={{
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: 'var(--t2)',
+            background: 'var(--bg-input)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 12,
+            padding: '10px 13px',
+          }}>
+            {arqueo.observaciones}
+          </div>
+        </>
+      )}
+
       {arqueo.detalles?.length > 0 && (
         <>
           <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Detalles</div>
@@ -434,7 +482,7 @@ export default function ArqueoList() {
             <thead>
               <tr>
                 <th>Fecha</th><th>Caja fuerte</th><th>Cofre</th><th>Adición</th>
-                <th>Total</th><th>Comprobación</th><th>Auditado</th><th></th>
+                <th>Total</th><th>Comprobación</th><th>Observaciones</th><th>Auditado</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -451,6 +499,17 @@ export default function ArqueoList() {
                       <span className={`badge ${cuadra ? 'badge-green' : 'badge-red'}`}>
                         {fmt$(a.comprobacion)}
                       </span>
+                    </td>
+                    {/* El truncado va en un span inline-block y no en el td:
+                        .data-table es width 100% sin table-layout fixed, y el
+                        max-width de una celda de tabla no se respeta de forma
+                        confiable en layout automatico. */}
+                    <td style={{ fontSize: 12 }} title={a.observaciones || ''}>
+                      {a.observaciones
+                        ? <span style={{ display: 'inline-block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
+                            {a.observaciones}
+                          </span>
+                        : <span className="td-muted">—</span>}
                     </td>
                     <td>
                       <span className={`badge ${a.audit ? 'badge-green' : 'badge-muted'}`}>
