@@ -107,10 +107,10 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
       </div>
       <div className="form-group" style={{ margin: 0 }}>
         <label className="form-label">Observaciones</label>
-        <div className="form-input-wrap">
+        <div className="form-input-wrap form-textarea-wrap">
           <textarea
-            rows={2}
-            placeholder="Opcional"
+            rows={3}
+            placeholder="Notas opcionales..."
             value={observaciones}
             onChange={e => setObservaciones(e.target.value)}
           />
@@ -238,10 +238,10 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
       </div>
       <div className="form-group" style={{ margin: 0 }}>
         <label className="form-label">Observaciones</label>
-        <div className="form-input-wrap">
+        <div className="form-input-wrap form-textarea-wrap">
           <textarea
-            rows={2}
-            placeholder="Opcional"
+            rows={3}
+            placeholder="Notas opcionales..."
             value={observaciones}
             onChange={e => setObservaciones(e.target.value)}
           />
@@ -362,15 +362,29 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
           <span className="drawer-detail-key">Comprobación</span>
           <span className={`badge ${cuadra ? 'badge-green' : 'badge-red'}`}>{fmt$(arqueo.comprobacion)}</span>
         </div>
-        {arqueo.observaciones && (
-          <div className="drawer-detail-row">
-            <span className="drawer-detail-key">Observaciones</span>
-            <span className="drawer-detail-val" style={{ whiteSpace: 'pre-wrap', textAlign: 'right' }}>
-              {arqueo.observaciones}
-            </span>
-          </div>
-        )}
       </div>
+
+      {/* Las observaciones van en su propia seccion y no como fila clave/valor:
+          .drawer-detail-row es flex con la clave fija en 110px, asi que un
+          texto de varias lineas queda angosto y desalineado ahi adentro. */}
+      {arqueo.observaciones && (
+        <>
+          <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Observaciones</div>
+          <div style={{
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: 'var(--t2)',
+            background: 'var(--bg-input)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 12,
+            padding: '10px 13px',
+          }}>
+            {arqueo.observaciones}
+          </div>
+        </>
+      )}
 
       {arqueo.detalles?.length > 0 && (
         <>
@@ -486,11 +500,16 @@ export default function ArqueoList() {
                         {fmt$(a.comprobacion)}
                       </span>
                     </td>
-                    <td
-                      style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}
-                      title={a.observaciones || ''}
-                    >
-                      {a.observaciones || <span className="td-muted">—</span>}
+                    {/* El truncado va en un span inline-block y no en el td:
+                        .data-table es width 100% sin table-layout fixed, y el
+                        max-width de una celda de tabla no se respeta de forma
+                        confiable en layout automatico. */}
+                    <td style={{ fontSize: 12 }} title={a.observaciones || ''}>
+                      {a.observaciones
+                        ? <span style={{ display: 'inline-block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
+                            {a.observaciones}
+                          </span>
+                        : <span className="td-muted">—</span>}
                     </td>
                     <td>
                       <span className={`badge ${a.audit ? 'badge-green' : 'badge-muted'}`}>

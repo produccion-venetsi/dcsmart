@@ -1615,11 +1615,16 @@ export default function PagoList() {
                   <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
                   <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
                   <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
-                  <td
-                    style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}
-                    title={p.observaciones || ''}
-                  >
-                    {p.observaciones || <span className="td-muted">—</span>}
+                  {/* El truncado va en un span inline-block y no en el td:
+                      .data-table es width 100% sin table-layout fixed, y el
+                      max-width de una celda de tabla no se respeta de forma
+                      confiable en layout automatico. */}
+                  <td style={{ fontSize: 12 }} title={p.observaciones || ''}>
+                    {p.observaciones
+                      ? <span style={{ display: 'inline-block', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
+                          {p.observaciones}
+                        </span>
+                      : <span className="td-muted">—</span>}
                   </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.cashflow)}</td>
                   <td style={{ minWidth: 40, textAlign: 'center' }}>
