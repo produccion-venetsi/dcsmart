@@ -1,5 +1,6 @@
 import { Storage } from '@google-cloud/storage'
 import multipart from '@fastify/multipart'
+import { parseNroOrd } from '../lib/nroOrd.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -176,10 +177,10 @@ async function buildPagosWhere(fastify, request, query) {
   const qStr = q?.trim()
   let qFilter = {}
   if (qStr) {
-    const qNum = parseInt(qStr.replace(/^op[-\s]*/i, ''))
+    const qNum = parseNroOrd(qStr)
     qFilter = {
       OR: [
-        ...(!isNaN(qNum) ? [{ nro_ord: qNum }] : []),
+        ...(qNum != null ? [{ nro_ord: qNum }] : []),
         { proveedor: { nombre:       { contains: qStr, mode: 'insensitive' } } },
         { proveedor: { razon_social: { contains: qStr, mode: 'insensitive' } } },
         { rubcat: { cuenta:               { contains: qStr, mode: 'insensitive' } } },
