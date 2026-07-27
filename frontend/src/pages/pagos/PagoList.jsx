@@ -819,6 +819,7 @@ const FILTER_INIT = {
   pagado: '', estado_op: '', campo_fecha: 'fecha', desde: '', hasta: '',
   id_tipo: '', id_rub: '', id_cat: '',
   audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
+  observaciones: '',
   id_proveedores: [],
   id_rubcats: [],
 }
@@ -903,6 +904,7 @@ export default function PagoList() {
       ...(filters.ingresa_egreso !== '' ? { ingresa_egreso:   filters.ingresa_egreso } : {}),
       ...(filters.id_metodo            ? { id_metodo:        filters.id_metodo }       : {}),
       ...(filters.cmv_quick === 'true' ? { cmv_quick: 'true' }                        : {}),
+      ...(filters.observaciones.trim()  ? { observaciones:   filters.observaciones.trim() } : {}),
       ...(filters.id_proveedores.length > 0 ? { id_proveedores: filters.id_proveedores.map(p => p.id).join(',') } : {}),
       ...(filters.id_rubcats.length    > 0 ? { id_rubcats:    filters.id_rubcats.join(',') }    : {}),
     }
@@ -1342,6 +1344,16 @@ export default function PagoList() {
                       <option value="true">Ingreso</option>
                       <option value="false">Egreso</option>
                     </select>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={lbl}>Observaciones</span>
+                    <div className="form-input-wrap">
+                      <input
+                        placeholder="Contiene el texto..."
+                        value={draft.observaciones}
+                        onChange={e => setDraftField('observaciones', e.target.value)}
+                      />
+                    </div>
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <span style={lbl}>Tipo de fecha</span>

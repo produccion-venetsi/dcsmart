@@ -147,7 +147,7 @@ async function buildPagosWhere(fastify, request, query) {
   const {
     id_local, id_proveedor, id_proveedores, pagado, estado_op,
     desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-    audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+    audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
   } = query
 
   const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
@@ -203,6 +203,9 @@ async function buildPagosWhere(fastify, request, query) {
     ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
     ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
     ...(estado_op      ? { estado_op }                                    : {}),
+    ...(observaciones?.trim()
+      ? { observaciones: { contains: observaciones.trim(), mode: 'insensitive' } }
+      : {}),
     // fecha/periodo/cashflow son "día calendario" (medianoche UTC), su rango
     // se marca en UTC. fecha_pago es un instante real en hora Argentina
     // (se carga con hora, el arqueo lo compara como instante), así que su
@@ -234,7 +237,7 @@ export default async function pagosRoutes(fastify) {
     const {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q,
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones,
       sort_field = 'fecha', sort_dir = 'desc',
       page = 1, limit = 50
     } = request.query
@@ -246,7 +249,7 @@ export default async function pagosRoutes(fastify) {
     const where = await buildPagosWhere(fastify, request, {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     })
 
     const VALID_SORT = ['fecha', 'importe', 'fecha_pago', 'periodo', 'nro_ord']
@@ -297,7 +300,7 @@ export default async function pagosRoutes(fastify) {
     const {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     } = request.query
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
@@ -307,7 +310,7 @@ export default async function pagosRoutes(fastify) {
     const where = await buildPagosWhere(fastify, request, {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
-      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q
+      audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     })
 
     const [totalAgg, porImpuestoRows] = await Promise.all([
