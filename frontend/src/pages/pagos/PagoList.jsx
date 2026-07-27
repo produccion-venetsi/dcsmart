@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { impuestosApi } from '../../api/impuestos.js'
@@ -1094,59 +1094,19 @@ export default function PagoList() {
   const closePanel = () => setPanelOpen(false)
 
   // ── Filtros ───────────────────────────────────────────────────────────────
+  // Viven en un DrawerPanel lateral, el mismo componente que el detalle de la
+  // OP. Antes eran un popover `position: absolute` que necesitaba calcular su
+  // propio `left` contra el sidebar y el ancho de la ventana; el drawer sale
+  // del borde derecho, así que ese cálculo (y el listener de click afuera y el
+  // de resize) ya no hacen falta: DrawerPanel trae backdrop y Escape.
   const [filterOpen, setFilterOpen] = useState(false)
   const [draft, setDraft] = useState(FILTER_INIT)
-  const filterRef = useRef(null)
-
-  // Ancho fijo del panel de Filtros (debe coincidir con el `width: 520` del
-  // style inline del panel) y margen mínimo respecto al sidebar/borde.
-  // Nota: en viewports angostos/zoom alto el panel puede renderizar más
-  // angosto que esto por el `maxWidth: '90vw'` del style inline; eso solo
-  // hace el clamp un poco más conservador, nunca causa overlap.
-  const PANEL_WIDTH  = 520
-  const PANEL_MARGIN = 8
-  const [panelLeft, setPanelLeft] = useState(0)
-
-  // Calcula dónde debe quedar el panel (en vez del `right: 0` fijo de antes)
-  // para que nunca se superponga al sidebar ni se salga de la pantalla,
-  // sin importar el zoom del navegador o el ancho de la ventana.
-  //
-  // getBoundingClientRect()/window.innerWidth devuelven coordenadas de
-  // viewport, pero el panel es `position: absolute` dentro de filterRef
-  // (que es `position: relative`) — su `left` final tiene que ser relativo
-  // a `buttonRect.left`, no una coordenada de viewport cruda.
-  const computePanelLeft = () => {
-    if (!filterRef.current) return
-    const buttonRect  = filterRef.current.getBoundingClientRect()
-    const sidebarEl    = document.querySelector('.sidebar')
-    const sidebarRight = sidebarEl ? sidebarEl.getBoundingClientRect().right : 0
-    const idealLeftViewport = buttonRect.right - PANEL_WIDTH
-    const minLeftViewport   = sidebarRight + PANEL_MARGIN
-    const maxLeftViewport   = window.innerWidth - PANEL_WIDTH - PANEL_MARGIN
-    const clampedLeftViewport = Math.max(minLeftViewport, Math.min(idealLeftViewport, maxLeftViewport))
-    setPanelLeft(clampedLeftViewport - buttonRect.left)
-  }
-
-  useLayoutEffect(() => {
-    if (!filterOpen) return
-    computePanelLeft()
-    window.addEventListener('resize', computePanelLeft)
-    return () => window.removeEventListener('resize', computePanelLeft)
-  }, [filterOpen])
 
   const activeFilterCount = Object.entries(filters).filter(([k, v]) => k !== 'campo_fecha' && (Array.isArray(v) ? v.length > 0 : v !== '')).length
   const hasActiveFilters  = activeFilterCount > 0
 
-  const openFilters = () => { setDraft(filters); setFilterOpen(true) }
-
-  useEffect(() => {
-    if (!filterOpen) return
-    const handleClick = (e) => {
-      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [filterOpen])
+  const openFilters  = () => { setDraft(filters); setFilterOpen(true) }
+  const closeFilters = () => setFilterOpen(false)
 
   const applyFilters   = () => { setFilters(draft); setFilterOpen(false) }
   const clearFilters   = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch('') }
@@ -1275,194 +1235,19 @@ export default function PagoList() {
             )}
           </div>
 
-          <div style={{ position: 'relative' }} ref={filterRef}>
-            <button
-              className={`btn ${filterOpen || hasActiveFilters ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => filterOpen ? setFilterOpen(false) : openFilters()}
-            >
-              <IcoFilter />
-              Filtros
-              {activeFilterCount > 0 && (
-                <span style={{ marginLeft: 6, background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-
-            {filterOpen && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', left: panelLeft, zIndex: 200,
-                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                borderRadius: 12, padding: '1.25rem', width: 520, maxWidth: '90vw',
-                boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
-              }}>
-                {/* Atajos */}
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.05em', marginRight: 2 }}>ATAJOS</span>
-                  {CHIPS.filter(c => !c.disabled).map(chip => (
-                    <button key={chip.label} style={chipSt(isChipActive(chip.filters))} onClick={() => toggleChip(chip.filters)}>
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-                  <div>
-                    <span style={lbl}>Tipo</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_tipo} onChange={e => setDraftField('id_tipo', e.target.value)}>
-                      <option value="">Todos los tipos</option>
-                      {TIPO_PAGO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Método</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_metodo} onChange={e => setDraftField('id_metodo', e.target.value)}>
-                      <option value="">Todos los métodos</option>
-                      {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Rubro</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_rub}
-                      onChange={e => setDraft(d => ({ ...d, id_rub: e.target.value, id_cat: '' }))}>
-                      <option value="">Todos los rubros</option>
-                      {rubros.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Categoría</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.id_cat} onChange={e => setDraftField('id_cat', e.target.value)}>
-                      <option value="">Todas las cats.</option>
-                      {catsForRubro.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Pagado</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.pagado} onChange={e => setDraftField('pagado', e.target.value)}>
-                      <option value="">Todos</option>
-                      <option value="false">No pagados</option>
-                      <option value="true">Pagados</option>
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Estado op.</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.estado_op} onChange={e => setDraftField('estado_op', e.target.value)}>
-                      <option value="">Todos los estados</option>
-                      {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Audit</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.audit} onChange={e => setDraftField('audit', e.target.value)}>
-                      <option value="">Todos</option>
-                      <option value="false">No auditado</option>
-                      <option value="true">Auditado</option>
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Dirección</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.ingresa_egreso} onChange={e => setDraftField('ingresa_egreso', e.target.value)}>
-                      <option value="">Todos</option>
-                      <option value="true">Ingreso</option>
-                      <option value="false">Egreso</option>
-                    </select>
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <span style={lbl}>Observaciones</span>
-                    <div className="form-input-wrap">
-                      <input
-                        placeholder="Contiene el texto..."
-                        value={draft.observaciones}
-                        onChange={e => setDraftField('observaciones', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <span style={lbl}>Tipo de fecha</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.campo_fecha} onChange={e => setDraftField('campo_fecha', e.target.value)}>
-                      {CAMPO_FECHA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <span style={lbl}>Desde</span>
-                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} onChange={e => setDraftField('desde', e.target.value)} />
-                  </div>
-                  <div>
-                    <span style={lbl}>Hasta</span>
-                    <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.hasta} onChange={e => setDraftField('hasta', e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Multi-select proveedores */}
-                <div style={{ marginTop: '0.75rem' }}>
-                  <span style={lbl}>Proveedores {draft.id_proveedores.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_proveedores.length})</span>}</span>
-                  <input
-                    type="text"
-                    placeholder="Escribí para buscar…"
-                    value={provSearch}
-                    onChange={e => setProvSearch(e.target.value)}
-                    style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
-                  />
-                  <div style={{ maxHeight: 110, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
-                    {provSearch.trim().length >= 2 ? (
-                      provSearchLoading
-                        ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Buscando…</div>
-                        : provSearchResults.length === 0
-                          ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Sin resultados</div>
-                          : provSearchResults.map(p => (
-                              <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
-                                <input type="checkbox" checked={draft.id_proveedores.some(x => x.id === p.id)} onChange={() => toggleDraftProv(p)} />
-                                {p.nombre}
-                              </label>
-                            ))
-                    ) : draft.id_proveedores.length === 0
-                      ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Escribí al menos 2 letras para buscar</div>
-                      : draft.id_proveedores.map(p => (
-                          <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
-                            <input type="checkbox" checked onChange={() => toggleDraftProv(p)} />
-                            {p.nombre}
-                          </label>
-                        ))
-                    }
-                  </div>
-                </div>
-
-                {/* Multi-select rubcats */}
-                <div style={{ marginTop: '0.75rem' }}>
-                  <span style={lbl}>Rubros/Cat (múltiple) {draft.id_rubcats.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_rubcats.length})</span>}</span>
-                  <input
-                    type="text"
-                    placeholder="Buscar rubro/cat…"
-                    value={rubcatSearch}
-                    onChange={e => setRubcatSearch(e.target.value)}
-                    style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
-                  />
-                  <div style={{ maxHeight: 110, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
-                    {rubcats
-                      .filter(rc => !rubcatSearch.trim() || `${rc.rubro?.nombre} ${rc.categoria?.nombre}`.toLowerCase().includes(rubcatSearch.toLowerCase()))
-                      .map(rc => (
-                        <label key={rc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
-                          <input type="checkbox" checked={draft.id_rubcats.includes(rc.id)} onChange={() => toggleDraftArr('id_rubcats', rc.id)} />
-                          <span style={{ color: 'var(--t2)' }}>{rc.rubro?.nombre}</span>
-                          <span style={{ color: 'var(--t3)' }}>/</span>
-                          <span>{rc.categoria?.nombre}</span>
-                        </label>
-                      ))
-                    }
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
-                  <button className="btn btn-sm btn-secondary" onClick={clearFilters}>
-                    Limpiar todo
-                  </button>
-                  <button className="btn btn-sm btn-primary" onClick={applyFilters}>
-                    Aplicar
-                  </button>
-                </div>
-              </div>
+          {/* El panel de filtros es un DrawerPanel al final del componente */}
+          <button
+            className={`btn ${filterOpen || hasActiveFilters ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => filterOpen ? closeFilters() : openFilters()}
+          >
+            <IcoFilter />
+            Filtros
+            {activeFilterCount > 0 && (
+              <span style={{ marginLeft: 6, background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
+                {activeFilterCount}
+              </span>
             )}
-          </div>
+          </button>
           <ActionsMenu label="Acciones" float>
             {(canEdit || canDelete) && (
               <button className={`btn ${selectionMode ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleSelectionMode}>
@@ -1691,6 +1476,188 @@ export default function PagoList() {
         {selectedPago && (
           <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} />
         )}
+      </DrawerPanel>
+
+      <DrawerPanel
+        open={filterOpen}
+        onClose={closeFilters}
+        title={activeFilterCount > 0 ? `Filtros (${activeFilterCount})` : 'Filtros'}
+        width={580}
+      >
+        {/* Atajos */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {CHIPS.filter(c => !c.disabled).map(chip => (
+            <button key={chip.label} style={chipSt(isChipActive(chip.filters))} onClick={() => toggleChip(chip.filters)}>
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Clasificación</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+          <div>
+            <span style={lbl}>Tipo</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.id_tipo} onChange={e => setDraftField('id_tipo', e.target.value)}>
+              <option value="">Todos los tipos</option>
+              {TIPO_PAGO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <span style={lbl}>Método</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.id_metodo} onChange={e => setDraftField('id_metodo', e.target.value)}>
+              <option value="">Todos los métodos</option>
+              {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <span style={lbl}>Rubro</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.id_rub}
+              onChange={e => setDraft(d => ({ ...d, id_rub: e.target.value, id_cat: '' }))}>
+              <option value="">Todos los rubros</option>
+              {rubros.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <span style={lbl}>Categoría</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.id_cat} onChange={e => setDraftField('id_cat', e.target.value)}>
+              <option value="">Todas las cats.</option>
+              {catsForRubro.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Multi-select rubcats */}
+        <div style={{ marginTop: '0.75rem' }}>
+          <span style={lbl}>Rubros/Cat (múltiple) {draft.id_rubcats.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_rubcats.length})</span>}</span>
+          <input
+            type="text"
+            placeholder="Buscar rubro/cat…"
+            value={rubcatSearch}
+            onChange={e => setRubcatSearch(e.target.value)}
+            style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+          />
+          <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+            {rubcats
+              .filter(rc => !rubcatSearch.trim() || `${rc.rubro?.nombre} ${rc.categoria?.nombre}`.toLowerCase().includes(rubcatSearch.toLowerCase()))
+              .map(rc => (
+                <label key={rc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
+                  <input type="checkbox" checked={draft.id_rubcats.includes(rc.id)} onChange={() => toggleDraftArr('id_rubcats', rc.id)} />
+                  <span style={{ color: 'var(--t2)' }}>{rc.rubro?.nombre}</span>
+                  <span style={{ color: 'var(--t3)' }}>/</span>
+                  <span>{rc.categoria?.nombre}</span>
+                </label>
+              ))
+            }
+          </div>
+        </div>
+
+        <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Proveedor</div>
+        <div>
+          <span style={lbl}>Proveedores {draft.id_proveedores.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_proveedores.length})</span>}</span>
+          <input
+            type="text"
+            placeholder="Escribí para buscar…"
+            value={provSearch}
+            onChange={e => setProvSearch(e.target.value)}
+            style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+          />
+          <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+            {provSearch.trim().length >= 2 ? (
+              provSearchLoading
+                ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Buscando…</div>
+                : provSearchResults.length === 0
+                  ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Sin resultados</div>
+                  : provSearchResults.map(p => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
+                        <input type="checkbox" checked={draft.id_proveedores.some(x => x.id === p.id)} onChange={() => toggleDraftProv(p)} />
+                        {p.nombre}
+                      </label>
+                    ))
+            ) : draft.id_proveedores.length === 0
+              ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Escribí al menos 2 letras para buscar</div>
+              : draft.id_proveedores.map(p => (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
+                    <input type="checkbox" checked onChange={() => toggleDraftProv(p)} />
+                    {p.nombre}
+                  </label>
+                ))
+            }
+          </div>
+        </div>
+
+        <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Estado</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+          <div>
+            <span style={lbl}>Pagado</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.pagado} onChange={e => setDraftField('pagado', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="false">No pagados</option>
+              <option value="true">Pagados</option>
+            </select>
+          </div>
+          <div>
+            <span style={lbl}>Estado op.</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.estado_op} onChange={e => setDraftField('estado_op', e.target.value)}>
+              <option value="">Todos los estados</option>
+              {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <span style={lbl}>Audit</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.audit} onChange={e => setDraftField('audit', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="false">No auditado</option>
+              <option value="true">Auditado</option>
+            </select>
+          </div>
+          <div>
+            <span style={lbl}>Dirección</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.ingresa_egreso} onChange={e => setDraftField('ingresa_egreso', e.target.value)}>
+              <option value="">Todos</option>
+              <option value="true">Ingreso</option>
+              <option value="false">Egreso</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Fechas</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <span style={lbl}>Tipo de fecha</span>
+            <select className="filter-select" style={{ width: '100%' }} value={draft.campo_fecha} onChange={e => setDraftField('campo_fecha', e.target.value)}>
+              {CAMPO_FECHA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <span style={lbl}>Desde</span>
+            <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} onChange={e => setDraftField('desde', e.target.value)} />
+          </div>
+          <div>
+            <span style={lbl}>Hasta</span>
+            <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.hasta} onChange={e => setDraftField('hasta', e.target.value)} />
+          </div>
+        </div>
+
+        <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Texto</div>
+        <div>
+          <span style={lbl}>Observaciones</span>
+          <div className="form-input-wrap">
+            <input
+              placeholder="Contiene el texto..."
+              value={draft.observaciones}
+              onChange={e => setDraftField('observaciones', e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+          <button className="btn btn-secondary" onClick={clearFilters}>
+            Limpiar todo
+          </button>
+          <button className="btn btn-primary" onClick={applyFilters}>
+            Aplicar
+          </button>
+        </div>
       </DrawerPanel>
     </div>
   )
