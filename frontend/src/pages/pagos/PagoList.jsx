@@ -41,6 +41,7 @@ const CAMPO_FECHA_OPTIONS = [
   { value: 'fecha_pago', label: 'Fecha de Pago' },
   { value: 'cashflow',   label: 'Cashflow' },
   { value: 'periodo',    label: 'Período' },
+  { value: 'created_at', label: 'Fecha de Creación' },
 ]
 const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
 
@@ -167,6 +168,10 @@ function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 // (sin "$" ni separador de miles) para que Excel/Sheets los reconozca como
 // numéricos al importar el CSV, en vez de como texto.
 const PAGO_CSV_COLUMNS = [
+  // La fecha de creación va primera por pedido explícito. Solo exportan DC y
+  // super admin (canExport), que son los mismos roles que la ven en pantalla,
+  // así que no hace falta condicionarla acá.
+  { label: 'Creado',      get: (p) => p.created_at ? fmtDateTimeArg(p.created_at) : '' },
   { label: 'OP',          get: (p) => p.nro_ord != null ? `OP-${p.nro_ord}` : '' },
   { label: 'Auditado',    get: (p) => p.audit ? 'Sí' : 'No' },
   { label: 'Fecha',       get: (p) => p.fecha ? fmtDate(p.fecha) : '' },
@@ -189,7 +194,7 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
 ]
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false }) {
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false, canSeeCreated = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -474,6 +479,8 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     ['Período',     fmtMonth(pago.periodo)],
     ['Local',       pago.local?.nombre || '—'],
     ['Periódico',   periodico ? 'Sí' : 'No'],
+    // Dato interno: solo DC y super admin (ver canSeeCreated en PagoList).
+    ...(canSeeCreated ? [['Creado', fmtDateTimeArg(pago.created_at)]] : []),
   ]
 
   return (
@@ -849,6 +856,9 @@ export default function PagoList() {
   const canDelete   = ['super_admin', 'dcsmart'].includes(role)
   const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
   const canExport   = ['super_admin', 'dcsmart'].includes(role)
+  // La fecha de creación de la OP es dato interno: solo la ven DC y super admin,
+  // en la tabla y en el detalle.
+  const canSeeCreated = ['super_admin', 'dcsmart'].includes(role)
   const [exporting, setExporting] = useState(false)
   const [summary,        setSummary]        = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -1213,7 +1223,7 @@ export default function PagoList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacaron las columnas de auditar/editar/eliminar de la fila (ahora viven en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 19 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  const colCount = 19 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0) + (canSeeCreated ? 1 : 0)
 
   return (
     <div className="page">
@@ -1375,6 +1385,7 @@ export default function PagoList() {
               <th style={{ minWidth: 40, textAlign: 'center' }}>Foto</th>
               <th style={{ minWidth: 40, textAlign: 'center' }}>PDF</th>
               {showLocalCol && <th>Local</th>}
+              {canSeeCreated && <SortTh field="created_at" minWidth={120}>Creado</SortTh>}
             </tr>
           </thead>
           <tbody>
@@ -1471,6 +1482,7 @@ export default function PagoList() {
                       : <span className="td-muted">—</span>}
                   </td>
                   {showLocalCol && <td style={{ minWidth: 120, fontSize: 12 }}>{p.local?.nombre || <span className="td-muted">—</span>}</td>}
+                  {canSeeCreated && <td style={{ minWidth: 120, fontSize: 12 }} className="td-muted">{fmtDateTimeArg(p.created_at)}</td>}
                 </tr>
               ))
             )}
@@ -1564,7 +1576,7 @@ export default function PagoList() {
                 onChange={e => setRubcatSearch(e.target.value)}
                 style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
               />
-              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+              <div className="filters-scroll" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
                 {rubcats
                   .filter(rc => !rubcatSearch.trim() || `${rc.rubro?.nombre} ${rc.categoria?.nombre}`.toLowerCase().includes(rubcatSearch.toLowerCase()))
                   .map(rc => (
@@ -1589,7 +1601,7 @@ export default function PagoList() {
                 onChange={e => setProvSearch(e.target.value)}
                 style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
               />
-              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
+              <div className="filters-scroll" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
                 {provSearch.trim().length >= 2 ? (
                   provSearchLoading
                     ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Buscando…</div>
@@ -1695,7 +1707,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} canSeeCreated={canSeeCreated} />
         )}
       </DrawerPanel>
 

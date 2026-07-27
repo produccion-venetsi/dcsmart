@@ -137,10 +137,15 @@ function sanitizeFolderName(nombre) {
 // Campos de fecha filtrables desde el frontend (dropdown "Tipo de fecha").
 // Whitelist estricta: cualquier valor fuera de esta lista cae al default
 // 'fecha', para no interpolar un valor arbitrario como key de Prisma.
-const CAMPOS_FECHA_VALIDOS = ['fecha', 'fecha_pago', 'cashflow', 'periodo']
+const CAMPOS_FECHA_VALIDOS = ['fecha', 'fecha_pago', 'cashflow', 'periodo', 'created_at']
 function campoFechaValido(campo) {
   return CAMPOS_FECHA_VALIDOS.includes(campo) ? campo : 'fecha'
 }
+
+// De los campos filtrables, estos guardan un instante real (con hora), no un
+// día calendario a medianoche UTC. Su rango se interpreta en hora de Argentina
+// para que lo cargado de noche no caiga en el día UTC siguiente.
+const CAMPOS_FECHA_INSTANTE = ['fecha_pago', 'created_at']
 
 // Construye el `where` de Prisma compartido entre GET /pagos (list/export)
 // y GET /pagos/summary, para que el resumen agregado matchee exactamente
@@ -209,13 +214,13 @@ async function buildPagosWhere(fastify, request, query) {
       ? { observaciones: { contains: observaciones.trim(), mode: 'insensitive' } }
       : {}),
     // fecha/periodo/cashflow son "día calendario" (medianoche UTC), su rango
-    // se marca en UTC. fecha_pago es un instante real en hora Argentina
-    // (se carga con hora, el arqueo lo compara como instante), así que su
-    // rango se marca con el offset de Argentina (-03:00) -- si no, los pagos
-    // hechos de noche (21-24hs ART) caen en el día UTC siguiente y se corren.
+    // se marca en UTC. fecha_pago y created_at son instantes reales en hora
+    // Argentina (se guardan con hora), así que su rango se marca con el offset
+    // de Argentina (-03:00) -- si no, lo cargado de noche (21-24hs ART) cae en
+    // el día UTC siguiente y se corre. Ver CAMPOS_FECHA_INSTANTE.
     ...(desde || hasta ? {
       [campoFecha]: (() => {
-        const suf = campoFecha === 'fecha_pago' ? '-03:00' : 'Z'
+        const suf = CAMPOS_FECHA_INSTANTE.includes(campoFecha) ? '-03:00' : 'Z'
         return {
           ...(desde ? { gte: new Date(`${desde}T00:00:00.000${suf}`) } : {}),
           ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999${suf}`) } : {})
@@ -255,7 +260,7 @@ export default async function pagosRoutes(fastify) {
       audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     })
 
-    const VALID_SORT = ['fecha', 'importe', 'fecha_pago', 'periodo', 'nro_ord']
+    const VALID_SORT = ['fecha', 'importe', 'fecha_pago', 'periodo', 'nro_ord', 'created_at']
     const orderField = VALID_SORT.includes(sort_field) ? sort_field : 'fecha'
     const orderDir   = sort_dir === 'asc' ? 'asc' : 'desc'
     const orderBy    = sort_field === 'proveedor'
