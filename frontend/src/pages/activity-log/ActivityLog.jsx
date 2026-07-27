@@ -53,6 +53,7 @@ export default function ActivityLog() {
   const [usuarios,  setUsuarios]  = useState([])
   const [filters,   setFilters]   = useState(FILTER_INIT)
   const [expandedId, setExpandedId] = useState(null)
+  const [debouncedNroOrd, setDebouncedNroOrd] = useState(FILTER_INIT.nro_ord)
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT))
 
@@ -62,17 +63,32 @@ export default function ActivityLog() {
       .catch(() => {})
   }, [])
 
-  const buildParams = useCallback((pageNum) => ({
-    page: pageNum,
-    limit: LIMIT,
-    ...(filters.desde   ? { desde: filters.desde }     : {}),
-    ...(filters.hasta   ? { hasta: filters.hasta }     : {}),
-    ...(filters.id_user ? { id_user: filters.id_user } : {}),
-    ...(filters.accion  ? { accion: filters.accion }   : {}),
-    ...(filters.nro_ord.trim() ? { nro_ord: filters.nro_ord.trim() } : {}),
-  }), [filters])
+  // ── Debounce buscador de OP ───────────────────────────────────────────────
+  // Sin esto cada tecla dispara un request. El placeholder invita a tipear
+  // "OP-101", y el backend rechaza con 400 los pasos intermedios ("O", "OP",
+  // "OP-") porque no tienen numero -- a velocidad real de tipeo, varios de
+  // esos 400 llegan a mostrarse como toast de error antes de completar la OP.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedNroOrd(filters.nro_ord), 400)
+    return () => clearTimeout(t)
+  }, [filters.nro_ord])
 
-  useEffect(() => { setPage(1) }, [filters])
+  const buildParams = useCallback((pageNum) => {
+    const nroOrd = debouncedNroOrd.trim()
+    return {
+      page: pageNum,
+      limit: LIMIT,
+      ...(filters.desde   ? { desde: filters.desde }     : {}),
+      ...(filters.hasta   ? { hasta: filters.hasta }     : {}),
+      ...(filters.id_user ? { id_user: filters.id_user } : {}),
+      ...(filters.accion  ? { accion: filters.accion }   : {}),
+      // Solo se manda si hay al menos un digito: asi "O", "OP" y "OP-" (los
+      // pasos intermedios de tipear "OP-101") nunca llegan al backend.
+      ...(/\d/.test(nroOrd) ? { nro_ord: nroOrd } : {}),
+    }
+  }, [filters.desde, filters.hasta, filters.id_user, filters.accion, debouncedNroOrd])
+
+  useEffect(() => { setPage(1) }, [buildParams])
 
   useEffect(() => {
     const ctrl = new AbortController()
