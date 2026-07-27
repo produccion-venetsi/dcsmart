@@ -1,6 +1,7 @@
 import { Storage } from '@google-cloud/storage'
 import multipart from '@fastify/multipart'
 import { parseNroOrd } from '../lib/nroOrd.js'
+import { partirIdsPorEstado } from '../lib/estadoOp.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -853,6 +854,10 @@ export default async function pagosRoutes(fastify) {
   // ── POST /pagar ────────────────────────────────────────────────────────
   // Flujo PDP, etapa 2: marca los pagos seleccionados como pagados,
   // registrando fecha de pago y forma de pago (método).
+  //
+  // Un pago que NO venia del flujo PDP queda en estado_op = CAJA: la plata
+  // salio de la caja. Los que venian de PDP/MP_PDP conservan su estado.
+  // Ver lib/estadoOp.js.
   fastify.post('/pagar', { preHandler: editHandler }, async (request, reply) => {
     const { ids, fecha_pago, id_metodo } = request.body
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -861,15 +866,34 @@ export default async function pagosRoutes(fastify) {
     if (!id_metodo) {
       return reply.code(400).send({ error: 'Forma de pago requerida' })
     }
-    const result = await fastify.db.pago.updateMany({
-      where: { id: { in: ids }, id_local: { in: request.allowedLocalIds } },
-      data: {
-        pagado:     true,
-        fecha_pago: fecha_pago ? new Date(fecha_pago) : new Date(),
-        id_metodo
-      }
+
+    // Se leen antes para decidir el estado de cada uno y para devolverle al
+    // frontend que ids quedaron en CAJA (asi no duplica la regla).
+    const afectados = await fastify.db.pago.findMany({
+      where:  { id: { in: ids }, id_local: { in: request.allowedLocalIds } },
+      select: { id: true, estado_op: true }
     })
-    return { ok: true, count: result.count }
+    if (afectados.length === 0) return { ok: true, count: 0, ids_caja: [] }
+
+    const { idsCaja, idsConservan } = partirIdsPorEstado(afectados)
+    const datosComunes = {
+      pagado:     true,
+      fecha_pago: fecha_pago ? new Date(fecha_pago) : new Date(),
+      id_metodo
+    }
+
+    await fastify.db.$transaction([
+      ...(idsCaja.length ? [fastify.db.pago.updateMany({
+        where: { id: { in: idsCaja } },
+        data:  { ...datosComunes, estado_op: 'CAJA' }
+      })] : []),
+      ...(idsConservan.length ? [fastify.db.pago.updateMany({
+        where: { id: { in: idsConservan } },
+        data:  datosComunes
+      })] : []),
+    ])
+
+    return { ok: true, count: afectados.length, ids_caja: idsCaja }
   })
 
   // ── GET /:id/attachment ────────────────────────────────────────────────

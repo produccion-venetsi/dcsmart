@@ -307,10 +307,15 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
     setPagando(true)
     try {
       const fechaPagoIso = toUtcIsoFromDateTimeLocal(pagarForm.fecha_pago)
-      await pagosApi.pagar([pago.id], { fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
+      const { data } = await pagosApi.pagar([pago.id], { fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
       notify('Pago registrado', 'success')
       setPagarOpen(false)
-      onPatch?.(pago.id, { pagado: true, fecha_pago: fechaPagoIso, id_metodo: pagarForm.id_metodo })
+      onPatch?.(pago.id, {
+        pagado: true,
+        fecha_pago: fechaPagoIso,
+        id_metodo: pagarForm.id_metodo,
+        ...(data?.ids_caja?.includes(pago.id) ? { estado_op: 'CAJA' } : {}),
+      })
     } catch { notify('Error al pagar', 'error') }
     finally { setPagando(false) }
   }
