@@ -239,6 +239,7 @@ export default async function pagosRoutes(fastify) {
       id_local, id_proveedor, id_proveedores, pagado, estado_op,
       desde, hasta, campo_fecha, id_tipo, id_rub, id_cat, id_rubcat, id_rubcats,
       audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones,
+      include_impuestos,
       sort_field = 'fecha', sort_dir = 'desc',
       page = 1, limit = 50
     } = request.query
@@ -272,7 +273,12 @@ export default async function pagosRoutes(fastify) {
           rubcat:      { include: { rubro: true, categoria: true } },
           metodo_pago: true,
           local:       { select: { id: true, nombre: true } },
-          creador:     { select: { id: true, nombre: true } }
+          creador:     { select: { id: true, nombre: true } },
+          // Solo para el export: la tabla no los necesita y son N filas mas
+          // por pago en cada pagina.
+          ...(include_impuestos === 'true'
+            ? { impuestos: { select: { id: true, tipo: true, monto: true } } }
+            : {}),
         },
         orderBy,
         skip,

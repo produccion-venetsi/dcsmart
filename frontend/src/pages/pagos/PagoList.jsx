@@ -11,6 +11,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import { downloadExcel } from '../../lib/excel.js'
+import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
@@ -178,6 +179,7 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Neto',        get: (p) => p.importe_neto ?? '' },
   { label: 'Importe',     get: (p) => p.importe ?? '' },
   { label: 'Método',      get: (p) => p.metodo_pago?.nombre || '' },
+  { label: 'Observaciones', get: (p) => p.observaciones || '' },
   { label: 'Cashflow',    get: (p) => p.cashflow ? fmtDate(p.cashflow) : '' },
   { label: 'Dirección',   get: (p) => p.ingresa_egreso == null ? '' : (p.ingresa_egreso ? 'Ingreso' : 'Egreso') },
   { label: 'Estado',      get: (p) => ESTADO_OP_LABEL[p.estado_op] ?? p.estado_op ?? '' },
@@ -185,7 +187,6 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Fecha Pago',  get: (p) => p.fecha_pago ? fmtDateArg(p.fecha_pago) : '' },
   { label: 'Período',     get: (p) => p.periodo ? fmtMonth(p.periodo) : '' },
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
-  { label: 'Observaciones', get: (p) => p.observaciones || '' },
 ]
 
 function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false }) {
@@ -918,9 +919,25 @@ export default function PagoList() {
   const exportCsv = useCallback(async () => {
     setExporting(true)
     try {
-      const { data } = await pagosApi.list({ ...buildParams(1), limit: 0 })
+      const { data } = await pagosApi.list({ ...buildParams(1), limit: 0, include_impuestos: 'true' })
       if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-      await downloadExcel(`pagos_${todayInputDate()}.xlsx`, data.data, PAGO_CSV_COLUMNS, 'Pagos')
+
+      const pagos = data.data
+      // Las columnas de impuesto van entre Neto e Importe.
+      const idxImporte = PAGO_CSV_COLUMNS.findIndex(c => c.label === 'Importe')
+      const columns = [
+        ...PAGO_CSV_COLUMNS.slice(0, idxImporte),
+        ...columnasImpuesto(tiposImpuestoPresentes(pagos)),
+        ...PAGO_CSV_COLUMNS.slice(idxImporte),
+      ]
+
+      await downloadExcel(
+        `pagos_${todayInputDate()}.xlsx`,
+        pagos,
+        columns,
+        'Pagos',
+        filaTotales(pagos, columns),
+      )
     } catch {
       notify('Error al exportar Excel', 'error')
     } finally {
