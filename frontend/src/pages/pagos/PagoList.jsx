@@ -5,6 +5,7 @@ import { impuestosApi } from '../../api/impuestos.js'
 import { rubrosApi, categoriasApi, rubcatApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { proveedoresApi } from '../../api/proveedores.js'
+import { filtroPresetsApi } from '../../api/filtroPresets.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
@@ -848,6 +849,7 @@ export default function PagoList() {
   const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   // El panel de filtros colapsa el sidebar mientras está abierto (ver openFilters).
   const sidebarOpen    = useUiStore((s) => s.sidebarOpen)
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen)
@@ -1137,6 +1139,67 @@ export default function PagoList() {
 
   const applyFilters   = () => { setFilters(draft); closeFilters() }
   const clearFilters   = () => { setDraft(FILTER_INIT); setFilters(FILTER_INIT); setSearch('') }
+
+  // ── Mis filtros (presets guardados) ───────────────────────────────────────
+  // Privados por usuario y solo para DC/super admin, igual que en el backend.
+  const [presets,      setPresets]      = useState([])
+  const [presetsMax,   setPresetsMax]   = useState(5)
+  const [presetSaving, setPresetSaving] = useState(false)
+
+  useEffect(() => {
+    if (!canSeeCreated) return
+    filtroPresetsApi.list('pagos')
+      .then(({ data }) => { setPresets(data.data); setPresetsMax(data.max) })
+      .catch(() => {})
+  }, [canSeeCreated])
+
+  // Guarda lo que está en el borrador, no lo aplicado: así se puede armar una
+  // combinación y guardarla sin tener que aplicarla primero.
+  const savePreset = async () => {
+    const nombre = await showPrompt('¿Con qué nombre guardás este filtro?', { placeholder: 'Ej: CMV sin auditar' })
+    if (nombre === null) return
+    if (!nombre.trim()) return notify('El filtro necesita un nombre', 'error')
+
+    setPresetSaving(true)
+    try {
+      const { data } = await filtroPresetsApi.create({ modulo: 'pagos', nombre, filtros: draft })
+      setPresets(ps => [...ps, data])
+      notify('Filtro guardado', 'success')
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al guardar el filtro', 'error')
+    } finally { setPresetSaving(false) }
+  }
+
+  // Aplica el preset directamente (no solo al borrador): elegirlo de la lista
+  // es una acción deliberada, no hace falta confirmar con Aplicar.
+  const applyPreset = (preset) => {
+    const filtros = { ...FILTER_INIT, ...preset.filtros }
+    setDraft(filtros)
+    setFilters(filtros)
+  }
+
+  const deletePreset = async (preset, e) => {
+    e.stopPropagation()
+    if (!(await showConfirm(`¿Borrar el filtro "${preset.nombre}"?`))) return
+    try {
+      await filtroPresetsApi.remove(preset.id)
+      setPresets(ps => ps.filter(p => p.id !== preset.id))
+      notify('Filtro borrado', 'success')
+    } catch { notify('Error al borrar el filtro', 'error') }
+  }
+
+  // Pisa un preset existente con el borrador actual.
+  const overwritePreset = async (preset, e) => {
+    e.stopPropagation()
+    if (!(await showConfirm(`¿Reemplazar "${preset.nombre}" con los filtros que tenés ahora?`))) return
+    try {
+      const { data } = await filtroPresetsApi.update(preset.id, { filtros: draft })
+      setPresets(ps => ps.map(p => (p.id === preset.id ? data : p)))
+      notify('Filtro actualizado', 'success')
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al actualizar el filtro', 'error')
+    }
+  }
 
   // Escape cierra el panel. DrawerPanel lo traía incluido; el aside no, y sin
   // esto la única salida sería el botón.
@@ -1524,7 +1587,66 @@ export default function PagoList() {
           </div>
 
           <div className="filters-inline-body">
+            {/* Mis filtros (presets guardados). Solo DC/super admin. */}
+            {canSeeCreated && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                  <span style={lbl}>Mis filtros ({presets.length}/{presetsMax})</span>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={savePreset}
+                    disabled={presetSaving || presets.length >= presetsMax}
+                    title={presets.length >= presetsMax
+                      ? `Llegaste al máximo de ${presetsMax}. Borrá uno para guardar otro.`
+                      : 'Guardar los filtros que tenés puestos ahora'}
+                    style={{ padding: '2px 8px', fontSize: 11 }}
+                  >
+                    {presetSaving ? <span className="spinner" style={{ width: 11, height: 11, borderWidth: 2 }} /> : '+ Guardar'}
+                  </button>
+                </div>
+                {presets.length === 0 ? (
+                  <div style={{ fontSize: 11, color: 'var(--t3)' }}>
+                    Armá una combinación de filtros y guardala para reusarla.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {presets.map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => applyPreset(p)}
+                        title="Aplicar este filtro"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                          padding: '5px 8px', borderRadius: 8, fontSize: 12,
+                          background: 'var(--bg-input)', border: '1px solid var(--border)',
+                        }}
+                      >
+                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.nombre}
+                        </span>
+                        <button
+                          onClick={(e) => overwritePreset(p, e)}
+                          title="Reemplazar con los filtros actuales"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)', fontSize: 11, padding: '0 2px' }}
+                        >
+                          ↻
+                        </button>
+                        <button
+                          onClick={(e) => deletePreset(p, e)}
+                          title="Borrar este filtro"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t3)', fontSize: 13, padding: '0 2px', lineHeight: 1 }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Atajos */}
+            <span style={lbl}>Atajos</span>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
               {CHIPS.filter(c => !c.disabled).map(chip => (
                 <button key={chip.label} style={chipSt(isChipActive(chip.filters))} onClick={() => toggleChip(chip.filters)}>
