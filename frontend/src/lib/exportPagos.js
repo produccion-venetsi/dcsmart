@@ -1,8 +1,6 @@
 // Armado de las columnas de impuesto y la fila de totales del export de pagos.
 // Separado de PagoList para poder testearlo con node --test (es JS puro).
 
-import { esNumerico } from './excel.js'
-
 // Orden del enum TipoImpuesto en schema.prisma. Se respeta para que el archivo
 // tenga siempre las mismas columnas en el mismo orden entre exports.
 const ORDEN_TIPOS = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
@@ -30,20 +28,27 @@ export function columnasImpuesto(tipos) {
     label: tipo,
     // 0 y no '' para que la columna sume bien en Excel.
     get: (pago) => montoDe(pago, tipo),
+    // Columna de plata: entra en la fila TOTAL. Se marca aca y no en el
+    // llamador para que un tipo de impuesto nuevo nunca dependa de que
+    // alguien se acuerde de marcarlo a mano.
+    total: true,
   }))
 }
 
+// Que columna se suma en la fila TOTAL es una propiedad de la columna
+// (col.total === true), no algo que se adivina mirando si sus valores
+// "parecen" numeros. Sniffing por valor sumaba OP/PV/Nro sin cero a la
+// izquierda y hasta notas de Observaciones que por casualidad eran solo
+// digitos. Declarar la columna evita esos falsos positivos por construccion,
+// sin necesidad de casos especiales por tipo de dato.
 export function filaTotales(pagos, columns) {
   return columns.map((col, i) => {
     if (i === 0) return 'TOTAL'
-    const valores = pagos.map((p) => col.get(p))
-    // Mismo criterio que excel.js usa para decidir que celdas volver number
-    // al armar el archivo (esNumerico), asi PV/Nro (identificadores con cero
-    // a la izquierda, ej. "00001") quedan en blanco aca igual que en el resto
-    // de sus filas, en vez de sumarse como si fueran montos.
-    const numericos = valores.filter((v) => esNumerico(v))
-    // Si ninguna celda de la columna es numerica, es texto o fecha: no se suma.
-    if (numericos.length === 0) return ''
-    return numericos.reduce((acc, v) => acc + Number(v), 0)
+    if (!col.total) return ''
+    const suma = pagos.reduce((acc, p) => acc + Number(col.get(p) ?? 0), 0)
+    // Redondeo a 2 decimales: sumar miles de valores de 2 decimales acumula
+    // error de flotante (0.1 + 0.2 + 0.3 = 0.6000000000000001) que Excel a
+    // veces muestra tal cual.
+    return Math.round(suma * 100) / 100
   })
 }
