@@ -136,6 +136,12 @@
   cursor: pointer;
   opacity: .8;
 }
+/* El MultiSelect de Tipo de turno convive con los campos de fecha de la fila
+   de filtros: se le iguala el alto y el borde para que no quede descolgado. */
+.rep-filter-col .multiselect-trigger {
+  height: 44px;
+  border-color: var(--glass-border);
+}
 .rep-presets {
   display: flex;
   gap: 7px;
