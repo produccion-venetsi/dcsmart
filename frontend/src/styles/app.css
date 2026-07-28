@@ -2496,32 +2496,32 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   min-height: 0;
 }
 
-/* Mismo tratamiento de scrollbar que .table-wrap, para que el panel y las
-   listas de los multi-select no muestren la barra nativa del sistema.
-   Aplica al cuerpo del panel y a cualquier caja con scroll adentro. */
+/* Mismo tratamiento de scrollbar que .table-wrap, para que el panel y la
+   lista del multi-select no muestren la barra nativa del sistema.
+   Aplica al cuerpo del panel y a la lista con scroll propio del MultiSelect. */
 .filters-inline-body,
-.filters-inline-body .filters-scroll {
+.filters-inline-body .multiselect-lista {
   scrollbar-width: thin;
   scrollbar-color: var(--gold-deep) rgba(30, 43, 58, 0.6);
 }
 .filters-inline-body::-webkit-scrollbar,
-.filters-inline-body .filters-scroll::-webkit-scrollbar {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar {
   width: 7px;
   height: 7px;
 }
 .filters-inline-body::-webkit-scrollbar-track,
-.filters-inline-body .filters-scroll::-webkit-scrollbar-track {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar-track {
   background: rgba(30, 43, 58, 0.6);
   border-radius: 10px;
 }
 .filters-inline-body::-webkit-scrollbar-thumb,
-.filters-inline-body .filters-scroll::-webkit-scrollbar-thumb {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar-thumb {
   background: var(--gold-deep);
   border-radius: 10px;
   transition: background 0.18s;
 }
 .filters-inline-body::-webkit-scrollbar-thumb:hover,
-.filters-inline-body .filters-scroll::-webkit-scrollbar-thumb:hover {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar-thumb:hover {
   background: var(--gold);
 }
 

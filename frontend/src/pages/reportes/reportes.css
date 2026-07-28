@@ -141,6 +141,9 @@
 .rep-filter-col .multiselect-trigger {
   height: 44px;
   border-color: var(--glass-border);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--t1);
 }
 .rep-presets {
   display: flex;

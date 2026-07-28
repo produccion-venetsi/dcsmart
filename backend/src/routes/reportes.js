@@ -67,7 +67,7 @@ export default async function reportesRoutes(fastify) {
     // no la clave interna de Prisma ("TARDE"). Para SQL crudo se compara
     // contra las etiquetas tal cual llegan del frontend (tipoTurnoLabels), NO
     // contra tipoTurnoEnums (esa lista es solo para el `where` de Prisma más
-    // abajo).
+    // arriba).
     let payTipoClause = ''
     if (tipoTurnoLabels.length) {
       // Placeholders dinámicos, igual que localPlaceholders más arriba.
