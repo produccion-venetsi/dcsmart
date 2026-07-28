@@ -70,8 +70,9 @@ cargadas, `fetchOptions` para búsqueda contra el backend con debounce de 300 ms
 
 ### Comportamiento
 
-- **Cerrado**: labels separados por coma más el contador. Con más de tres,
-  `"Mañana, Noche +2"`. Sin selección, muestra el `placeholder`.
+- **Cerrado**: labels separados por coma más el contador. Se listan hasta dos
+  labels; a partir del tercero, `"Mañana, Noche +2"`. Sin selección, muestra el
+  `placeholder`.
 - **Abierto**: buscador, lista de checkboxes, y pie con **Todos** / **Ninguno**.
   El buscador aparece si hay más de 8 opciones o si es remoto.
 - **Nada seleccionado = sin filtrar.** Equivale al "Todos" del select actual. No
@@ -104,8 +105,11 @@ Cambios por archivo:
   `GET /summary`.
 - **`reportes.js:47`** — el `where` de Prisma pasa a `{ in: [...] }`.
 - **`reportes.js:79,123,155`** — las tres queries con `$queryRawUnsafe` cambian
-  `c.tipo_turno::text = $N` por `c.tipo_turno::text = ANY($N::text[])`, pasando
-  el array de labels visibles. Se mantiene la distinción ya documentada en
+  `c.tipo_turno::text = $N` por `c.tipo_turno::text IN ($N, $N+1, …)`, con
+  placeholders generados dinámicamente igual que `localPlaceholders`
+  (`reportes.js:68`) y un parámetro por etiqueta. Se prefiere esto a
+  `= ANY($N::text[])` para no depender de cómo Prisma serializa un array JS a
+  un array de Postgres. Se mantiene la distinción ya documentada en
   `reportes.js:72-75`: el SQL crudo compara contra la etiqueta (`"Tarde"`),
   Prisma contra la clave del enum (`TARDE`).
 
