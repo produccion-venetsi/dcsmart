@@ -10,6 +10,11 @@ function toTipoTurnoEnum(value) {
   return TIPO_TURNO_MAP[value] || value
 }
 
+// Comprobantes que entran al reporte BALANCE (ver GET /balance). Son los tipos
+// fiscales; el reporte se define por este conjunto, no por lo que el usuario
+// tenga filtrado en pantalla. Valores del enum TipoPago en schema.prisma.
+const TIPOS_BALANCE = ['A', 'C', 'M', 'NDA', 'NCA']
+
 export default async function reportesRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.appContext, fastify.can('reportes', 'view')]
 
@@ -449,5 +454,53 @@ export default async function reportesRoutes(fastify) {
       total_bebidas: totalBebidas,
       total_general: totalGeneral
     }
+  })
+
+  // ── GET /balance ───────────────────────────────────────────────────────
+  // Listado de comprobantes fiscales para contabilidad: un renglón por
+  // comprobante con proveedor, CUIT, tipo, PV-Nro, fecha de factura, neto, IVA
+  // discriminado por alícuota, total y forma de pago.
+  //
+  // Solo super_admin: expone CUIT y razón social de todos los proveedores.
+  //
+  // Los tipos son fijos (TIPOS_BALANCE), no se toman del filtro de pantalla: el
+  // reporte se define justamente por ser el conjunto de comprobantes fiscales.
+  // Filtra siempre por `fecha` (fecha de factura), no por fecha de pago.
+  fastify.get('/balance', {
+    preHandler: [fastify.authenticate, fastify.appContext, fastify.requireSuperAdmin]
+  }, async (request, reply) => {
+    const { id_local, desde, hasta } = request.query
+
+    if (!desde || !hasta) {
+      return reply.code(400).send({ error: 'desde y hasta son requeridos' })
+    }
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    const localIds = id_local ? [id_local] : request.allowedLocalIds
+    if (!localIds.length) return { data: [] }
+
+    // `fecha` es día calendario (medianoche UTC), su rango va en UTC.
+    const rows = await fastify.db.pago.findMany({
+      where: {
+        id_local: { in: localIds },
+        id_tipo:  { in: TIPOS_BALANCE },
+        fecha: {
+          gte: new Date(`${desde}T00:00:00.000Z`),
+          lte: new Date(`${hasta}T23:59:59.999Z`)
+        }
+      },
+      select: {
+        id: true, nro_ord: true, fecha: true, id_tipo: true,
+        pv: true, nro: true, importe_neto: true, descuento: true, importe: true,
+        proveedor:   { select: { nombre: true, razon_social: true, cuit: true } },
+        metodo_pago: { select: { nombre: true } },
+        impuestos:   { select: { tipo: true, monto: true } }
+      },
+      orderBy: [{ fecha: 'asc' }, { nro_ord: 'asc' }]
+    })
+
+    return { data: rows }
   })
 }

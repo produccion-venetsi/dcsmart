@@ -4,6 +4,19 @@
 // xlsx (SheetJS) se carga on-demand (import dinámico) para no sumarlo al
 // bundle inicial: recién se descarga cuando el usuario exporta.
 
+// Une el criterio de "esto es numérico" para todo el módulo de export: una
+// celda es numérica si ya es number, o si es un string que Number() puede
+// parsear sin ser un identificador con cero a la izquierda (PV/Nro tipo
+// "00001"). Se exporta para que filaTotales (exportPagos.js) sume exactamente
+// las mismas columnas que coerce() vuelve numéricas — si difirieran, el TOTAL
+// podría sumar una columna que el archivo dejó como texto, o viceversa.
+export function esNumerico(value) {
+  if (value == null || value === '') return false
+  if (typeof value === 'number') return true
+  const s = String(value)
+  return !/^0\d/.test(s) && !isNaN(Number(s))
+}
+
 // Convierte a número las celdas que son claramente numéricas, para que Excel
 // las trate como número (sumas, formato) y no como texto. Preserva los que
 // tienen ceros a la izquierda (PV/Nro tipo "00001") dejándolos como texto.
@@ -11,15 +24,15 @@ function coerce(value) {
   if (value == null) return ''
   if (typeof value === 'number') return value
   const s = String(value)
-  if (s !== '' && !/^0\d/.test(s) && !isNaN(Number(s))) return Number(s)
+  if (esNumerico(s)) return Number(s)
   return s
 }
 
-export async function downloadExcel(filename, rows, columns, sheetName = 'Datos') {
+export async function downloadExcel(filename, rows, columns, sheetName = 'Datos', totalsRow = null) {
   const XLSX = await import('xlsx')
   const header = columns.map((c) => c.label)
   const body = rows.map((row) => columns.map((c) => coerce(c.get(row))))
-  const aoa = [header, ...body]
+  const aoa = [header, ...body, ...(totalsRow ? [totalsRow] : [])]
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   // Ancho de columna aproximado según el contenido (acotado 8..45).

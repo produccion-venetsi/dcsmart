@@ -13,32 +13,35 @@ const ACCION_LABEL = { creado: 'Creado', editado: 'Editado', eliminado: 'Elimina
 const ACCION_BADGE = { creado: 'badge-green', editado: 'badge-blue', eliminado: 'badge-red' }
 
 // Traduce el snapshot crudo del pago (columnas de la tabla, sin joins) a
-// pares label/valor legibles, en vez de mostrar el JSON tal cual.
-function snapshotRows(s) {
+// pares label/valor legibles, en vez de mostrar el JSON tal cual. Los ids
+// (proveedor, rubcat, metodo, local) llegan resueltos a nombre en `labels`
+// -- ver snapshot_labels que devuelve el backend.
+function snapshotRows(s, labels) {
   if (!s) return []
+  const l = labels ?? {}
   return [
     ['Nro Orden',    s.nro_ord != null ? `OP-${s.nro_ord}` : '—'],
     ['Fecha',        fmtDate(s.fecha)],
-    ['Proveedor',    s.id_proveedor || '—'],
-    ['Rubro/Cat',    s.id_rubcat || '—'],
-    ['Tipo',         s.id_tipo || '—'],
+    ['Proveedor',    l.proveedor ?? '—'],
+    ['Rubro/Cat',    l.rubcat    ?? '—'],
+    ['Tipo',         l.tipo      ?? '—'],
     ['PV',           s.pv ?? '—'],
     ['Nro',          s.nro ?? '—'],
     ['Neto',         fmt$(s.importe_neto)],
     ['Descuento',    fmt$(s.descuento)],
     ['Importe',      fmt$(s.importe)],
-    ['Método',       s.id_metodo || '—'],
+    ['Método',       l.metodo ?? '—'],
     ['Dirección',    s.ingresa_egreso != null ? (s.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
     ['Estado Op.',   s.estado_op || '—'],
     ['Pagado',       s.pagado ? 'Sí' : 'No'],
     ['Fecha Pago',   fmtDateArg(s.fecha_pago)],
     ['Período',      fmtDate(s.periodo)],
-    ['Local',        s.id_local || '—'],
+    ['Local',        l.local ?? '—'],
     ['Observaciones', s.observaciones || '—'],
   ]
 }
 
-const FILTER_INIT = { desde: '', hasta: '', id_user: '', accion: '' }
+const FILTER_INIT = { desde: '', hasta: '', id_user: '', accion: '', nro_ord: '' }
 
 export default function ActivityLog() {
   const notify = useUiStore((s) => s.notify)
@@ -50,6 +53,7 @@ export default function ActivityLog() {
   const [usuarios,  setUsuarios]  = useState([])
   const [filters,   setFilters]   = useState(FILTER_INIT)
   const [expandedId, setExpandedId] = useState(null)
+  const [debouncedNroOrd, setDebouncedNroOrd] = useState(FILTER_INIT.nro_ord)
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT))
 
@@ -59,23 +63,42 @@ export default function ActivityLog() {
       .catch(() => {})
   }, [])
 
-  const buildParams = useCallback((pageNum) => ({
-    page: pageNum,
-    limit: LIMIT,
-    ...(filters.desde   ? { desde: filters.desde }     : {}),
-    ...(filters.hasta   ? { hasta: filters.hasta }     : {}),
-    ...(filters.id_user ? { id_user: filters.id_user } : {}),
-    ...(filters.accion  ? { accion: filters.accion }   : {}),
-  }), [filters])
+  // ── Debounce buscador de OP ───────────────────────────────────────────────
+  // Sin esto cada tecla dispara un request. El placeholder invita a tipear
+  // "OP-101", y el backend rechaza con 400 los pasos intermedios ("O", "OP",
+  // "OP-") porque no tienen numero -- a velocidad real de tipeo, varios de
+  // esos 400 llegan a mostrarse como toast de error antes de completar la OP.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedNroOrd(filters.nro_ord), 400)
+    return () => clearTimeout(t)
+  }, [filters.nro_ord])
 
-  useEffect(() => { setPage(1) }, [filters])
+  const buildParams = useCallback((pageNum) => {
+    const nroOrd = debouncedNroOrd.trim()
+    return {
+      page: pageNum,
+      limit: LIMIT,
+      ...(filters.desde   ? { desde: filters.desde }     : {}),
+      ...(filters.hasta   ? { hasta: filters.hasta }     : {}),
+      ...(filters.id_user ? { id_user: filters.id_user } : {}),
+      ...(filters.accion  ? { accion: filters.accion }   : {}),
+      // Solo se manda si hay al menos un digito: asi "O", "OP" y "OP-" (los
+      // pasos intermedios de tipear "OP-101") nunca llegan al backend.
+      ...(/\d/.test(nroOrd) ? { nro_ord: nroOrd } : {}),
+    }
+  }, [filters.desde, filters.hasta, filters.id_user, filters.accion, debouncedNroOrd])
+
+  useEffect(() => { setPage(1) }, [buildParams])
 
   useEffect(() => {
     const ctrl = new AbortController()
     setLoading(true)
     activityLogApi.list(buildParams(page), ctrl.signal)
       .then(({ data }) => { setRows(data.data); setTotal(data.total) })
-      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar el log de actividad', 'error') })
+      .catch((err) => {
+        if (ctrl.signal.aborted) return
+        notify(err.response?.data?.error || 'Error al cargar el log de actividad', 'error')
+      })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
   }, [buildParams, page])
@@ -120,6 +143,17 @@ export default function ActivityLog() {
             <option value="editado">Editado</option>
             <option value="eliminado">Eliminado</option>
           </select>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">OP</label>
+          <div className="form-input-wrap">
+            <input
+              placeholder="101 u OP-101"
+              value={filters.nro_ord}
+              onChange={e => setFilter('nro_ord', e.target.value)}
+              style={{ maxWidth: 140 }}
+            />
+          </div>
         </div>
       </div>
 
@@ -177,7 +211,7 @@ export default function ActivityLog() {
                             background: 'var(--bg-input)', borderRadius: 8,
                             padding: '0.9rem 1.1rem', margin: '0.25rem 0 0.75rem',
                           }}>
-                            {snapshotRows(ev.snapshot).map(([label, val]) => (
+                            {snapshotRows(ev.snapshot, ev.snapshot_labels).map(([label, val]) => (
                               <div key={label}>
                                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</div>
                                 <div style={{ fontSize: 13, color: 'var(--t1)' }}>{val}</div>
