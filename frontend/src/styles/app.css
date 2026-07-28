@@ -7,6 +7,14 @@
    DESIGN TOKENS
    ═══════════════════════════════════════════════ */
 :root {
+  /* La app es oscura de punta a punta. Sin esto, el navegador dibuja todos los
+     widgets nativos (el desplegable de los <select>, los calendarios de los
+     input date, los checkboxes, las scrollbars) con el esquema CLARO del
+     sistema, mientras el CSS les pinta texto claro encima: el desplegable
+     queda blanco con letra casi blanca. Va en :root para que valga para toda
+     la app y no haya que parchear control por control. */
+  color-scheme: dark;
+
   /* backgrounds */
   --bg-app:         #19232f;
   --bg-sidebar:     #111820;
@@ -74,6 +82,16 @@ body {
   font-family: 'Montserrat', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Desplegable nativo de TODOS los <select> de la app. Antes esto estaba
+   repetido, con el color escrito a mano, en tres contextos distintos
+   (.form-input-wrap, .filter-select, .sidebar-local-select), así que cualquier
+   select fuera de ellos abría un desplegable sin estilar. */
+select option {
+  background: var(--bg-elevated);
+  color: var(--t1);
+}
+select option:disabled { color: var(--t4); }
 
 /* Override Vite template #root */
 #root {
@@ -238,7 +256,7 @@ body {
   background-position: right 9px center;
 }
 .sidebar-local-select:focus { border-color: var(--border-hi); }
-.sidebar-local-select option { background: #1e2b3a; color: var(--t1); }
+/* el estilo del desplegable lo pone la regla global `select option` */
 
 .sidebar-local-single {
   font-size: 11px;
@@ -1020,8 +1038,6 @@ body {
   padding-right: 20px;
   cursor: pointer;
 }
-.form-input-wrap select option { background: #1e2b3a; color: var(--t1); }
-
 /* textarea */
 .form-textarea-wrap {
   height: auto;
@@ -1135,7 +1151,7 @@ body {
   transition: border-color 0.18s var(--ease);
 }
 .filter-select:focus { border-color: var(--border-hi); outline: none; }
-.filter-select option { background: #1e2b3a; color: var(--t1); }
+/* el estilo del desplegable lo pone la regla global `select option` */
 
 .search-wrap {
   position: relative;
