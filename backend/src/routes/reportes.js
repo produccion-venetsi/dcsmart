@@ -1,14 +1,4 @@
-// El enum TipoTurno usa @map en el schema (ver prisma/schema.prisma) --
-// Prisma Client / SQL crudo espera la clave (MANANA), no la etiqueta visible
-// ("Mañana") que envía el frontend. Mismo mapeo que backend/src/routes/caja.js.
-const TIPO_TURNO_MAP = {
-  'Mañana': 'MANANA', 'Tarde': 'TARDE', 'Noche': 'NOCHE',
-  'Trasnoche': 'TRASNOCHE', 'Evento': 'EVENTO', 'Otros': 'OTROS'
-}
-function toTipoTurnoEnum(value) {
-  if (!value) return null
-  return TIPO_TURNO_MAP[value] || value
-}
+import { toTipoTurnoEnum } from '../lib/tipoTurno.js'
 
 // Comprobantes que entran al reporte BALANCE (ver GET /balance). Son los tipos
 // fiscales; el reporte se define por este conjunto, no por lo que el usuario
