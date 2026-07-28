@@ -11,6 +11,8 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
+import MultiSelect from '../../components/MultiSelect.jsx'
+import { multiParam, normalizarMulti } from '../../lib/filtros.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
@@ -37,6 +39,7 @@ const ESTADO_OP_OPTIONS = [
 const TIPO_PAGO_OPTIONS = [
   'A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'
 ]
+const TIPO_PAGO_MULTI = TIPO_PAGO_OPTIONS.map(t => ({ value: t, label: t }))
 const CAMPO_FECHA_OPTIONS = [
   { value: 'fecha',      label: 'Fecha' },
   { value: 'fecha_pago', label: 'Fecha de Pago' },
@@ -830,9 +833,9 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
 // ─── Filtros ────────────────────────────────────────────────────────────────
 
 const FILTER_INIT = {
-  pagado: '', estado_op: '', campo_fecha: 'fecha', desde: '', hasta: '',
-  id_tipo: '', id_rub: '', id_cat: '',
-  audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
+  pagado: '', estado_op: [], campo_fecha: 'fecha', desde: '', hasta: '',
+  id_tipo: [], id_rub: '', id_cat: '',
+  audit: '', ingresa_egreso: '', id_metodo: [], cmv_quick: '',
   observaciones: '',
   id_proveedores: [],
   id_rubcats: [],
@@ -914,16 +917,16 @@ export default function PagoList() {
       sort_dir:   sortDir,
       ...(qStr ? { q: qStr } : {}),
       ...(filters.pagado         !== '' ? { pagado:          filters.pagado }         : {}),
-      ...(filters.estado_op            ? { estado_op:        filters.estado_op }       : {}),
+      ...(filters.estado_op.length > 0 ? { estado_op:        multiParam(filters.estado_op) } : {}),
       ...(filters.desde                ? { desde:            filters.desde }           : {}),
       ...(filters.hasta                ? { hasta:            filters.hasta }           : {}),
       ...((filters.desde || filters.hasta) ? { campo_fecha:   filters.campo_fecha }    : {}),
-      ...(filters.id_tipo              ? { id_tipo:          filters.id_tipo }         : {}),
+      ...(filters.id_tipo.length   > 0 ? { id_tipo:          multiParam(filters.id_tipo) }   : {}),
       ...(filters.id_rub               ? { id_rub:           filters.id_rub }          : {}),
       ...(filters.id_cat               ? { id_cat:           filters.id_cat }          : {}),
       ...(filters.audit          !== '' ? { audit:            filters.audit }           : {}),
       ...(filters.ingresa_egreso !== '' ? { ingresa_egreso:   filters.ingresa_egreso } : {}),
-      ...(filters.id_metodo            ? { id_metodo:        filters.id_metodo }       : {}),
+      ...(filters.id_metodo.length > 0 ? { id_metodo:        multiParam(filters.id_metodo) } : {}),
       ...(filters.cmv_quick === 'true' ? { cmv_quick: 'true' }                        : {}),
       ...(filters.observaciones.trim()  ? { observaciones:   filters.observaciones.trim() } : {}),
       ...(filters.id_proveedores.length > 0 ? { id_proveedores: filters.id_proveedores.map(p => p.id).join(',') } : {}),
@@ -1172,8 +1175,22 @@ export default function PagoList() {
 
   // Aplica el preset directamente (no solo al borrador): elegirlo de la lista
   // es una acción deliberada, no hace falta confirmar con Aplicar.
+  // Los presets guardados antes del multiselect tienen strings donde ahora van
+  // arrays -- se normalizan al aplicarlos, sin migrar nada en la base.
+  // NOTA: id_rubcats e id_proveedores NO se normalizan acá -- siguen en su
+  // formato viejo (array de ids sueltos / {id,nombre}) hasta la Task 10, que
+  // migra esos dos campos en todo el archivo. Normalizarlos ya rompería los
+  // checkboxes y buildParams, que todavía esperan el formato viejo.
   const applyPreset = (preset) => {
-    const filtros = { ...FILTER_INIT, ...preset.filtros }
+    const guardado = preset.filtros || {}
+    const metodoOptions = metodos.map(m => ({ value: m.id, label: m.nombre }))
+    const filtros = {
+      ...FILTER_INIT,
+      ...guardado,
+      id_tipo:   normalizarMulti(guardado.id_tipo, TIPO_PAGO_MULTI),
+      estado_op: normalizarMulti(guardado.estado_op, ESTADO_OP_OPTIONS),
+      id_metodo: normalizarMulti(guardado.id_metodo, metodoOptions),
+    }
     setDraft(filtros)
     setFilters(filtros)
   }
@@ -1238,19 +1255,29 @@ export default function PagoList() {
 
   const hasCmvRubros = rubros.some(r => r.nombre?.toUpperCase().startsWith('CMV'))
   const CHIPS = [
-    { label: 'STK',         filters: { id_tipo: 'STK' } },
+    { label: 'STK',         filters: { id_tipo: [{ value: 'STK', label: 'STK' }] } },
     { label: 'CMV',         filters: { cmv_quick: 'true' }, disabled: !hasCmvRubros },
     { label: 'No auditado', filters: { audit: 'false' } },
     { label: 'No pagado',   filters: { pagado: 'false' } },
     { label: 'Egreso',      filters: { ingresa_egreso: 'false' } },
   ]
 
+  const mismoValor = (a, b) => {
+    if (Array.isArray(a) || Array.isArray(b)) {
+      const va = (a || []).map(x => x.value).join(',')
+      const vb = (b || []).map(x => x.value).join(',')
+      return va !== '' && va === vb
+    }
+    return b !== '' && a === b
+  }
+
   const isChipActive = (chipFilters) =>
-    Object.entries(chipFilters).every(([k, v]) => v !== '' && draft[k] === v)
+    Object.entries(chipFilters).every(([k, v]) => mismoValor(draft[k], v))
 
   const toggleChip = (chipFilters) => {
     if (isChipActive(chipFilters)) {
-      const cleared = Object.keys(chipFilters).reduce((acc, k) => ({ ...acc, [k]: '' }), {})
+      const cleared = Object.keys(chipFilters).reduce(
+        (acc, k) => ({ ...acc, [k]: Array.isArray(FILTER_INIT[k]) ? [] : '' }), {})
       setDraft(d => ({ ...d, ...cleared }))
     } else {
       setDraft(d => ({ ...d, ...chipFilters }))
@@ -1659,17 +1686,21 @@ export default function PagoList() {
             <div style={{ display: 'grid', gap: '0.6rem' }}>
               <div>
                 <span style={lbl}>Tipo</span>
-                <select className="filter-select" style={{ width: '100%' }} value={draft.id_tipo} onChange={e => setDraftField('id_tipo', e.target.value)}>
-                  <option value="">Todos los tipos</option>
-                  {TIPO_PAGO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <MultiSelect
+                  value={draft.id_tipo}
+                  onChange={(v) => setDraftField('id_tipo', v)}
+                  options={TIPO_PAGO_MULTI}
+                  placeholder="Todos los tipos"
+                />
               </div>
               <div>
                 <span style={lbl}>Método</span>
-                <select className="filter-select" style={{ width: '100%' }} value={draft.id_metodo} onChange={e => setDraftField('id_metodo', e.target.value)}>
-                  <option value="">Todos los métodos</option>
-                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-                </select>
+                <MultiSelect
+                  value={draft.id_metodo}
+                  onChange={(v) => setDraftField('id_metodo', v)}
+                  options={metodos.map(m => ({ value: m.id, label: m.nombre }))}
+                  placeholder="Todos los métodos"
+                />
               </div>
               <div>
                 <span style={lbl}>Rubro</span>
@@ -1759,10 +1790,12 @@ export default function PagoList() {
               </div>
               <div>
                 <span style={lbl}>Estado op.</span>
-                <select className="filter-select" style={{ width: '100%' }} value={draft.estado_op} onChange={e => setDraftField('estado_op', e.target.value)}>
-                  <option value="">Todos</option>
-                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                <MultiSelect
+                  value={draft.estado_op}
+                  onChange={(v) => setDraftField('estado_op', v)}
+                  options={ESTADO_OP_OPTIONS}
+                  placeholder="Todos"
+                />
               </div>
               <div>
                 <span style={lbl}>Audit</span>
