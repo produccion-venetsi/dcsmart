@@ -2577,7 +2577,19 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   font-weight: 700;
 }
 
-.multiselect-panel { padding: 6px; }
+.multiselect-panel {
+  padding: 6px;
+  /* Anula el max-height/overflow de .combobox-dropdown: el scroll interno lo
+     maneja .multiselect-lista, así el buscador y el pie "Todos/Ninguno"
+     nunca quedan cortados por un scroll anidado. */
+  max-height: none;
+  /* Anula el position: absolute de .combobox-dropdown: el panel se despliega
+     en flujo (empujando el contenido) en vez de flotar. Así nunca se recorta
+     contra un ancestro con overflow distinto de "visible" (p. ej. el panel
+     de filtros de Pagos), que sí scrollea el documento completo. */
+  position: static;
+  margin-top: 4px;
+}
 
 .multiselect-search {
   width: 100%;

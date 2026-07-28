@@ -40,6 +40,12 @@ export default function MultiSelect({
     }
   }, [open])
 
+  // Al cerrar se limpia la búsqueda: si no, al reabrir se repite el fetch (o
+  // el filtro local) con la query vieja en vez de arrancar en blanco.
+  useEffect(() => {
+    if (!open) setSearch('')
+  }, [open])
+
   // Búsqueda remota con debounce de 300 ms (mismo valor que Combobox.jsx).
   useEffect(() => {
     if (!esRemoto || !open) return
@@ -112,7 +118,7 @@ export default function MultiSelect({
           )}
 
           <div className="multiselect-lista">
-            {loading
+            {loading && lista.length === 0
               ? <div className="combobox-inline-empty">Buscando…</div>
               : esperandoTexto && value.length === 0
                 ? <div className="combobox-inline-empty">Escribí al menos {minCharsRemoto} letras para buscar</div>
