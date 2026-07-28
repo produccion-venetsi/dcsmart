@@ -885,8 +885,6 @@ export default function PagoList() {
   const [categorias,  setCategorias]  = useState([])
   const [rubcats,     setRubcats]     = useState([])
   const [metodos,     setMetodos]     = useState([])
-  const [provSearchResults, setProvSearchResults] = useState([])
-  const [provSearchLoading, setProvSearchLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
 
@@ -929,8 +927,8 @@ export default function PagoList() {
       ...(filters.id_metodo.length > 0 ? { id_metodo:        multiParam(filters.id_metodo) } : {}),
       ...(filters.cmv_quick === 'true' ? { cmv_quick: 'true' }                        : {}),
       ...(filters.observaciones.trim()  ? { observaciones:   filters.observaciones.trim() } : {}),
-      ...(filters.id_proveedores.length > 0 ? { id_proveedores: filters.id_proveedores.map(p => p.id).join(',') } : {}),
-      ...(filters.id_rubcats.length    > 0 ? { id_rubcats:    filters.id_rubcats.join(',') }    : {}),
+      ...(filters.id_proveedores.length > 0 ? { id_proveedores: multiParam(filters.id_proveedores) } : {}),
+      ...(filters.id_rubcats.length    > 0 ? { id_rubcats:    multiParam(filters.id_rubcats) }  : {}),
     }
   }, [activeLocal?.id, sortField, sortDir, debouncedSearch, filters])
 
@@ -1176,20 +1174,24 @@ export default function PagoList() {
   // Aplica el preset directamente (no solo al borrador): elegirlo de la lista
   // es una acción deliberada, no hace falta confirmar con Aplicar.
   // Los presets guardados antes del multiselect tienen strings donde ahora van
-  // arrays -- se normalizan al aplicarlos, sin migrar nada en la base.
-  // NOTA: id_rubcats e id_proveedores NO se normalizan acá -- siguen en su
-  // formato viejo (array de ids sueltos / {id,nombre}) hasta la Task 10, que
-  // migra esos dos campos en todo el archivo. Normalizarlos ya rompería los
-  // checkboxes y buildParams, que todavía esperan el formato viejo.
+  // arrays -- se normalizan al aplicarlos, sin migrar nada en la base. Esto
+  // incluye id_rubcats (antes array de ids sueltos) e id_proveedores (antes
+  // array de {id,nombre}), migrados al formato {value,label} en la Task 10.
   const applyPreset = (preset) => {
     const guardado = preset.filtros || {}
     const metodoOptions = metodos.map(m => ({ value: m.id, label: m.nombre }))
+    const rubcatOptions = rubcats.map(rc => ({
+      value: rc.id,
+      label: `${rc.rubro?.nombre ?? ''} / ${rc.categoria?.nombre ?? ''}`,
+    }))
     const filtros = {
       ...FILTER_INIT,
       ...guardado,
-      id_tipo:   normalizarMulti(guardado.id_tipo, TIPO_PAGO_MULTI),
-      estado_op: normalizarMulti(guardado.estado_op, ESTADO_OP_OPTIONS),
-      id_metodo: normalizarMulti(guardado.id_metodo, metodoOptions),
+      id_tipo:        normalizarMulti(guardado.id_tipo, TIPO_PAGO_MULTI),
+      estado_op:      normalizarMulti(guardado.estado_op, ESTADO_OP_OPTIONS),
+      id_metodo:      normalizarMulti(guardado.id_metodo, metodoOptions),
+      id_rubcats:     normalizarMulti(guardado.id_rubcats, rubcatOptions),
+      id_proveedores: normalizarMulti(guardado.id_proveedores),
     }
     setDraft(filtros)
     setFilters(filtros)
@@ -1227,31 +1229,13 @@ export default function PagoList() {
     return () => document.removeEventListener('keydown', onKey)
   }, [filterOpen, closeFilters])
   const setDraftField  = (k, v) => setDraft(d => ({ ...d, [k]: v }))
-  const toggleDraftArr = (k, v) => setDraft(d => {
-    const arr = d[k] || []
-    return { ...d, [k]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] }
-  })
 
-  const [provSearch,    setProvSearch]    = useState('')
-  const [rubcatSearch,  setRubcatSearch]  = useState('')
-
-  useEffect(() => {
-    if (provSearch.trim().length < 2) { setProvSearchResults([]); return }
-    setProvSearchLoading(true)
-    const t = setTimeout(() => {
-      proveedoresApi.list({ search: provSearch.trim(), activo: 'true', limit: 30 })
-        .then(r => setProvSearchResults(r.data?.data || []))
-        .catch(() => setProvSearchResults([]))
-        .finally(() => setProvSearchLoading(false))
-    }, 300)
-    return () => clearTimeout(t)
-  }, [provSearch])
-
-  const toggleDraftProv = (p) => setDraft(d => {
-    const arr = d.id_proveedores || []
-    const exists = arr.some(x => x.id === p.id)
-    return { ...d, id_proveedores: exists ? arr.filter(x => x.id !== p.id) : [...arr, { id: p.id, nombre: p.nombre }] }
-  })
+  // El MultiSelect ya hace el debounce; acá solo se traduce la respuesta del
+  // backend al formato { value, label }.
+  const buscarProveedores = useCallback(async (q) => {
+    const r = await proveedoresApi.list({ search: q, activo: 'true', limit: 30 })
+    return (r.data?.data || []).map(p => ({ value: p.id, label: p.nombre }))
+  }, [])
 
   const hasCmvRubros = rubros.some(r => r.nombre?.toUpperCase().startsWith('CMV'))
   const CHIPS = [
@@ -1721,61 +1705,27 @@ export default function PagoList() {
 
             {/* Multi-select rubcats */}
             <div style={{ marginTop: '0.75rem' }}>
-              <span style={lbl}>Rubros/Cat (múltiple) {draft.id_rubcats.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_rubcats.length})</span>}</span>
-              <input
-                type="text"
-                placeholder="Buscar rubro/cat…"
-                value={rubcatSearch}
-                onChange={e => setRubcatSearch(e.target.value)}
-                style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+              <span style={lbl}>Rubros/Cat (múltiple)</span>
+              <MultiSelect
+                value={draft.id_rubcats}
+                onChange={(v) => setDraftField('id_rubcats', v)}
+                options={rubcats.map(rc => ({
+                  value: rc.id,
+                  label: `${rc.rubro?.nombre ?? ''} / ${rc.categoria?.nombre ?? ''}`,
+                }))}
+                placeholder="Todos los rubros/cat"
               />
-              <div className="filters-scroll" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
-                {rubcats
-                  .filter(rc => !rubcatSearch.trim() || `${rc.rubro?.nombre} ${rc.categoria?.nombre}`.toLowerCase().includes(rubcatSearch.toLowerCase()))
-                  .map(rc => (
-                    <label key={rc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
-                      <input type="checkbox" checked={draft.id_rubcats.includes(rc.id)} onChange={() => toggleDraftArr('id_rubcats', rc.id)} />
-                      <span style={{ color: 'var(--t2)' }}>{rc.rubro?.nombre}</span>
-                      <span style={{ color: 'var(--t3)' }}>/</span>
-                      <span>{rc.categoria?.nombre}</span>
-                    </label>
-                  ))
-                }
-              </div>
             </div>
 
             <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Proveedor</div>
             <div>
-              <span style={lbl}>Proveedores {draft.id_proveedores.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_proveedores.length})</span>}</span>
-              <input
-                type="text"
-                placeholder="Escribí para buscar…"
-                value={provSearch}
-                onChange={e => setProvSearch(e.target.value)}
-                style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+              <span style={lbl}>Proveedores</span>
+              <MultiSelect
+                value={draft.id_proveedores}
+                onChange={(v) => setDraftField('id_proveedores', v)}
+                fetchOptions={buscarProveedores}
+                placeholder="Todos los proveedores"
               />
-              <div className="filters-scroll" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
-                {provSearch.trim().length >= 2 ? (
-                  provSearchLoading
-                    ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Buscando…</div>
-                    : provSearchResults.length === 0
-                      ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Sin resultados</div>
-                      : provSearchResults.map(p => (
-                          <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
-                            <input type="checkbox" checked={draft.id_proveedores.some(x => x.id === p.id)} onChange={() => toggleDraftProv(p)} />
-                            {p.nombre}
-                          </label>
-                        ))
-                ) : draft.id_proveedores.length === 0
-                  ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Escribí al menos 2 letras para buscar</div>
-                  : draft.id_proveedores.map(p => (
-                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
-                        <input type="checkbox" checked onChange={() => toggleDraftProv(p)} />
-                        {p.nombre}
-                      </label>
-                    ))
-                }
-              </div>
             </div>
 
             <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Estado</div>
