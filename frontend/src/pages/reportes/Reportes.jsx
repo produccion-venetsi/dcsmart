@@ -5,6 +5,7 @@ import { todayInputDate } from '../../lib/dates.js'
 import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
+import ReporteBalance from './ReporteBalance.jsx'
 import './reportes.css'
 
 const ANALYTICS_URL = import.meta.env.VITE_ANALYTICS_URL || 'https://analisis.dcsmart.app'
@@ -54,10 +55,14 @@ const PRESETS = [
   { key: '12m', label: 'Últimos 12 meses' },
 ]
 
+// Balance solo para super_admin: expone CUIT y razón social de los proveedores.
+// El backend lo exige igual (requireSuperAdmin en GET /reportes/balance), esto
+// es para no mostrar una pestaña que iba a responder 403.
 const TABS = [
   { key: 'pagos', label: 'Pagos' },
   { key: 'cajas', label: 'Cajas' },
   { key: 'cmv',   label: 'CMV' },
+  { key: 'balance', label: 'Balance', soloSuperAdmin: true },
 ]
 
 // Solo el reporte de Pagos permite elegir sobre qué campo de fecha se arma
@@ -93,6 +98,7 @@ function IcoArrowRight() {
 export default function Reportes() {
   const { activeApp, activeLocal, setActiveLocal } = useAppStore()
   const locales = activeApp?.locales ?? []
+  const isSuperAdmin = activeApp?.role === 'super_admin'
   const multiLocal = locales.length > 1
 
   const [tab, setTab] = useState('pagos')
@@ -145,7 +151,7 @@ export default function Reportes() {
         <div className="rep-header">
           <div className="rep-header-left">
             <div className="rep-tabs">
-              {TABS.map((t) => (
+              {TABS.filter(t => !t.soloSuperAdmin || isSuperAdmin).map((t) => (
                 <button
                   key={t.key}
                   className={'rep-tab' + (tab === t.key ? ' active' : '')}
@@ -281,6 +287,9 @@ export default function Reportes() {
         )}
         {tab === 'cmv' && (
           <ReporteCMV applied={applied} activeLocal={activeLocal} />
+        )}
+        {tab === 'balance' && isSuperAdmin && (
+          <ReporteBalance applied={applied} activeLocal={activeLocal} />
         )}
 
       </div>
