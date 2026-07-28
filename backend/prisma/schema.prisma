@@ -70,6 +70,7 @@ model User {
   audits           Audit[]           @relation("AuditUser")
   app_usage        UserAppUsage[]
   activity_logs    ActivityLog[]     @relation("ActivityLogUser")
+  filtro_presets   FiltroPreset[]    @relation("FiltroPresetUser")
 
   @@map("users")
 }
@@ -578,4 +579,25 @@ model TapTapSyncRun {
   ok          Boolean   @default(true)
 
   @@map("taptap_sync_runs")
+}
+
+// Filtros guardados por usuario ("mis filtros") de las pantallas de listado.
+// `modulo` existe para que la misma tabla sirva a pagos y despues a cajas sin
+// migrar de nuevo. El tope de 5 por usuario y modulo se valida en la ruta, no
+// en el esquema: Postgres no puede expresar "maximo N filas por grupo" sin un
+// trigger, y un trigger seria mas dificil de encontrar que la validacion.
+model FiltroPreset {
+  id         String   @id @default(uuid())
+  id_user    String
+  modulo     String   // 'pagos' | 'cajas'
+  nombre     String
+  filtros    Json
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user User @relation("FiltroPresetUser", fields: [id_user], references: [id], onDelete: Cascade)
+
+  @@unique([id_user, modulo, nombre])
+  @@index([id_user, modulo])
+  @@map("filtro_presets")
 }
