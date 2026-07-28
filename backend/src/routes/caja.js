@@ -1,6 +1,7 @@
 import multipart from '@fastify/multipart'
 import { Storage } from '@google-cloud/storage'
-import { toTipoTurnoEnum, fromTipoTurnoEnum } from '../lib/tipoTurno.js'
+import { toTipoTurnoEnum, fromTipoTurnoEnum, toTipoTurnoEnumList } from '../lib/tipoTurno.js'
+import { parseCsvParam } from '../lib/queryParams.js'
 
 // El estado de auditoría de una caja se guarda en la tabla `audits`
 // (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
@@ -83,10 +84,13 @@ export default async function cajaRoutes(fastify) {
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
     const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
 
+    // tipo_turno puede traer varios valores separados por coma.
+    const tipoTurnos = toTipoTurnoEnumList(parseCsvParam(tipo_turno))
+
     const where = {
       ...localFilter,
       ...auditFilter,
-      ...(tipo_turno ? { tipo_turno: toTipoTurnoEnum(tipo_turno) } : {}),
+      ...(tipoTurnos.length ? { tipo_turno: { in: tipoTurnos } } : {}),
       ...(desde || hasta ? {
         // desde/hasta son días de calendario (input type="date") sobre un
         // campo que es un instante real (fecha_inicio) -- el rango se
@@ -134,10 +138,13 @@ export default async function cajaRoutes(fastify) {
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
     const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
 
+    // tipo_turno puede traer varios valores separados por coma.
+    const tipoTurnos = toTipoTurnoEnumList(parseCsvParam(tipo_turno))
+
     const where = {
       ...localFilter,
       ...auditFilter,
-      ...(tipo_turno ? { tipo_turno: toTipoTurnoEnum(tipo_turno) } : {}),
+      ...(tipoTurnos.length ? { tipo_turno: { in: tipoTurnos } } : {}),
       ...(desde || hasta ? {
         fecha_inicio: {
           ...(desde && { gte: new Date(`${desde}T00:00:00.000-03:00`) }),
