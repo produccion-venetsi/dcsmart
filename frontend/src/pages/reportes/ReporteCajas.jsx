@@ -4,6 +4,7 @@ import {
   BarChart, Bar, Cell
 } from 'recharts'
 import { reportesApi } from '../../api/reportes.js'
+import { multiParam } from '../../lib/filtros.js'
 
 const fmtCurrency = new Intl.NumberFormat('es-AR', {
   style: 'currency', currency: 'ARS', maximumFractionDigits: 0
@@ -89,14 +90,16 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
       desde: applied.desde,
       hasta: applied.hasta,
       ...(activeLocal ? { id_local: activeLocal.id } : {}),
-      ...(tipoTurno ? { tipo_turno: tipoTurno } : {})
+      ...(tipoTurno?.length ? { tipo_turno: multiParam(tipoTurno) } : {})
     }
     reportesApi.cajas(params, ctrl.signal)
       .then((res) => setData(res.data))
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [applied.desde, applied.hasta, activeLocal?.id, tipoTurno])
+  // tipoTurno es un array: se compara por su CSV, no por identidad de objeto,
+  // para no re-disparar el fetch en cada render del padre.
+  }, [applied.desde, applied.hasta, activeLocal?.id, multiParam(tipoTurno)])
 
   const kpi           = data?.kpi ?? {}
   const secondary     = data?.secondary ?? []
