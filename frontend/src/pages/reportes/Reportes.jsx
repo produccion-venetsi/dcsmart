@@ -232,14 +232,12 @@ export default function Reportes() {
               {tab === 'cajas' && (
                 <div className="rep-filter-col" style={{ maxWidth: 180 }}>
                   <div className="rep-filter-label">Tipo de turno</div>
-                  <div className="rep-date-input">
-                    <MultiSelect
-                      value={tipoTurno}
-                      onChange={setTipoTurno}
-                      options={TURNO_OPTIONS}
-                      placeholder="Todos"
-                    />
-                  </div>
+                  <MultiSelect
+                    value={tipoTurno}
+                    onChange={setTipoTurno}
+                    options={TURNO_OPTIONS}
+                    placeholder="Todos"
+                  />
                 </div>
               )}
               <div className="rep-filter-col">
