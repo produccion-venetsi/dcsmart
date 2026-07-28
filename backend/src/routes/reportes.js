@@ -1,14 +1,5 @@
-// El enum TipoTurno usa @map en el schema (ver prisma/schema.prisma) --
-// Prisma Client / SQL crudo espera la clave (MANANA), no la etiqueta visible
-// ("Mañana") que envía el frontend. Mismo mapeo que backend/src/routes/caja.js.
-const TIPO_TURNO_MAP = {
-  'Mañana': 'MANANA', 'Tarde': 'TARDE', 'Noche': 'NOCHE',
-  'Trasnoche': 'TRASNOCHE', 'Evento': 'EVENTO', 'Otros': 'OTROS'
-}
-function toTipoTurnoEnum(value) {
-  if (!value) return null
-  return TIPO_TURNO_MAP[value] || value
-}
+import { toTipoTurnoEnumList } from '../lib/tipoTurno.js'
+import { parseCsvParam } from '../lib/queryParams.js'
 
 // Comprobantes que entran al reporte BALANCE (ver GET /balance). Son los tipos
 // fiscales; el reporte se define por este conjunto, no por lo que el usuario
@@ -39,12 +30,15 @@ export default async function reportesRoutes(fastify) {
     const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
     const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
 
-    const tipoTurnoEnum = toTipoTurnoEnum(tipo_turno)
+    // Dos listas por la asimetría del @map: el SQL crudo compara contra la
+    // etiqueta ("Tarde") y Prisma contra la clave del enum ("TARDE").
+    const tipoTurnoLabels = parseCsvParam(tipo_turno)
+    const tipoTurnoEnums  = toTipoTurnoEnumList(tipoTurnoLabels)
 
     const localFilter = { id_local: { in: localIds } }
     const cajaWhere = {
       ...localFilter,
-      ...(tipoTurnoEnum ? { tipo_turno: tipoTurnoEnum } : {}),
+      ...(tipoTurnoEnums.length ? { tipo_turno: { in: tipoTurnoEnums } } : {}),
       fecha_inicio: { gte: desdeDate, lte: hastaDate }
     }
 
@@ -71,12 +65,15 @@ export default async function reportesRoutes(fastify) {
     payParams.push(hastaDate)
     // Nota: el enum de Postgres guarda el label visible (@map), ej. "Tarde" --
     // no la clave interna de Prisma ("TARDE"). Para SQL crudo se compara
-    // contra el valor tal cual llega del frontend (tipo_turno), NO contra
-    // tipoTurnoEnum (ese es solo para el `where` de Prisma más abajo).
+    // contra las etiquetas tal cual llegan del frontend (tipoTurnoLabels), NO
+    // contra tipoTurnoEnums (esa lista es solo para el `where` de Prisma más
+    // arriba).
     let payTipoClause = ''
-    if (tipoTurnoEnum) {
-      payParams.push(tipo_turno)
-      payTipoClause = `AND c.tipo_turno::text = $${payParams.length}`
+    if (tipoTurnoLabels.length) {
+      // Placeholders dinámicos, igual que localPlaceholders más arriba.
+      const ph = tipoTurnoLabels.map((_, i) => `$${payParams.length + i + 1}`).join(', ')
+      payParams.push(...tipoTurnoLabels)
+      payTipoClause = `AND c.tipo_turno::text IN (${ph})`
     }
 
     // LEFT JOIN (no INNER) -- un movimiento COBRO sin id_metodo asignado no
@@ -118,9 +115,10 @@ export default async function reportesRoutes(fastify) {
     // y da el mismo resultado incorrecto que no convertir nada.
     const weekParams = [...localIds, desdeDate, hastaDate]
     let weekTipoClause = ''
-    if (tipoTurnoEnum) {
-      weekParams.push(tipo_turno)
-      weekTipoClause = `AND tipo_turno::text = $${weekParams.length}`
+    if (tipoTurnoLabels.length) {
+      const ph = tipoTurnoLabels.map((_, i) => `$${weekParams.length + i + 1}`).join(', ')
+      weekParams.push(...tipoTurnoLabels)
+      weekTipoClause = `AND tipo_turno::text IN (${ph})`
     }
     const weekRows = await fastify.db.$queryRawUnsafe(`
       SELECT
@@ -150,9 +148,10 @@ export default async function reportesRoutes(fastify) {
     // nombre libre cargado en el propio detalle).
     const detParams = [...localIds, desdeDate, hastaDate, request.activeAppId]
     let detTipoClause = ''
-    if (tipoTurnoEnum) {
-      detParams.push(tipo_turno)
-      detTipoClause = `AND c.tipo_turno::text = $${detParams.length}`
+    if (tipoTurnoLabels.length) {
+      const ph = tipoTurnoLabels.map((_, i) => `$${detParams.length + i + 1}`).join(', ')
+      detParams.push(...tipoTurnoLabels)
+      detTipoClause = `AND c.tipo_turno::text IN (${ph})`
     }
     const detRows = await fastify.db.$queryRawUnsafe(`
       SELECT

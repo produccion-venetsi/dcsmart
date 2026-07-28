@@ -2,6 +2,7 @@ import { Storage } from '@google-cloud/storage'
 import multipart from '@fastify/multipart'
 import { parseNroOrd } from '../lib/nroOrd.js'
 import { partirIdsPorEstado } from '../lib/estadoOp.js'
+import { parseCsvParam } from '../lib/queryParams.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -178,6 +179,12 @@ async function buildPagosWhere(fastify, request, query) {
     ? { id_proveedor: { in: provIdsArr } }
     : id_proveedor ? { id_proveedor } : {}
 
+  // Tipo, método y estado OP admiten varios valores (CSV), igual que
+  // id_rubcats e id_proveedores.
+  const tipoIds   = parseCsvParam(id_tipo)
+  const metodoIds = parseCsvParam(id_metodo)
+  const estadoOps = parseCsvParam(estado_op)
+
   const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
 
   const qStr = q?.trim()
@@ -205,11 +212,11 @@ async function buildPagosWhere(fastify, request, query) {
     ...proveedorFilter,
     ...qFilter,
     ...(nro_ord        ? { nro_ord: parseInt(nro_ord) }                  : {}),
-    ...(id_tipo        ? { id_tipo }                                      : {}),
-    ...(id_metodo      ? { id_metodo }                                    : {}),
+    ...(tipoIds.length   ? { id_tipo:   { in: tipoIds } }                 : {}),
+    ...(metodoIds.length ? { id_metodo: { in: metodoIds } }               : {}),
     ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
     ...(ingresa_egreso !== undefined ? { ingresa_egreso: ingresa_egreso === 'true' } : {}),
-    ...(estado_op      ? { estado_op }                                    : {}),
+    ...(estadoOps.length ? { estado_op: { in: estadoOps } }               : {}),
     ...(observaciones?.trim()
       ? { observaciones: { contains: observaciones.trim(), mode: 'insensitive' } }
       : {}),

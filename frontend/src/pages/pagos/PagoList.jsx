@@ -11,6 +11,8 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
+import MultiSelect from '../../components/MultiSelect.jsx'
+import { multiParam, normalizarMulti } from '../../lib/filtros.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
@@ -37,6 +39,7 @@ const ESTADO_OP_OPTIONS = [
 const TIPO_PAGO_OPTIONS = [
   'A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'
 ]
+const TIPO_PAGO_MULTI = TIPO_PAGO_OPTIONS.map(t => ({ value: t, label: t }))
 const CAMPO_FECHA_OPTIONS = [
   { value: 'fecha',      label: 'Fecha' },
   { value: 'fecha_pago', label: 'Fecha de Pago' },
@@ -830,9 +833,9 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
 // ─── Filtros ────────────────────────────────────────────────────────────────
 
 const FILTER_INIT = {
-  pagado: '', estado_op: '', campo_fecha: 'fecha', desde: '', hasta: '',
-  id_tipo: '', id_rub: '', id_cat: '',
-  audit: '', ingresa_egreso: '', id_metodo: '', cmv_quick: '',
+  pagado: '', estado_op: [], campo_fecha: 'fecha', desde: '', hasta: '',
+  id_tipo: [], id_rub: '', id_cat: '',
+  audit: '', ingresa_egreso: '', id_metodo: [], cmv_quick: '',
   observaciones: '',
   id_proveedores: [],
   id_rubcats: [],
@@ -882,8 +885,6 @@ export default function PagoList() {
   const [categorias,  setCategorias]  = useState([])
   const [rubcats,     setRubcats]     = useState([])
   const [metodos,     setMetodos]     = useState([])
-  const [provSearchResults, setProvSearchResults] = useState([])
-  const [provSearchLoading, setProvSearchLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
 
@@ -914,20 +915,20 @@ export default function PagoList() {
       sort_dir:   sortDir,
       ...(qStr ? { q: qStr } : {}),
       ...(filters.pagado         !== '' ? { pagado:          filters.pagado }         : {}),
-      ...(filters.estado_op            ? { estado_op:        filters.estado_op }       : {}),
+      ...(filters.estado_op.length > 0 ? { estado_op:        multiParam(filters.estado_op) } : {}),
       ...(filters.desde                ? { desde:            filters.desde }           : {}),
       ...(filters.hasta                ? { hasta:            filters.hasta }           : {}),
       ...((filters.desde || filters.hasta) ? { campo_fecha:   filters.campo_fecha }    : {}),
-      ...(filters.id_tipo              ? { id_tipo:          filters.id_tipo }         : {}),
+      ...(filters.id_tipo.length   > 0 ? { id_tipo:          multiParam(filters.id_tipo) }   : {}),
       ...(filters.id_rub               ? { id_rub:           filters.id_rub }          : {}),
       ...(filters.id_cat               ? { id_cat:           filters.id_cat }          : {}),
       ...(filters.audit          !== '' ? { audit:            filters.audit }           : {}),
       ...(filters.ingresa_egreso !== '' ? { ingresa_egreso:   filters.ingresa_egreso } : {}),
-      ...(filters.id_metodo            ? { id_metodo:        filters.id_metodo }       : {}),
+      ...(filters.id_metodo.length > 0 ? { id_metodo:        multiParam(filters.id_metodo) } : {}),
       ...(filters.cmv_quick === 'true' ? { cmv_quick: 'true' }                        : {}),
       ...(filters.observaciones.trim()  ? { observaciones:   filters.observaciones.trim() } : {}),
-      ...(filters.id_proveedores.length > 0 ? { id_proveedores: filters.id_proveedores.map(p => p.id).join(',') } : {}),
-      ...(filters.id_rubcats.length    > 0 ? { id_rubcats:    filters.id_rubcats.join(',') }    : {}),
+      ...(filters.id_proveedores.length > 0 ? { id_proveedores: multiParam(filters.id_proveedores) } : {}),
+      ...(filters.id_rubcats.length    > 0 ? { id_rubcats:    multiParam(filters.id_rubcats) }  : {}),
     }
   }, [activeLocal?.id, sortField, sortDir, debouncedSearch, filters])
 
@@ -1172,8 +1173,26 @@ export default function PagoList() {
 
   // Aplica el preset directamente (no solo al borrador): elegirlo de la lista
   // es una acción deliberada, no hace falta confirmar con Aplicar.
+  // Los presets guardados antes del multiselect tienen strings donde ahora van
+  // arrays -- se normalizan al aplicarlos, sin migrar nada en la base. Esto
+  // incluye id_rubcats (antes array de ids sueltos) e id_proveedores (antes
+  // array de {id,nombre}), migrados al formato {value,label} en la Task 10.
   const applyPreset = (preset) => {
-    const filtros = { ...FILTER_INIT, ...preset.filtros }
+    const guardado = preset.filtros || {}
+    const metodoOptions = metodos.map(m => ({ value: m.id, label: m.nombre }))
+    const rubcatOptions = rubcats.map(rc => ({
+      value: rc.id,
+      label: `${rc.rubro?.nombre ?? ''} / ${rc.categoria?.nombre ?? ''}`,
+    }))
+    const filtros = {
+      ...FILTER_INIT,
+      ...guardado,
+      id_tipo:        normalizarMulti(guardado.id_tipo, TIPO_PAGO_MULTI),
+      estado_op:      normalizarMulti(guardado.estado_op, ESTADO_OP_OPTIONS),
+      id_metodo:      normalizarMulti(guardado.id_metodo, metodoOptions),
+      id_rubcats:     normalizarMulti(guardado.id_rubcats, rubcatOptions),
+      id_proveedores: normalizarMulti(guardado.id_proveedores),
+    }
     setDraft(filtros)
     setFilters(filtros)
   }
@@ -1210,47 +1229,39 @@ export default function PagoList() {
     return () => document.removeEventListener('keydown', onKey)
   }, [filterOpen, closeFilters])
   const setDraftField  = (k, v) => setDraft(d => ({ ...d, [k]: v }))
-  const toggleDraftArr = (k, v) => setDraft(d => {
-    const arr = d[k] || []
-    return { ...d, [k]: arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v] }
-  })
 
-  const [provSearch,    setProvSearch]    = useState('')
-  const [rubcatSearch,  setRubcatSearch]  = useState('')
-
-  useEffect(() => {
-    if (provSearch.trim().length < 2) { setProvSearchResults([]); return }
-    setProvSearchLoading(true)
-    const t = setTimeout(() => {
-      proveedoresApi.list({ search: provSearch.trim(), activo: 'true', limit: 30 })
-        .then(r => setProvSearchResults(r.data?.data || []))
-        .catch(() => setProvSearchResults([]))
-        .finally(() => setProvSearchLoading(false))
-    }, 300)
-    return () => clearTimeout(t)
-  }, [provSearch])
-
-  const toggleDraftProv = (p) => setDraft(d => {
-    const arr = d.id_proveedores || []
-    const exists = arr.some(x => x.id === p.id)
-    return { ...d, id_proveedores: exists ? arr.filter(x => x.id !== p.id) : [...arr, { id: p.id, nombre: p.nombre }] }
-  })
+  // El MultiSelect ya hace el debounce; acá solo se traduce la respuesta del
+  // backend al formato { value, label }.
+  const buscarProveedores = useCallback(async (q) => {
+    const r = await proveedoresApi.list({ search: q, activo: 'true', limit: 30 })
+    return (r.data?.data || []).map(p => ({ value: p.id, label: p.nombre }))
+  }, [])
 
   const hasCmvRubros = rubros.some(r => r.nombre?.toUpperCase().startsWith('CMV'))
   const CHIPS = [
-    { label: 'STK',         filters: { id_tipo: 'STK' } },
+    { label: 'STK',         filters: { id_tipo: [{ value: 'STK', label: 'STK' }] } },
     { label: 'CMV',         filters: { cmv_quick: 'true' }, disabled: !hasCmvRubros },
     { label: 'No auditado', filters: { audit: 'false' } },
     { label: 'No pagado',   filters: { pagado: 'false' } },
     { label: 'Egreso',      filters: { ingresa_egreso: 'false' } },
   ]
 
+  const mismoValor = (a, b) => {
+    if (Array.isArray(a) || Array.isArray(b)) {
+      const va = (a || []).map(x => x.value).join(',')
+      const vb = (b || []).map(x => x.value).join(',')
+      return va !== '' && va === vb
+    }
+    return b !== '' && a === b
+  }
+
   const isChipActive = (chipFilters) =>
-    Object.entries(chipFilters).every(([k, v]) => v !== '' && draft[k] === v)
+    Object.entries(chipFilters).every(([k, v]) => mismoValor(draft[k], v))
 
   const toggleChip = (chipFilters) => {
     if (isChipActive(chipFilters)) {
-      const cleared = Object.keys(chipFilters).reduce((acc, k) => ({ ...acc, [k]: '' }), {})
+      const cleared = Object.keys(chipFilters).reduce(
+        (acc, k) => ({ ...acc, [k]: Array.isArray(FILTER_INIT[k]) ? [] : '' }), {})
       setDraft(d => ({ ...d, ...cleared }))
     } else {
       setDraft(d => ({ ...d, ...chipFilters }))
@@ -1659,17 +1670,21 @@ export default function PagoList() {
             <div style={{ display: 'grid', gap: '0.6rem' }}>
               <div>
                 <span style={lbl}>Tipo</span>
-                <select className="filter-select" style={{ width: '100%' }} value={draft.id_tipo} onChange={e => setDraftField('id_tipo', e.target.value)}>
-                  <option value="">Todos los tipos</option>
-                  {TIPO_PAGO_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <MultiSelect
+                  value={draft.id_tipo}
+                  onChange={(v) => setDraftField('id_tipo', v)}
+                  options={TIPO_PAGO_MULTI}
+                  placeholder="Todos los tipos"
+                />
               </div>
               <div>
                 <span style={lbl}>Método</span>
-                <select className="filter-select" style={{ width: '100%' }} value={draft.id_metodo} onChange={e => setDraftField('id_metodo', e.target.value)}>
-                  <option value="">Todos los métodos</option>
-                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-                </select>
+                <MultiSelect
+                  value={draft.id_metodo}
+                  onChange={(v) => setDraftField('id_metodo', v)}
+                  options={metodos.map(m => ({ value: m.id, label: m.nombre }))}
+                  placeholder="Todos los métodos"
+                />
               </div>
               <div>
                 <span style={lbl}>Rubro</span>
@@ -1690,61 +1705,27 @@ export default function PagoList() {
 
             {/* Multi-select rubcats */}
             <div style={{ marginTop: '0.75rem' }}>
-              <span style={lbl}>Rubros/Cat (múltiple) {draft.id_rubcats.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_rubcats.length})</span>}</span>
-              <input
-                type="text"
-                placeholder="Buscar rubro/cat…"
-                value={rubcatSearch}
-                onChange={e => setRubcatSearch(e.target.value)}
-                style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+              <span style={lbl}>Rubros/Cat (múltiple)</span>
+              <MultiSelect
+                value={draft.id_rubcats}
+                onChange={(v) => setDraftField('id_rubcats', v)}
+                options={rubcats.map(rc => ({
+                  value: rc.id,
+                  label: `${rc.rubro?.nombre ?? ''} / ${rc.categoria?.nombre ?? ''}`,
+                }))}
+                placeholder="Todos los rubros/cat"
               />
-              <div className="filters-scroll" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
-                {rubcats
-                  .filter(rc => !rubcatSearch.trim() || `${rc.rubro?.nombre} ${rc.categoria?.nombre}`.toLowerCase().includes(rubcatSearch.toLowerCase()))
-                  .map(rc => (
-                    <label key={rc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
-                      <input type="checkbox" checked={draft.id_rubcats.includes(rc.id)} onChange={() => toggleDraftArr('id_rubcats', rc.id)} />
-                      <span style={{ color: 'var(--t2)' }}>{rc.rubro?.nombre}</span>
-                      <span style={{ color: 'var(--t3)' }}>/</span>
-                      <span>{rc.categoria?.nombre}</span>
-                    </label>
-                  ))
-                }
-              </div>
             </div>
 
             <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Proveedor</div>
             <div>
-              <span style={lbl}>Proveedores {draft.id_proveedores.length > 0 && <span style={{ color: 'var(--gold-bright)' }}>({draft.id_proveedores.length})</span>}</span>
-              <input
-                type="text"
-                placeholder="Escribí para buscar…"
-                value={provSearch}
-                onChange={e => setProvSearch(e.target.value)}
-                style={{ width: '100%', marginBottom: 4, height: 30, padding: '0 8px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 6, color: 'var(--t1)', fontSize: 12 }}
+              <span style={lbl}>Proveedores</span>
+              <MultiSelect
+                value={draft.id_proveedores}
+                onChange={(v) => setDraftField('id_proveedores', v)}
+                fetchOptions={buscarProveedores}
+                placeholder="Todos los proveedores"
               />
-              <div className="filters-scroll" style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 0' }}>
-                {provSearch.trim().length >= 2 ? (
-                  provSearchLoading
-                    ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Buscando…</div>
-                    : provSearchResults.length === 0
-                      ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Sin resultados</div>
-                      : provSearchResults.map(p => (
-                          <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
-                            <input type="checkbox" checked={draft.id_proveedores.some(x => x.id === p.id)} onChange={() => toggleDraftProv(p)} />
-                            {p.nombre}
-                          </label>
-                        ))
-                ) : draft.id_proveedores.length === 0
-                  ? <div style={{ padding: '4px 8px', color: 'var(--t3)', fontSize: 12 }}>Escribí al menos 2 letras para buscar</div>
-                  : draft.id_proveedores.map(p => (
-                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 12 }}>
-                        <input type="checkbox" checked onChange={() => toggleDraftProv(p)} />
-                        {p.nombre}
-                      </label>
-                    ))
-                }
-              </div>
             </div>
 
             <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Estado</div>
@@ -1759,10 +1740,12 @@ export default function PagoList() {
               </div>
               <div>
                 <span style={lbl}>Estado op.</span>
-                <select className="filter-select" style={{ width: '100%' }} value={draft.estado_op} onChange={e => setDraftField('estado_op', e.target.value)}>
-                  <option value="">Todos</option>
-                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                <MultiSelect
+                  value={draft.estado_op}
+                  onChange={(v) => setDraftField('estado_op', v)}
+                  options={ESTADO_OP_OPTIONS}
+                  placeholder="Todos"
+                />
               </div>
               <div>
                 <span style={lbl}>Audit</span>

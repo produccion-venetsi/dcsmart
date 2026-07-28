@@ -14,6 +14,8 @@ import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
+import MultiSelect from '../../components/MultiSelect.jsx'
+import { multiParam } from '../../lib/filtros.js'
 
 const EMPTY_CAJA = {
   nro_turno: '', tipo_turno: '', fecha_inicio: '', fecha_cierre: '', cajero: '', total: '',
@@ -21,6 +23,7 @@ const EMPTY_CAJA = {
 }
 
 const TIPOS_TURNO = ['Mañana', 'Tarde', 'Noche', 'Trasnoche', 'Evento', 'Otros']
+const TURNO_OPTIONS = TIPOS_TURNO.map(t => ({ value: t, label: t }))
 
 function IcoPlus() {
   return (
@@ -1559,13 +1562,15 @@ export default function CajaList() {
   const [selectedId, setSelectedId] = useState(null)
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
-  const FILTER_INIT_CAJAS = { desde: '', hasta: '', audit: '', tipo_turno: '' }
+  const FILTER_INIT_CAJAS = { desde: '', hasta: '', audit: '', tipo_turno: [] }
   const [filters, setFilters] = useState(FILTER_INIT_CAJAS)
   const [draft,   setDraft]   = useState(FILTER_INIT_CAJAS)
   const [filterOpen, setFilterOpen] = useState(false)
   const filterRef = useRef(null)
 
-  const activeFilterCount = Object.values(filters).filter(v => v !== '').length
+  // Un array vacío es "sin filtrar", igual que un string vacío.
+  const activeFilterCount = Object.values(filters)
+    .filter(v => (Array.isArray(v) ? v.length > 0 : v !== '')).length
   const hasActiveFilters  = activeFilterCount > 0
 
   const openFilters   = () => { setDraft(filters); setFilterOpen(true) }
@@ -1595,7 +1600,7 @@ export default function CajaList() {
     sort_field: sortField,
     sort_dir: sortDir,
     ...(filters.audit !== '' ? { audit: filters.audit } : {}),
-    ...(filters.tipo_turno !== '' ? { tipo_turno: filters.tipo_turno } : {}),
+    ...(filters.tipo_turno.length > 0 ? { tipo_turno: multiParam(filters.tipo_turno) } : {}),
     ...(filters.desde !== '' ? { desde: filters.desde } : {}),
     ...(filters.hasta !== '' ? { hasta: filters.hasta } : {})
   }), [activeLocal?.id, sortField, sortDir, filters])
@@ -1802,7 +1807,7 @@ export default function CajaList() {
               <div style={{
                 position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                borderRadius: 12, padding: '1.25rem', width: 320, maxWidth: '90vw',
+                borderRadius: 12, padding: '1.25rem', width: 360, maxWidth: '90vw',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
               }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem' }}>
@@ -1824,10 +1829,12 @@ export default function CajaList() {
                   </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <span style={{ fontSize: 10, color: 'var(--t3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3, display: 'block' }}>Tipo de turno</span>
-                    <select className="filter-select" style={{ width: '100%' }} value={draft.tipo_turno} onChange={e => setDraftField('tipo_turno', e.target.value)}>
-                      <option value="">Todos</option>
-                      {TIPOS_TURNO.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    <MultiSelect
+                      value={draft.tipo_turno}
+                      onChange={(v) => setDraftField('tipo_turno', v)}
+                      options={TURNO_OPTIONS}
+                      placeholder="Todos"
+                    />
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useAppStore } from '../../store/appStore.js'
 import { authApi } from '../../api/auth.js'
 import { todayInputDate } from '../../lib/dates.js'
+import MultiSelect from '../../components/MultiSelect.jsx'
 import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
@@ -78,6 +79,7 @@ const CAMPO_FECHA_OPTIONS = [
 // Mismas 6 opciones que el filtro de Tipo en la tabla de Cajas (ver
 // frontend/src/pages/cajas/CajaList.jsx, TIPOS_TURNO).
 const TIPOS_TURNO = ['Mañana', 'Tarde', 'Noche', 'Trasnoche', 'Evento', 'Otros']
+const TURNO_OPTIONS = TIPOS_TURNO.map(t => ({ value: t, label: t }))
 
 function IcoCalendar() {
   return (
@@ -103,7 +105,7 @@ export default function Reportes() {
 
   const [tab, setTab] = useState('pagos')
   const [campoFecha, setCampoFecha] = useState('fecha')
-  const [tipoTurno, setTipoTurno] = useState('')
+  const [tipoTurno, setTipoTurno] = useState([])
   const [analyticsLoading, setAnalyticsLoading] = useState(false)
 
   // Abre la Analytics App (dcsmart-analisis) con un ticket SSO de un solo uso
@@ -230,18 +232,12 @@ export default function Reportes() {
               {tab === 'cajas' && (
                 <div className="rep-filter-col" style={{ maxWidth: 180 }}>
                   <div className="rep-filter-label">Tipo de turno</div>
-                  <div className="rep-date-input">
-                    <select
-                      value={tipoTurno}
-                      onChange={(e) => setTipoTurno(e.target.value)}
-                      style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif', appearance: 'none', WebkitAppearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='rgba(240,237,232,0.55)' stroke-width='1.5' stroke-linecap='round' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right center', paddingRight: 16, cursor: 'pointer' }}
-                    >
-                      <option value="">Todos</option>
-                      {TIPOS_TURNO.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <MultiSelect
+                    value={tipoTurno}
+                    onChange={setTipoTurno}
+                    options={TURNO_OPTIONS}
+                    placeholder="Todos"
+                  />
                 </div>
               )}
               <div className="rep-filter-col">

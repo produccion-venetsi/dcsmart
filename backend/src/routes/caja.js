@@ -1,35 +1,11 @@
 import multipart from '@fastify/multipart'
 import { Storage } from '@google-cloud/storage'
+import { toTipoTurnoEnum, fromTipoTurnoEnum, toTipoTurnoEnumList } from '../lib/tipoTurno.js'
+import { parseCsvParam } from '../lib/queryParams.js'
 
 // El estado de auditoría de una caja se guarda en la tabla `audits`
 // (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
 // Ver backend/src/routes/pagos.js para la explicación del historial append-only.
-
-// El enum TipoTurno usa @map en el schema (ver prisma/schema.prisma), por lo que
-// Prisma Client espera la clave (MANANA) y no la etiqueta visible ("Mañana") que
-// envía el frontend.
-const TIPO_TURNO_MAP = {
-  'Mañana': 'MANANA',
-  'Tarde': 'TARDE',
-  'Noche': 'NOCHE',
-  'Trasnoche': 'TRASNOCHE',
-  'Evento': 'EVENTO',
-  'Otros': 'OTROS'
-}
-
-function toTipoTurnoEnum(value) {
-  if (!value) return null
-  return TIPO_TURNO_MAP[value] || value
-}
-
-const TIPO_TURNO_REVERSE_MAP = Object.fromEntries(
-  Object.entries(TIPO_TURNO_MAP).map(([label, key]) => [key, label])
-)
-
-function fromTipoTurnoEnum(value) {
-  if (!value) return value
-  return TIPO_TURNO_REVERSE_MAP[value] || value
-}
 
 async function getAuditedCajaSet(fastify, cajaIds) {
   if (!cajaIds.length) return new Set()
@@ -108,10 +84,13 @@ export default async function cajaRoutes(fastify) {
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
     const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
 
+    // tipo_turno puede traer varios valores separados por coma.
+    const tipoTurnos = toTipoTurnoEnumList(parseCsvParam(tipo_turno))
+
     const where = {
       ...localFilter,
       ...auditFilter,
-      ...(tipo_turno ? { tipo_turno: toTipoTurnoEnum(tipo_turno) } : {}),
+      ...(tipoTurnos.length ? { tipo_turno: { in: tipoTurnos } } : {}),
       ...(desde || hasta ? {
         // desde/hasta son días de calendario (input type="date") sobre un
         // campo que es un instante real (fecha_inicio) -- el rango se
@@ -159,10 +138,13 @@ export default async function cajaRoutes(fastify) {
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
     const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
 
+    // tipo_turno puede traer varios valores separados por coma.
+    const tipoTurnos = toTipoTurnoEnumList(parseCsvParam(tipo_turno))
+
     const where = {
       ...localFilter,
       ...auditFilter,
-      ...(tipo_turno ? { tipo_turno: toTipoTurnoEnum(tipo_turno) } : {}),
+      ...(tipoTurnos.length ? { tipo_turno: { in: tipoTurnos } } : {}),
       ...(desde || hasta ? {
         fecha_inicio: {
           ...(desde && { gte: new Date(`${desde}T00:00:00.000-03:00`) }),
