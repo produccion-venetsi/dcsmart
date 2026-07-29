@@ -775,7 +775,7 @@ export default function Users() {
                     </label>
                     {costosAccess.enabled === null && (
                       <div style={{ fontSize: 11.5, color: 'var(--t4)', marginBottom: 8 }}>
-                        Sin habilitación individual — hoy entra igual si su rol es super_admin o dcsmart.
+                        Sin habilitación individual — no puede entrar a Costos hasta que lo habilites aca.
                       </div>
                     )}
                     {costosAccess.enabled ? (
