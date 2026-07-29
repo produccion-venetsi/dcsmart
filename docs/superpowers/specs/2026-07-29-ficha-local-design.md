@@ -25,7 +25,7 @@ La pantalla `admin/Locales.jsx` solo permite cargar `nombre`, `direccion`, `tele
 | Tema | Decisión |
 |---|---|
 | Identidad fiscal | Se lee del `Proveedor` vinculado vía `Local.id_proveedor`. Cada local tiene su proveedor propio, que sale de la tabla `proveedores` — no es una entidad aparte. No se duplican `razon_social` ni `cuit` en `locales`. |
-| `idlocal` | Es el UUID que el local ya tiene. Se muestra en modo lectura con botón de copiar. Sin cambio de esquema. |
+| `idlocal` | **No se muestra.** Primero se resolvió como el UUID en modo lectura con botón de copiar, pero al verlo en pantalla se descartó: un UUID crudo en la ficha es ruido para quien la usa. Sin cambio de esquema. |
 | Logo | Upload multipart a GCS, servido por un proxy autenticado del backend. Mismo patrón que los adjuntos de pagos; el bucket sigue privado. |
 | Tipo de local | `enum` de Prisma con cinco valores, uno por local. Consistente con `TipoTurno` / `TipoPago` / `EstadoOp`. |
 | Mail recepción facturas | Se guarda, se valida como email y se muestra. El sistema no lee ni escribe esa casilla. |
@@ -106,7 +106,6 @@ IDENTIFICACIÓN
   [logo 96x96]   Grupo *            (select, label "Grupo")
                  Nombre fantasía *  (era "Nombre")
                  Tipo de local      (select del enum)
-  ID del local: 3f8a1c92-…  [copiar]
 
 FISCAL
   Proveedor vinculado   (Combobox con búsqueda)

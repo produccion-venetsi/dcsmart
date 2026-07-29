@@ -39,14 +39,6 @@ function IcoFilter() {
     </svg>
   )
 }
-function IcoCopy() {
-  return (
-    <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2"/>
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-    </svg>
-  )
-}
 function IcoImage() {
   return (
     <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -234,15 +226,6 @@ export default function Locales() {
     proveedoresApi
       .list({ search, activo: 'true', limit: 60, ...(form.tipo_local ? { tipo_local: form.tipo_local } : {}) })
       .then(r => r.data.data)
-
-  const copiarId = async () => {
-    try {
-      await navigator.clipboard.writeText(selected.id)
-      notify('ID copiado', 'success')
-    } catch {
-      notify('No se pudo copiar', 'error')
-    }
-  }
 
   const subirLogo = async (file) => {
     if (!file || !selected) return
@@ -464,19 +447,6 @@ export default function Locales() {
               </div>
             </div>
           </div>
-
-          {selected && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, marginTop: '1rem',
-              fontSize: 11.5, color: 'var(--t3)'
-            }}>
-              <span style={{ fontWeight: 600 }}>ID del local</span>
-              <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{selected.id}</code>
-              <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={copiarId} title="Copiar ID">
-                <IcoCopy />
-              </button>
-            </div>
-          )}
 
           {/* ── Fiscal ─────────────────────────────────────────────────── */}
           <Seccion titulo="Fiscal">
