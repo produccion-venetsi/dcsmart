@@ -14,5 +14,7 @@ export const usersApi = {
   setPermission: (id, moduleName, data) => client.put(`/users/${id}/permissions/${moduleName}`, data),
   removePermission: (id, moduleName) => client.delete(`/users/${id}/permissions/${moduleName}`),
   getAnalyticsAccess: (id) => client.get(`/users/${id}/analytics-access`),
-  setAnalyticsAccess: (id, data) => client.put(`/users/${id}/analytics-access`, data)
+  setAnalyticsAccess: (id, data) => client.put(`/users/${id}/analytics-access`, data),
+  getCostosAccess: (id) => client.get(`/users/${id}/costos-access`),
+  setCostosAccess: (id, data) => client.put(`/users/${id}/costos-access`, data)
 }
