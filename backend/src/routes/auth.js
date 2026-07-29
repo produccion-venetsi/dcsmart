@@ -313,31 +313,72 @@ export default async function authRoutes(fastify) {
   // POST /api/auth/costos-ticket
   // Igual que /analytics-ticket pero ademas lleva los locales permitidos y el
   // rol: Costos no lee las tablas de permisos de gestion, confia en el ticket.
+  // La resolucion de locales calca la de /my-apps (lineas 159-225 de este
+  // archivo), solo que aplanada a una lista unica en vez de agrupada por app,
+  // porque Costos no distingue apps: solo necesita saber a que locales entra.
   fastify.post('/costos-ticket', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     if (!process.env.INTERNAL_SHARED_SECRET) {
       return reply.code(500).send({ error: 'Integración con Costos no configurada' })
     }
 
     const userRoles = await fastify.db.userAppRole.findMany({
-      where: { id_user: request.user.id }, include: { role: true }
+      where: { id_user: request.user.id },
+      include: { app: true, role: true },
+      orderBy: { app: { nombre: 'asc' } }
     })
+
+    // super_admin gana siempre; dcsmart solo si no es super_admin (igual que
+    // /my-apps). Si no tiene ninguno de los dos, el rol es el del primer
+    // UserAppRole ordenado por nombre de app, para que sea determinístico.
     const isSuperAdmin = userRoles.some(r => r.role.nombre === 'super_admin')
-    const isDcsmart    = userRoles.some(r => r.role.nombre === 'dcsmart')
+    const isDcsmart    = !isSuperAdmin && userRoles.some(r => r.role.nombre === 'dcsmart')
     const rol = isSuperAdmin ? 'super_admin' : isDcsmart ? 'dcsmart' : (userRoles[0]?.role.nombre ?? null)
 
-    let locales
+    const localesById = new Map()
+
+    // super_admin / dcsmart: acceso a todos los locales activos de todas las
+    // apps activas. Excepcion: apps con solo_super_admin=true son invisibles
+    // incluso para dcsmart -- solo super_admin las ve (igual que /my-apps).
     if (isSuperAdmin || isDcsmart) {
-      locales = await fastify.db.local.findMany({
-        where: { activo: true, ...(isSuperAdmin ? {} : { app: { solo_super_admin: false } }) },
-        select: { id: true, nombre: true }, orderBy: { nombre: 'asc' }
+      const allApps = await fastify.db.app.findMany({
+        where: { activo: true, ...(isSuperAdmin ? {} : { solo_super_admin: false }) },
+        include: { locales: { where: { activo: true }, select: { id: true, nombre: true } } }
       })
+      for (const a of allApps) {
+        for (const l of a.locales) localesById.set(l.id, l)
+      }
     } else {
-      const accesos = await fastify.db.userLocalAccess.findMany({
+      // Para usuarios normales: resolver locales permitidos desde user_local_access
+      const localAccesses = await fastify.db.userLocalAccess.findMany({
         where: { id_user: request.user.id },
-        include: { local: { select: { id: true, nombre: true, activo: true } } }
+        include: { local: { select: { id: true, nombre: true } } }
       })
-      locales = accesos.map(a => a.local).filter(l => l.activo)
+
+      // Agrupar por app
+      const accessByApp = {}
+      for (const la of localAccesses) {
+        if (!accessByApp[la.id_app]) accessByApp[la.id_app] = []
+        accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
+      }
+
+      // admin / cajero: locales asignados en user_local_access.
+      // Excepcion: admin sin filas explicitas = acceso a TODOS los locales activos de la app.
+      for (const r of userRoles) {
+        const assigned = accessByApp[r.id_app] ?? []
+        let localesForApp = assigned
+        if (r.role.nombre === 'admin' && assigned.length === 0) {
+          localesForApp = await fastify.db.local.findMany({
+            where: { id_app: r.id_app, activo: true },
+            select: { id: true, nombre: true }
+          })
+        }
+        for (const l of localesForApp) localesById.set(l.id, l)
+      }
     }
+
+    // Aplanar y dedupear por id de local (un mismo local puede llegar por
+    // mas de una app/rol), ordenado por nombre para que el resultado sea estable.
+    const locales = [...localesById.values()].sort((a, b) => a.nombre.localeCompare(b.nombre))
     if (locales.length === 0) return reply.code(403).send({ error: 'No tenés locales asignados' })
 
     const ticket = jwt.sign(
