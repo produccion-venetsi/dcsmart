@@ -10,6 +10,14 @@
 
 Spec: `docs/superpowers/specs/2026-07-29-ficha-local-design.md`
 
+## Desviaciones durante la ejecución
+
+Tres cosas del plan estaban mal y se corrigieron al ejecutarlo. Quedan acá porque el plan no es el registro de lo que se hizo si no se corrige:
+
+1. **`sanitizeFolderName` no se reescribe.** El plan la proponía con `toLowerCase()` y guiones medios; la función real produce `Gran_Danzon` (mayúsculas, guión bajo). Cambiarla habría mandado los adjuntos nuevos de `pagos.js` a carpetas distintas de las ya subidas. Se copió byte por byte y los tests congelan ese comportamiento.
+2. **`multipart` NO va en `server.js`.** Se creyó que registrarlo en dos plugins de rutas rompía el arranque; es al revés. Usa `fastify-plugin`, que lo aplica al scope de quien lo registra, así que plugins hermanos conviven — `pagos.js` y `caja.js` ya lo hacían. Ponerlo en la raíz **sí** rompe: `FST_ERR_CTP_ALREADY_PRESENT` en cuanto un hijo lo registra. Verificado con un script de humo. `locales.js` registra el suyo con el límite de 2 MB.
+3. **El logo no se muestra con `<img src>` al proxy.** El proxy pide el JWT y la etiqueta `img` no manda el header `Authorization`. Se baja como blob con `responseType: 'blob'` + `createObjectURL`, igual que `CajaFotoViewer.jsx:18`. `localesApi.logoSrc` se reemplazó por `localesApi.getLogo`.
+
 ## Global Constraints
 
 - ESModules, `async/await`, nunca callbacks.
