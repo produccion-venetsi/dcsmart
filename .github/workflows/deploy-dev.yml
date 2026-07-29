@@ -29,6 +29,7 @@ jobs:
           VITE_APP_ENV: dev
           VITE_API_URL: ${{ secrets.BACKEND_URL }}/api
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_FRONTEND }}
+          VITE_COSTOS_URL: ${{ secrets.VITE_COSTOS_URL }}
 
       - name: Autenticar en Google Cloud
         uses: google-github-actions/auth@v2
