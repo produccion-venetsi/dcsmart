@@ -309,4 +309,42 @@ export default async function authRoutes(fastify) {
     })
     return { ticket }
   })
+
+  // POST /api/auth/costos-ticket
+  // Igual que /analytics-ticket pero ademas lleva los locales permitidos y el
+  // rol: Costos no lee las tablas de permisos de gestion, confia en el ticket.
+  fastify.post('/costos-ticket', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    if (!process.env.INTERNAL_SHARED_SECRET) {
+      return reply.code(500).send({ error: 'Integración con Costos no configurada' })
+    }
+
+    const userRoles = await fastify.db.userAppRole.findMany({
+      where: { id_user: request.user.id }, include: { role: true }
+    })
+    const isSuperAdmin = userRoles.some(r => r.role.nombre === 'super_admin')
+    const isDcsmart    = userRoles.some(r => r.role.nombre === 'dcsmart')
+    const rol = isSuperAdmin ? 'super_admin' : isDcsmart ? 'dcsmart' : (userRoles[0]?.role.nombre ?? null)
+
+    let locales
+    if (isSuperAdmin || isDcsmart) {
+      locales = await fastify.db.local.findMany({
+        where: { activo: true, ...(isSuperAdmin ? {} : { app: { solo_super_admin: false } }) },
+        select: { id: true, nombre: true }, orderBy: { nombre: 'asc' }
+      })
+    } else {
+      const accesos = await fastify.db.userLocalAccess.findMany({
+        where: { id_user: request.user.id },
+        include: { local: { select: { id: true, nombre: true, activo: true } } }
+      })
+      locales = accesos.map(a => a.local).filter(l => l.activo)
+    }
+    if (locales.length === 0) return reply.code(403).send({ error: 'No tenés locales asignados' })
+
+    const ticket = jwt.sign(
+      { email: request.user.email, rol, locales },
+      process.env.INTERNAL_SHARED_SECRET,
+      { expiresIn: '60s', issuer: 'dcsmart-gestion', audience: 'dcsmart-costos' }
+    )
+    return { ticket }
+  })
 }
