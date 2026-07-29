@@ -229,8 +229,11 @@ export default function Locales() {
     catch { notify('Error al eliminar', 'error') }
   }
 
+  // Ordena por afinidad con el tipo elegido en el formulario, sin filtrar.
   const fetchProveedores = (search) =>
-    proveedoresApi.list({ search, activo: 'true', limit: 60 }).then(r => r.data.data)
+    proveedoresApi
+      .list({ search, activo: 'true', limit: 60, ...(form.tipo_local ? { tipo_local: form.tipo_local } : {}) })
+      .then(r => r.data.data)
 
   const copiarId = async () => {
     try {

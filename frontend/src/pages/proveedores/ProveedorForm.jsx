@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { useUiStore } from '../../store/uiStore.js'
+import { TIPOS_LOCAL } from '../../lib/tiposLocal.js'
 
 function IcoBack() {
   return (
@@ -15,7 +16,7 @@ const EMPTY = {
   nombre: '', razon_social: '', cuit: '', banco: '', cbu: '', alias: '',
   direccion_url: '', detalle_direc: '', telefono: '', mail_contacto: '',
   mail_envio: '', tag: '', cuenta: '', observaciones: '', tipo_local: '', tipo: '',
-  plazo: '', activo: true
+  plazo: '', activo: true, tipos_afines: [], es_general: false
 }
 
 export default function ProveedorForm() {
@@ -30,7 +31,13 @@ export default function ProveedorForm() {
   useEffect(() => {
     if (isEditing) {
       proveedoresApi.get(id)
-        .then(({ data }) => setForm({ ...EMPTY, ...data }))
+        // tipos_afines puede venir null en registros viejos; el render hace
+        // .includes() sobre el array, asi que se normaliza al cargar.
+        .then(({ data }) => setForm({
+          ...EMPTY, ...data,
+          tipos_afines: data.tipos_afines ?? [],
+          es_general:   data.es_general   ?? false
+        }))
         .catch(() => notify('Error al cargar proveedor', 'error'))
     }
   }, [id])
@@ -190,6 +197,41 @@ export default function ProveedorForm() {
               <div className="form-input-wrap">
                 <input type="text" placeholder="Ej: GASTRONOMICO" value={form.tipo_local} onChange={e => set('tipo_local', e.target.value)} />
               </div>
+            </div>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">¿Para qué tipo de local sirve?</label>
+              <p style={{ margin: '0 0 8px', fontSize: 11.5, color: 'var(--t3)', lineHeight: 1.45 }}>
+                Solo ordena el buscador: los proveedores que aplican al local aparecen primero.
+                Nunca se esconde ninguno, así que si no estás seguro dejalo sin marcar.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.1rem' }}>
+                {TIPOS_LOCAL.map((t) => (
+                  <label key={t.value} className="checkbox-wrap">
+                    <input
+                      type="checkbox"
+                      checked={form.tipos_afines.includes(t.value)}
+                      disabled={form.es_general}
+                      onChange={(e) => set(
+                        'tipos_afines',
+                        e.target.checked
+                          ? [...form.tipos_afines, t.value]
+                          : form.tipos_afines.filter((v) => v !== t.value)
+                      )}
+                    />
+                    <span className="checkbox-label">{t.label}</span>
+                  </label>
+                ))}
+              </div>
+              <label className="checkbox-wrap" style={{ marginTop: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={form.es_general}
+                  onChange={(e) => set('es_general', e.target.checked)}
+                />
+                <span className="checkbox-label">
+                  Servicio general — sirve a cualquier rubro (Aysa, Metrogas, AFIP, bancos)
+                </span>
+              </label>
             </div>
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label className="form-label">Observaciones</label>

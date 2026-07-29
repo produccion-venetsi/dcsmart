@@ -235,6 +235,17 @@ model Proveedor {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
+  // Afinidad con el tipo de local, para ordenar el buscador de proveedores:
+  // los afines y los generales primero. Nunca filtra, solo ordena -- un local
+  // siempre puede elegir cualquier proveedor.
+  //
+  // `tipos_afines` es distinto del viejo `tipo_local` (texto libre, hoy con
+  // 4014 registros en "GASTRONOMICO" cargados en una migracion). Se dejan los
+  // dos: el viejo sigue siendo el dato historico y este es el que ordena.
+  // Vacio = sin clasificar, va al final.
+  tipos_afines  TipoLocal[]
+  es_general    Boolean  @default(false) // servicios transversales: Aysa, Metrogas, AFIP, bancos
+
   rubcat  RubCat? @relation(fields: [id_rubcat], references: [id])
   pagos   Pago[]
   locales Local[]
