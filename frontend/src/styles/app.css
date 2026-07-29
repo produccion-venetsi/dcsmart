@@ -7,6 +7,14 @@
    DESIGN TOKENS
    ═══════════════════════════════════════════════ */
 :root {
+  /* La app es oscura de punta a punta. Sin esto, el navegador dibuja todos los
+     widgets nativos (el desplegable de los <select>, los calendarios de los
+     input date, los checkboxes, las scrollbars) con el esquema CLARO del
+     sistema, mientras el CSS les pinta texto claro encima: el desplegable
+     queda blanco con letra casi blanca. Va en :root para que valga para toda
+     la app y no haya que parchear control por control. */
+  color-scheme: dark;
+
   /* backgrounds */
   --bg-app:         #19232f;
   --bg-sidebar:     #111820;
@@ -74,6 +82,16 @@ body {
   font-family: 'Montserrat', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Desplegable nativo de TODOS los <select> de la app. Antes esto estaba
+   repetido, con el color escrito a mano, en tres contextos distintos
+   (.form-input-wrap, .filter-select, .sidebar-local-select), así que cualquier
+   select fuera de ellos abría un desplegable sin estilar. */
+select option {
+  background: var(--bg-elevated);
+  color: var(--t1);
+}
+select option:disabled { color: var(--t4); }
 
 /* Override Vite template #root */
 #root {
@@ -238,7 +256,7 @@ body {
   background-position: right 9px center;
 }
 .sidebar-local-select:focus { border-color: var(--border-hi); }
-.sidebar-local-select option { background: #1e2b3a; color: var(--t1); }
+/* el estilo del desplegable lo pone la regla global `select option` */
 
 .sidebar-local-single {
   font-size: 11px;
@@ -1020,8 +1038,6 @@ body {
   padding-right: 20px;
   cursor: pointer;
 }
-.form-input-wrap select option { background: #1e2b3a; color: var(--t1); }
-
 /* textarea */
 .form-textarea-wrap {
   height: auto;
@@ -1135,7 +1151,7 @@ body {
   transition: border-color 0.18s var(--ease);
 }
 .filter-select:focus { border-color: var(--border-hi); outline: none; }
-.filter-select option { background: #1e2b3a; color: var(--t1); }
+/* el estilo del desplegable lo pone la regla global `select option` */
 
 .search-wrap {
   position: relative;
@@ -2496,32 +2512,32 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   min-height: 0;
 }
 
-/* Mismo tratamiento de scrollbar que .table-wrap, para que el panel y las
-   listas de los multi-select no muestren la barra nativa del sistema.
-   Aplica al cuerpo del panel y a cualquier caja con scroll adentro. */
+/* Mismo tratamiento de scrollbar que .table-wrap, para que el panel y la
+   lista del multi-select no muestren la barra nativa del sistema.
+   Aplica al cuerpo del panel y a la lista con scroll propio del MultiSelect. */
 .filters-inline-body,
-.filters-inline-body .filters-scroll {
+.filters-inline-body .multiselect-lista {
   scrollbar-width: thin;
   scrollbar-color: var(--gold-deep) rgba(30, 43, 58, 0.6);
 }
 .filters-inline-body::-webkit-scrollbar,
-.filters-inline-body .filters-scroll::-webkit-scrollbar {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar {
   width: 7px;
   height: 7px;
 }
 .filters-inline-body::-webkit-scrollbar-track,
-.filters-inline-body .filters-scroll::-webkit-scrollbar-track {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar-track {
   background: rgba(30, 43, 58, 0.6);
   border-radius: 10px;
 }
 .filters-inline-body::-webkit-scrollbar-thumb,
-.filters-inline-body .filters-scroll::-webkit-scrollbar-thumb {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar-thumb {
   background: var(--gold-deep);
   border-radius: 10px;
   transition: background 0.18s;
 }
 .filters-inline-body::-webkit-scrollbar-thumb:hover,
-.filters-inline-body .filters-scroll::-webkit-scrollbar-thumb:hover {
+.filters-inline-body .multiselect-lista::-webkit-scrollbar-thumb:hover {
   background: var(--gold);
 }
 
@@ -2548,3 +2564,91 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
     max-height: none;
   }
 }
+
+/* ── MultiSelect (filtros multi-valor) ─────────────────────────────────── */
+.multiselect-wrap { position: relative; }
+
+.multiselect-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding-right: 26px;
+}
+.multiselect-trigger.has-value { color: var(--t1); }
+
+.multiselect-resumen {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.multiselect-count {
+  background: rgba(212,175,55,0.18);
+  color: var(--gold-bright);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.multiselect-panel {
+  padding: 6px;
+  /* Anula el max-height/overflow de .combobox-dropdown: el scroll interno lo
+     maneja .multiselect-lista, así el buscador y el pie "Todos/Ninguno"
+     nunca quedan cortados por un scroll anidado. */
+  max-height: none;
+  /* Anula el position: absolute de .combobox-dropdown: el panel se despliega
+     en flujo (empujando el contenido) en vez de flotar. Así nunca se recorta
+     contra un ancestro con overflow distinto de "visible" (p. ej. el panel
+     de filtros de Pagos), que sí scrollea el documento completo. */
+  position: static;
+  margin-top: 4px;
+}
+
+.multiselect-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  margin-bottom: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  color: var(--t1);
+  font-size: 12px;
+  outline: none;
+}
+
+.multiselect-lista { max-height: 190px; overflow-y: auto; }
+
+.multiselect-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--t1);
+}
+.multiselect-option:hover { background: var(--bg-card-hi); }
+
+.multiselect-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.multiselect-footer button {
+  background: none;
+  border: none;
+  color: var(--t2);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.multiselect-footer button:hover:not(:disabled) { color: var(--gold-bright); }
+.multiselect-footer button:disabled { opacity: 0.4; cursor: default; }
