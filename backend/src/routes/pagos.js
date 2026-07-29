@@ -1,6 +1,7 @@
 import { Storage } from '@google-cloud/storage'
 import multipart from '@fastify/multipart'
 import { parseNroOrd } from '../lib/nroOrd.js'
+import { sanitizeFolderName, parseGsPath } from '../lib/gcsPaths.js'
 import { partirIdsPorEstado } from '../lib/estadoOp.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 
@@ -122,18 +123,6 @@ function translatePagoError(err) {
 // Extensiones aceptadas para adjuntos (fotos de factura / PDF) -- rechaza
 // cualquier otro tipo de archivo en vez de subirlo tal cual a GCS.
 const EXTENSIONES_ADJUNTO = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'pdf'])
-
-// El nombre del local se usa como carpeta en GCS -- se sanitiza para evitar
-// que caracteres raros (o un intento de path traversal via "../") rompan
-// la ruta del archivo dentro del bucket.
-function sanitizeFolderName(nombre) {
-  const limpio = String(nombre || '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-zA-Z0-9 _-]/g, '')
-    .trim()
-    .replace(/\s+/g, '_')
-  return limpio || 'general'
-}
 
 // Campos de fecha filtrables desde el frontend (dropdown "Tipo de fecha").
 // Whitelist estricta: cualquier valor fuera de esta lista cae al default
@@ -925,10 +914,9 @@ export default async function pagosRoutes(fastify) {
     const gsPath = type === 'pdf' ? pago.pdf_url : pago.foto_url
     if (!gsPath?.startsWith('gs://')) return reply.code(404).send({ error: 'Sin adjunto' })
 
-    const withoutScheme = gsPath.replace('gs://', '')
-    const slashIdx      = withoutScheme.indexOf('/')
-    const bucketName    = withoutScheme.slice(0, slashIdx)
-    const filePath      = withoutScheme.slice(slashIdx + 1)
+    const parsed = parseGsPath(gsPath)
+    if (!parsed) return reply.code(404).send({ error: 'Sin adjunto' })
+    const { bucket: bucketName, filePath } = parsed
 
     const ext         = filePath.split('.').pop().toLowerCase()
     const contentType = type === 'pdf' ? 'application/pdf'
