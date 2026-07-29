@@ -1,8 +1,17 @@
+import { partirPorAfinidad, TIPOS_LOCAL_VALIDOS } from '../lib/afinidadProveedor.js'
+
+// El array va derecho a una columna de enums: un valor invalido no da un 400
+// prolijo sino un error de Postgres. Se sanea y se deduplica antes de escribir.
+function saneartiposAfines(valor) {
+  if (!Array.isArray(valor)) return undefined
+  return [...new Set(valor.filter((t) => TIPOS_LOCAL_VALIDOS.has(t)))]
+}
+
 export default async function proveedoresRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('proveedores', 'view')]
 
   fastify.get('/', { preHandler: viewHandler }, async (request) => {
-    const { activo, search, page = 1, limit = 50 } = request.query
+    const { activo, search, page = 1, limit = 50, tipo_local } = request.query
     const limitNum = Number(limit)
     const skip = limitNum > 0 ? (Number(page) - 1) * limitNum : undefined
     const take = limitNum > 0 ? limitNum : undefined
@@ -29,10 +38,35 @@ export default async function proveedoresRoutes(fastify) {
       } : {})
     }
 
+    const incluir = { rubcat: { include: { rubro: true, categoria: true } } }
+
+    // Orden por afinidad con el tipo de local: los que aplican a este rubro (y
+    // los generales) primero. Se hace con dos consultas y no con un orderBy
+    // porque hay que priorizar sobre el total, no sobre la pagina ya traida:
+    // ordenar los 60 primeros alfabeticos no sube al proveedor afin que quedo
+    // en la pagina 40. Solo se aplica en la primera pagina, que es la que usa
+    // el buscador; el listado paginado del admin sigue alfabetico puro.
+    const partido = take ? partirPorAfinidad(where, tipo_local) : null
+    if (partido && Number(page) === 1) {
+      const [afines, total] = await Promise.all([
+        fastify.db.proveedor.findMany({
+          where: partido.afin, include: incluir, orderBy: { nombre: 'asc' }, take
+        }),
+        fastify.db.proveedor.count({ where })
+      ])
+      const faltan = take - afines.length
+      const resto = faltan > 0
+        ? await fastify.db.proveedor.findMany({
+            where: partido.resto, include: incluir, orderBy: { nombre: 'asc' }, take: faltan
+          })
+        : []
+      return { data: [...afines, ...resto], total, page: 1, limit: take }
+    }
+
     const [data, total] = await Promise.all([
       fastify.db.proveedor.findMany({
         where,
-        include: { rubcat: { include: { rubro: true, categoria: true } } },
+        include: incluir,
         orderBy: { nombre: 'asc' },
         skip,
         take
@@ -59,7 +93,7 @@ export default async function proveedoresRoutes(fastify) {
       nombre, razon_social, cuit, banco, cbu, alias,
       direccion_url, detalle_direc, telefono, mail_contacto,
       mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
-      id_rubcat, plazo, activo
+      id_rubcat, plazo, activo, tipos_afines, es_general
     } = request.body
 
     if (!nombre && !razon_social) return reply.code(400).send({ error: 'nombre o razon_social es requerido' })
@@ -71,7 +105,9 @@ export default async function proveedoresRoutes(fastify) {
         mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
         id_rubcat: id_rubcat || null,
         plazo: plazo != null ? parseInt(plazo) : null,
-        activo: activo ?? true
+        activo: activo ?? true,
+        tipos_afines: saneartiposAfines(tipos_afines) ?? [],
+        es_general: es_general ?? false
       }
     })
     return reply.code(201).send(proveedor)
@@ -84,7 +120,7 @@ export default async function proveedoresRoutes(fastify) {
       nombre, razon_social, cuit, banco, cbu, alias,
       direccion_url, detalle_direc, telefono, mail_contacto,
       mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
-      id_rubcat, plazo, activo
+      id_rubcat, plazo, activo, tipos_afines, es_general
     } = request.body
 
     try {
@@ -96,7 +132,9 @@ export default async function proveedoresRoutes(fastify) {
           mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
           id_rubcat,
           plazo: plazo != null ? parseInt(plazo) : null,
-          activo
+          activo,
+          tipos_afines: saneartiposAfines(tipos_afines),
+          es_general
         }
       })
       return proveedor

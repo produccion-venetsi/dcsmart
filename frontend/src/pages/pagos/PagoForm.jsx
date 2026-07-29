@@ -376,8 +376,13 @@ export default function PagoForm() {
     setForm(f => ({ ...f, id_proveedor: '', cashflow: '' }))
   }
 
+  // tipo_local solo reordena el resultado (los proveedores del rubro del local
+  // y los generales primero); nunca filtra. Si el local activo viene de una
+  // sesion vieja y no lo trae, el backend responde alfabetico como siempre.
   const fetchProveedores = (search) =>
-    proveedoresApi.list({ search, activo: 'true', limit: 60 }).then(r => r.data.data)
+    proveedoresApi
+      .list({ search, activo: 'true', limit: 60, ...(activeLocal?.tipo_local ? { tipo_local: activeLocal.tipo_local } : {}) })
+      .then(r => r.data.data)
 
   const fetchRubcats = (search) =>
     rubcatApi.list({ search }).then(r => {
