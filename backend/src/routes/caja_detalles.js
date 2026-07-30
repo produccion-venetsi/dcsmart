@@ -1,3 +1,5 @@
+import { CLASIFICACIONES, normalizarClasificacion } from '../lib/clasificaciones.js'
+
 export default async function cajaDetallesRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
@@ -41,7 +43,7 @@ export default async function cajaDetallesRoutes(fastify) {
 
   // ── POST / ────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
-    const { id_caja, id_tipo, nombre, monto, observaciones } = request.body
+    const { id_caja, id_tipo, nombre, monto, observaciones, clasificacion } = request.body
 
     if (!id_caja || monto === undefined) {
       return reply.code(400).send({ error: 'id_caja y monto son requeridos' })
@@ -57,7 +59,9 @@ export default async function cajaDetallesRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
-    // tipo y nombre se derivan del tipo del catálogo cuando se elige id_tipo
+    // `tipo` guarda la clasificación de ESTE detalle y es la que manda en el
+    // cálculo. El usuario la elige al cargar el detalle; la del tipo del
+    // catálogo solo se usa como valor propuesto cuando no mandó ninguna.
     let tipo = null
     let nombreFinal = nombre || null
     if (id_tipo) {
@@ -68,6 +72,13 @@ export default async function cajaDetallesRoutes(fastify) {
       if (!dt) return reply.code(400).send({ error: 'Tipo de detalle inexistente' })
       tipo = dt.clasificacion
       nombreFinal = dt.nombre
+    }
+    if (clasificacion !== undefined && clasificacion !== null && clasificacion !== '') {
+      const elegida = normalizarClasificacion(clasificacion)
+      if (!elegida) {
+        return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+      }
+      tipo = elegida
     }
 
     const detalle = await fastify.db.cajaDetalle.create({
@@ -98,11 +109,12 @@ export default async function cajaDetallesRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    const { id_tipo, nombre, monto, observaciones } = request.body
+    const { id_tipo, nombre, monto, observaciones, clasificacion } = request.body
     if (monto === undefined) return reply.code(400).send({ error: 'El monto es requerido' })
 
-    // tipo y nombre se derivan del tipo del catálogo cuando se elige id_tipo,
-    // igual que en la creación (ver POST /)
+    // Cambiar el tipo re-propone su clasificación, igual que en la creación
+    // (ver POST /). Si además vino una clasificación explícita, esa gana: es la
+    // que el usuario eligió para este detalle.
     let tipo = existing.tipo
     let nombreFinal = nombre !== undefined ? (nombre || null) : existing.nombre
     if (id_tipo !== undefined) {
@@ -117,6 +129,13 @@ export default async function cajaDetallesRoutes(fastify) {
       } else {
         tipo = null
       }
+    }
+    if (clasificacion !== undefined && clasificacion !== null && clasificacion !== '') {
+      const elegida = normalizarClasificacion(clasificacion)
+      if (!elegida) {
+        return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+      }
+      tipo = elegida
     }
 
     const detalle = await fastify.db.cajaDetalle.update({

@@ -2,6 +2,7 @@ import multipart from '@fastify/multipart'
 import { Storage } from '@google-cloud/storage'
 import { toTipoTurnoEnum, fromTipoTurnoEnum, toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
+import { calcularCuadre } from '../lib/cuadreCaja.js'
 
 // El estado de auditoría de una caja se guarda en la tabla `audits`
 // (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
@@ -112,7 +113,12 @@ export default async function cajaRoutes(fastify) {
         where,
         include: {
           local:   { select: { id: true, nombre: true } },
-          creador: { select: { id: true, nombre: true } }
+          creador: { select: { id: true, nombre: true } },
+          // Necesarios para calcular la diferencia de caja en el listado. Antes
+          // no venian y por eso la diferencia solo se podia ver abriendo cada
+          // caja, sin forma de filtrar o listar las descuadradas.
+          movimientos: { select: { tipo: true, monto: true, metodo_pago: { select: { nombre: true } } } },
+          detalles:    { select: { monto: true, tipo: true, detalle_tipo: { select: { clasificacion: true } } } }
         },
         orderBy: { [orderField]: orderDir },
         skip,
@@ -122,7 +128,14 @@ export default async function cajaRoutes(fastify) {
     ])
 
     const auditedSet = await getAuditedCajaSet(fastify, cajas.map(c => c.id))
-    const data = cajas.map(c => ({ ...c, tipo_turno: fromTipoTurnoEnum(c.tipo_turno), audit: auditedSet.has(c.id) }))
+    const data = cajas.map(({ movimientos, detalles, ...c }) => ({
+      ...c,
+      tipo_turno: fromTipoTurnoEnum(c.tipo_turno),
+      audit: auditedSet.has(c.id),
+      // Se devuelve el cuadre calculado y no las colecciones crudas: la lista no
+      // las muestra y son varios miles de filas al serializar.
+      cuadre: calcularCuadre({ ...c, movimientos, detalles })
+    }))
 
     return { data, total, page: Number(page), limit: Number(limit) }
   })
@@ -206,7 +219,9 @@ export default async function cajaRoutes(fastify) {
       audit:      auditRow?.accion === 'auditado',
       audit_by:   auditRow?.user?.nombre ?? null,
       audit_date: auditRow?.fecha ?? null,
-      ...(isDc ? { audit_dc: auditDcRow?.accion === 'auditado' } : {})
+      ...(isDc ? { audit_dc: auditDcRow?.accion === 'auditado' } : {}),
+      // El desglose completo, para poder explicar contra que se comparo
+      cuadre: calcularCuadre(caja)
     }
   })
 
