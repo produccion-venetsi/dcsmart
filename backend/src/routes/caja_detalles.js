@@ -57,7 +57,13 @@ export default async function cajaDetallesRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
-    // tipo y nombre se derivan del tipo del catálogo cuando se elige id_tipo
+    // tipo y nombre se derivan del tipo del catálogo cuando se elige id_tipo.
+    //
+    // `tipo` es una COPIA de la clasificación al momento de crear el detalle, no
+    // la fuente de verdad: si después se reclasifica el tipo, esta copia queda
+    // vieja. Pasó con Rappi en ATTE (era canal, se corrigió a cobro) y la lista
+    // seguía mostrando la clasificación anterior. Para leer la clasificación hay
+    // que ir siempre por `detalle_tipo.clasificacion`.
     let tipo = null
     let nombreFinal = nombre || null
     if (id_tipo) {

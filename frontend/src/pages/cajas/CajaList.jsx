@@ -475,7 +475,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                     </>
                   ) : (
                     <>
-                      <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
+                      <td className="td-muted">{clasificacionLabel(d.detalle_tipo?.clasificacion ?? d.tipo)}</td>
                       <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
                       <td className="td-number">{fmt$2(d.monto)}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
@@ -1003,7 +1003,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                     </>
                   ) : (
                     <>
-                      <td className="td-muted">{clasificacionLabel(d.tipo)}</td>
+                      <td className="td-muted">{clasificacionLabel(d.detalle_tipo?.clasificacion ?? d.tipo)}</td>
                       <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
                       <td className="td-number">{fmt$2(d.monto)}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
