@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import { toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateTimeArg } from '../../lib/dates.js'
+import { totalContado, calcularComprobacion, describirComprobacion } from '../../lib/cuadreArqueo.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -50,9 +51,9 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
       .finally(() => setLoadingPreview(false))
   }, [activeLocal.id])
 
-  const total = (Number(cajaFuerte) || 0) + (Number(cofre) || 0) + (Number(adicion) || 0)
+  const total = totalContado({ caja_fuerte: cajaFuerte, cofre, adicion })
   const comprobacion = preview
-    ? (preview.ingresos - preview.gastos) - (total - preview.total_ultimo_arqueo)
+    ? calcularComprobacion({ ingresos: preview.ingresos, gastos: preview.gastos, contado: total, contadoAnterior: preview.total_ultimo_arqueo })
     : null
 
   const addPendingDetalle = () => {
@@ -150,7 +151,16 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
           <div className="drawer-detail-row"><span className="drawer-detail-key">Gastos</span><span className="drawer-detail-val">{fmt$(preview?.gastos)}</span></div>
           <div className="drawer-detail-row">
             <span className="drawer-detail-key">Comprobación</span>
-            <span className={`badge ${Math.abs(comprobacion) < 0.01 ? 'badge-green' : 'badge-red'}`}>{fmt$(comprobacion)}</span>
+            {/* Con el monto pelado no se sabe si falta o sobra: el signo del
+                arqueo es el opuesto al de cajas. Va siempre con su etiqueta. */}
+            {(() => {
+              const d = describirComprobacion(comprobacion)
+              return (
+                <span className={`badge ${d.estado === 'cuadra' ? 'badge-green' : 'badge-red'}`}>
+                  {d.estado === 'cuadra' ? 'Cuadra' : `${d.texto} ${fmt$(d.monto)}`}
+                </span>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -325,7 +335,8 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
     }
   }
 
-  const cuadra = Math.abs(Number(arqueo.comprobacion)) < 0.01
+  const comprobacionDet = describirComprobacion(arqueo.comprobacion, { esPrimero: arqueo.es_primero })
+  const cuadra = comprobacionDet.estado === 'cuadra'
 
   const handleAudit = async () => {
     setAuditando(true)
@@ -360,7 +371,12 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
         <div className="drawer-detail-row"><span className="drawer-detail-key">Gastos</span><span className="drawer-detail-val">{fmt$(arqueo.gastos)}</span></div>
         <div className="drawer-detail-row">
           <span className="drawer-detail-key">Comprobación</span>
-          <span className={`badge ${cuadra ? 'badge-green' : 'badge-red'}`}>{fmt$(arqueo.comprobacion)}</span>
+          <span
+            className={`badge ${comprobacionDet.estado === 'base' ? 'badge-muted' : cuadra ? 'badge-green' : 'badge-red'}`}
+            title={comprobacionDet.estado === 'base' ? 'Primer arqueo del local: no hay una medición anterior contra la que comparar.' : undefined}
+          >
+            {comprobacionDet.monto == null ? comprobacionDet.texto : cuadra ? 'Cuadra' : `${comprobacionDet.texto} ${fmt$(comprobacionDet.monto)}`}
+          </span>
         </div>
       </div>
 
@@ -487,7 +503,8 @@ export default function ArqueoList() {
             </thead>
             <tbody>
               {arqueos.map((a) => {
-                const cuadra = Math.abs(Number(a.comprobacion)) < 0.01
+                const d = describirComprobacion(a.comprobacion, { esPrimero: a.es_primero })
+                const cuadra = d.estado === 'cuadra'
                 return (
                   <tr key={a.id}>
                     <td>{fmtDateTime(a.fecha)}</td>
@@ -496,8 +513,11 @@ export default function ArqueoList() {
                     <td className="td-number">{fmt$(a.adicion)}</td>
                     <td className="td-number">{fmt$(a.total)}</td>
                     <td>
-                      <span className={`badge ${cuadra ? 'badge-green' : 'badge-red'}`}>
-                        {fmt$(a.comprobacion)}
+                      <span
+                        className={`badge ${d.estado === 'base' ? 'badge-muted' : cuadra ? 'badge-green' : 'badge-red'}`}
+                        title={d.estado === 'base' ? 'Primer arqueo del local: no hay medición anterior contra la que comparar.' : undefined}
+                      >
+                        {d.monto == null ? d.texto : cuadra ? 'Cuadra' : `${d.texto} ${fmt$(d.monto)}`}
                       </span>
                     </td>
                     {/* El truncado va en un span inline-block y no en el td:

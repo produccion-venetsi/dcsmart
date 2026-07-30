@@ -3,6 +3,8 @@
 // mismo local. Ver docs/superpowers/specs/2026-07-16-arqueo-design.md para
 // la fórmula completa.
 
+import { totalContado, calcularComprobacion, describirComprobacion } from '../lib/cuadreArqueo.js'
+
 // Busca el arqueo anterior de un local (el más reciente con fecha < la nueva).
 // Devuelve null si es el primer arqueo del local.
 async function getArqueoAnterior(fastify, id_local, fecha) {
@@ -83,7 +85,19 @@ export default async function arqueoRoutes(fastify) {
       orderBy: { fecha: 'desc' }
     })
     const auditedSet = await getAuditedArqueoSet(fastify, arqueos.map(a => a.id))
-    const data = arqueos.map(a => ({ ...a, audit: auditedSet.has(a.id) }))
+    // La etiqueta viaja calculada: la pantalla no tiene que saber de qué lado
+    // está el signo ni cuál es la tolerancia.
+    //
+    // Vienen ordenados por fecha desc, así que el más antiguo del local es el
+    // último. Ese es la línea de base y su comprobación no significa nada (ver
+    // describirComprobacion).
+    const idPrimero = arqueos.length ? arqueos[arqueos.length - 1].id : null
+    const data = arqueos.map(a => ({
+      ...a,
+      audit: auditedSet.has(a.id),
+      es_primero: a.id === idPrimero,
+      comprobacion_detalle: describirComprobacion(a.comprobacion, { esPrimero: a.id === idPrimero })
+    }))
     return { data }
   })
 
@@ -101,8 +115,15 @@ export default async function arqueoRoutes(fastify) {
       where: { tabla: 'arqueos', id_registro: arqueo.id, vigente: true, audit_dc: false },
       include: { user: { select: { id: true, nombre: true } } }
     })
+    // Si no hay uno anterior, este es la línea de base del local: su
+    // comprobación compara contra todo el historial y no significa nada.
+    const anterior = await getArqueoAnterior(fastify, arqueo.id_local, arqueo.fecha)
+    const esPrimero = !anterior
+
     return {
       ...arqueo,
+      es_primero: esPrimero,
+      comprobacion_detalle: describirComprobacion(arqueo.comprobacion, { esPrimero }),
       audit:      auditRow?.accion === 'auditado',
       audit_by:   auditRow?.user?.nombre ?? null,
       audit_date: auditRow?.fecha ?? null,
@@ -159,6 +180,10 @@ export default async function arqueoRoutes(fastify) {
   // ── GET /preview ──────────────────────────────────────────────────────
   // Mismo cálculo que POST /, pero sin persistir nada -- para que el
   // frontend muestre la comprobación en vivo antes de confirmar.
+  // Devuelve las partes, no la comprobación: el usuario va tipeando los montos y
+  // la ve cambiar en vivo, así que pedirla al servidor en cada tecla sería peor.
+  // El frontend la calcula con lib/cuadreArqueo.js, que es espejo del de acá, y
+  // el POST la recalcula del lado del servidor antes de guardar.
   fastify.get('/preview', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, fecha } = request.query
     if (!id_local || !fecha) {
@@ -194,13 +219,10 @@ export default async function arqueoRoutes(fastify) {
     const totalUltimoArqueo = anterior ? Number(anterior.total) : 0
     const fechaDesde = anterior ? anterior.fecha : null
 
-    const total = Number(caja_fuerte) + Number(cofre) + Number(adicion)
+    const total = totalContado({ caja_fuerte, cofre, adicion })
     const ingresos = await calcularIngresos(fastify, id_local, fechaDesde, fechaArqueo)
     const gastos = await calcularGastos(fastify, id_local, fechaDesde, fechaArqueo)
-    // Compara cuánto debería haber cambiado la plata según el sistema (ingresos -
-    // gastos) contra cuánto cambió realmente la plata contada (total - total del
-    // arqueo anterior). Positivo = falta, negativo = sobra, 0 = cuadra.
-    const comprobacion = (ingresos - gastos) - (total - totalUltimoArqueo)
+    const comprobacion = calcularComprobacion({ ingresos, gastos, contado: total, contadoAnterior: totalUltimoArqueo })
 
     const arqueo = await fastify.db.arqueo.create({
       data: {
@@ -252,10 +274,10 @@ export default async function arqueoRoutes(fastify) {
     const totalUltimoArqueo = anterior ? Number(anterior.total) : 0
     const fechaDesde = anterior ? anterior.fecha : null
 
-    const total = Number(caja_fuerte) + Number(cofre) + Number(adicion)
+    const total = totalContado({ caja_fuerte, cofre, adicion })
     const ingresos = await calcularIngresos(fastify, existente.id_local, fechaDesde, fechaArqueo)
     const gastos = await calcularGastos(fastify, existente.id_local, fechaDesde, fechaArqueo)
-    const comprobacion = (ingresos - gastos) - (total - totalUltimoArqueo)
+    const comprobacion = calcularComprobacion({ ingresos, gastos, contado: total, contadoAnterior: totalUltimoArqueo })
 
     const arqueo = await fastify.db.arqueo.update({
       where: { id: existente.id },
