@@ -71,6 +71,10 @@ function IcoEdit() {
     </svg>
   )
 }
+// Mismo formato que la tabla de impuestos de más abajo
+const fmtMoneda = (n) =>
+  n == null ? '—' : `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+
 function IcoAlerta() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
@@ -325,6 +329,63 @@ export default function PagoForm() {
   // los exime en ambos casos; exigirlos acá forzaba a inventar números al
   // editar una factura B creada sin ellos.
   const pvNroOpcional = esCargaAvion || form.id_tipo === 'B'
+
+  // ── Lectura de la factura con IA ─────────────────────────────────────────
+  // Al elegir la foto se leen los datos y se precargan. Nada se guarda: la
+  // persona revisa. Los campos que vinieron de la lectura quedan marcados, para
+  // que se sepa qué revisar y qué escribió uno mismo.
+  const [leyendoFactura, setLeyendoFactura] = useState(false)
+  const [lectura, setLectura] = useState(null) // { marcados, aritmetica, proveedor, totalFactura }
+
+  const marcadoIA = (campo) => (lectura?.marcados?.includes(campo) ? ' campo-ia' : '')
+
+  const leerFactura = async (file) => {
+    if (!file) return
+    setLeyendoFactura(true)
+    setLectura(null)
+    try {
+      const { data } = await pagosApi.leerFactura(file)
+      if (!data.legible) {
+        notify('No se pudo leer la factura de esa foto. Cargá los datos a mano.', 'info')
+        return
+      }
+      const c = data.campos
+
+      // El importe total NO se precarga: se calcula solo desde neto + impuestos
+      // − descuento (ver el useEffect de abajo). Lo que sí se guarda es el total
+      // que decía la factura, para poder avisar si no coincide.
+      setForm((f) => ({
+        ...f,
+        ...(c.fecha        != null ? { fecha: c.fecha } : {}),
+        ...(c.id_tipo      != null ? { id_tipo: c.id_tipo } : {}),
+        ...(c.pv           != null ? { pv: String(c.pv) } : {}),
+        ...(c.nro          != null ? { nro: String(c.nro) } : {}),
+        ...(c.importe_neto != null ? { importe_neto: String(c.importe_neto) } : {}),
+        ...(c.descuento    != null ? { descuento: String(c.descuento) } : {}),
+      }))
+
+      if (c.impuestos?.length && !isEditing) {
+        setPendingImp(c.impuestos.map((i) => ({ tipo: i.tipo, monto: String(i.monto) })))
+      }
+
+      if (data.proveedor?.estado === 'encontrado') {
+        setProvSelected(data.proveedor)
+        setForm((f) => ({ ...f, id_proveedor: data.proveedor.id }))
+      }
+
+      setLectura({
+        marcados: data.marcados ?? [],
+        aritmetica: data.aritmetica,
+        proveedor: data.proveedor,
+        totalFactura: c.importe
+      })
+      notify(`Leí la factura: ${(data.marcados ?? []).length} campos precargados. Revisalos.`, 'success')
+    } catch (err) {
+      notify(err.response?.data?.error || 'No se pudo leer la factura. Cargá los datos a mano.', 'error')
+    } finally {
+      setLeyendoFactura(false)
+    }
+  }
 
   // Antigüedad del período, para el aviso de más abajo. Se recalcula en cada
   // render y no en un useMemo porque son dos restas.
@@ -624,6 +685,38 @@ export default function PagoForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
+        {/* ── Resultado de leer la foto de la factura ── */}
+        {leyendoFactura && (
+          <div className="aviso-lectura">
+            <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+            <span>Leyendo la factura…</span>
+          </div>
+        )}
+        {!leyendoFactura && lectura && (
+          <div className="aviso-lectura">
+            <div>
+              <strong>Datos precargados de la foto.</strong> Revisá los campos marcados antes de guardar.
+              {lectura.proveedor?.estado === 'encontrado' && (
+                <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
+              )}
+              {lectura.proveedor?.estado === 'no_encontrado' && (
+                <> No hay proveedor con CUIT <strong>{lectura.proveedor.cuit}</strong>
+                  {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
+                  : elegilo o crealo a mano.</>
+              )}
+              {/* El total no se precarga (se calcula solo), asi que si la factura
+                  decia otro numero conviene avisarlo: o se leyo mal un importe, o
+                  falta un impuesto. */}
+              {lectura.aritmetica?.verificable && lectura.aritmetica.cuadra === false && (
+                <div style={{ marginTop: 6 }}>
+                  ⚠ La factura dice <strong>{fmtMoneda(lectura.totalFactura)}</strong> pero neto + impuestos − descuento
+                  da <strong>{fmtMoneda(lectura.aritmetica.esperado)}</strong>. Revisá los importes.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── Toggle Ingreso / Egreso ── */}
         <div style={{
           padding: '1rem 1.25rem',
@@ -708,7 +801,7 @@ export default function PagoForm() {
             <div className="form-group">
               <label className="form-label">Fecha Factura *</label>
               <div className="form-input-wrap">
-                <input type="date" required value={form.fecha} onChange={e => set('fecha', e.target.value)} />
+                <input type="date" required className={marcadoIA('fecha').trim()} value={form.fecha} onChange={e => set('fecha', e.target.value)} />
               </div>
             </div>
             <div className="form-group">
@@ -1107,9 +1200,9 @@ export default function PagoForm() {
               accept="image/*"
               value={form.foto_url}
               file={fotoFile}
-              onFileSelected={setFotoFile}
-              onRemove={() => { set('foto_url', ''); setFotoFile(null) }}
-              uploading={uploadingFoto}
+              onFileSelected={(f) => { setFotoFile(f); if (!isEditing) leerFactura(f) }}
+              onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null) }}
+              uploading={uploadingFoto || leyendoFactura}
             />
             <AdjuntoUpload
               label="PDF"
