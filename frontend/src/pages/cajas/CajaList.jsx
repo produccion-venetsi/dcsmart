@@ -130,8 +130,9 @@ const CAJA_CSV_COLUMNS = [
   { label: 'Observaciones', get: (c) => c.observaciones || '' },
 ]
 
-const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1, EGRESO: -1 }
-const DESCUADRE_TOLERANCE = 0.01
+// La diferencia de caja se calcula en el backend (lib/cuadreCaja.js) y viene en
+// `caja.cuadre`. Acá solo se muestran sumas crudas por sección.
+const sumaMontos = (items) => (items ?? []).reduce((acc, i) => acc + Number(i.monto ?? 0), 0)
 
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
@@ -327,38 +328,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
   if (!caja) return <div style={{ color: 'var(--red)', padding: '1rem' }}>No se pudo cargar la caja.</div>
 
-  const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
-  // Los detalles siempre se cargan en positivo; la clasificación del tipo
-  // (no el signo del monto) dice si suma o resta -- un "egreso" (ej. Gastos)
-  // resta del total esperado.
-  const totalDet = caja.detalles?.reduce((acc, d) => {
-    const sign = d.detalle_tipo?.clasificacion === 'egreso' ? -1 : 1
-    return acc + sign * Number(d.monto)
-  }, 0) || 0
-
-  // Total de movimientos para el resumen (fila debajo de Fiscal): solo
-  // INICIAL + COBRO cuentan -- son los únicos tipos que representan plata
-  // real entrando a la caja en el momento del cierre, el resto (gastos,
-  // retiros, vaciados, ingresos, egresos) son movimientos posteriores/ajustes
-  // que no forman parte del total de venta del turno.
-  const totalMovIniCobro = caja.movimientos?.reduce((acc, m) => {
-    return (m.tipo === 'INICIAL' || m.tipo === 'COBRO') ? acc + Number(m.monto) : acc
-  }, 0) || 0
-
-  // Si el origen es DCSMART y hay detalles cargados, el total esperado se
-  // valida contra efectivo + detalles (verificado contra datos reales de
-  // producción, el "fiscal" no entra en esta cuenta). Si no hay detalles
-  // (caja cargada solo con movimientos), sigue el chequeo de siempre contra
-  // movimientos. Las cajas TAPTAP se comprueban distinto: se comparan los
-  // movimientos (inicial + cobro) contra el total, nunca contra detalles.
-  const usaDetalles = caja.origin === 'DCSMART' && caja.detalles?.length > 0
-  const totalEsperado = caja.origin === 'TAPTAP'
-    ? totalMovIniCobro
-    : usaDetalles
-      ? Number(caja.efectivo ?? 0) + totalDet
-      : (caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0)
-  const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
-  const hayDescuadre = descuadre != null && Math.abs(descuadre) > DESCUADRE_TOLERANCE
+  // La diferencia la calcula el backend (lib/cuadreCaja.js). Antes se calculaba
+  // acá y en CajaDetail, y las dos copias habían divergido: la misma caja
+  // mostraba diferencias distintas según desde dónde se la mirara.
+  const cuadre = caja.cuadre ?? {}
+  const hayDescuadre = cuadre.cuadra === false
+  const descuadre = cuadre.diferencia
 
   const rows = [
     ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
@@ -370,8 +345,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     ['Total',      fmt$(caja.total)],
     ['Efectivo',   fmt$(caja.efectivo)],
     ['Fiscal',     fmt$(caja.fiscal)],
-    ['Total detalles',    fmt$(totalDet)],
-    ['Total movimientos', fmt$(totalMovIniCobro)],
+    ['Cobros',     fmt$(cuadre.cobros)],
+    ...(cuadre.gastos ? [['Gastos', fmt$(cuadre.gastos)]] : []),
     ['Comensales', caja.comensales ?? '—'],
     ['Tickets',    caja.tickets ?? '—'],
   ]
@@ -390,9 +365,9 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         {hayDescuadre && (
           <span
             className="badge badge-red"
-            title={usaDetalles ? 'Total de caja vs. suma de detalles' : 'Total de caja vs. inicial + ingresos − egresos de los movimientos'}
+            title={`Total declarado ${fmt$(cuadre.total)} vs. efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)}${cuadre.gastos ? ` − gastos ${fmt$(cuadre.gastos)}` : ''} = ${fmt$(cuadre.esperado)}. Los cobros salen de los ${cuadre.fuente} de esta caja.`}
           >
-            ⚠ Descuadre: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
+            ⚠ Diferencia: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
           </span>
         )}
       </div>
@@ -463,7 +438,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalDet)}</span>
+          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(sumaMontos(caja.detalles))}</span>
           {canEdit && !addingDet && (
             <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
               <IcoPlus /> Añadir
@@ -577,7 +552,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(totalMov)}</span>
+          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(sumaMontos(caja.movimientos))}</span>
           {canEdit && !addingMov && (
             <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMov(true)}>
               <IcoPlus /> Añadir

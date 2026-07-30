@@ -47,8 +47,10 @@ function IcoMovs() {
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 const fmtDT = fmtDateTimeArg
 
-const SIGN_BY_TIPO = { INICIAL: 1, INGRESO: 1, COBRO: 1, GASTO: -1, RETIRO: -1, VACIADO: -1 }
-const TOLERANCE = 0.01
+// La diferencia de caja la calcula el backend (lib/cuadreCaja.js) y llega en
+// `caja.cuadre`. Esta pantalla tenía su propia copia de la fórmula, que había
+// divergido de la del listado (le faltaba la rama de TAPTAP y el tipo EGRESO).
+const sumaMontos = (items) => (items ?? []).reduce((acc, i) => acc + Number(i.monto ?? 0), 0)
 
 export default function CajaDetail() {
   const { id }   = useParams()
@@ -168,26 +170,10 @@ export default function CajaDetail() {
   if (loading) return <div className="page-loading"><div className="spinner" /></div>
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
-  const totalMov = caja.movimientos?.reduce((acc, m) => acc + Number(m.monto), 0) || 0
-  // Los detalles siempre se cargan en positivo; la clasificación del tipo
-  // (no el signo del monto) dice si suma o resta -- un "egreso" (ej. Gastos)
-  // resta del total esperado.
-  const totalDet = caja.detalles?.reduce((acc, d) => {
-    const sign = d.detalle_tipo?.clasificacion === 'egreso' ? -1 : 1
-    return acc + sign * Number(d.monto)
-  }, 0) || 0
-
-  // Si el origen es DCSMART y hay detalles cargados, el total esperado se
-  // valida contra efectivo + detalles (verificado contra datos reales de
-  // producción, el "fiscal" no entra en esta cuenta). Si no hay detalles
-  // (caja cargada solo con movimientos), sigue el chequeo de siempre contra
-  // movimientos.
-  const usaDetalles = caja.origin === 'DCSMART' && caja.detalles?.length > 0
-  const totalEsperado = usaDetalles
-    ? Number(caja.efectivo ?? 0) + totalDet
-    : (caja.movimientos?.reduce((acc, m) => acc + Number(m.monto) * (SIGN_BY_TIPO[m.tipo] ?? 0), 0) || 0)
-  const descuadre = caja.total != null ? Number(caja.total) - totalEsperado : null
-  const hayDescuadre = descuadre != null && Math.abs(descuadre) > TOLERANCE
+  const totalMov = sumaMontos(caja.movimientos)
+  const cuadre = caja.cuadre ?? {}
+  const hayDescuadre = cuadre.cuadra === false
+  const descuadre = cuadre.diferencia
 
   const infoRows = [
     ['Tipo Turno',   caja.tipo_turno ?? '—'],
@@ -262,9 +248,9 @@ export default function CajaDetail() {
               <div
                 className="badge badge-red"
                 style={{ marginTop: '0.75rem', display: 'inline-block' }}
-                title={usaDetalles ? 'Total de caja vs. suma de detalles' : 'Total de caja vs. inicial + ingresos − egresos de los movimientos'}
+                title={`Total declarado ${fmt$(cuadre.total)} vs. efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)}${cuadre.gastos ? ` − gastos ${fmt$(cuadre.gastos)}` : ''} = ${fmt$(cuadre.esperado)}. Los cobros salen de los ${cuadre.fuente} de esta caja.`}
               >
-                ⚠ Descuadre: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
+                ⚠ Diferencia: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
               </div>
             )}
           </div>
