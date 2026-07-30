@@ -257,7 +257,9 @@ export default function Sidebar() {
   // openAnalytics en pages/reportes/Reportes.jsx).
   const openCostos = async () => {
     try {
-      const { data } = await authApi.costosTicket()
+      // Se manda el local activo para que Costos abra en el mismo local y no
+      // haya que volver a elegirlo. Si no hay ninguno, Costos lo pide.
+      const { data } = await authApi.costosTicket(activeLocal?.id)
       const dest = new URL('/sso', COSTOS_URL)
       dest.searchParams.set('ticket', data.ticket)
       window.open(dest.toString(), '_blank', 'noopener')

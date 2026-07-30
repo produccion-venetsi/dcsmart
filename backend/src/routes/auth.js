@@ -344,21 +344,24 @@ export default async function authRoutes(fastify) {
         where: { activo: true, ...(isSuperAdmin ? {} : { solo_super_admin: false }) },
         include: { locales: { where: { activo: true }, select: { id: true, nombre: true } } }
       })
+      // El grupo (App.nombre) viaja plano dentro de cada local: Costos no
+      // agrupa por app, pero necesita mostrar de que grupo es cada local.
       for (const a of allApps) {
-        for (const l of a.locales) localesById.set(l.id, l)
+        for (const l of a.locales) localesById.set(l.id, { id: l.id, nombre: l.nombre, grupo: a.nombre })
       }
     } else {
-      // Para usuarios normales: resolver locales permitidos desde user_local_access
+      // Para usuarios normales: resolver locales permitidos desde user_local_access.
+      // El nombre de la app viene anidado para no consultarlo aparte por local.
       const localAccesses = await fastify.db.userLocalAccess.findMany({
         where: { id_user: request.user.id },
-        include: { local: { select: { id: true, nombre: true } } }
+        include: { local: { select: { id: true, nombre: true, app: { select: { nombre: true } } } } }
       })
 
       // Agrupar por app
       const accessByApp = {}
       for (const la of localAccesses) {
         if (!accessByApp[la.id_app]) accessByApp[la.id_app] = []
-        accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
+        accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre, grupo: la.local.app.nombre })
       }
 
       // admin / cajero: locales asignados en user_local_access.
@@ -367,10 +370,13 @@ export default async function authRoutes(fastify) {
         const assigned = accessByApp[r.id_app] ?? []
         let localesForApp = assigned
         if (r.role.nombre === 'admin' && assigned.length === 0) {
-          localesForApp = await fastify.db.local.findMany({
+          const todosLosLocales = await fastify.db.local.findMany({
             where: { id_app: r.id_app, activo: true },
             select: { id: true, nombre: true }
           })
+          // r.app ya viene del include de userRoles, asi que el nombre del grupo
+          // esta en memoria: no hace falta pedirlo de nuevo en este findMany.
+          localesForApp = todosLosLocales.map(l => ({ id: l.id, nombre: l.nombre, grupo: r.app.nombre }))
         }
         for (const l of localesForApp) localesById.set(l.id, l)
       }
@@ -381,8 +387,15 @@ export default async function authRoutes(fastify) {
     const locales = [...localesById.values()].sort((a, b) => a.nombre.localeCompare(b.nombre))
     if (locales.length === 0) return reply.code(403).send({ error: 'No tenés locales asignados' })
 
+    // Local desde el que se apreto "Costos": viaja firmado para que Costos abra
+    // en el mismo local en el que se estaba trabajando, en vez de pedirlo de
+    // nuevo. Se valida contra los locales permitidos: un id arbitrario en el
+    // body no puede dar acceso a un local que el usuario no tiene.
+    const idLocalPedido = String(request.body?.id_local ?? '')
+    const localActivo = locales.find(l => l.id === idLocalPedido) ?? null
+
     const ticket = jwt.sign(
-      { email: request.user.email, rol, locales },
+      { email: request.user.email, rol, locales, ...(localActivo ? { local_activo: localActivo } : {}) },
       process.env.INTERNAL_SHARED_SECRET,
       { expiresIn: '60s', issuer: 'dcsmart-gestion', audience: 'dcsmart-costos' }
     )
