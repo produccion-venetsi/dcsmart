@@ -11,7 +11,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
-import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
+import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo } from '../../lib/dates.js'
 
 function IcoBack() {
   return (
@@ -68,6 +68,14 @@ function IcoEdit() {
     <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+  )
+}
+function IcoAlerta() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
     </svg>
   )
 }
@@ -318,6 +326,11 @@ export default function PagoForm() {
   // editar una factura B creada sin ellos.
   const pvNroOpcional = esCargaAvion || form.id_tipo === 'B'
 
+  // Antigüedad del período, para el aviso de más abajo. Se recalcula en cada
+  // render y no en un useMemo porque son dos restas.
+  const diasPeriodo  = diasDesdeFinDePeriodo(form.periodo)
+  const periodoViejo = periodoDemasiadoViejo(form.periodo)
+
   // set con efectos encadenados
   const set = (field, value) => setForm(f => {
     const next = { ...f, [field]: value }
@@ -526,6 +539,19 @@ export default function PagoForm() {
     if (!pvNroOpcional && !form.nro) { notify('El número de comprobante es obligatorio', 'error'); return }
     if (!form.cashflow)   { notify('El cashflow es obligatorio', 'error'); return }
     if (!form.importe)   { notify('Ingresá el importe neto (o un impuesto) para calcular el total', 'error'); return }
+
+    // Advertencia, no validación: la factura se guarda igual si el usuario
+    // confirma. Puede ser una factura atrasada de verdad, pero también un año
+    // mal tipeado en el período, que es el error que esto pesca.
+    if (periodoDemasiadoViejo(form.periodo)) {
+      const dias = diasDesdeFinDePeriodo(form.periodo)
+      const seguir = await showConfirm(
+        `El período ${fmtMonthUTC(form.periodo)} cerró hace ${dias} días. Revisá que sea el correcto antes de guardar. ¿Guardar la factura con ese período?`,
+        'Período muy viejo'
+      )
+      if (!seguir) return
+    }
+
     setLoading(true)
     try {
       let foto_url = form.foto_url
@@ -690,6 +716,18 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
               </div>
+              {/* Se avisa acá, al elegir el período, y no solo al guardar: si
+                  aparece recién al final ya cargó toda la factura al lado del
+                  dato equivocado. */}
+              {periodoViejo && (
+                <div className="aviso-periodo-viejo">
+                  <IcoAlerta />
+                  <span>
+                    El período <strong>{fmtMonthUTC(form.periodo)}</strong> cerró hace {diasPeriodo} días.
+                    Se puede guardar igual, pero revisá que sea el correcto.
+                  </span>
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label className="form-label">Cashflow *</label>

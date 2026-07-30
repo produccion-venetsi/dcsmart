@@ -96,3 +96,56 @@ export function fmtDateArg(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('es-AR', { timeZone: TZ })
 }
+
+// ── Antigüedad del período de una factura ───────────────────────────────────
+//
+// A partir de cuántos días de terminado el período se avisa que la factura es
+// vieja. No bloquea la carga: solo advierte.
+export const DIAS_PERIODO_VIEJO = 20
+
+// Un período representa un MES, no un día: 28.233 de los 28.865 pagos con
+// período cargado (97,8%) tienen día 1. Por eso la antigüedad se mide desde el
+// FIN del mes del período y no desde la fecha ingresada.
+//
+// Si se midiera desde la fecha ingresada, una factura del mes corriente con
+// período día 1 avisaría siempre a partir del día 20 del mismo mes, que es
+// justamente el caso normal y no tiene nada de viejo.
+
+// Pasa una fecha de calendario a milisegundos UTC. Se parsean los componentes a
+// mano en lugar de usar `new Date(...)` sobre el string completo, para que el
+// huso horario del navegador no pueda correr el resultado un día.
+function calendarioAUtcMs(fechaCalendario) {
+  const [y, m, d] = fechaCalendario.split('-').map(Number)
+  return Date.UTC(y, m - 1, d)
+}
+
+// Último día del mes de esa fecha, en ms UTC. Día 0 del mes siguiente.
+function finDeMesUtcMs(fechaCalendario) {
+  const [y, m] = fechaCalendario.split('-').map(Number)
+  return Date.UTC(y, m, 0)
+}
+
+// Acepta lo que puede tener el formulario: el string del <input type="date">,
+// un ISO ya guardado, o un Date. Devuelve 'YYYY-MM-DD' o null.
+function aFechaCalendario(valor) {
+  if (!valor) return null
+  if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? null : valor.toISOString().slice(0, 10)
+  const s = String(valor).slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
+}
+
+// Días transcurridos desde que terminó el mes del período. Negativo si el
+// período todavía no cerró (el mes corriente o uno futuro). null si no hay
+// período o no se entiende.
+export function diasDesdeFinDePeriodo(periodo, hoy = todayInputDate()) {
+  const p = aFechaCalendario(periodo)
+  const h = aFechaCalendario(hoy)
+  if (!p || !h) return null
+  return Math.round((calendarioAUtcMs(h) - finDeMesUtcMs(p)) / 86400000)
+}
+
+// true si el período cerró hace DIAS_PERIODO_VIEJO días o más.
+export function periodoDemasiadoViejo(periodo, hoy = todayInputDate()) {
+  const dias = diasDesdeFinDePeriodo(periodo, hoy)
+  return dias !== null && dias >= DIAS_PERIODO_VIEJO
+}
