@@ -1,4 +1,6 @@
-const CLASIFICACIONES = ['canal', 'medio_pago', 'calculo', 'otro']
+// La clasificacion de un tipo es la SUGERENCIA para los detalles que lo usan:
+// al cargar un detalle se propone esta y el usuario puede cambiarla.
+import { CLASIFICACIONES, normalizarClasificacion } from '../lib/clasificaciones.js'
 
 export default async function detalleTiposRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
@@ -20,8 +22,10 @@ export default async function detalleTiposRoutes(fastify) {
     const { nombre, id_local, clasificacion } = request.body
     if (!nombre) return reply.code(400).send({ error: 'nombre es requerido' })
 
-    const clasif = clasificacion || 'otro'
-    if (!CLASIFICACIONES.includes(clasif)) {
+    // Default cobro: es como se carga la mayoria de los detalles. Si un tipo no
+    // tiene que entrar en la diferencia, se marca como informativo a mano.
+    const clasif = normalizarClasificacion(clasificacion) ?? (clasificacion ? null : 'cobro')
+    if (!clasif) {
       return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
     }
 
@@ -54,8 +58,12 @@ export default async function detalleTiposRoutes(fastify) {
     if (existing.id_app !== request.activeAppId) return reply.code(403).send({ error: 'Sin acceso' })
 
     const { nombre, activo, clasificacion } = request.body
-    if (clasificacion !== undefined && !CLASIFICACIONES.includes(clasificacion)) {
-      return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+    let clasifNueva
+    if (clasificacion !== undefined) {
+      clasifNueva = normalizarClasificacion(clasificacion)
+      if (!clasifNueva) {
+        return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+      }
     }
 
     const tipo = await fastify.db.detalleTipo.update({
@@ -63,7 +71,7 @@ export default async function detalleTiposRoutes(fastify) {
       data: {
         ...(nombre !== undefined ? { nombre } : {}),
         ...(activo !== undefined ? { activo } : {}),
-        ...(clasificacion !== undefined ? { clasificacion } : {})
+        ...(clasifNueva !== undefined ? { clasificacion: clasifNueva } : {})
       },
       include: { local: { select: { id: true, nombre: true } } }
     })

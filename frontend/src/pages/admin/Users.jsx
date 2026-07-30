@@ -135,6 +135,10 @@ export default function Users() {
   const [analyticsAccess, setAnalyticsAccess] = useState(null) // { enabled, is_admin } | { unavailable: true } | null (cargando)
   const [analyticsBusy,   setAnalyticsBusy]   = useState(false)
 
+  // Acceso a dcsmart-costos (plataforma de costos, backend separado)
+  const [costosAccess, setCostosAccess] = useState(null) // { enabled, is_admin } | { unavailable: true } | null (cargando)
+  const [costosBusy,   setCostosBusy]   = useState(false)
+
   // ── load list ──────────────────────────────────────────────────────────────
 
   const load = () => {
@@ -167,6 +171,16 @@ export default function Users() {
     usersApi.getAnalyticsAccess(selected.id)
       .then(({ data }) => setAnalyticsAccess(data))
       .catch(() => setAnalyticsAccess({ unavailable: true }))
+  }, [panelOpen, selected?.id])
+
+  // ── acceso a dcsmart-costos (se consulta al vuelo, otro backend/base) ─────
+
+  useEffect(() => {
+    if (!panelOpen || !selected?.id) { setCostosAccess(null); return }
+    setCostosAccess(null)
+    usersApi.getCostosAccess(selected.id)
+      .then(({ data }) => setCostosAccess(data))
+      .catch(() => setCostosAccess({ unavailable: true }))
   }, [panelOpen, selected?.id])
 
   // ── load locales when app is selected in role form ────────────────────────
@@ -717,6 +731,78 @@ export default function Users() {
                           }}
                         />
                         Administrador en Analytics (puede habilitar a otros)
+                      </label>
+                    ) : null}
+                  </>
+                )}
+              </div>
+
+              {/* Acceso a dcsmart-costos (plataforma de costos, backend/base separados) */}
+              <div className="drawer-section-title">Costos</div>
+              <div style={{ marginBottom: '1.25rem' }}>
+                {costosAccess === null ? (
+                  <div style={{ fontSize: 12.5, color: 'var(--t3)' }}>Consultando acceso…</div>
+                ) : costosAccess.unavailable ? (
+                  <div style={{ fontSize: 12.5, color: 'var(--t3)' }}>
+                    No se pudo consultar (¿está corriendo el backend de Costos?)
+                  </div>
+                ) : (
+                  <>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: costosBusy ? 'wait' : 'pointer', userSelect: 'none', marginBottom: 8, fontSize: 13, color: 'var(--t2)' }}>
+                      <input
+                        type="checkbox"
+                        className="select-checkbox"
+                        disabled={costosBusy}
+                        checked={!!costosAccess.enabled}
+                        onChange={async (e) => {
+                          const enabled = e.target.checked
+                          const msg = enabled
+                            ? '¿Habilitar el acceso a Costos para este usuario?'
+                            : '¿Deshabilitar el acceso a Costos para este usuario?'
+                          if (!(await showConfirm(msg))) return
+                          setCostosBusy(true)
+                          try {
+                            await usersApi.setCostosAccess(selected.id, { enabled, is_admin: costosAccess.is_admin })
+                            setCostosAccess({ enabled, is_admin: costosAccess.is_admin })
+                          } catch (err) {
+                            notify(err.response?.data?.error || 'Error al actualizar el acceso a Costos', 'error')
+                          } finally {
+                            setCostosBusy(false)
+                          }
+                        }}
+                      />
+                      Acceso habilitado a Costos
+                    </label>
+                    {costosAccess.enabled === null && (
+                      <div style={{ fontSize: 11.5, color: 'var(--t4)', marginBottom: 8 }}>
+                        Sin habilitación individual — no puede entrar a Costos hasta que lo habilites aca.
+                      </div>
+                    )}
+                    {costosAccess.enabled ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: costosBusy ? 'wait' : 'pointer', userSelect: 'none', fontSize: 13, color: 'var(--t2)' }}>
+                        <input
+                          type="checkbox"
+                          className="select-checkbox"
+                          disabled={costosBusy}
+                          checked={!!costosAccess.is_admin}
+                          onChange={async (e) => {
+                            const is_admin = e.target.checked
+                            const msg = is_admin
+                              ? '¿Convertir a este usuario en administrador de Costos (podrá habilitar a otros)?'
+                              : '¿Quitarle el rol de administrador de Costos a este usuario?'
+                            if (!(await showConfirm(msg))) return
+                            setCostosBusy(true)
+                            try {
+                              await usersApi.setCostosAccess(selected.id, { enabled: true, is_admin })
+                              setCostosAccess({ enabled: true, is_admin })
+                            } catch (err) {
+                              notify(err.response?.data?.error || 'Error al actualizar el acceso a Costos', 'error')
+                            } finally {
+                              setCostosBusy(false)
+                            }
+                          }}
+                        />
+                        Administrador en Costos (puede habilitar a otros)
                       </label>
                     ) : null}
                   </>

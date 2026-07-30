@@ -27,15 +27,20 @@ model App {
 }
 
 model Local {
-  id           String   @id @default(uuid())
-  nombre       String
-  direccion    String?
-  telefono     String?
-  activo       Boolean  @default(true)
-  id_app       String
-  id_proveedor String?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  id            String     @id @default(uuid())
+  nombre        String
+  direccion     String?
+  telefono      String?
+  activo        Boolean    @default(true)
+  id_app        String
+  id_proveedor  String?
+  logo_url      String?
+  maps_url      String?
+  menu_url      String?
+  mail_facturas String?
+  tipo_local    TipoLocal?
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
 
   app           App               @relation(fields: [id_app], references: [id])
   proveedor     Proveedor?        @relation(fields: [id_proveedor], references: [id])
@@ -230,6 +235,17 @@ model Proveedor {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
+  // Afinidad con el tipo de local, para ordenar el buscador de proveedores:
+  // los afines y los generales primero. Nunca filtra, solo ordena -- un local
+  // siempre puede elegir cualquier proveedor.
+  //
+  // `tipos_afines` es distinto del viejo `tipo_local` (texto libre, hoy con
+  // 4014 registros en "GASTRONOMICO" cargados en una migracion). Se dejan los
+  // dos: el viejo sigue siendo el dato historico y este es el que ordena.
+  // Vacio = sin clasificar, va al final.
+  tipos_afines  TipoLocal[]
+  es_general    Boolean  @default(false) // servicios transversales: Aysa, Metrogas, AFIP, bancos
+
   rubcat  RubCat? @relation(fields: [id_rubcat], references: [id])
   pagos   Pago[]
   locales Local[]
@@ -366,6 +382,19 @@ enum TipoTurno {
   OTROS     @map("Otros")
 
   @@map("tipo_turno")
+}
+
+// Rubro del local. Los valores se guardan con acento porque dcsmart-analisis
+// lee esta misma base sin un contrato compartido: conviene que el dato sea
+// legible por si solo, igual que TipoTurno.
+enum TipoLocal {
+  GASTRONOMIA  @map("Gastronomía")
+  INDUMENTARIA @map("Indumentaria")
+  ARQUITECTURA @map("Arquitectura")
+  INMOBILIARIO @map("Inmobiliario")
+  MULTIMEDIA   @map("Multimedia")
+
+  @@map("tipo_local")
 }
 
 enum TipoMovimiento {

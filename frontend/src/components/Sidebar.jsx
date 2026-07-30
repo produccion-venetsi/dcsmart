@@ -3,7 +3,11 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
+import { authApi } from '../api/auth.js'
 import AppLogo from './AppLogo.jsx'
+
+// URL de dcsmart-costos (plataforma de costos, backend/base separados).
+const COSTOS_URL = import.meta.env.VITE_COSTOS_URL || 'https://costos.dcsmart.app'
 
 // Versión visible de la app. En producción se muestra solo la version de
 // package.json (__APP_VERSION__); el commit corto (VITE_GIT_SHA) se agrega
@@ -78,6 +82,23 @@ function IcoReportes() {
       <line x1="12" y1="20" x2="12" y2="4"/>
       <line x1="6" y1="20" x2="6" y2="14"/>
       <line x1="2" y1="20" x2="22" y2="20"/>
+    </svg>
+  )
+}
+function IcoCalculator() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="2" width="16" height="20" rx="2"/>
+      <line x1="8" y1="6" x2="16" y2="6"/>
+      <line x1="8" y1="11" x2="8" y2="11.01"/>
+      <line x1="12" y1="11" x2="12" y2="11.01"/>
+      <line x1="16" y1="11" x2="16" y2="11.01"/>
+      <line x1="8" y1="15" x2="8" y2="15.01"/>
+      <line x1="12" y1="15" x2="12" y2="15.01"/>
+      <line x1="16" y1="15" x2="16" y2="15.01"/>
+      <line x1="8" y1="19" x2="8" y2="19.01"/>
+      <line x1="12" y1="19" x2="12" y2="19.01"/>
+      <line x1="16" y1="19" x2="16" y2="19.01"/>
     </svg>
   )
 }
@@ -190,6 +211,10 @@ const NAV_MAIN = [
   // Reportes internos de la app de gestión (/reportes). El Analytics externo
   // se abre desde un botón dentro de esa pantalla, no desde el sidebar.
   { key: 'reportes', to: '/reportes', label: 'Reportes', Icon: IcoReportes },
+  // Costos es OTRA app (backend/base separados): no navega con NavLink, abre
+  // en pestaña nueva vía SSO (ver openCostos). Visible para todos — Costos
+  // rechaza con 403 a quien no tenga grant habilitado del lado de Costos.
+  { key: 'costos', label: 'Costos', Icon: IcoCalculator, external: true },
 ]
 
 const NAV_ADMIN = [
@@ -225,6 +250,22 @@ export default function Sidebar() {
     closeMobileNav()
     useAppStore.getState().clearContext()
     navigate('/select-app')
+  }
+
+  // Abre dcsmart-costos con un ticket SSO de un solo uso para no volver a
+  // loguearse. Si falla, abre el link igual para ver el error (calcado de
+  // openAnalytics en pages/reportes/Reportes.jsx).
+  const openCostos = async () => {
+    try {
+      // Se manda el local activo para que Costos abra en el mismo local y no
+      // haya que volver a elegirlo. Si no hay ninguno, Costos lo pide.
+      const { data } = await authApi.costosTicket(activeLocal?.id)
+      const dest = new URL('/sso', COSTOS_URL)
+      dest.searchParams.set('ticket', data.ticket)
+      window.open(dest.toString(), '_blank', 'noopener')
+    } catch {
+      window.open(COSTOS_URL, '_blank', 'noopener')
+    }
   }
 
   // Colapsado: rail angosto solo con íconos. En mobile el off-canvas
@@ -308,7 +349,18 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {mainItems.map(({ to, label, Icon }) => (
+        {mainItems.map(({ key, to, label, Icon, external }) => external ? (
+          <button
+            key={key}
+            type="button"
+            className="nav-item nav-item-btn"
+            onClick={() => { closeMobileNav(); openCostos() }}
+            title={collapsed ? label : undefined}
+          >
+            <Icon />
+            <span className="nav-item-label">{label}</span>
+          </button>
+        ) : (
           <NavLink
             key={to}
             to={to}

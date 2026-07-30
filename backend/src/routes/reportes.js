@@ -156,7 +156,9 @@ export default async function reportesRoutes(fastify) {
     const detRows = await fastify.db.$queryRawUnsafe(`
       SELECT
         COALESCE(dt.nombre, cd.nombre, 'Sin nombre') AS nombre,
-        BOOL_OR(dt.clasificacion = 'egreso') AS egreso,
+        -- 'gasto' es el valor vigente; 'egreso' es el anterior y sigue en cajas
+        -- historicas, asi que se aceptan los dos.
+        BOOL_OR(dt.clasificacion IN ('gasto', 'egreso')) AS egreso,
         SUM(cd.monto) AS total
       FROM caja_detalles cd
       JOIN cajas c ON cd.id_caja = c.id

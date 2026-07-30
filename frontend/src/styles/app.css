@@ -330,6 +330,16 @@ select option:disabled { color: var(--t4); }
   cursor: pointer;
 }
 
+/* .nav-item usado sobre un <button> (ítems que abren en pestaña nueva, no
+   navegan con NavLink) -- resetea los estilos por defecto del navegador. */
+.nav-item-btn {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
 .nav-item svg:last-child:not(:first-child) {
   margin-left: auto;
   opacity: 0.55;
