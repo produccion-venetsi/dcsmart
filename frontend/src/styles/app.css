@@ -940,6 +940,23 @@ select option:disabled { color: var(--t4); }
 .badge-red    { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-border); }
 .badge-blue   { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-border); }
 .badge-amber  { background: var(--amber-bg);  color: var(--amber);  border: 1px solid var(--amber-border); }
+
+/* Aviso de período viejo en la carga de facturas. Advierte, no bloquea: por eso
+   es ámbar y no rojo, y vive al lado del campo en vez de cortar el formulario. */
+.aviso-periodo-viejo {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 7px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--amber);
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-border);
+  border-radius: 7px;
+}
+.aviso-periodo-viejo strong { font-weight: 700; }
 .badge-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
 .badge-muted  { background: rgba(255,255,255,0.06); color: var(--t3); border: 1px solid var(--border); }
 
