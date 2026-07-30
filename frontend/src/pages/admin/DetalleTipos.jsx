@@ -21,7 +21,8 @@ function IcoPlus() {
   )
 }
 
-const EMPTY = { nombre: '', id_local: '', clasificacion: 'otro', activo: true }
+// Default cobro: es como se carga la mayoria de los detalles
+const EMPTY = { nombre: '', id_local: '', clasificacion: 'cobro', activo: true }
 
 export default function DetalleTipos() {
   const notify      = useUiStore((s) => s.notify)
@@ -177,6 +178,11 @@ export default function DetalleTipos() {
                   {CLASIFICACIONES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
+              {/* La clasificación decide si el detalle entra en la diferencia de
+                  caja, así que conviene que quede explícito al elegirla. */}
+              <p className="td-muted" style={{ fontSize: 11.5, margin: '6px 0 0' }}>
+                {CLASIFICACIONES.find(c => c.value === form.clasificacion)?.ayuda}
+              </p>
             </div>
             {!selected && locales.length > 1 && (
               <div className="form-group" style={{ marginTop: '1rem' }}>

@@ -1,4 +1,27 @@
-const CLASIFICACIONES = ['canal', 'medio_pago', 'calculo', 'otro']
+// Como participa el detalle en la diferencia de caja (ver lib/cuadreCaja.js).
+// Antes eran canal/medio_pago/calculo/otro, que describian el dato pero no su
+// efecto en el calculo: no habia forma de marcar un tipo como "no suma", y
+// tampoco de crear uno que restara (el codigo buscaba 'egreso', que no estaba
+// en esta lista, asi que ningun gasto restaba nunca).
+const CLASIFICACIONES = ['cobro', 'gasto', 'informativo']
+
+// Valores anteriores: se siguen aceptando en el PUT para no romper integraciones
+// ni el sync de TapTap, y se traducen al vigente antes de guardar.
+const EQUIVALENCIAS = {
+  ingreso: 'cobro',
+  medio_pago: 'cobro',
+  egreso: 'gasto',
+  canal: 'informativo',
+  otro: 'informativo',
+  calculo: 'informativo'
+}
+
+const normalizarClasificacion = (valor) => {
+  if (!valor) return null
+  const v = String(valor).toLowerCase()
+  if (CLASIFICACIONES.includes(v)) return v
+  return EQUIVALENCIAS[v] ?? null
+}
 
 export default async function detalleTiposRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
@@ -20,8 +43,10 @@ export default async function detalleTiposRoutes(fastify) {
     const { nombre, id_local, clasificacion } = request.body
     if (!nombre) return reply.code(400).send({ error: 'nombre es requerido' })
 
-    const clasif = clasificacion || 'otro'
-    if (!CLASIFICACIONES.includes(clasif)) {
+    // Default cobro: es como se carga la mayoria de los detalles. Si un tipo no
+    // tiene que entrar en la diferencia, se marca como informativo a mano.
+    const clasif = normalizarClasificacion(clasificacion) ?? (clasificacion ? null : 'cobro')
+    if (!clasif) {
       return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
     }
 
@@ -54,8 +79,12 @@ export default async function detalleTiposRoutes(fastify) {
     if (existing.id_app !== request.activeAppId) return reply.code(403).send({ error: 'Sin acceso' })
 
     const { nombre, activo, clasificacion } = request.body
-    if (clasificacion !== undefined && !CLASIFICACIONES.includes(clasificacion)) {
-      return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+    let clasifNueva
+    if (clasificacion !== undefined) {
+      clasifNueva = normalizarClasificacion(clasificacion)
+      if (!clasifNueva) {
+        return reply.code(400).send({ error: `clasificacion inválida. Use: ${CLASIFICACIONES.join(', ')}` })
+      }
     }
 
     const tipo = await fastify.db.detalleTipo.update({
@@ -63,7 +92,7 @@ export default async function detalleTiposRoutes(fastify) {
       data: {
         ...(nombre !== undefined ? { nombre } : {}),
         ...(activo !== undefined ? { activo } : {}),
-        ...(clasificacion !== undefined ? { clasificacion } : {})
+        ...(clasifNueva !== undefined ? { clasificacion: clasifNueva } : {})
       },
       include: { local: { select: { id: true, nombre: true } } }
     })
