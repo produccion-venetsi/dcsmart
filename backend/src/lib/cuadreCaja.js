@@ -64,9 +64,14 @@ const num = (v) => {
 
 const esEfectivo = (nombreMetodo) => /efectivo/i.test(String(nombreMetodo ?? ''))
 
+// La clasificacion del propio detalle gana sobre la de su tipo: el usuario la
+// elige al cargar el detalle y puede diferir a proposito (un "Rappi" que en una
+// caja se carga como cobro y en otra como informativo porque ya venia sumado).
+// El tipo solo aporta el valor propuesto y queda como respaldo para los detalles
+// viejos que no tienen clasificacion propia.
 export function rolDeDetalle(detalle) {
-  const clasif = detalle?.detalle_tipo?.clasificacion ?? detalle?.tipo ?? null
-  // Sin tipo asignado se asume cobro: es lo que carga la mayoria y evita que un
+  const clasif = detalle?.tipo ?? detalle?.detalle_tipo?.clasificacion ?? null
+  // Sin clasificacion se asume cobro: es lo que carga la mayoria y evita que un
   // detalle sin clasificar desaparezca del calculo sin aviso.
   if (!clasif) return 'cobro'
   return ROL_POR_CLASIFICACION[clasif] ?? 'cobro'

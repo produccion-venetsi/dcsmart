@@ -33,6 +33,28 @@ test('una clasificacion desconocida cae en cobro', () => {
   assert.equal(rolDeDetalle(det(1, 'algo_nuevo')), 'cobro')
 })
 
+test('la clasificacion elegida en el detalle gana sobre la del tipo', () => {
+  // El caso real: un tipo "Rappi" clasificado como cobro, que en esta caja se
+  // carga como informativo porque el monto ya venia incluido en el total.
+  const conOverride = { monto: 1, tipo: 'informativo', detalle_tipo: { clasificacion: 'cobro' } }
+  assert.equal(rolDeDetalle(conOverride), 'informativo')
+
+  // Y al reves: un tipo informativo que en esta caja si suma.
+  const alReves = { monto: 1, tipo: 'cobro', detalle_tipo: { clasificacion: 'informativo' } }
+  assert.equal(rolDeDetalle(alReves), 'cobro')
+})
+
+test('sin clasificacion propia se usa la del tipo', () => {
+  // Detalles viejos: se cargaron antes de que la clasificacion fuera elegible.
+  assert.equal(rolDeDetalle({ monto: 1, tipo: null, detalle_tipo: { clasificacion: 'gasto' } }), 'gasto')
+  assert.equal(rolDeDetalle({ monto: 1, detalle_tipo: { clasificacion: 'informativo' } }), 'informativo')
+})
+
+test('el override tambien acepta valores historicos', () => {
+  assert.equal(rolDeDetalle({ monto: 1, tipo: 'egreso', detalle_tipo: { clasificacion: 'cobro' } }), 'gasto')
+  assert.equal(rolDeDetalle({ monto: 1, tipo: 'canal', detalle_tipo: { clasificacion: 'cobro' } }), 'informativo')
+})
+
 test('solo COBRO y GASTO participan de los movimientos', () => {
   assert.equal(rolDeMovimiento(mov('COBRO', 1)), 'cobro')
   assert.equal(rolDeMovimiento(mov('GASTO', 1)), 'gasto')
