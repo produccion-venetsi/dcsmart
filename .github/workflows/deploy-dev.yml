@@ -29,7 +29,10 @@ jobs:
           VITE_APP_ENV: dev
           VITE_API_URL: ${{ secrets.BACKEND_URL }}/api
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID_FRONTEND }}
-          VITE_COSTOS_URL: ${{ secrets.VITE_COSTOS_URL }}
+          # dev apunta al site dev de Costos y master al de produccion, para poder
+          # probar sin mandar a los usuarios de produccion a un entorno de prueba.
+          # Si el secret de dev no esta cargado, cae al de produccion.
+          VITE_COSTOS_URL: ${{ secrets.VITE_COSTOS_URL_DEV || secrets.VITE_COSTOS_URL }}
 
       - name: Autenticar en Google Cloud
         uses: google-github-actions/auth@v2
