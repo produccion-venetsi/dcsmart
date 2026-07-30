@@ -373,10 +373,17 @@ export default function PagoForm() {
         setForm((f) => ({ ...f, id_proveedor: data.proveedor.id }))
       }
 
+      // La factura dice "Contado" o "Cuenta Corriente"; el backend ya lo mapeó
+      // al método del catálogo. Si no pudo, se muestra qué leyó y la persona elige.
+      if (data.metodo?.id) {
+        setForm((f) => ({ ...f, id_metodo: data.metodo.id }))
+      }
+
       setLectura({
         marcados: data.marcados ?? [],
         aritmetica: data.aritmetica,
         proveedor: data.proveedor,
+        metodo: data.metodo,
         totalFactura: c.importe
       })
       notify(`Leí la factura: ${(data.marcados ?? []).length} campos precargados. Revisalos.`, 'success')
@@ -704,6 +711,14 @@ export default function PagoForm() {
                   {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
                   : elegilo o crealo a mano.</>
               )}
+              {/* Si leyó la condición de venta pero no la pudo mapear, se dice
+                  qué decía la factura para que la persona elija con ese dato. */}
+              {lectura.metodo && !lectura.metodo.id && (
+                <div style={{ marginTop: 6 }}>
+                  La factura dice <strong>«{lectura.metodo.texto}»</strong> como condición de venta,
+                  pero no coincide con ningún método de pago del sistema: elegilo a mano.
+                </div>
+              )}
               {/* El total no se precarga (se calcula solo), asi que si la factura
                   decia otro numero conviene avisarlo: o se leyo mal un importe, o
                   falta un impuesto. */}
@@ -896,7 +911,7 @@ export default function PagoForm() {
             <div className="form-group">
               <label className="form-label">Método de Pago *</label>
               <div className="form-input-wrap">
-                <select required value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
+                <select required className={marcadoIA('id_metodo').trim()} value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
                   <option value="">Seleccioná un método…</option>
                   {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                 </select>

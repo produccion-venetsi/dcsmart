@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   normalizarCuit, normalizarTipoComprobante, validarAritmetica,
-  aCamposFormulario, camposConDato
+  aCamposFormulario, camposConDato, matchearMetodoPago, normalizarTexto
 } from './leerFactura.js'
 
 // ── CUIT ────────────────────────────────────────────────────────────────────
@@ -234,4 +234,89 @@ test('IMP_INTERNOS es un tipo valido del sistema', () => {
   // descartara, una factura con impuestos internos perderia ese renglon.
   const c = aCamposFormulario({ ...CRUDO_OK, impuestos: [{ tipo: 'IMP_INTERNOS', monto: 500 }] })
   assert.deepEqual(c.impuestos, [{ tipo: 'IMP_INTERNOS', monto: 500 }])
+})
+
+// ── Metodo de pago desde la condicion de venta ──────────────────────────────
+// Los nombres son los reales del catalogo (los 16 que tienen pagos cargados).
+
+const METODOS = [
+  { id: 'm1', nombre: 'Efectivo' },
+  { id: 'm2', nombre: 'Transferencia' },
+  { id: 'm3', nombre: 'Cuenta Cte.' },
+  { id: 'm4', nombre: 'Mercado Pago' },
+  { id: 'm5', nombre: 'Tarjeta crédito' },
+  { id: 'm6', nombre: 'Tarjeta débito' },
+  { id: 'm7', nombre: 'CHEQUE AL DÍA' },
+  { id: 'm8', nombre: 'CHEQUE DIFERIDO' },
+  { id: 'm9', nombre: 'E-Cheque' },
+  { id: 'm10', nombre: 'Débito Automático' },
+  { id: 'm11', nombre: 'Nota de Crédito' },
+]
+
+test('"Contado" mapea a Efectivo, que es el caso mas comun', () => {
+  // No coinciden en una sola letra: sin sinonimos esto no se resuelve.
+  assert.equal(matchearMetodoPago('Contado', METODOS)?.nombre, 'Efectivo')
+  assert.equal(matchearMetodoPago('CONTADO', METODOS)?.nombre, 'Efectivo')
+})
+
+test('"Cuenta Corriente" mapea a Cuenta Cte.', () => {
+  assert.equal(matchearMetodoPago('Cuenta Corriente', METODOS)?.nombre, 'Cuenta Cte.')
+  assert.equal(matchearMetodoPago('Cta. Cte.', METODOS)?.nombre, 'Cuenta Cte.')
+  assert.equal(matchearMetodoPago('CTA CTE', METODOS)?.nombre, 'Cuenta Cte.')
+})
+
+test('el nombre del catalogo tal cual tambien matchea', () => {
+  assert.equal(matchearMetodoPago('Transferencia', METODOS)?.nombre, 'Transferencia')
+  assert.equal(matchearMetodoPago('Mercado Pago', METODOS)?.nombre, 'Mercado Pago')
+  assert.equal(matchearMetodoPago('mercado pago', METODOS)?.nombre, 'Mercado Pago')
+})
+
+test('los acentos y puntos no importan', () => {
+  assert.equal(matchearMetodoPago('Debito Automatico', METODOS)?.nombre, 'Débito Automático')
+  assert.equal(matchearMetodoPago('CHEQUE AL DIA', METODOS)?.nombre, 'CHEQUE AL DÍA')
+})
+
+test('el texto con datos de mas igual matchea', () => {
+  // Las facturas escriben cosas como "Cuenta Corriente 30 dias F.F."
+  assert.equal(matchearMetodoPago('Cuenta Corriente 30 días F.F.', METODOS)?.nombre, 'Cuenta Cte.')
+  assert.equal(matchearMetodoPago('Pago: transferencia bancaria', METODOS)?.nombre, 'Transferencia')
+})
+
+test('"cheque diferido" gana sobre "cheque"', () => {
+  // Se prueban los sinonimos mas largos primero; si no, un cheque diferido
+  // quedaria cargado como cheque al dia.
+  assert.equal(matchearMetodoPago('Cheque diferido', METODOS)?.nombre, 'CHEQUE DIFERIDO')
+  assert.equal(matchearMetodoPago('Cheque de pago diferido a 60 días', METODOS)?.nombre, 'CHEQUE DIFERIDO')
+  assert.equal(matchearMetodoPago('Cheque', METODOS)?.nombre, 'CHEQUE AL DÍA')
+})
+
+test('echeq mapea a E-Cheque', () => {
+  assert.equal(matchearMetodoPago('ECHEQ', METODOS)?.nombre, 'E-Cheque')
+  assert.equal(matchearMetodoPago('e-cheq', METODOS)?.nombre, 'E-Cheque')
+})
+
+test('si leyo algo que no se puede mapear, devuelve el texto igual', () => {
+  // Se informa para que la persona elija, en vez de descartarlo en silencio.
+  const r = matchearMetodoPago('Canje de mercadería', METODOS)
+  assert.equal(r.id, null)
+  assert.equal(r.texto, 'Canje de mercadería')
+})
+
+test('un metodo que no esta en el catalogo del local no se inventa', () => {
+  // Si "Tarjeta crédito" no existiera, no se puede precargar nada.
+  const sinTarjeta = METODOS.filter((m) => !m.nombre.startsWith('Tarjeta'))
+  const r = matchearMetodoPago('Tarjeta de crédito', sinTarjeta)
+  assert.equal(r.id, null)
+  assert.equal(r.texto, 'Tarjeta de crédito')
+})
+
+test('sin condicion de venta no se devuelve nada', () => {
+  assert.equal(matchearMetodoPago(null, METODOS), null)
+  assert.equal(matchearMetodoPago('', METODOS), null)
+  assert.equal(matchearMetodoPago('   ', METODOS), null)
+})
+
+test('la condicion de venta llega hasta los campos del formulario', () => {
+  const c = aCamposFormulario({ ...CRUDO_OK, condicion_venta: '  Cuenta Corriente 30 días  ' })
+  assert.equal(c.condicion_venta, 'Cuenta Corriente 30 días')
 })

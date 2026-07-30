@@ -24,6 +24,101 @@ const TIPOS_COMPROBANTE = {
 // Impuestos que acepta el sistema (enum TipoImpuesto).
 const TIPOS_IMPUESTO = new Set(['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS'])
 
+// Lo que dice la factura en "Condicion de venta" no coincide con como se llaman
+// los metodos de pago en la base: la factura dice "Contado" o "Cuenta Corriente"
+// y el catalogo tiene "Efectivo" y "Cuenta Cte.". Estos son los sinonimos que no
+// se pueden resolver comparando texto.
+//
+// Se mapea al NOMBRE del metodo, no a un id: los ids cambian por instalacion y
+// los nombres son unicos en la tabla.
+const SINONIMOS_METODO = {
+  contado: 'Efectivo',
+  'pago contado': 'Efectivo',
+  efectivo: 'Efectivo',
+  cash: 'Efectivo',
+  'cuenta corriente': 'Cuenta Cte.',
+  'cta corriente': 'Cuenta Cte.',
+  'cta cte': 'Cuenta Cte.',
+  'cuenta cte': 'Cuenta Cte.',
+  'a plazo': 'Cuenta Cte.',
+  'cuenta corriente 30 dias': 'Cuenta Cte.',
+  transferencia: 'Transferencia',
+  'transferencia bancaria': 'Transferencia',
+  transf: 'Transferencia',
+  deposito: 'Transferencia',
+  cheque: 'CHEQUE AL DÍA',
+  'cheque al dia': 'CHEQUE AL DÍA',
+  'cheque comun': 'CHEQUE AL DÍA',
+  'cheque diferido': 'CHEQUE DIFERIDO',
+  'cheque de pago diferido': 'CHEQUE DIFERIDO',
+  echeq: 'E-Cheque',
+  'e cheq': 'E-Cheque',
+  'e cheque': 'E-Cheque',
+  'cheque electronico': 'E-Cheque',
+  tarjeta: 'Tarjeta crédito',
+  'tarjeta de credito': 'Tarjeta crédito',
+  'tarjeta credito': 'Tarjeta crédito',
+  'tarjeta de debito': 'Tarjeta débito',
+  'tarjeta debito': 'Tarjeta débito',
+  'debito automatico': 'Débito Automático',
+  'debito directo': 'Débito Automático',
+  'mercado pago': 'Mercado Pago',
+  mercadopago: 'Mercado Pago',
+  mp: 'Mercado Pago',
+  'nota de credito': 'Nota de Crédito'
+}
+
+// Saca acentos, puntos y espacios de mas para poder comparar "Cta. Cte." con
+// "cta cte" y "Débito Automático" con "debito automatico".
+export function normalizarTexto(valor) {
+  if (!valor) return ''
+  return String(valor)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // saca acentos
+    .toLowerCase()
+    .replace(/[.,;:_/-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Busca a que metodo de pago del catalogo corresponde lo que decia la factura.
+// `metodos` son los de la base: [{ id, nombre }].
+//
+// Devuelve { id, nombre, texto } si encontro, o { id: null, texto } si no —
+// asi la pantalla puede mostrar que leyo aunque no lo haya podido mapear, en vez
+// de descartarlo en silencio.
+export function matchearMetodoPago(textoLeido, metodos = []) {
+  const texto = String(textoLeido ?? '').trim()
+  if (!texto) return null
+
+  const norm = normalizarTexto(texto)
+  const porNombre = new Map(metodos.map((m) => [normalizarTexto(m.nombre), m]))
+
+  // 1. El nombre del catalogo tal cual ("Transferencia", "Mercado Pago")
+  const directo = porNombre.get(norm)
+  if (directo) return { id: directo.id, nombre: directo.nombre, texto }
+
+  // 2. Sinonimo conocido ("Contado" -> "Efectivo")
+  const canonico = SINONIMOS_METODO[norm]
+  if (canonico) {
+    const porSinonimo = porNombre.get(normalizarTexto(canonico))
+    if (porSinonimo) return { id: porSinonimo.id, nombre: porSinonimo.nombre, texto }
+  }
+
+  // 3. Sinonimo contenido en el texto: cubre "Cuenta corriente 30 dias F.F." o
+  //    "Pago: transferencia bancaria". Se prueban los mas largos primero para que
+  //    "cheque diferido" gane sobre "cheque".
+  const claves = Object.keys(SINONIMOS_METODO).sort((a, b) => b.length - a.length)
+  for (const clave of claves) {
+    if (norm.includes(clave)) {
+      const m = porNombre.get(normalizarTexto(SINONIMOS_METODO[clave]))
+      if (m) return { id: m.id, nombre: m.nombre, texto }
+    }
+  }
+
+  // Leyo algo pero no se pudo mapear: se informa para que la persona elija.
+  return { id: null, nombre: null, texto }
+}
+
 // Se le pide JSON con esquema fijo en lugar de texto libre: asi no hay que
 // parsear prosa y el modelo no puede devolver un formato distinto cada vez.
 const ESQUEMA = {
@@ -48,6 +143,7 @@ const ESQUEMA = {
         }
       }
     },
+    condicion_venta:      { type: 'string', description: 'Texto tal cual de la condición de venta / pago / forma de pago' },
     legible: { type: 'boolean', description: 'false si la foto no permite leer la factura' }
   }
 }
@@ -65,6 +161,7 @@ Extraé los datos de la factura de la imagen. Tené en cuenta:
 - El importe neto es el subtotal ANTES de impuestos. El total es el importe final a pagar.
 - Los impuestos van discriminados: IVA 21% -> IVA21, IVA 10,5% -> IVA10, IVA 27% -> IVA27. Percepciones -> PERCEPCION, retenciones -> RETENCION, impuestos internos -> IMP_INTERNOS.
 - En una factura tipo B o C el IVA no se discrimina: en ese caso importe_neto es igual al total y el array de impuestos va vacío.
+- La forma de pago aparece con distintos nombres segun el proveedor: "Condición de venta", "Condición de pago", "Forma de pago" o "Cond. Vta.". Copiá el texto TAL CUAL lo dice la factura (por ejemplo "Contado", "Cuenta Corriente 30 días", "Transferencia"), sin traducirlo ni interpretarlo.
 
 REGLA IMPORTANTE: si un dato no se ve con claridad, devolvé null en ese campo. NO lo adivines ni lo calcules. Un campo vacío lo completa la persona; un número inventado se guarda mal y nadie se da cuenta.
 
@@ -136,6 +233,9 @@ export function aCamposFormulario(crudo) {
     descuento:     numeroONull(crudo.descuento),
     importe:       numeroONull(crudo.total),
     impuestos,
+    // Texto crudo de la condicion de venta; el match contra el catalogo de
+    // metodos se hace en la ruta, que es la que tiene acceso a la base.
+    condicion_venta:     crudo.condicion_venta?.trim() || null,
     // Para buscar el proveedor, no para guardar
     cuit_emisor:         normalizarCuit(crudo.cuit_emisor),
     razon_social_emisor: crudo.razon_social_emisor?.trim() || null

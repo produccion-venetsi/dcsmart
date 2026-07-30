@@ -1,5 +1,5 @@
 import { Storage } from '@google-cloud/storage'
-import { extraerDeImagen, aCamposFormulario, camposConDato, validarAritmetica } from '../lib/leerFactura.js'
+import { extraerDeImagen, aCamposFormulario, camposConDato, validarAritmetica, matchearMetodoPago } from '../lib/leerFactura.js'
 import multipart from '@fastify/multipart'
 import { parseNroOrd } from '../lib/nroOrd.js'
 import { sanitizeFolderName, parseGsPath } from '../lib/gcsPaths.js'
@@ -1032,11 +1032,27 @@ export default async function pagosRoutes(fastify) {
         : { estado: 'no_encontrado', cuit: campos.cuit_emisor, razon_social: campos.razon_social_emisor }
     }
 
+    // La factura dice "Contado" o "Cuenta Corriente 30 días" y el catálogo tiene
+    // "Efectivo" y "Cuenta Cte.": el match resuelve esos sinónimos. Si leyó algo
+    // que no se pudo mapear, se devuelve el texto igual para que se vea.
+    let metodo = null
+    if (campos.condicion_venta) {
+      const metodos = await fastify.db.metodoPago.findMany({
+        where: { activo: true },
+        select: { id: true, nombre: true }
+      })
+      metodo = matchearMetodoPago(campos.condicion_venta, metodos)
+    }
+
+    const marcados = camposConDato(campos)
+    if (metodo?.id) marcados.push('id_metodo')
+
     return {
       legible: true,
       campos,
-      marcados: camposConDato(campos),
+      marcados,
       proveedor,
+      metodo,
       aritmetica: validarAritmetica(campos)
     }
   })
