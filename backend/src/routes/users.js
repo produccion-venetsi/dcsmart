@@ -42,6 +42,48 @@ async function setAnalyticsAccess (email, { enabled, is_admin }) {
   }
 }
 
+// dcsmart-costos es OTRO backend con su propia base; mismo patrón que
+// Analytics de arriba, esto solo llama a su API interna server-to-server.
+function costosCreds () {
+  const base = process.env.COSTOS_BACKEND_URL
+  const secret = process.env.INTERNAL_SHARED_SECRET
+  if (!base || !secret) {
+    const err = new Error('Integración con Costos no configurada')
+    err.statusCode = 500
+    throw err
+  }
+  return { base, secret }
+}
+
+async function getCostosAccess (email) {
+  const { base, secret } = costosCreds()
+  const resp = await fetch(`${base}/api/internal/access/${encodeURIComponent(email)}`, {
+    headers: { 'X-Internal-Secret': secret }
+  })
+  if (resp.status === 404) return { enabled: null, is_admin: false }
+  if (!resp.ok) {
+    const err = new Error('Error al consultar acceso en Costos')
+    err.statusCode = resp.status
+    throw err
+  }
+  return resp.json()
+}
+
+async function setCostosAccess (email, { enabled, is_admin }) {
+  const { base, secret } = costosCreds()
+  const resp = await fetch(`${base}/api/internal/access`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': secret },
+    body: JSON.stringify({ email, enabled, is_admin })
+  })
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}))
+    const err = new Error(data.error || 'Error al actualizar acceso en Costos')
+    err.statusCode = resp.status
+    throw err
+  }
+}
+
 export default async function usersRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('usuarios', 'view')]
 
@@ -318,6 +360,37 @@ export default async function usersRoutes(fastify) {
 
     try {
       await setAnalyticsAccess(user.email, { enabled, is_admin })
+    } catch (err) {
+      return reply.code(err.statusCode || 500).send({ error: err.message })
+    }
+    return { ok: true }
+  })
+
+  // GET /api/users/:id/costos-access
+  fastify.get('/:id/costos-access', {
+    preHandler: [fastify.authenticate, fastify.can('usuarios', 'view')]
+  }, async (request, reply) => {
+    const user = await fastify.db.user.findUnique({ where: { id: request.params.id }, select: { email: true } })
+    if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
+    try {
+      return await getCostosAccess(user.email)
+    } catch (err) {
+      return reply.code(err.statusCode || 500).send({ error: err.message })
+    }
+  })
+
+  // PUT /api/users/:id/costos-access  { enabled, is_admin }
+  // Habilita/deshabilita el acceso de este usuario a dcsmart-costos (la
+  // plataforma de costos). Delegado vía API interna — ver setCostosAccess.
+  fastify.put('/:id/costos-access', {
+    preHandler: [fastify.authenticate, fastify.can('usuarios', 'edit')]
+  }, async (request, reply) => {
+    const { enabled = true, is_admin = false } = request.body || {}
+    const user = await fastify.db.user.findUnique({ where: { id: request.params.id }, select: { email: true } })
+    if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
+
+    try {
+      await setCostosAccess(user.email, { enabled, is_admin })
     } catch (err) {
       return reply.code(err.statusCode || 500).send({ error: err.message })
     }
