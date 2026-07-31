@@ -1,5 +1,6 @@
 import { toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
+import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 
 // Comprobantes que entran al reporte BALANCE (ver GET /balance). Son los tipos
 // fiscales; el reporte se define por este conjunto, no por lo que el usuario
@@ -247,13 +248,20 @@ export default async function reportesRoutes(fastify) {
     const hastaDate = new Date(`${hasta}T23:59:59.999${sufFecha}`)
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { [campoFecha]: { gte: desdeDate, lte: hastaDate } }
-    const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
 
-    const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
+    // La deuda es egresos impagos menos ingresos impagos: una nota de crédito
+    // cargada como ingreso resta sola, sin listas de tipos. Ver lib/deuda.js.
+    const { egresos, ingresos } = wheresDeuda({ ...localFilter, ...fechaWhere })
+
+    const [egresosAgg, ingresosAgg, efectivoAgg, pagosEnRango] = await Promise.all([
       fastify.db.pago.aggregate({
-        where: { ...localFilter, pagado: false, ...fechaWhere },
+        where: egresos,
         _sum: { importe: true },
         _count: { id: true }
+      }),
+      fastify.db.pago.aggregate({
+        where: ingresos,
+        _sum: { importe: true }
       }),
       fastify.db.pago.aggregate({
         where: { ...localFilter, ...fechaWhere, metodo_pago: { nombre: { equals: 'Efectivo', mode: 'insensitive' } } },
@@ -290,7 +298,9 @@ export default async function reportesRoutes(fastify) {
       if (rubroNombre === 'Impositivo') totalImpuestos += importe
       else if (rubroNombre === 'Sueldos') totalSueldos += importe
 
-      if (!p.pagado && !TIPOS_NO_DEUDA.has(p.id_tipo)) {
+      // Los ingresos ya salieron del loop en el `continue` de arriba, y el
+      // total los descuenta en deudaNeta: acá alcanza con mirar `pagado`.
+      if (!p.pagado) {
         if (rubroNombre === 'Impositivo') pendImpuestos += importe
         else if (rubroNombre === 'Sueldos') pendSueldos += importe
         else if (!esCmv) pendProveedores += importe
@@ -314,8 +324,8 @@ export default async function reportesRoutes(fastify) {
     const countNoAuditados = pagoIds.length - countAuditados
 
     return {
-      total_adeudado: Number(adeudadoAgg._sum.importe ?? 0),
-      count_adeudado: adeudadoAgg._count.id,
+      total_adeudado: deudaNeta(egresosAgg._sum.importe, ingresosAgg._sum.importe),
+      count_adeudado: egresosAgg._count.id,
       count_auditados: countAuditados,
       count_no_auditados: countNoAuditados,
       total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
