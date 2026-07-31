@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs'
+import { normalizarPassword } from '../lib/password.js'
 
 // dcsmart-analisis es OTRO backend con su propia base (dcsmart_analytics);
 // esto solo llama a su API interna server-to-server, nunca escribe ahí directo.
@@ -117,7 +118,8 @@ export default async function usersRoutes(fastify) {
   fastify.post('/', {
     preHandler: [fastify.authenticate, fastify.can('usuarios', 'create')]
   }, async (request, reply) => {
-    const { nombre, password, activo } = request.body
+    const { nombre, activo } = request.body
+    const password = normalizarPassword(request.body.password)
     const email = request.body.email?.trim().toLowerCase()
     if (!email || !nombre) return reply.code(400).send({ error: 'email y nombre son requeridos' })
 
@@ -139,7 +141,10 @@ export default async function usersRoutes(fastify) {
   fastify.put('/:id', {
     preHandler: [fastify.authenticate, fastify.can('usuarios', 'edit')]
   }, async (request, reply) => {
-    const { nombre, avatar_url, activo, password } = request.body
+    const { nombre, avatar_url, activo } = request.body
+    // Se guarda normalizada (sin espacios en los extremos) porque el login
+    // tambien normaliza antes de comparar. Ver lib/password.js.
+    const password = normalizarPassword(request.body.password)
     const data = {
       nombre, avatar_url, activo,
       ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {})
