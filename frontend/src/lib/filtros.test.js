@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { multiParam, normalizarMulti, resumenSeleccion } from './filtros.js'
+import { multiParam, normalizarMulti, normalizarRangos, resumenSeleccion } from './filtros.js'
 
 const TURNOS = [
   { value: 'Mañana', label: 'Mañana' },
@@ -60,4 +60,56 @@ test('resumenSeleccion: hasta el máximo lista los labels', () => {
 test('resumenSeleccion: pasado el máximo agrega el contador', () => {
   const cuatro = ['Mañana', 'Noche', 'Tarde', 'Evento'].map(v => ({ value: v, label: v }))
   assert.equal(resumenSeleccion(cuatro, 'Todos'), 'Mañana, Noche +2')
+})
+
+test('normalizarRangos: el formato viejo de un solo rango se convierte en una fila', () => {
+  assert.deepEqual(
+    normalizarRangos({ campo_fecha: 'periodo', desde: '2026-06-01', hasta: '2026-06-30' }),
+    [{ campo: 'periodo', desde: '2026-06-01', hasta: '2026-06-30' }]
+  )
+})
+
+test('normalizarRangos: formato viejo sin campo_fecha asume fecha', () => {
+  assert.deepEqual(
+    normalizarRangos({ desde: '2026-07-01', hasta: '2026-07-31' }),
+    [{ campo: 'fecha', desde: '2026-07-01', hasta: '2026-07-31' }]
+  )
+})
+
+test('normalizarRangos: el formato nuevo pasa igual', () => {
+  const rangos = [
+    { campo: 'fecha',   desde: '2026-07-01', hasta: '2026-07-31' },
+    { campo: 'periodo', desde: '2026-06-01', hasta: '2026-06-30' }
+  ]
+  assert.deepEqual(normalizarRangos({ rangos_fecha: rangos }), rangos)
+})
+
+test('normalizarRangos: descarta las filas sin ninguna fecha', () => {
+  assert.deepEqual(
+    normalizarRangos({ rangos_fecha: [
+      { campo: 'fecha',   desde: '2026-07-01', hasta: '' },
+      { campo: 'periodo', desde: '',           hasta: '' }
+    ] }),
+    [{ campo: 'fecha', desde: '2026-07-01', hasta: '' }]
+  )
+})
+
+test('normalizarRangos: un preset viejo sin ninguna fecha da lista vacia', () => {
+  assert.deepEqual(normalizarRangos({ campo_fecha: 'fecha', desde: '', hasta: '' }), [])
+})
+
+test('normalizarRangos: vacio, null y ausente dan lista vacia', () => {
+  assert.deepEqual(normalizarRangos({}), [])
+  assert.deepEqual(normalizarRangos(null), [])
+  assert.deepEqual(normalizarRangos(undefined), [])
+})
+
+test('normalizarRangos: el formato nuevo gana si por algun motivo estan los dos', () => {
+  assert.deepEqual(
+    normalizarRangos({
+      rangos_fecha: [{ campo: 'periodo', desde: '2026-06-01', hasta: '2026-06-30' }],
+      campo_fecha: 'fecha', desde: '2026-07-01', hasta: '2026-07-31'
+    }),
+    [{ campo: 'periodo', desde: '2026-06-01', hasta: '2026-06-30' }]
+  )
 })
