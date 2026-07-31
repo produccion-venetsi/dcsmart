@@ -263,11 +263,10 @@ export default function PagoForm() {
           const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
           setProvSelected(prov)
           setProvPlazo(prov.plazo || null)
-          if (prov.rubcat) setRubcatSelected(prov.rubcat)
+          // Sin precarga de rubro, igual que en selectProveedor.
           setForm(f => ({
             ...f,
             id_proveedor: prov.id,
-            id_rubcat:    prov.id_rubcat || f.id_rubcat,
             cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
           }))
         }
@@ -430,12 +429,16 @@ export default function PagoForm() {
     set('importe', total.toFixed(2))
   }, [form.importe_neto, form.descuento, impuestosSum])
 
-  // seleccionar proveedor desde el combobox: pre-llena rubcat y recalcula cashflow si hay plazo
+  // seleccionar proveedor desde el combobox: recalcula cashflow si hay plazo.
+  //
+  // El rubro NO se precarga desde el proveedor: arrastraba clasificaciones
+  // equivocadas porque quien carga no revisa un campo que ya viene lleno
+  // (pedido de Anaxi, reunión del 31/07/2026). El proveedor sigue teniendo su
+  // id_rubcat guardado y configurable, solo dejó de autocompletar.
   const selectProveedor = (prov) => {
     const plazo = prov.plazo || null
     setProvPlazo(plazo)
     setProvSelected(prov)
-    if (prov.rubcat) setRubcatSelected(prov.rubcat)
     setForm(f => {
       // Igual que en set('fecha'): solo pisar el cashflow si estaba vacío o
       // si era el auto-calculado con el plazo del proveedor anterior. Si el
@@ -445,7 +448,6 @@ export default function PagoForm() {
       return {
         ...f,
         id_proveedor: prov.id,
-        id_rubcat:    prov.id_rubcat || f.id_rubcat,
         cashflow:     esManual ? f.cashflow : (calcCashflow(f.fecha, plazo) || f.cashflow),
       }
     })
