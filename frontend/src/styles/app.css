@@ -957,6 +957,32 @@ select option:disabled { color: var(--t4); }
   border-radius: 7px;
 }
 .aviso-periodo-viejo strong { font-weight: 700; }
+
+/* Resultado de leer la foto de una factura. Informativo: los datos están
+   precargados y hay que revisarlos, no hay nada roto. */
+.aviso-lectura {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 1rem;
+  padding: 11px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--blue);
+  background: var(--blue-bg);
+  border: 1px solid var(--blue-border);
+  border-radius: 10px;
+}
+.aviso-lectura strong { font-weight: 700; }
+
+/* Campo que vino de la lectura de la foto: se marca para que se sepa qué revisar
+   y qué escribió la persona. Solo el borde — cambiarle el fondo lo haría parecer
+   deshabilitado, que es lo contrario de lo que se quiere. */
+input.campo-ia,
+select.campo-ia {
+  border-color: var(--gold) !important;
+  box-shadow: inset 2px 0 0 var(--gold);
+}
 .badge-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
 .badge-muted  { background: rgba(255,255,255,0.06); color: var(--t3); border: 1px solid var(--border); }
 

@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage'
+import { extraerDeImagen, aCamposFormulario, camposConDato, validarAritmetica, matchearMetodoPago } from '../lib/leerFactura.js'
 import multipart from '@fastify/multipart'
 import { parseNroOrd } from '../lib/nroOrd.js'
 import { sanitizeFolderName, parseGsPath } from '../lib/gcsPaths.js'
@@ -123,6 +124,10 @@ function translatePagoError(err) {
 // Extensiones aceptadas para adjuntos (fotos de factura / PDF) -- rechaza
 // cualquier otro tipo de archivo en vez de subirlo tal cual a GCS.
 const EXTENSIONES_ADJUNTO = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'pdf'])
+
+// Para leer con IA solo imagenes: el PDF hay que rasterizarlo primero y no vale
+// la pena para la primera version (casi todas las facturas entran por foto).
+const EXTENSIONES_LECTURA = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'])
 
 // Campos de fecha filtrables desde el frontend (dropdown "Tipo de fecha").
 // Whitelist estricta: cualquier valor fuera de esta lista cae al default
@@ -982,6 +987,74 @@ export default async function pagosRoutes(fastify) {
       data.file.pipe(stream).on('error', reject).on('finish', resolve)
     })
     return { ok: true, type, url: `gs://${bucket}/${filename}` }
+  })
+
+  // ── POST /leer-factura ─────────────────────────────────────────────────────
+  // Lee los datos de la foto de una factura para precargar el formulario. No
+  // guarda nada: devuelve campos sueltos y la persona los revisa y confirma.
+  fastify.post('/leer-factura', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
+    const data = await request.file()
+    if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
+
+    const ext = (data.filename ?? '').split('.').pop().toLowerCase()
+    if (!EXTENSIONES_LECTURA.has(ext)) {
+      return reply.code(400).send({ error: `Solo se puede leer una imagen (.${ext} no sirve)` })
+    }
+
+    const buffer = await data.toBuffer()
+
+    let crudo
+    try {
+      crudo = await extraerDeImagen(buffer, data.mimetype)
+    } catch (err) {
+      // El formulario tiene que quedar usable a mano si esto falla, asi que el
+      // error se informa y no se rompe nada de lo ya cargado.
+      request.log.error({ err }, 'Falló la lectura de la factura')
+      return reply.code(502).send({ error: 'No se pudo leer la factura. Cargá los datos a mano.' })
+    }
+
+    const campos = aCamposFormulario(crudo)
+    if (!campos) {
+      return { legible: false, campos: null, marcados: [], proveedor: null, aritmetica: null }
+    }
+
+    // El CUIT es lo que hace util esto: hay 4458 proveedores con CUIT limpio.
+    // Si no se encuentra, se devuelve la razon social leida para que la pantalla
+    // ofrezca crearlo, en vez de dejar al usuario buscando a ciegas.
+    let proveedor = null
+    if (campos.cuit_emisor) {
+      const encontrado = await fastify.db.proveedor.findFirst({
+        where: { cuit: campos.cuit_emisor },
+        select: { id: true, nombre: true, razon_social: true, cuit: true }
+      })
+      proveedor = encontrado
+        ? { estado: 'encontrado', ...encontrado }
+        : { estado: 'no_encontrado', cuit: campos.cuit_emisor, razon_social: campos.razon_social_emisor }
+    }
+
+    // La factura dice "Contado" o "Cuenta Corriente 30 días" y el catálogo tiene
+    // "Efectivo" y "Cuenta Cte.": el match resuelve esos sinónimos. Si leyó algo
+    // que no se pudo mapear, se devuelve el texto igual para que se vea.
+    let metodo = null
+    if (campos.condicion_venta) {
+      const metodos = await fastify.db.metodoPago.findMany({
+        where: { activo: true },
+        select: { id: true, nombre: true }
+      })
+      metodo = matchearMetodoPago(campos.condicion_venta, metodos)
+    }
+
+    const marcados = camposConDato(campos)
+    if (metodo?.id) marcados.push('id_metodo')
+
+    return {
+      legible: true,
+      campos,
+      marcados,
+      proveedor,
+      metodo,
+      aritmetica: validarAritmetica(campos)
+    }
   })
 
   // ── GET /:id/multimoneda ───────────────────────────────────────────────────

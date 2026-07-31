@@ -19,6 +19,13 @@ export const pagosApi = {
   revertirPdp:(ids)            => client.post('/pagos/revertir-pdp',        { ids }),
   pagar:      (ids, data)      => client.post('/pagos/pagar',               { ids, ...data }),
   upload:     (formData, idLocal) => client.post(`/pagos/upload${idLocal ? `?id_local=${idLocal}` : ''}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  // Lee los datos de la foto de una factura para precargar el formulario. No
+  // guarda nada; la persona revisa y confirma.
+  leerFactura: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client.post('/pagos/leer-factura', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
   listMM:     (id)             => client.get(`/pagos/${id}/multimoneda`),
   createMM:   (id, data)       => client.post(`/pagos/${id}/multimoneda`,   data),
   updateMM:   (id, mmId, data) => client.put(`/pagos/${id}/multimoneda/${mmId}`, data),
