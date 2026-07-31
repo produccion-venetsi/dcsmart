@@ -111,7 +111,11 @@ export default function Login() {
     e.preventDefault()
     clearError()
     try {
-      await login(email, password)
+      // Se recortan los espacios de los extremos antes de enviar: los teclados
+      // de celular agregan uno al final sin que se vea (el campo muestra
+      // puntitos) y el login fallaba con "Credenciales inválidas". El backend
+      // hace lo mismo, esto solo evita el viaje de ida y vuelta.
+      await login(email.trim(), password.trim())
       navigate('/start')
     } catch {}
   }
