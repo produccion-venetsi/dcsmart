@@ -5,6 +5,8 @@ import { parseNroOrd } from '../lib/nroOrd.js'
 import { sanitizeFolderName, parseGsPath } from '../lib/gcsPaths.js'
 import { partirIdsPorEstado } from '../lib/estadoOp.js'
 import { parseCsvParam } from '../lib/queryParams.js'
+import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
+import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -129,18 +131,8 @@ const EXTENSIONES_ADJUNTO = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'
 // la pena para la primera version (casi todas las facturas entran por foto).
 const EXTENSIONES_LECTURA = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'])
 
-// Campos de fecha filtrables desde el frontend (dropdown "Tipo de fecha").
-// Whitelist estricta: cualquier valor fuera de esta lista cae al default
-// 'fecha', para no interpolar un valor arbitrario como key de Prisma.
-const CAMPOS_FECHA_VALIDOS = ['fecha', 'fecha_pago', 'cashflow', 'periodo', 'created_at']
-function campoFechaValido(campo) {
-  return CAMPOS_FECHA_VALIDOS.includes(campo) ? campo : 'fecha'
-}
-
-// De los campos filtrables, estos guardan un instante real (con hora), no un
-// día calendario a medianoche UTC. Su rango se interpreta en hora de Argentina
-// para que lo cargado de noche no caiga en el día UTC siguiente.
-const CAMPOS_FECHA_INSTANTE = ['fecha_pago', 'created_at']
+// La whitelist de campos de fecha y el manejo de zonas horarias viven en
+// lib/rangosFecha.js, que además soporta varios rangos combinados con AND.
 
 // Construye el `where` de Prisma compartido entre GET /pagos (list/export)
 // y GET /pagos/summary, para que el resumen agregado matchee exactamente
@@ -197,8 +189,6 @@ async function buildPagosWhere(fastify, request, query) {
     }
   }
 
-  const campoFecha = campoFechaValido(campo_fecha)
-
   return {
     ...localFilter,
     ...rubcatFilter,
@@ -214,20 +204,9 @@ async function buildPagosWhere(fastify, request, query) {
     ...(observaciones?.trim()
       ? { observaciones: { contains: observaciones.trim(), mode: 'insensitive' } }
       : {}),
-    // fecha/periodo/cashflow son "día calendario" (medianoche UTC), su rango
-    // se marca en UTC. fecha_pago y created_at son instantes reales en hora
-    // Argentina (se guardan con hora), así que su rango se marca con el offset
-    // de Argentina (-03:00) -- si no, lo cargado de noche (21-24hs ART) cae en
-    // el día UTC siguiente y se corre. Ver CAMPOS_FECHA_INSTANTE.
-    ...(desde || hasta ? {
-      [campoFecha]: (() => {
-        const suf = CAMPOS_FECHA_INSTANTE.includes(campoFecha) ? '-03:00' : 'Z'
-        return {
-          ...(desde ? { gte: new Date(`${desde}T00:00:00.000${suf}`) } : {}),
-          ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999${suf}`) } : {})
-        }
-      })()
-    } : {})
+    // Uno o varios rangos de fecha, combinados con AND. Cada campo lleva su
+    // propia interpretación de zona horaria. Ver lib/rangosFecha.js.
+    ...whereRangosFecha(parseRangosFecha(campo_fecha, desde, hasta))
   }
 }
 
@@ -327,13 +306,21 @@ export default async function pagosRoutes(fastify) {
       audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     })
 
-    const [totalAgg, porImpuestoRows] = await Promise.all([
+    const { egresos, ingresos } = wheresDeuda(where)
+
+    const [totalAgg, porImpuestoRows, egresosAgg, ingresosAgg] = await Promise.all([
       fastify.db.pago.aggregate({ where, _sum: { importe: true } }),
-      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: where }, _sum: { monto: true } })
+      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: where }, _sum: { monto: true } }),
+      fastify.db.pago.aggregate({ where: egresos,  _sum: { importe: true }, _count: { id: true } }),
+      fastify.db.pago.aggregate({ where: ingresos, _sum: { importe: true } })
     ])
 
     return {
       total_importe: Number(totalAgg._sum.importe ?? 0),
+      // Deuda del conjunto FILTRADO, no del local entero: es lo que hace falta
+      // para "cuánto le debo a este proveedor". Ver lib/deuda.js.
+      total_deuda: deudaNeta(egresosAgg._sum.importe, ingresosAgg._sum.importe),
+      count_deuda: egresosAgg._count.id,
       por_impuesto: Object.fromEntries(
         porImpuestoRows.map(row => [row.tipo, Number(row._sum.monto ?? 0)])
       )

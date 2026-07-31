@@ -1,5 +1,6 @@
 import { toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
+import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 
 // Comprobantes que entran al reporte BALANCE (ver GET /balance). Son los tipos
 // fiscales; el reporte se define por este conjunto, no por lo que el usuario
@@ -247,13 +248,20 @@ export default async function reportesRoutes(fastify) {
     const hastaDate = new Date(`${hasta}T23:59:59.999${sufFecha}`)
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { [campoFecha]: { gte: desdeDate, lte: hastaDate } }
-    const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
 
-    const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
+    // La deuda es egresos impagos menos ingresos impagos: una nota de crédito
+    // cargada como ingreso resta sola, sin listas de tipos. Ver lib/deuda.js.
+    const { egresos, ingresos } = wheresDeuda({ ...localFilter, ...fechaWhere })
+
+    const [egresosAgg, ingresosAgg, efectivoAgg, pagosEnRango] = await Promise.all([
       fastify.db.pago.aggregate({
-        where: { ...localFilter, pagado: false, ...fechaWhere },
+        where: egresos,
         _sum: { importe: true },
         _count: { id: true }
+      }),
+      fastify.db.pago.aggregate({
+        where: ingresos,
+        _sum: { importe: true }
       }),
       fastify.db.pago.aggregate({
         where: { ...localFilter, ...fechaWhere, metodo_pago: { nombre: { equals: 'Efectivo', mode: 'insensitive' } } },
@@ -290,7 +298,9 @@ export default async function reportesRoutes(fastify) {
       if (rubroNombre === 'Impositivo') totalImpuestos += importe
       else if (rubroNombre === 'Sueldos') totalSueldos += importe
 
-      if (!p.pagado && !TIPOS_NO_DEUDA.has(p.id_tipo)) {
+      // Los ingresos ya salieron del loop en el `continue` de arriba, y el
+      // total los descuenta en deudaNeta: acá alcanza con mirar `pagado`.
+      if (!p.pagado) {
         if (rubroNombre === 'Impositivo') pendImpuestos += importe
         else if (rubroNombre === 'Sueldos') pendSueldos += importe
         else if (!esCmv) pendProveedores += importe
@@ -314,8 +324,8 @@ export default async function reportesRoutes(fastify) {
     const countNoAuditados = pagoIds.length - countAuditados
 
     return {
-      total_adeudado: Number(adeudadoAgg._sum.importe ?? 0),
-      count_adeudado: adeudadoAgg._count.id,
+      total_adeudado: deudaNeta(egresosAgg._sum.importe, ingresosAgg._sum.importe),
+      count_adeudado: egresosAgg._count.id,
       count_auditados: countAuditados,
       count_no_auditados: countNoAuditados,
       total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
@@ -503,5 +513,59 @@ export default async function reportesRoutes(fastify) {
     })
 
     return { data: rows }
+  })
+
+  // ── GET /fuera-de-termino ───────────────────────────────────────────────
+  // Facturas cargadas dentro del rango pedido pero cuyo período es de un mes
+  // anterior al de la carga. Sirve para ajustar un informe ya enviado sin tener
+  // que cruzar Excels a mano: son justamente las que cambian los números de un
+  // mes que el cliente ya recibió. Ver lib/fueraDeTermino.js para el criterio.
+  //
+  // El filtro va en SQL porque compara dos columnas entre sí, algo que el
+  // `where` de Prisma no expresa.
+  fastify.get('/fuera-de-termino', { preHandler: viewHandler }, async (request, reply) => {
+    const { desde, hasta, id_local } = request.query
+
+    if (!desde || !hasta) {
+      return reply.code(400).send({ error: 'desde y hasta son requeridos' })
+    }
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    const localIds = id_local ? [id_local] : request.allowedLocalIds
+    if (!localIds.length) return { data: [], total: 0 }
+
+    // created_at es un instante real -> el rango va en hora de Argentina.
+    const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
+
+    // El AT TIME ZONE doble pasa created_at (timestamptz en UTC) a hora local
+    // de Argentina antes de truncar el mes, por el mismo motivo que
+    // lib/fueraDeTermino.js: un pago cargado 22hs del último día del mes es el
+    // día 1 del mes siguiente en UTC y quedaría marcado como atrasado sin serlo.
+    const rows = await fastify.db.$queryRaw`
+      SELECT p.id, p.nro_ord, p.fecha, p.periodo, p.created_at, p.importe,
+             p.id_tipo, p.pagado,
+             pr.nombre AS proveedor,
+             l.nombre  AS local,
+             u.nombre  AS cargado_por
+      FROM pagos p
+      LEFT JOIN proveedores pr ON pr.id = p.id_proveedor
+      LEFT JOIN locales     l  ON l.id  = p.id_local
+      LEFT JOIN users       u  ON u.id  = p.created_by
+      WHERE p.id_local = ANY(${localIds})
+        AND p.created_at >= ${desdeDate}
+        AND p.created_at <= ${hastaDate}
+        AND p.periodo IS NOT NULL
+        AND date_trunc('month', p.periodo)
+              < date_trunc('month', p.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')
+      ORDER BY p.created_at DESC
+    `
+
+    return {
+      data: rows.map(r => ({ ...r, importe: Number(r.importe ?? 0) })),
+      total: rows.length
+    }
   })
 }
