@@ -1,13 +1,15 @@
 import bcrypt from 'bcryptjs'
 import { OAuth2Client } from 'google-auth-library'
 import jwt from 'jsonwebtoken'
+import { normalizarPassword } from '../lib/password.js'
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
 export default async function authRoutes(fastify) {
   // POST /api/auth/register
   fastify.post('/register', async (request, reply) => {
-    const { nombre, password } = request.body
+    const { nombre } = request.body
+    const password = normalizarPassword(request.body.password)
     const email = request.body.email?.trim().toLowerCase()
 
     if (!email || !nombre || !password) {
@@ -39,7 +41,10 @@ export default async function authRoutes(fastify) {
 
   // POST /api/auth/login
   fastify.post('/login', async (request, reply) => {
-    const { password } = request.body
+    // Se normaliza igual que el email: los teclados de celular agregan un
+    // espacio invisible que hacia fallar el login sin explicacion. Ver
+    // lib/password.js.
+    const password = normalizarPassword(request.body.password)
     const email = request.body.email?.trim().toLowerCase()
 
     if (!email || !password) {

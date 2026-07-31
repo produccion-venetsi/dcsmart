@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAppStore } from '../store/appStore'
+import { esSesionExpirada } from '../lib/sesionExpirada.js'
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
@@ -24,7 +25,11 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    // Solo un 401 de sesión vencida expulsa. El 401 del propio login es una
+    // respuesta esperada ("credenciales inválidas") y tiene que llegar al
+    // catch del authStore para que se muestre el mensaje: si acá se redirige,
+    // la navegación recarga la app y borra el error antes de que se vea.
+    if (esSesionExpirada(err.response?.status, err.config?.url)) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
