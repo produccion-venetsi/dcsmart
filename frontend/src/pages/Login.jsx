@@ -197,10 +197,12 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Forgot password */}
-          <div className="auth-forgot">
-            <a>¿Olvidaste tu contraseña?</a>
-          </div>
+          {/* Acá iba "¿Olvidaste tu contraseña?": un <a> sin href ni onClick, que
+              con el estilo de .auth-forgot parecía un enlace vivo y no hacía
+              nada. No hay flujo de recuperación (ni self-service ni un botón de
+              reset para el administrador), así que ofrecerlo era mentirle a la
+              persona justo cuando no puede entrar. Cuando exista el reset, este
+              es el lugar. */}
 
           {/* Submit */}
           <button type="submit" className="btn-auth-primary" disabled={loading}>
