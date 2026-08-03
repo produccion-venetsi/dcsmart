@@ -2,13 +2,36 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { construirVersion } from './src/lib/version.js'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
 
+// Cantidad de commits, que es de dónde sale el patch de la versión (ver
+// src/lib/version.js). Si git no está disponible se devuelve null y la versión
+// cae a la de package.json.
+//
+// Los workflows de deploy hacen checkout con `fetch-depth: 0`: sin eso el
+// checkout es shallow, el conteo da 1 y la versión no se movería nunca.
+function cantidadDeCommits() {
+  try {
+    return execFileSync('git', ['rev-list', '--count', 'HEAD'], {
+      cwd: new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf-8',
+    })
+  } catch {
+    return null
+  }
+}
+
+const APP_VERSION = construirVersion(pkg.version, cantidadDeCommits())
+
 export default defineConfig({
   define: {
-    // Versión de la app, disponible en el código como __APP_VERSION__.
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    // Versión de la app, disponible en el código como __APP_VERSION__. El major
+    // y el minor salen de package.json; el patch es la cantidad de commits.
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   plugins: [
     react(),
