@@ -1,6 +1,7 @@
 import { toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
+import { resolverRangoCmv } from '../lib/rangoCmv.js'
 import {
   etiquetaTurno, promedioPorCubierto, pctFiscal, ordenarPorTurno,
   desglosarPorTurno, totalizarPorNombre
@@ -398,10 +399,16 @@ export default async function reportesRoutes(fastify) {
 
   // ── GET /cmv ────────────────────────────────────────────────────────────
   fastify.get('/cmv', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta } = request.query
+    const { id_local, desde, hasta, mes } = request.query
 
-    if (!desde || !hasta) {
-      return reply.code(400).send({ error: 'desde y hasta son requeridos' })
+    // Dos modos, y en ninguno se comparan unidades distintas (ver lib/rangoCmv.js):
+    // `mes` lee el CMV por período contable; `desde`/`hasta` lo lee por fecha
+    // real, la misma unidad que las ventas.
+    const rango = resolverRangoCmv({ mes, desde, hasta })
+    if (!rango) {
+      return reply.code(400).send({
+        error: 'Pedí un mes (YYYY-MM) o un rango válido de desde/hasta (YYYY-MM-DD, desde <= hasta)'
+      })
     }
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
@@ -413,21 +420,22 @@ export default async function reportesRoutes(fastify) {
       return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00' }
     }
 
-    // fecha_inicio (Caja) es un instante real (con hora) -- rango en hora Argentina.
-    const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
-    const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
-    // periodo (Pago) se guarda como medianoche UTC del día elegido (misma
-    // convención que Pago.fecha/cashflow) -- NO es un instante real como
-    // fecha_inicio, así que compararlo con el offset de Argentina de arriba
-    // correría el filtro 3 horas. Usa su propio par de fechas en UTC puro.
-    const desdePeriodoUTC = new Date(`${desde}T00:00:00.000Z`)
-    const hastaPeriodoUTC = new Date(`${hasta}T23:59:59.999Z`)
+    // Las fechas salen todas de resolverRangoCmv: fecha_inicio (Caja) es un
+    // instante real y va con el offset de Argentina; periodo/fecha (Pago) se
+    // guardan a medianoche UTC del día elegido y van en UTC puro. Mezclarlos
+    // corría el filtro 3 horas.
+    const { campoPago, pagoDesde, pagoHasta, ventasDesde, ventasHasta } = rango
+    // El nombre de columna se interpola en el SQL, así que no se confía en que
+    // venga bien de arriba: solo estos dos valores son aceptables.
+    if (campoPago !== 'periodo' && campoPago !== 'fecha') {
+      return reply.code(500).send({ error: 'Campo de fecha inválido' })
+    }
     const localPlaceholders = localIds.map((_, i) => `$${i + 1}`).join(', ')
 
     const ventasAgg = await fastify.db.caja.aggregate({
       where: {
         id_local: { in: localIds },
-        fecha_inicio: { gte: desdeDate, lte: hastaDate }
+        fecha_inicio: { gte: ventasDesde, lte: ventasHasta }
       },
       _sum: { total: true }
     })
@@ -436,7 +444,7 @@ export default async function reportesRoutes(fastify) {
 
     // CMV costs: pagos grouped by rubro + categoría
     // Rubros with name LIKE 'CMV%' are CMV rubros
-    const costParams = [...localIds, desdePeriodoUTC, hastaPeriodoUTC]
+    const costParams = [...localIds, pagoDesde, pagoHasta]
     const costRows = await fastify.db.$queryRawUnsafe(`
       SELECT
         r.nombre AS rubro,
@@ -447,8 +455,8 @@ export default async function reportesRoutes(fastify) {
       JOIN rubros r ON rc.id_rub = r.id
       JOIN categorias c ON rc.id_cat = c.id
       WHERE p.id_local IN (${localPlaceholders})
-        AND p.periodo >= $${localIds.length + 1}
-        AND p.periodo <= $${localIds.length + 2}
+        AND p.${campoPago} >= $${localIds.length + 1}
+        AND p.${campoPago} <= $${localIds.length + 2}
         AND UPPER(r.nombre) LIKE 'CMV%'
       GROUP BY r.nombre, c.nombre
       ORDER BY total DESC
