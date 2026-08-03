@@ -2318,8 +2318,25 @@ tr.row-clickable:hover td {
 .pdp-row.sel { background: rgba(201,176,134,0.10); }
 .pdp-row.sel:hover { background: rgba(201,176,134,0.14); }
 .pdp-row-ord { font-weight: 600; color: var(--t1); min-width: 64px; }
-.pdp-row-date { color: var(--t3); flex: 1; white-space: nowrap; }
-.pdp-row-amount { font-weight: 600; color: var(--t2); white-space: nowrap; }
+.pdp-row-date { color: var(--t3); white-space: nowrap; }
+/* Fecha de cashflow. Va en el medio y se come el espacio sobrante para que los
+   importes queden alineados a la derecha en toda la columna. */
+.pdp-row-cf {
+  color: var(--t3);
+  flex: 1;
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.pdp-row-amount {
+  font-weight: 600;
+  color: var(--t2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Nota de crédito o cualquier ingreso: descuenta, no suma. */
+.pdp-row-amount.resta { color: var(--green); }
 .pdp-check {
   appearance: none;
   -webkit-appearance: none;

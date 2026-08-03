@@ -18,10 +18,17 @@ function provName(p) {
   return p.proveedor?.razon_social || p.proveedor?.nombre || 'Sin proveedor'
 }
 
-// Un pago en PDP es un egreso (plata que sale) salvo que ingresa_egreso diga lo contrario.
+// Un plan de pago lista lo que se va a pagar: la factura suma y la nota de
+// crédito descuenta. El signo lo da `ingresa_egreso`, no el tipo.
+//
+// Estaba al revés (el egreso salía negativo y el ingreso positivo), así que
+// hasta hoy el PDF mostraba todos los importes y el total en negativo. No se
+// notaba porque los ingresos se filtraban antes de llegar acá y todos los
+// renglones tenían el mismo signo; con las notas de crédito adentro, quedaban
+// mezclados y el total no se entendía.
 function signedImporte(p) {
   const v = Math.abs(Number(p.importe ?? 0))
-  return p.ingresa_egreso === true ? v : -v
+  return p.ingresa_egreso === true ? -v : v
 }
 
 function nroFactura(p) {

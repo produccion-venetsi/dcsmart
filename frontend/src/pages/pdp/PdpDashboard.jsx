@@ -31,21 +31,28 @@ function groupByProveedor(pagos) {
     if (!map.has(key)) map.set(key, { key, nombre: provName(p), total: 0, totalTransferencia: 0, items: [] })
     const g = map.get(key)
     g.items.push(p)
-    g.total += Number(p.importe ?? 0)
+    g.total += montoConSigno(p)
     if (p.metodo_pago?.nombre === 'Transferencia') g.totalTransferencia += Number(p.importe ?? 0)
   }
   return [...map.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
-const sumImporte = (rows) => rows.reduce((acc, p) => acc + Number(p.importe ?? 0), 0)
+// Los montos en la base son SIEMPRE positivos; la dirección la da
+// `ingresa_egreso`. Una nota de crédito cargada como ingreso resta sola, sin
+// que el código tenga que saber que es una nota de crédito. Es el mismo
+// criterio que backend/src/lib/deuda.js usa en Pagos y en Reportes.
+const esIngreso = (p) => p.ingresa_egreso === true
+const montoConSigno = (p) => (esIngreso(p) ? -1 : 1) * Number(p.importe ?? 0)
 
-// NCA/NCB (notas de crédito) e ingresos no son deuda real: se excluyen del
-// todo del "Total Deuda" (no restan ni suman), a diferencia del PDF de PDP
-// que sí los neteo con signo (ver pdpReport.js -- distinto criterio a propósito).
-const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
-function esDeudaReal(p) {
-  return p.ingresa_egreso !== true && !TIPOS_NO_DEUDA.has(p.id_tipo)
-}
+// Total neto: lo que se debe menos lo que descuenta.
+//
+// Antes las notas de crédito y los ingresos se filtraban de la pantalla entera
+// (ni sumaban ni restaban) y encima quedaban invisibles: había 3 notas de
+// crédito impagas YA en estado PDP, por $121.083, que no se veían en ninguna
+// parte ni llegaban al PDF, porque el filtro corría antes de generarlo.
+const totalNeto = (rows) => rows.reduce((acc, p) => acc + montoConSigno(p), 0)
+
+const sumImporte = totalNeto
 
 // Desglose del total de deuda en categorías fijas (por nombre real de Rubro
 // en la base): Sueldos, CMV (cualquier variante "CMV *"), Impositivo, y el
@@ -53,7 +60,7 @@ function esDeudaReal(p) {
 function desglosarDeuda(rows) {
   const acc = { Sueldos: 0, CMV: 0, Impositivo: 0, Resto: 0 }
   for (const p of rows) {
-    const importe = Number(p.importe ?? 0)
+    const importe = montoConSigno(p)
     const rubroNombre = p.rubcat?.rubro?.nombre || ''
     if (rubroNombre === 'Sueldos') acc.Sueldos += importe
     else if (/^CMV/i.test(rubroNombre)) acc.CMV += importe
@@ -83,6 +90,12 @@ function DesgloseBarras({ rows, total }) {
   const ordenadas = [...rows].sort((a, b) => b[1] - a[1])
   const conMonto = ordenadas.filter(([, val]) => val > 0)
 
+  // Los anchos se reparten sobre la suma de los tramos DIBUJADOS, no sobre el
+  // total neto. Con notas de crédito, una categoría puede quedar en negativo y
+  // entonces el neto es menor que la suma de las positivas: dividiendo por el
+  // neto los tramos pasaban del 100% y se cortaban contra el borde.
+  const baseAncho = conMonto.reduce((acc, [, val]) => acc + val, 0)
+
   return (
     <div className="pdp-desglose">
       <div className="pdp-desglose-stack" role="img"
@@ -90,7 +103,7 @@ function DesgloseBarras({ rows, total }) {
         {conMonto.map(([label, val]) => (
           <span
             key={label}
-            style={{ width: `${(val / total) * 100}%`, background: DESGLOSE_COLOR[label] }}
+            style={{ width: `${(val / baseAncho) * 100}%`, background: DESGLOSE_COLOR[label] }}
             title={`${label} · ${fmt$(val)}`}
           />
         ))}
@@ -424,7 +437,17 @@ function PdpColumn({
                       )}
                       <span className="pdp-row-ord">{p.nro_ord != null ? `OP-${p.nro_ord}` : '—'}</span>
                       <span className="pdp-row-date">{fmtDate(p.fecha)}</span>
-                      <span className="pdp-row-amount">{fmt$(p.importe)}</span>
+                      {/* Fecha de cashflow: cuándo se estima que sale la plata.
+                          Es el dato con el que se arma el plan de pago, así que
+                          va en la fila y no escondido en el detalle. */}
+                      <span className="pdp-row-cf" title="Fecha de cashflow">
+                        {p.cashflow ? fmtDate(p.cashflow) : '—'}
+                      </span>
+                      {/* Una nota de crédito descuenta: se muestra en negativo y
+                          en verde para que no se lea como una deuda más. */}
+                      <span className={`pdp-row-amount${esIngreso(p) ? ' resta' : ''}`}>
+                        {esIngreso(p) ? '−' : ''}{fmt$(p.importe)}
+                      </span>
                     </div>
                   )
                 })}
@@ -474,7 +497,8 @@ export default function PdpDashboard() {
       pagosApi.list({ ...base, estado_op: 'PDP', pagado: 'false' }),
     ])
       .then(([d, p]) => {
-        setDeuda(d.data.data.filter(esDeudaReal)); setPagar(p.data.data.filter(esDeudaReal))
+        // Sin filtrar por tipo: las notas de credito entran y restan (ver totalNeto).
+        setDeuda(d.data.data); setPagar(p.data.data)
         setSelDeuda(new Set()); setSelPagar(new Set())
       })
       .catch(() => notify('Error al cargar el PDP', 'error'))
