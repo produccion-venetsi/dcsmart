@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { diasDesdeFinDePeriodo, periodoDemasiadoViejo, DIAS_PERIODO_VIEJO, nroDesdeFecha } from './dates.js'
+import { diasDesdeFinDePeriodo, periodoDemasiadoViejo, DIAS_PERIODO_VIEJO, nroDesdeFecha, periodoDistintoDeFecha } from './dates.js'
 
 // El "hoy" va explicito en cada caso: si dependiera del reloj, estos tests
 // pasarian hoy y fallarian el mes que viene.
@@ -100,4 +100,38 @@ test('nroDesdeFecha: sin fecha o con basura devuelve vacio', () => {
   assert.equal(nroDesdeFecha(undefined), '')
   assert.equal(nroDesdeFecha('02/08/2026'), '')
   assert.equal(nroDesdeFecha('2026-8-2'), '')
+})
+
+// ── periodoDistintoDeFecha ──────────────────────────────────────────────────
+
+test('periodoDistintoDeFecha: mismo mes que la fecha, no hay desfasaje', () => {
+  assert.equal(periodoDistintoDeFecha('2026-07-15', '2026-07-01'), false)
+  assert.equal(periodoDistintoDeFecha('2026-07-01', '2026-07-31'), false)
+})
+
+test('periodoDistintoDeFecha: periodo de otro mes se marca', () => {
+  // Una factura de julio imputada a junio. Pasa de verdad y es valido, pero
+  // conviene que se vea.
+  assert.equal(periodoDistintoDeFecha('2026-07-05', '2026-06-01'), true)
+})
+
+test('periodoDistintoDeFecha: mismo mes pero otro anio se marca', () => {
+  assert.equal(periodoDistintoDeFecha('2026-01-10', '2025-01-01'), true)
+})
+
+test('periodoDistintoDeFecha: un periodo posterior a la fecha tambien se marca', () => {
+  assert.equal(periodoDistintoDeFecha('2026-06-28', '2026-07-01'), true)
+})
+
+test('periodoDistintoDeFecha: sin alguno de los dos no se afirma nada', () => {
+  assert.equal(periodoDistintoDeFecha('2026-07-05', null), false)
+  assert.equal(periodoDistintoDeFecha(null, '2026-07-01'), false)
+  assert.equal(periodoDistintoDeFecha(null, null), false)
+  assert.equal(periodoDistintoDeFecha('cualquiera', '2026-07-01'), false)
+})
+
+test('periodoDistintoDeFecha: acepta el ISO completo que viene del backend', () => {
+  // En el snapshot del log las fechas vienen como ISO con hora.
+  assert.equal(periodoDistintoDeFecha('2026-07-05T00:00:00.000Z', '2026-06-01T00:00:00.000Z'), true)
+  assert.equal(periodoDistintoDeFecha('2026-07-05T00:00:00.000Z', '2026-07-01T00:00:00.000Z'), false)
 })
