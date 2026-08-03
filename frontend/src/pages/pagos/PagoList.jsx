@@ -15,7 +15,7 @@ import MultiSelect from '../../components/MultiSelect.jsx'
 import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
-import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
+import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -852,6 +852,20 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       {canSeeActivity && (
         <>
           <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de actividad</div>
+
+          {/* Cómo está el pago HOY. Va aparte del historial porque el log
+              arrancó después de que se cargaran muchos pagos: sin esto, un pago
+              viejo con el período desfasado no mostraría nada. */}
+          {periodoDistintoDeFecha(pago.fecha, pago.periodo) && (
+            <div className="aviso-periodo-viejo" style={{ marginBottom: '0.75rem' }}>
+              <span>
+                <strong>El período no coincide con el mes de la factura.</strong>{' '}
+                La factura es del {fmtDateUTC(pago.fecha)} y está imputada a {fmtMonthUTC(pago.periodo)}.
+                Puede ser a propósito, pero es lo que hace que un informe ya enviado deje de cerrar.
+              </span>
+            </div>
+          )}
+
           <div className="table-wrap" style={{ marginBottom: '1rem' }}>
             <table className="data-table">
               <thead>
@@ -878,15 +892,22 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
                           <span className={`badge ${ACTIVIDAD_BADGE[ev.accion] ?? 'badge-muted'}`}>
                             {ACTIVIDAD_LABEL[ev.accion] ?? ev.accion}
                           </span>
-                          {periodoDistintoDeFecha(ev.snapshot?.fecha, ev.snapshot?.periodo) && (
-                            <span
-                              className="badge badge-amber"
-                              title={`Quedó con fecha ${fmtDateUTC(ev.snapshot.fecha)} y período ${fmtDateUTC(ev.snapshot.periodo)}.`}
-                            >
-                              Período ≠ mes
-                            </span>
-                          )}
                         </div>
+                        {/* Las dos fechas se escriben enteras en vez de dejarlas
+                            en un tooltip: es el dato que hay que comparar, y un
+                            title no se ve en celular ni se puede copiar. */}
+                        {periodoDistintoDeFecha(ev.snapshot?.fecha, ev.snapshot?.periodo) && (
+                          <div style={{
+                            display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap',
+                            marginTop: 5, fontSize: 11.5, lineHeight: 1.45, color: 'var(--amber)',
+                          }}>
+                            <span style={{ fontWeight: 700 }}>⚠ Período fuera del mes de la factura:</span>
+                            <span>
+                              factura del <strong>{fmtDateUTC(ev.snapshot.fecha)}</strong>
+                              {' '}imputada a <strong>{fmtMonthUTC(ev.snapshot.periodo)}</strong>
+                            </span>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
