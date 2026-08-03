@@ -12,6 +12,7 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import MultiSelect from '../../components/MultiSelect.jsx'
+import { esRolDc, puedeEditar, puedeBorrarPagos } from '../../lib/roles.js'
 import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
@@ -942,16 +943,16 @@ export default function PagoList() {
   const sidebarOpen    = useUiStore((s) => s.sidebarOpen)
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen)
   const role        = activeApp?.role
-  const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
-  const canDelete   = ['super_admin', 'dcsmart'].includes(role)
-  const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
-  const canExport   = ['super_admin', 'dcsmart'].includes(role)
+  const canEdit     = puedeEditar(role)
+  const canDelete   = puedeBorrarPagos(role)
+  const canAuditDc  = esRolDc(role)
+  const canExport   = esRolDc(role)
   // La fecha de creación de la OP es dato interno: solo la ven DC y super admin,
   // en la tabla y en el detalle.
-  const canSeeCreated = ['super_admin', 'dcsmart'].includes(role)
+  const canSeeCreated = esRolDc(role)
   // Quién cargó y quién tocó el pago. Mismo criterio: control interno. El
   // backend valida lo mismo, esto solo evita pedir algo que va a dar 403.
-  const canSeeActivity = ['super_admin', 'dcsmart'].includes(role)
+  const canSeeActivity = esRolDc(role)
   const [exporting, setExporting] = useState(false)
   const [summary,        setSummary]        = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)

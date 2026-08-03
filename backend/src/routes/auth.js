@@ -11,6 +11,10 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 // seguía sirviendo para siempre, aunque la persona no volviera a entrar.
 const VENCIMIENTO_TOKEN = process.env.JWT_EXPIRES_IN || '7d'
 
+// Mismo criterio que plugins/appContext.js: sin locales asignados, estos
+// roles ven todos los locales de la app.
+const ROLES_TODOS_LOS_LOCALES = ['admin', 'externo']
+
 // Firma el token de sesión. Todo el auth pasa por acá para que ninguno se
 // escape sin vencimiento, que es exactamente lo que había pasado.
 function firmarToken(fastify, user) {
@@ -244,13 +248,14 @@ export default async function authRoutes(fastify) {
         accessByApp[la.id_app].push({ id: la.local.id, nombre: la.local.nombre })
       }
 
-      // admin / cajero: locales asignados en user_local_access.
-      // Excepción: admin sin filas explícitas = acceso a TODOS los locales activos de la app.
+      // admin / externo / cajero: locales asignados en user_local_access.
+      // Excepción: admin y externo sin filas explícitas = acceso a TODOS los
+      // locales activos de la app (ver ROLES_TODOS_LOS_LOCALES).
       result = []
       for (const r of userRoles) {
         const assigned = accessByApp[r.id_app] ?? []
         let locales = assigned
-        if (r.role.nombre === 'admin' && assigned.length === 0) {
+        if (ROLES_TODOS_LOS_LOCALES.includes(r.role.nombre) && assigned.length === 0) {
           const allLocales = await fastify.db.local.findMany({
             where: { id_app: r.id_app, activo: true },
             select: { id: true, nombre: true },
@@ -411,7 +416,7 @@ export default async function authRoutes(fastify) {
       for (const r of userRoles) {
         const assigned = accessByApp[r.id_app] ?? []
         let localesForApp = assigned
-        if (r.role.nombre === 'admin' && assigned.length === 0) {
+        if (ROLES_TODOS_LOS_LOCALES.includes(r.role.nombre) && assigned.length === 0) {
           const todosLosLocales = await fastify.db.local.findMany({
             where: { id_app: r.id_app, activo: true },
             select: { id: true, nombre: true }

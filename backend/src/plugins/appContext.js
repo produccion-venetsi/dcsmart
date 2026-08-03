@@ -1,5 +1,10 @@
 import fp from 'fastify-plugin'
 
+// Roles que, sin locales asignados, ven todos los locales de la app. Es el
+// comportamiento historico de `admin`; `externo` lo comparte porque es un admin
+// que ademas puede borrar. El resto (cajero) solo ve lo que se le asigna.
+const ROLES_TODOS_LOS_LOCALES = ['admin', 'externo']
+
 async function appContextPlugin(fastify) {
   fastify.decorate('appContext', async (request, reply) => {
     const appId = request.headers['x-app-id']
@@ -58,8 +63,11 @@ async function appContextPlugin(fastify) {
       select: { id_local: true }
     })
 
-    // admin sin locales específicos = acceso a TODOS los locales activos de la app
-    if (roleName === 'admin' && localAccess.length === 0) {
+    // admin/externo sin locales específicos = acceso a TODOS los locales
+    // activos de la app. `externo` se comporta igual que `admin` en todo salvo
+    // que puede borrar; si se le quiere acotar el alcance, se le asignan
+    // locales explícitos como a cualquier otro.
+    if (ROLES_TODOS_LOS_LOCALES.includes(roleName) && localAccess.length === 0) {
       const allLocales = await fastify.db.local.findMany({
         where: { id_app: appId, activo: true },
         select: { id: true }
