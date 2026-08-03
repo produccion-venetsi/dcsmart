@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { metodosApi } from '../../api/metodospago.js'
@@ -66,67 +65,37 @@ function desglosarDeuda(rows) {
 
 const DESGLOSE_COLOR = { Sueldos: '#f59e0b', CMV: '#22c55e', Impositivo: '#ef4444', Resto: '#64748b' }
 
-// Modal centrado con barras de proporción por categoría (Sueldos/CMV/Impositivo/Resto).
-function DesgloseModal({ title, rows, total, onClose }) {
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
-
-  return createPortal(
-    <>
-      <div className="drawer-backdrop open" onClick={onClose} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        style={{
-          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-          zIndex: 1011, background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-          borderRadius: 14, padding: '1.5rem 1.75rem', width: 320, maxWidth: '90vw',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.1rem' }}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>{title}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)', display: 'flex', padding: 2 }}
-          >
-            <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        {rows.map(([label, val]) => {
-          const pct = total > 0 ? (val / total) * 100 : 0
-          return (
-            <div key={label} style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 5 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 7, color: 'var(--t2)' }}>
-                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: DESGLOSE_COLOR[label], flexShrink: 0 }} />
-                  {label}
-                </span>
-                <span style={{ fontWeight: 700 }}>
-                  {fmt$(val)} <span style={{ color: 'var(--t3)', fontWeight: 400 }}>({pct.toFixed(0)}%)</span>
-                </span>
-              </div>
-              <div style={{ height: 7, borderRadius: 4, background: 'var(--bg-input)', overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: DESGLOSE_COLOR[label], borderRadius: 4, transition: 'width 0.3s ease' }} />
-              </div>
-            </div>
-          )
-        })}
-        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.6rem', marginTop: '0.4rem', borderTop: '1px solid var(--border)', fontSize: 13, fontWeight: 700 }}>
-          <span>Total</span>
-          <span>{fmt$(total)}</span>
-        </div>
-      </div>
-    </>,
-    document.body
+// Las barras del desglose. Antes vivían solo dentro de un modal que había que
+// abrir a propósito; ahora son la mitad derecha de cada tarjeta y están
+// siempre a la vista, que es como se usa: la composición de la deuda es tan
+// importante como el total, y esconderla detrás de un click hacía que casi
+// nunca se mirara.
+//
+// Las categorías se muestran SIEMPRE las cuatro, incluso en cero. Que Sueldos
+// esté en cero es información: si solo aparecieran las que tienen monto, la
+// tarjeta cambiaría de forma según el mes y no se podrían comparar dos locales
+// de un vistazo.
+function DesgloseBarras({ rows, total }) {
+  return (
+    <div className="pdp-desglose">
+      {rows.map(([label, val]) => {
+        const pct = total > 0 ? (val / total) * 100 : 0
+        return (
+          <div className="pdp-desglose-fila" key={label}>
+            <span className="pdp-desglose-dot" style={{ background: DESGLOSE_COLOR[label] }} />
+            <span className="pdp-desglose-label">{label}</span>
+            <span className="pdp-desglose-barra">
+              <span style={{ width: `${pct}%`, background: DESGLOSE_COLOR[label] }} />
+            </span>
+            <span className="pdp-desglose-monto">{fmt$(val)}</span>
+            <span className="pdp-desglose-pct">{pct.toFixed(0)}%</span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
+
 
 /* ── icons ── */
 function IcoArrow() {
@@ -476,8 +445,6 @@ export default function PdpDashboard() {
   const [selectedPago, setSelectedPago] = useState(null)
   const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
 
-  const [desgloseDeudaOpen, setDesgloseDeudaOpen] = useState(false)
-  const [desglosePdpOpen,   setDesglosePdpOpen]   = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -630,56 +597,29 @@ export default function PdpDashboard() {
         </div>
       </div>
 
-      {/* ── tarjetas de resumen ── */}
+      {/* ── tarjetas de resumen, con el desglose al costado ── */}
       <div className="pdp-stats">
         <div className="pdp-stat-card">
-          <span className="pdp-stat-label">Total Deuda</span>
-          <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(deuda))}</span>
-          <span className="pdp-stat-sub">{loading ? '' : `${deuda.length} orden${deuda.length !== 1 ? 'es' : ''}`}</span>
+          <div className="pdp-stat-main">
+            <span className="pdp-stat-label">Total Deuda</span>
+            <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(deuda))}</span>
+            <span className="pdp-stat-sub">{loading ? '' : `${deuda.length} orden${deuda.length !== 1 ? 'es' : ''}`}</span>
+          </div>
           {!loading && deuda.length > 0 && (
-            <button
-              type="button"
-              className="btn btn-sm btn-secondary"
-              style={{ marginTop: 8 }}
-              onClick={() => setDesgloseDeudaOpen(true)}
-            >
-              Ver desglose
-            </button>
+            <DesgloseBarras rows={Object.entries(desglosarDeuda(deuda))} total={sumImporte(deuda)} />
           )}
         </div>
         <div className="pdp-stat-card">
-          <span className="pdp-stat-label">Total en PDP</span>
-          <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(pagar))}</span>
-          <span className="pdp-stat-sub">{loading ? '' : `${pagar.length} orden${pagar.length !== 1 ? 'es' : ''} pendiente${pagar.length !== 1 ? 's' : ''}`}</span>
+          <div className="pdp-stat-main">
+            <span className="pdp-stat-label">Total en PDP</span>
+            <span className="pdp-stat-value">{loading ? '…' : fmt$(sumImporte(pagar))}</span>
+            <span className="pdp-stat-sub">{loading ? '' : `${pagar.length} orden${pagar.length !== 1 ? 'es' : ''} pendiente${pagar.length !== 1 ? 's' : ''}`}</span>
+          </div>
           {!loading && pagar.length > 0 && (
-            <button
-              type="button"
-              className="btn btn-sm btn-secondary"
-              style={{ marginTop: 8 }}
-              onClick={() => setDesglosePdpOpen(true)}
-            >
-              Ver desglose
-            </button>
+            <DesgloseBarras rows={Object.entries(desglosarDeuda(pagar))} total={sumImporte(pagar)} />
           )}
         </div>
       </div>
-
-      {desgloseDeudaOpen && (
-        <DesgloseModal
-          title="Desglose · Total Deuda"
-          rows={Object.entries(desglosarDeuda(deuda))}
-          total={sumImporte(deuda)}
-          onClose={() => setDesgloseDeudaOpen(false)}
-        />
-      )}
-      {desglosePdpOpen && (
-        <DesgloseModal
-          title="Desglose · Total en PDP"
-          rows={Object.entries(desglosarDeuda(pagar))}
-          total={sumImporte(pagar)}
-          onClose={() => setDesglosePdpOpen(false)}
-        />
-      )}
 
       <div className="pdp-grid">
         <PdpColumn
