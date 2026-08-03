@@ -983,6 +983,146 @@ select.campo-ia {
   border-color: var(--gold) !important;
   box-shadow: inset 2px 0 0 var(--gold);
 }
+
+/* Aviso de versión nueva desplegada (components/ActualizarApp.jsx). Flota
+   abajo a la derecha: interrumpe menos que una barra arriba y no tapa el
+   contenido. Si la pestaña se oculta, la app se actualiza sola y esto no
+   llega a verse. */
+.actualizar-app {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--gold-bright);
+  font-size: 13px;
+}
+.actualizar-app-txt { color: var(--t1); }
+@media (max-width: 640px) {
+  .actualizar-app { left: 12px; right: 12px; bottom: 12px; }
+  .actualizar-app-txt { flex: 1; }
+}
+
+/* ── Superficie "IA" ────────────────────────────────────────────────────────
+   Dorado de la marca cruzado con azul, más un barrido de brillo. Es el lenguaje
+   visual de "esto lo hace la IA" y lo comparten el botón de Carga con IA y el
+   de Analytics App, para que se lean como la misma familia y no como dos
+   invenciones distintas. Las variables están acá y no repetidas en cada regla
+   porque son dos botones en archivos CSS distintos. */
+:root {
+  --ia-azul:        #6BA6E0;
+  --ia-grad:        linear-gradient(115deg, rgba(201, 176, 134, 0.30) 0%, rgba(225, 203, 160, 0.22) 38%, rgba(107, 166, 224, 0.32) 100%);
+  --ia-grad-hover:  linear-gradient(115deg, rgba(201, 176, 134, 0.44) 0%, rgba(225, 203, 160, 0.34) 38%, rgba(107, 166, 224, 0.46) 100%);
+  --ia-borde:       rgba(201, 176, 134, 0.55);
+  --ia-borde-hover: rgba(225, 203, 160, 0.85);
+}
+
+/* El barrido y el latido son la parte "IA" del efecto. Se definen una sola vez
+   y los usan las dos superficies. */
+@keyframes ia-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(201, 176, 134, 0); }
+  50%      { box-shadow: 0 0 16px rgba(201, 176, 134, 0.40), 0 0 26px rgba(107, 166, 224, 0.22); }
+}
+@keyframes ia-sheen {
+  0%   { left: -60%; }
+  55%  { left: 120%; }
+  100% { left: 120%; }
+}
+
+/* Botón "Carga con IA" del formulario de pagos (components/CargaIA.jsx). */
+.btn-ia {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--ia-borde);
+  background: var(--ia-grad);
+  color: var(--gold-bright);
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  overflow: hidden;
+  animation: ia-glow 2.8s ease-in-out infinite;
+  transition: transform 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.btn-ia:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--ia-borde-hover);
+  background: var(--ia-grad-hover);
+}
+.btn-ia.drag-over {
+  border-color: var(--ia-borde-hover);
+  background: var(--ia-grad-hover);
+}
+/* Mientras lee, el latido molesta más de lo que informa: manda el spinner. */
+.btn-ia:disabled { opacity: 0.75; cursor: default; animation: none; }
+.btn-ia::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -60%;
+  width: 45%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.30), transparent);
+  transform: skewX(-18deg);
+  animation: ia-sheen 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.btn-ia:disabled::after { animation: none; display: none; }
+
+.carga-ia { grid-column: 1 / -1; }
+.carga-ia-sub {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--t3);
+}
+.carga-ia-sub strong { color: var(--gold-bright); font-weight: 700; }
+
+.carga-ia-menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 0;
+  z-index: 11;
+  min-width: 240px;
+  background: var(--bg-elevated, #1e1e24);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.carga-ia-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.carga-ia-menu button:last-child { border-bottom: none; }
+.carga-ia-menu button:hover { background: rgba(255, 255, 255, 0.05); color: var(--gold-bright); }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-ia { animation: none; }
+  .btn-ia::after { animation: none; display: none; }
+}
 .badge-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
 .badge-muted  { background: rgba(255,255,255,0.06); color: var(--t3); border: 1px solid var(--border); }
 
@@ -1690,7 +1830,20 @@ tr.skel-row td {
   .drawer-body { padding: 1rem; }
   /* Montos grandes (7+ dígitos) no entran a 22px en dos tarjetas de ~160px
      de ancho -- se apilan en una columna en vez de reducir la fuente. */
-  .pdp-stat-card { flex: 1 1 100%; }
+  .pdp-stat-card {
+    flex: 1 1 100%;
+    /* El desglose deja de ir al costado y pasa abajo: al lado no entra sin
+       apretar los montos hasta que se cortan. Sigue estando siempre visible. */
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+  .pdp-desglose {
+    padding-left: 0;
+    padding-top: 0.85rem;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
 }
 
 @media (max-width: 420px) {
@@ -2165,8 +2318,25 @@ tr.row-clickable:hover td {
 .pdp-row.sel { background: rgba(201,176,134,0.10); }
 .pdp-row.sel:hover { background: rgba(201,176,134,0.14); }
 .pdp-row-ord { font-weight: 600; color: var(--t1); min-width: 64px; }
-.pdp-row-date { color: var(--t3); flex: 1; white-space: nowrap; }
-.pdp-row-amount { font-weight: 600; color: var(--t2); white-space: nowrap; }
+.pdp-row-date { color: var(--t3); white-space: nowrap; }
+/* Fecha de cashflow. Va en el medio y se come el espacio sobrante para que los
+   importes queden alineados a la derecha en toda la columna. */
+.pdp-row-cf {
+  color: var(--t3);
+  flex: 1;
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.pdp-row-amount {
+  font-weight: 600;
+  color: var(--t2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Nota de crédito o cualquier ingreso: descuenta, no suma. */
+.pdp-row-amount.resta { color: var(--green); }
 .pdp-check {
   appearance: none;
   -webkit-appearance: none;
@@ -2232,16 +2402,91 @@ tr.row-clickable:hover td {
   margin-bottom: 1.25rem;
   flex-wrap: wrap;
 }
+/* La tarjeta se parte en dos: el total a la izquierda y su desglose al lado,
+   siempre visible. Antes el desglose estaba detrás de un botón "Ver desglose"
+   que abría un modal, así que casi nunca se miraba. */
 .pdp-stat-card {
-  flex: 1;
-  min-width: 160px;
+  flex: 1 1 420px;
+  min-width: 320px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.9rem 1.1rem;
   display: flex;
+  align-items: center;
+  gap: 1.4rem;
+}
+/* El bloque del total no se comprime: el número es lo primero que se lee y
+   tiene que entrar entero aunque el desglose necesite lugar. */
+.pdp-stat-main {
+  display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 0 0 auto;
+  min-width: 130px;
+}
+
+.pdp-desglose {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-left: 1.4rem;
+  border-left: 1px solid var(--border);
+}
+
+/* Una sola barra con la composición completa. Cuatro barras separadas obligaban
+   a compararlas entre sí; acá la proporción se lee de un golpe y ocupa la mitad
+   de alto. */
+.pdp-desglose-stack {
+  display: flex;
+  height: 9px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--bg-input);
+}
+.pdp-desglose-stack > span {
+  height: 100%;
+  transition: width 0.3s var(--ease);
+  /* Sin esto, dos tramos de colores cercanos se leen como uno solo. */
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.28);
+}
+.pdp-desglose-stack > span:last-child { box-shadow: none; }
+
+.pdp-desglose-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 1.1rem;
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.pdp-desglose-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+.pdp-desglose-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* baseline alinea el punto con el texto de al lado, no con su caja. */
+  align-self: center;
+}
+.pdp-desglose-label { color: var(--t2); }
+.pdp-desglose-monto {
+  font-variant-numeric: tabular-nums;
+  color: var(--t1);
+  font-weight: 600;
+}
+.pdp-desglose-pct {
+  font-variant-numeric: tabular-nums;
+  color: var(--t3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdp-desglose-stack > span { transition: none; }
 }
 .pdp-stat-label {
   font-size: 11px;

@@ -147,7 +147,11 @@ export default async function usersRoutes(fastify) {
     const password = normalizarPassword(request.body.password)
     const data = {
       nombre, avatar_url, activo,
-      ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {})
+      // Resetear la contraseña destraba una cuenta frenada por inactividad:
+      // vuelve last_login a NULL, que es "todavía no lo sabemos" y no bloquea
+      // (ver lib/inactividad.js). Sin esto, resetear la clave no alcanzaba y la
+      // persona seguía sin poder entrar.
+      ...(password ? { password_hash: await bcrypt.hash(password, 12), last_login: null } : {})
     }
     Object.keys(data).forEach(k => data[k] === undefined && delete data[k])
 

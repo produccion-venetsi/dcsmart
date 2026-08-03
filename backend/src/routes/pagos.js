@@ -1,10 +1,12 @@
 import { Storage } from '@google-cloud/storage'
-import { extraerDeImagen, aCamposFormulario, camposConDato, validarAritmetica, matchearMetodoPago } from '../lib/leerFactura.js'
+import { extraerDeArchivo, aCamposFormulario, camposConDato, validarAritmetica, matchearMetodoPago } from '../lib/leerFactura.js'
 import multipart from '@fastify/multipart'
 import { parseNroOrd } from '../lib/nroOrd.js'
 import { sanitizeFolderName, parseGsPath } from '../lib/gcsPaths.js'
 import { partirIdsPorEstado } from '../lib/estadoOp.js'
 import { parseCsvParam } from '../lib/queryParams.js'
+import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
+import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -125,22 +127,14 @@ function translatePagoError(err) {
 // cualquier otro tipo de archivo en vez de subirlo tal cual a GCS.
 const EXTENSIONES_ADJUNTO = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'pdf'])
 
-// Para leer con IA solo imagenes: el PDF hay que rasterizarlo primero y no vale
-// la pena para la primera version (casi todas las facturas entran por foto).
-const EXTENSIONES_LECTURA = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'])
+// Para leer con IA: imagenes y PDF. Gemini acepta el PDF nativo por inlineData,
+// asi que no hay que rasterizarlo. Se agrego porque muchos proveedores mandan la
+// factura electronica en PDF y obligar a sacarle una foto a la pantalla se leia
+// peor. Queda afuera 'gif', que si sirve como adjunto pero no como factura.
+const EXTENSIONES_LECTURA = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf'])
 
-// Campos de fecha filtrables desde el frontend (dropdown "Tipo de fecha").
-// Whitelist estricta: cualquier valor fuera de esta lista cae al default
-// 'fecha', para no interpolar un valor arbitrario como key de Prisma.
-const CAMPOS_FECHA_VALIDOS = ['fecha', 'fecha_pago', 'cashflow', 'periodo', 'created_at']
-function campoFechaValido(campo) {
-  return CAMPOS_FECHA_VALIDOS.includes(campo) ? campo : 'fecha'
-}
-
-// De los campos filtrables, estos guardan un instante real (con hora), no un
-// día calendario a medianoche UTC. Su rango se interpreta en hora de Argentina
-// para que lo cargado de noche no caiga en el día UTC siguiente.
-const CAMPOS_FECHA_INSTANTE = ['fecha_pago', 'created_at']
+// La whitelist de campos de fecha y el manejo de zonas horarias viven en
+// lib/rangosFecha.js, que además soporta varios rangos combinados con AND.
 
 // Construye el `where` de Prisma compartido entre GET /pagos (list/export)
 // y GET /pagos/summary, para que el resumen agregado matchee exactamente
@@ -197,8 +191,6 @@ async function buildPagosWhere(fastify, request, query) {
     }
   }
 
-  const campoFecha = campoFechaValido(campo_fecha)
-
   return {
     ...localFilter,
     ...rubcatFilter,
@@ -214,20 +206,9 @@ async function buildPagosWhere(fastify, request, query) {
     ...(observaciones?.trim()
       ? { observaciones: { contains: observaciones.trim(), mode: 'insensitive' } }
       : {}),
-    // fecha/periodo/cashflow son "día calendario" (medianoche UTC), su rango
-    // se marca en UTC. fecha_pago y created_at son instantes reales en hora
-    // Argentina (se guardan con hora), así que su rango se marca con el offset
-    // de Argentina (-03:00) -- si no, lo cargado de noche (21-24hs ART) cae en
-    // el día UTC siguiente y se corre. Ver CAMPOS_FECHA_INSTANTE.
-    ...(desde || hasta ? {
-      [campoFecha]: (() => {
-        const suf = CAMPOS_FECHA_INSTANTE.includes(campoFecha) ? '-03:00' : 'Z'
-        return {
-          ...(desde ? { gte: new Date(`${desde}T00:00:00.000${suf}`) } : {}),
-          ...(hasta ? { lte: new Date(`${hasta}T23:59:59.999${suf}`) } : {})
-        }
-      })()
-    } : {})
+    // Uno o varios rangos de fecha, combinados con AND. Cada campo lleva su
+    // propia interpretación de zona horaria. Ver lib/rangosFecha.js.
+    ...whereRangosFecha(parseRangosFecha(campo_fecha, desde, hasta))
   }
 }
 
@@ -327,13 +308,21 @@ export default async function pagosRoutes(fastify) {
       audit, ingresa_egreso, id_metodo, nro_ord, cmv_quick, q, observaciones
     })
 
-    const [totalAgg, porImpuestoRows] = await Promise.all([
+    const { egresos, ingresos } = wheresDeuda(where)
+
+    const [totalAgg, porImpuestoRows, egresosAgg, ingresosAgg] = await Promise.all([
       fastify.db.pago.aggregate({ where, _sum: { importe: true } }),
-      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: where }, _sum: { monto: true } })
+      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: where }, _sum: { monto: true } }),
+      fastify.db.pago.aggregate({ where: egresos,  _sum: { importe: true }, _count: { id: true } }),
+      fastify.db.pago.aggregate({ where: ingresos, _sum: { importe: true } })
     ])
 
     return {
       total_importe: Number(totalAgg._sum.importe ?? 0),
+      // Deuda del conjunto FILTRADO, no del local entero: es lo que hace falta
+      // para "cuánto le debo a este proveedor". Ver lib/deuda.js.
+      total_deuda: deudaNeta(egresosAgg._sum.importe, ingresosAgg._sum.importe),
+      count_deuda: egresosAgg._count.id,
       por_impuesto: Object.fromEntries(
         porImpuestoRows.map(row => [row.tipo, Number(row._sum.monto ?? 0)])
       )
@@ -827,6 +816,42 @@ export default async function pagosRoutes(fastify) {
     })
   })
 
+  // ── GET /:id/activity-history ──────────────────────────────────────────
+  // Quién creó, editó o eliminó este pago, más reciente primero. Es el mismo
+  // dato que la pantalla Actividad pero acotado a un pago, para no tener que
+  // ir a buscarlo por OP cuando ya se está mirando el detalle.
+  //
+  // Restringido a los roles internos (super_admin y dcsmart), igual que la
+  // fecha de creación y el circuito DC del mismo panel: es información de
+  // control interno, no del operador del local.
+  fastify.get('/:id/activity-history', { preHandler: viewHandler }, async (request, reply) => {
+    if (!['super_admin', 'dcsmart'].includes(request.activeRole)) {
+      return reply.code(403).send({ error: 'Sin acceso al historial de actividad' })
+    }
+
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    // El pago pudo haberse eliminado y su rastro sigue en el log: por eso no
+    // se responde 404 si no está, solo se valida el acceso cuando existe.
+    if (pago && !request.allowedLocalIds.includes(pago.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const rows = await fastify.db.activityLog.findMany({
+      where: {
+        tabla: 'pagos',
+        id_registro: request.params.id,
+        id_local: { in: request.allowedLocalIds }
+      },
+      orderBy: { fecha: 'desc' },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
+
+    return rows
+  })
+
   // ── POST /mandar-pdp ───────────────────────────────────────────────────
   // Flujo PDP, etapa 1: mueve los pagos seleccionados a estado PDP
   // (desde la "deuda" en cuenta corriente al armado del PDP).
@@ -990,22 +1015,32 @@ export default async function pagosRoutes(fastify) {
   })
 
   // ── POST /leer-factura ─────────────────────────────────────────────────────
-  // Lee los datos de la foto de una factura para precargar el formulario. No
+  // Lee los datos de una factura (foto o PDF) para precargar el formulario. No
   // guarda nada: devuelve campos sueltos y la persona los revisa y confirma.
+  // Quien quiera guardar el archivo lo sube aparte por /upload, como cualquier
+  // otro adjunto.
   fastify.post('/leer-factura', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
     const data = await request.file()
     if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
 
     const ext = (data.filename ?? '').split('.').pop().toLowerCase()
     if (!EXTENSIONES_LECTURA.has(ext)) {
-      return reply.code(400).send({ error: `Solo se puede leer una imagen (.${ext} no sirve)` })
+      return reply.code(400).send({ error: `Solo se puede leer una foto o un PDF (.${ext} no sirve)` })
     }
 
-    const buffer = await data.toBuffer()
+    // Pasado el limite de multipart (20 MB) toBuffer() lanza, y sin esto salia
+    // un 500 sin explicacion. Un PDF de factura pesa unos pocos cientos de KB:
+    // si alguien manda algo de 20 MB, casi seguro se equivoco de archivo.
+    let buffer
+    try {
+      buffer = await data.toBuffer()
+    } catch {
+      return reply.code(413).send({ error: 'El archivo es demasiado grande (máximo 20 MB)' })
+    }
 
     let crudo
     try {
-      crudo = await extraerDeImagen(buffer, data.mimetype)
+      crudo = await extraerDeArchivo(buffer, data.mimetype)
     } catch (err) {
       // El formulario tiene que quedar usable a mano si esto falla, asi que el
       // error se informa y no se rompe nada de lo ya cargado.

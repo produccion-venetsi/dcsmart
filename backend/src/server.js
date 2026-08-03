@@ -68,6 +68,15 @@ app.decorate('authenticate', async (request, reply) => {
     await request.jwtVerify()
   } catch (err) {
     reply.code(401).send({ error: 'Unauthorized' })
+    return
+  }
+
+  // Los tokens emitidos antes de que el login pusiera vencimiento salieron sin
+  // `exp`, y jwtVerify los da por buenos para siempre. Se rechazan para que la
+  // caducidad valga para todos: quien tenga una de esas sesiones vuelve a
+  // loguearse una vez y ya recibe un token que sí vence.
+  if (request.user?.exp == null) {
+    reply.code(401).send({ error: 'Sesión vencida, volvé a iniciar sesión' })
   }
 })
 

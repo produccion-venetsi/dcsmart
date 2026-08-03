@@ -2,6 +2,7 @@ import { Storage } from '@google-cloud/storage'
 import multipart from '@fastify/multipart'
 import { sanitizeFolderName, parseGsPath, contentTypePorExt } from '../lib/gcsPaths.js'
 import { normalizarUrl, validarMail } from '../lib/localFicha.js'
+import { validarPorcentaje } from '../lib/descuentoMovstock.js'
 
 // Datos fiscales del local: no se duplican en `locales`, se leen del proveedor
 // vinculado. Cada local tiene su proveedor propio dentro de la tabla de
@@ -44,6 +45,12 @@ function parseFicha(body) {
     const tipo = body.tipo_local || null
     if (tipo && !TIPOS_LOCAL.has(tipo)) return { error: `tipo_local invalido: ${tipo}` }
     data.tipo_local = tipo
+  }
+
+  if (body.descuento_movstock !== undefined) {
+    const r = validarPorcentaje(body.descuento_movstock)
+    if (!r.ok) return { error: `descuento_movstock: ${r.error}` }
+    data.descuento_movstock = r.value
   }
 
   if (body.id_proveedor !== undefined) data.id_proveedor = body.id_proveedor || null

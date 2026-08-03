@@ -11,6 +11,14 @@
 // Los File no son serializables directamente: se guardan como
 // { __file: true, name, type, base64 } y se reconstruyen con fileFromDraft().
 
+// Guardar es asíncrono: pasar una foto a base64 tarda, y en ese rato el
+// formulario se puede haber descartado. Sin esto, esa escritura tardía revivía
+// un borrador ya borrado y al volver a entrar aparecía otra vez "Se recuperó la
+// carga que tenías sin guardar". Cada clearDraft invalida los saves que
+// arrancaron antes de él.
+const generacion = new Map()
+const genActual = (key) => generacion.get(key) ?? 0
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -31,6 +39,7 @@ function dataUrlToFile(dataUrl, name, type) {
 // Serializa un objeto plano, convirtiendo cualquier File presente (en el
 // nivel superior) a su forma persistible. `files` es un mapa { key: File|null }.
 export async function saveDraft(key, data, files = {}) {
+  const gen = genActual(key)
   try {
     const serializedFiles = {}
     for (const [fkey, file] of Object.entries(files)) {
@@ -38,6 +47,8 @@ export async function saveDraft(key, data, files = {}) {
         serializedFiles[fkey] = { __file: true, name: file.name, type: file.type, base64: await fileToDataUrl(file) }
       }
     }
+    // El borrador se descartó mientras se serializaba: no resucitarlo.
+    if (gen !== genActual(key)) return
     sessionStorage.setItem(key, JSON.stringify({ data, files: serializedFiles, savedAt: Date.now() }))
   } catch {
     // sessionStorage lleno (foto muy pesada) o no disponible: no rompemos el flujo normal por esto.
@@ -61,5 +72,6 @@ export function loadDraft(key) {
 }
 
 export function clearDraft(key) {
+  generacion.set(key, genActual(key) + 1)
   try { sessionStorage.removeItem(key) } catch { /* noop */ }
 }

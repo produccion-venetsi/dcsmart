@@ -12,10 +12,11 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import MultiSelect from '../../components/MultiSelect.jsx'
-import { multiParam, normalizarMulti } from '../../lib/filtros.js'
+import { esRolDc, puedeEditar, puedeBorrarPagos } from '../../lib/roles.js'
+import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
-import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
+import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -198,7 +199,12 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
 ]
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false, canSeeCreated = false }) {
+// Mismas etiquetas y colores que la pantalla Actividad, para que el badge se
+// lea igual en los dos lados.
+const ACTIVIDAD_LABEL = { creado: 'Creado', editado: 'Editado', eliminado: 'Eliminado' }
+const ACTIVIDAD_BADGE = { creado: 'badge-green', editado: 'badge-blue', eliminado: 'badge-red' }
+
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false, canSeeCreated = false, canSeeActivity = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -214,6 +220,8 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [auditedDc,    setAuditedDc]    = useState(pago.audit_dc)
   const [auditandoDc,  setAuditandoDc]  = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
+  const [activityHistory, setActivityHistory] = useState([])
+  const [loadingActivity, setLoadingActivity] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [periodico,   setPeriodico]   = useState(pago.periodico ?? false)
   const [toggling,    setToggling]    = useState(false)
@@ -275,7 +283,18 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       .finally(() => setLoadingHistory(false))
   }
 
-  useEffect(() => { if (pago) { loadImpuestos(); loadMM(); loadAuditHistory() } }, [pago?.id])
+  // Quién creó / editó / eliminó el pago. Solo se pide si el rol lo puede ver:
+  // para el resto el backend responde 403 y no tiene sentido gastar el request.
+  const loadActivityHistory = () => {
+    if (!canSeeActivity) return
+    setLoadingActivity(true)
+    pagosApi.activityHistory(pago.id)
+      .then(({ data }) => setActivityHistory(data))
+      .catch(() => {})
+      .finally(() => setLoadingActivity(false))
+  }
+
+  useEffect(() => { if (pago) { loadImpuestos(); loadMM(); loadAuditHistory(); loadActivityHistory() } }, [pago?.id])
 
   const handleTogglePeriodico = async () => {
     setToggling(true)
@@ -826,6 +845,68 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           </tbody>
         </table>
       </div>
+
+      {/* Historial de actividad: quién cargó y quién tocó el pago. Es el mismo
+          dato de la pantalla Actividad pero acotado a este pago, para no tener
+          que ir a buscarlo por OP. Solo roles internos, igual que el resto de
+          la información de control de este panel. */}
+      {canSeeActivity && (
+        <>
+          <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de actividad</div>
+
+          <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+            <table className="data-table">
+              <thead>
+                <tr><th>Fecha</th><th>Usuario</th><th>Acción</th></tr>
+              </thead>
+              <tbody>
+                {loadingActivity ? (
+                  <tr><td colSpan={3}><span className="skel" style={{ width: '60%' }} /></td></tr>
+                ) : activityHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>
+                      {/* El log arrancó después de que se cargaran muchos pagos:
+                          vacío no significa que nadie lo tocó. */}
+                      Sin actividad registrada para este pago
+                    </td>
+                  </tr>
+                ) : (
+                  activityHistory.map((ev) => (
+                    <tr key={ev.id}>
+                      <td className="td-muted">{fmtDateTimeArg(ev.fecha)}</td>
+                      <td>{ev.user?.nombre ?? '—'}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span className={`badge ${ACTIVIDAD_BADGE[ev.accion] ?? 'badge-muted'}`}>
+                            {ACTIVIDAD_LABEL[ev.accion] ?? ev.accion}
+                          </span>
+                        </div>
+                        {/* Las dos fechas se escriben enteras en vez de dejarlas
+                            en un tooltip: es el dato que hay que comparar, y un
+                            title no se ve en celular ni se puede copiar. Va por
+                            fila y no arriba de la tabla porque así se ve con qué
+                            período quedó el pago en cada edición. */}
+                        {periodoDistintoDeFecha(ev.snapshot?.fecha, ev.snapshot?.periodo) && (
+                          <div style={{
+                            display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap',
+                            marginTop: 5, fontSize: 11.5, lineHeight: 1.45, color: 'var(--amber)',
+                          }}>
+                            <span style={{ fontWeight: 700 }}>⚠ Período fuera del mes de la factura:</span>
+                            <span>
+                              factura del <strong>{fmtDateUTC(ev.snapshot.fecha)}</strong>
+                              {' '}imputada a <strong>{fmtMonthUTC(ev.snapshot.periodo)}</strong>
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -833,7 +914,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
 // ─── Filtros ────────────────────────────────────────────────────────────────
 
 const FILTER_INIT = {
-  pagado: '', estado_op: [], campo_fecha: 'fecha', desde: '', hasta: '',
+  pagado: '', estado_op: [], rangos_fecha: [],
   id_tipo: [], id_rub: '', id_cat: '',
   audit: '', ingresa_egreso: '', id_metodo: [], cmv_quick: '',
   observaciones: '',
@@ -842,6 +923,11 @@ const FILTER_INIT = {
 }
 
 const LIMIT     = 100
+
+// Sin rango de fechas se permite exportar igual, pero acotado: traer la
+// historia completa de un local son decenas de miles de filas. Con fechas no
+// hay tope, como siempre.
+const MAX_EXPORT_SIN_FECHA = 300
 
 // ─── Componente principal ───────────────────────────────────────────────────
 
@@ -857,13 +943,16 @@ export default function PagoList() {
   const sidebarOpen    = useUiStore((s) => s.sidebarOpen)
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen)
   const role        = activeApp?.role
-  const canEdit     = ['super_admin', 'dcsmart', 'admin'].includes(role)
-  const canDelete   = ['super_admin', 'dcsmart'].includes(role)
-  const canAuditDc  = ['super_admin', 'dcsmart'].includes(role)
-  const canExport   = ['super_admin', 'dcsmart'].includes(role)
+  const canEdit     = puedeEditar(role)
+  const canDelete   = puedeBorrarPagos(role)
+  const canAuditDc  = esRolDc(role)
+  const canExport   = esRolDc(role)
   // La fecha de creación de la OP es dato interno: solo la ven DC y super admin,
   // en la tabla y en el detalle.
-  const canSeeCreated = ['super_admin', 'dcsmart'].includes(role)
+  const canSeeCreated = esRolDc(role)
+  // Quién cargó y quién tocó el pago. Mismo criterio: control interno. El
+  // backend valida lo mismo, esto solo evita pedir algo que va a dar 403.
+  const canSeeActivity = esRolDc(role)
   const [exporting, setExporting] = useState(false)
   const [summary,        setSummary]        = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -916,9 +1005,13 @@ export default function PagoList() {
       ...(qStr ? { q: qStr } : {}),
       ...(filters.pagado         !== '' ? { pagado:          filters.pagado }         : {}),
       ...(filters.estado_op.length > 0 ? { estado_op:        multiParam(filters.estado_op) } : {}),
-      ...(filters.desde                ? { desde:            filters.desde }           : {}),
-      ...(filters.hasta                ? { hasta:            filters.hasta }           : {}),
-      ...((filters.desde || filters.hasta) ? { campo_fecha:   filters.campo_fecha }    : {}),
+      // Los rangos viajan como tres CSV paralelos y posicionales. Con un solo
+      // rango queda idéntico al formato de siempre. Ver lib/rangosFecha.js.
+      ...(filters.rangos_fecha.length > 0 ? {
+        campo_fecha: filters.rangos_fecha.map(r => r.campo).join(','),
+        desde:       filters.rangos_fecha.map(r => r.desde || '').join(','),
+        hasta:       filters.rangos_fecha.map(r => r.hasta || '').join(','),
+      } : {}),
       ...(filters.id_tipo.length   > 0 ? { id_tipo:          multiParam(filters.id_tipo) }   : {}),
       ...(filters.id_rub               ? { id_rub:           filters.id_rub }          : {}),
       ...(filters.id_cat               ? { id_cat:           filters.id_cat }          : {}),
@@ -993,12 +1086,13 @@ export default function PagoList() {
     return () => ctrl.abort()
   }, [buildParams, page])
 
-  // ── Resumen agregado (total + impuestos) ───────────────────────────────────
-  // Solo se calcula cuando hay un rango de fecha elegido (mismo gate que el
-  // CSV) — usa los mismos filtros que la tabla pero sin paginar, porque el
+  // ── Resumen agregado (total + deuda + impuestos) ───────────────────────────
+  // Se calcula siempre que la consulta tenga resultados: antes pedía un rango
+  // de fechas, pero la deuda y el total también son útiles filtrando solo por
+  // proveedor. Usa los mismos filtros que la tabla pero sin paginar, porque el
   // total debe ser de TODOS los pagos filtrados, no solo la página visible.
   useEffect(() => {
-    if (!(filters.desde && filters.hasta)) { setSummary(null); return }
+    if (loading || total === 0) { setSummary(null); return }
     const ctrl = new AbortController()
     setSummaryLoading(true)
     pagosApi.summary(buildParams(1), ctrl.signal)
@@ -1006,7 +1100,7 @@ export default function PagoList() {
       .catch(() => { if (!ctrl.signal.aborted) { notify('Error al cargar el resumen', 'error'); setSummary(null) } })
       .finally(() => { if (!ctrl.signal.aborted) setSummaryLoading(false) })
     return () => ctrl.abort()
-  }, [buildParams, filters.desde, filters.hasta])
+  }, [buildParams, loading, total])
 
   // ── Navegación de páginas ──────────────────────────────────────────────────
   const goToPage = (p) => {
@@ -1119,14 +1213,50 @@ export default function PagoList() {
   const [draft, setDraft] = useState(FILTER_INIT)
   const sidebarAntesRef = useRef(null)
 
-  const activeFilterCount = Object.entries(filters).filter(([k, v]) => k !== 'campo_fecha' && (Array.isArray(v) ? v.length > 0 : v !== '')).length
+  const activeFilterCount = Object.entries(filters).filter(([, v]) => (Array.isArray(v) ? v.length > 0 : v !== '')).length
   const hasActiveFilters  = activeFilterCount > 0
+
+  // Sin ningún rango de fecha se puede exportar igual, pero solo si el
+  // resultado es chico. `total` arranca en 0 y conserva el valor anterior
+  // durante un refetch, así que se mira `loading` para no decidir con un
+  // número viejo.
+  const hayFiltroFecha  = filters.rangos_fecha.some(r => r.desde || r.hasta)
+  const exportBloqueado = !loading && !hayFiltroFecha && total > MAX_EXPORT_SIN_FECHA
 
   const openFilters = () => {
     sidebarAntesRef.current = sidebarOpen
     setSidebarOpen(false)
-    setDraft(filters)
+    // Se siembra una fila de fecha vacía para que los campos se vean sin tener
+    // que apretar "agregar" primero. Una fila sin fechas no filtra ni cuenta
+    // como filtro activo (la descartan buildParams y normalizarRangos).
+    setDraft(filters.rangos_fecha.length > 0
+      ? filters
+      : { ...filters, rangos_fecha: [{ campo: 'fecha', desde: '', hasta: '' }] })
     setFilterOpen(true)
+  }
+
+  const setRangoField = (i, campo, valor) => {
+    setDraft(d => ({
+      ...d,
+      rangos_fecha: d.rangos_fecha.map((r, j) => j === i ? { ...r, [campo]: valor } : r)
+    }))
+  }
+
+  // Arranca en el primer campo que no esté usado: así dos filas seguidas no
+  // quedan las dos en "Fecha de factura", que es el error fácil de cometer.
+  const agregarRango = () => {
+    setDraft(d => {
+      const usados = d.rangos_fecha.map(r => r.campo)
+      const libre  = CAMPO_FECHA_OPTIONS.find(o => !usados.includes(o.value))
+      return {
+        ...d,
+        rangos_fecha: [...d.rangos_fecha, { campo: libre?.value ?? 'fecha', desde: '', hasta: '' }]
+      }
+    })
+  }
+
+  const quitarRango = (i) => {
+    setDraft(d => ({ ...d, rangos_fecha: d.rangos_fecha.filter((_, j) => j !== i) }))
   }
 
   // Solo se restaura si el sidebar sigue colapsado: si el usuario lo volvió a
@@ -1187,12 +1317,20 @@ export default function PagoList() {
     const filtros = {
       ...FILTER_INIT,
       ...guardado,
+      rangos_fecha:   normalizarRangos(guardado),
       id_tipo:        normalizarMulti(guardado.id_tipo, TIPO_PAGO_MULTI),
       estado_op:      normalizarMulti(guardado.estado_op, ESTADO_OP_OPTIONS),
       id_metodo:      normalizarMulti(guardado.id_metodo, metodoOptions),
       id_rubcats:     normalizarMulti(guardado.id_rubcats, rubcatOptions),
       id_proveedores: normalizarMulti(guardado.id_proveedores),
     }
+    // El spread de `guardado` puede traer las claves del formato viejo. Se
+    // borran para que no queden como zombies: ya se leyeron en normalizarRangos
+    // y si quedaran inflarían el contador de filtros activos y habilitarían el
+    // export con un filtro que ya no aplica.
+    delete filtros.campo_fecha
+    delete filtros.desde
+    delete filtros.hasta
     setDraft(filtros)
     setFilters(filtros)
   }
@@ -1374,10 +1512,10 @@ export default function PagoList() {
               <button
                 className="btn btn-secondary"
                 onClick={exportCsv}
-                disabled={exporting || !(filters.desde && filters.hasta)}
-                title={filters.desde && filters.hasta
-                  ? 'Exportar a Excel los pagos con los filtros actuales'
-                  : 'Elegí un tipo de fecha y un rango (Desde/Hasta) en Filtros para poder exportar'}
+                disabled={exporting || loading || exportBloqueado}
+                title={exportBloqueado
+                  ? `Hay ${total} pagos y sin filtro de fecha el máximo es ${MAX_EXPORT_SIN_FECHA}. Poné un rango de fechas o afiná los filtros.`
+                  : 'Exportar a Excel los pagos con los filtros actuales'}
               >
                 {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
               </button>
@@ -1392,12 +1530,21 @@ export default function PagoList() {
       <div className="page-with-filters">
       <div className="page-with-filters-main">
 
-      {filters.desde && filters.hasta && (summaryLoading || summary) && (
+      {(summaryLoading || summary) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
           <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.6rem 1rem', minWidth: 140 }}>
             <div style={{ fontSize: 11, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.03em' }}>TOTAL IMPORTE</div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>
               {summaryLoading ? <span className="skel" style={{ width: 80, height: 16, display: 'inline-block' }} /> : fmt$(summary?.total_importe)}
+            </div>
+          </div>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.6rem 1rem', minWidth: 140 }}>
+            <div style={{ fontSize: 11, color: 'var(--t3)', fontWeight: 700, letterSpacing: '0.03em' }}
+                 title="Egresos impagos menos ingresos impagos: las notas de crédito restan">
+              TOTAL DEUDA
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>
+              {summaryLoading ? <span className="skel" style={{ width: 80, height: 16, display: 'inline-block' }} /> : fmt$(summary?.total_deuda)}
             </div>
           </div>
           {!summaryLoading && summary && Object.entries(summary.por_impuesto).map(([tipo, monto]) => (
@@ -1765,23 +1912,53 @@ export default function PagoList() {
               </div>
             </div>
 
-            <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Fechas</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <span style={lbl}>Tipo de fecha</span>
-                <select className="filter-select" style={{ width: '100%' }} value={draft.campo_fecha} onChange={e => setDraftField('campo_fecha', e.target.value)}>
-                  {CAMPO_FECHA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <span style={lbl}>Desde</span>
-                <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.desde} onChange={e => setDraftField('desde', e.target.value)} />
-              </div>
-              <div>
-                <span style={lbl}>Hasta</span>
-                <input type="date" className="filter-select" style={{ width: '100%' }} value={draft.hasta} onChange={e => setDraftField('hasta', e.target.value)} />
-              </div>
+            <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>
+              Fechas
+              {draft.rangos_fecha.length > 1 && (
+                <span style={{ fontWeight: 400, textTransform: 'none', opacity: 0.7 }}> — se combinan con Y</span>
+              )}
             </div>
+
+            {draft.rangos_fecha.map((rango, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.6rem', alignItems: 'end', marginBottom: '0.75rem' }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={lbl}>Tipo de fecha</span>
+                  <select
+                    className="filter-select"
+                    style={{ width: '100%' }}
+                    value={rango.campo}
+                    onChange={e => setRangoField(i, 'campo', e.target.value)}
+                  >
+                    {CAMPO_FECHA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <span style={lbl}>Desde</span>
+                  <input type="date" className="filter-select" style={{ width: '100%' }}
+                    value={rango.desde}
+                    onChange={e => setRangoField(i, 'desde', e.target.value)} />
+                </div>
+                <div>
+                  <span style={lbl}>Hasta</span>
+                  <input type="date" className="filter-select" style={{ width: '100%' }}
+                    value={rango.hasta}
+                    onChange={e => setRangoField(i, 'hasta', e.target.value)} />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  aria-label="Quitar este filtro de fecha"
+                  title="Quitar este filtro de fecha"
+                  onClick={() => quitarRango(i)}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            <button type="button" className="btn btn-secondary btn-sm" onClick={agregarRango}>
+              + agregar fecha
+            </button>
 
             <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Texto</div>
             <div>
@@ -1812,7 +1989,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} canSeeCreated={canSeeCreated} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} canSeeCreated={canSeeCreated} canSeeActivity={canSeeActivity} />
         )}
       </DrawerPanel>
 

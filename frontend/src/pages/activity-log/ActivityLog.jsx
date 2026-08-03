@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { activityLogApi } from '../../api/activityLog.js'
 import { useUiStore } from '../../store/uiStore.js'
-import { fmtDateUTC, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
+import { fmtDateUTC, fmtDateArg, fmtDateTimeArg, periodoDistintoDeFecha } from '../../lib/dates.js'
 
 const LIMIT = 50
 
@@ -16,6 +16,22 @@ const ACCION_BADGE = { creado: 'badge-green', editado: 'badge-blue', eliminado: 
 // pares label/valor legibles, en vez de mostrar el JSON tal cual. Los ids
 // (proveedor, rubcat, metodo, local) llegan resueltos a nombre en `labels`
 // -- ver snapshot_labels que devuelve el backend.
+// El período imputado no cae en el mes de la fecha de la factura. No es un
+// error (un servicio de junio se factura en julio), pero es lo que descuadra un
+// informe ya enviado, así que se marca acá para poder revisarlo sin abrir el
+// pago uno por uno. Ver periodoDistintoDeFecha en lib/dates.js.
+function DesfasajePeriodo({ snapshot }) {
+  if (!periodoDistintoDeFecha(snapshot?.fecha, snapshot?.periodo)) return null
+  return (
+    <span
+      className="badge badge-amber"
+      title={`La factura es del ${fmtDate(snapshot.fecha)} pero está imputada al período ${fmtDate(snapshot.periodo)}. Revisá que sea a propósito.`}
+    >
+      Período ≠ mes de la factura
+    </span>
+  )
+}
+
 function snapshotRows(s, labels) {
   if (!s) return []
   const l = labels ?? {}
@@ -35,7 +51,11 @@ function snapshotRows(s, labels) {
     ['Estado Op.',   s.estado_op || '—'],
     ['Pagado',       s.pagado ? 'Sí' : 'No'],
     ['Fecha Pago',   fmtDateArg(s.fecha_pago)],
-    ['Período',      fmtDate(s.periodo)],
+    // Se destaca en ámbar cuando no cae en el mes de la fecha: al abrir el
+    // detalle, el dato a mirar es justamente este contra la fecha de arriba.
+    ['Período', periodoDistintoDeFecha(s.fecha, s.periodo)
+      ? <span style={{ color: 'var(--amber)', fontWeight: 700 }}>{fmtDate(s.periodo)} ⚠</span>
+      : fmtDate(s.periodo)],
     ['Local',        l.local ?? '—'],
     ['Observaciones', s.observaciones || '—'],
   ]
@@ -197,9 +217,12 @@ export default function ActivityLog() {
                       <td>{opLabel}</td>
                       <td>{ev.user?.nombre ?? '—'}</td>
                       <td>
-                        <span className={`badge ${ACCION_BADGE[ev.accion] ?? 'badge-muted'}`}>
-                          {ACCION_LABEL[ev.accion] ?? ev.accion}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span className={`badge ${ACCION_BADGE[ev.accion] ?? 'badge-muted'}`}>
+                            {ACCION_LABEL[ev.accion] ?? ev.accion}
+                          </span>
+                          <DesfasajePeriodo snapshot={ev.snapshot} />
+                        </div>
                       </td>
                     </tr>
                     {isOpen && (

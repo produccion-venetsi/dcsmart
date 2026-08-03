@@ -1,5 +1,10 @@
 import { toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
+import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
+import {
+  etiquetaTurno, promedioPorCubierto, pctFiscal, ordenarPorTurno,
+  desglosarPorTurno, totalizarPorNombre
+} from '../lib/turnos.js'
 
 // Comprobantes que entran al reporte BALANCE (ver GET /balance). Son los tipos
 // fiscales; el reporte se define por este conjunto, no por lo que el usuario
@@ -78,8 +83,13 @@ export default async function reportesRoutes(fastify) {
 
     // LEFT JOIN (no INNER) -- un movimiento COBRO sin id_metodo asignado no
     // debe desaparecer silenciosamente de la suma, solo queda sin nombre.
+    // Se agrupa TAMBIÉN por turno y el total del período se reconstruye
+    // sumando, en vez de correr dos consultas que agrupan distinto: así el
+    // desglose por turno no puede quedar desalineado con el total de arriba.
     const payRows = await fastify.db.$queryRawUnsafe(`
-      SELECT COALESCE(mp.nombre, 'Sin especificar') AS nombre, SUM(cm.monto) AS total
+      SELECT c.tipo_turno::text AS turno,
+             COALESCE(mp.nombre, 'Sin especificar') AS nombre,
+             SUM(cm.monto) AS total
       FROM caja_movimientos cm
       JOIN cajas c ON cm.id_caja = c.id
       LEFT JOIN metodos_pago mp ON cm.id_metodo = mp.id
@@ -88,18 +98,22 @@ export default async function reportesRoutes(fastify) {
         AND c.fecha_inicio <= $${localIds.length + 2}
         AND cm.tipo = 'COBRO'
         ${payTipoClause}
-      GROUP BY COALESCE(mp.nombre, 'Sin especificar')
+      GROUP BY c.tipo_turno, COALESCE(mp.nombre, 'Sin especificar')
       ORDER BY total DESC
     `, ...payParams)
 
-    const payTotal = payRows.reduce((s, r) => s + Number(r.total), 0)
+    const payTotales = totalizarPorNombre(payRows)
+    const payTotal = payTotales.reduce((s, r) => s + r.val, 0)
     const PAY_COLORS = ['#3FA9DE', '#7FD49B', '#EF6F8E', '#4BC4CC', '#F4C152', '#F08A5D', '#B98CD8', '#9b958c']
-    const payments = payRows.map((r, i) => ({
-      name: r.nombre,
-      val: Number(r.total),
-      pct: payTotal > 0 ? ((Number(r.total) / payTotal) * 100).toFixed(1) : '0.0',
+    const payments = payTotales.map((r, i) => ({
+      ...r,
+      pct: payTotal > 0 ? ((r.val / payTotal) * 100).toFixed(1) : '0.0',
       color: PAY_COLORS[i % PAY_COLORS.length]
     }))
+    // El color se toma del agregado del período para que un mismo método se vea
+    // del mismo color en todos los turnos y en el gráfico de arriba.
+    const colorPorMetodo = new Map(payments.map(p => [p.name, p.color]))
+    const payPorTurno = desglosarPorTurno(payRows)
 
     const digital = payments
       .filter(p => !p.name.toLowerCase().includes('efectivo'))
@@ -155,6 +169,7 @@ export default async function reportesRoutes(fastify) {
     }
     const detRows = await fastify.db.$queryRawUnsafe(`
       SELECT
+        c.tipo_turno::text AS turno,
         COALESCE(dt.nombre, cd.nombre, 'Sin nombre') AS nombre,
         -- 'gasto' es el valor vigente; 'egreso' es el anterior y sigue en cajas
         -- historicas, asi que se aceptan los dos.
@@ -168,26 +183,67 @@ export default async function reportesRoutes(fastify) {
         AND c.fecha_inicio <= $${localIds.length + 2}
         AND (dt.id_app = $${localIds.length + 3} OR dt.id_app IS NULL)
         ${detTipoClause}
-      GROUP BY COALESCE(dt.nombre, cd.nombre, 'Sin nombre')
+      GROUP BY c.tipo_turno, COALESCE(dt.nombre, cd.nombre, 'Sin nombre')
       ORDER BY total DESC
     `, ...detParams)
 
+    const conEgreso = (r) => ({ egreso: Boolean(r.egreso) })
     const DET_COLORS = ['#3FA9DE', '#7FD49B', '#EF6F8E', '#4BC4CC', '#F4C152', '#F08A5D', '#B98CD8', '#9b958c', '#E0938C', '#5FA8D9']
-    const detallesTotal = detRows.reduce((s, r) => s + Number(r.total), 0)
-    const detalles = detRows
-      .filter(r => Number(r.total) !== 0)
+    const detTotales = totalizarPorNombre(detRows, conEgreso)
+    const detallesTotal = detTotales.reduce((s, r) => s + r.val, 0)
+    const detalles = detTotales
+      .filter(r => r.val !== 0)
       .map((r, i) => ({
-        name: r.nombre,
-        val: Number(r.total),
-        egreso: Boolean(r.egreso),
-        pct: detallesTotal > 0 ? ((Number(r.total) / detallesTotal) * 100).toFixed(1) : '0.0',
+        ...r,
+        pct: detallesTotal > 0 ? ((r.val / detallesTotal) * 100).toFixed(1) : '0.0',
         color: DET_COLORS[i % DET_COLORS.length]
       }))
+    const colorPorDetalle = new Map(detalles.map(d => [d.name, d.color]))
+    const detPorTurno = desglosarPorTurno(detRows, conEgreso)
 
     const pctZ      = totalVentas > 0 ? ((totalFiscal / totalVentas) * 100).toFixed(0) : '0'
     const pctNoFisc = totalVentas > 0 ? ((noFiscal / totalVentas) * 100).toFixed(0) : '0'
 
+    // ── Desglose por turno ──────────────────────────────────────────────────
+    // Una fila por turno con lo mismo que los KPI de arriba, más su propio
+    // desglose de métodos y detalles. Con el filtro de turno puesto, salen solo
+    // los turnos filtrados: es el mismo `where` que el resto del reporte.
+    const turnoRows = await fastify.db.caja.groupBy({
+      by: ['tipo_turno'],
+      where: cajaWhere,
+      _sum: { total: true, fiscal: true, comensales: true, tickets: true, efectivo: true },
+      _count: { id: true }
+    })
+
+    const turnos = ordenarPorTurno(turnoRows.map(row => {
+      const turno = etiquetaTurno(row.tipo_turno)
+      const total = Number(row._sum.total ?? 0)
+      const fiscalTurno = Number(row._sum.fiscal ?? 0)
+      const cubiertos = Number(row._sum.comensales ?? 0)
+      const ticketsTurno = Number(row._sum.tickets ?? 0)
+
+      return {
+        turno,
+        total,
+        cubiertos,
+        prom_cubierto: promedioPorCubierto(total, cubiertos),
+        fiscal: fiscalTurno,
+        pct_fiscal: pctFiscal(fiscalTurno, total),
+        tickets: ticketsTurno,
+        ticket_promedio: ticketsTurno > 0 ? Math.round(total / ticketsTurno) : null,
+        efectivo: Number(row._sum.efectivo ?? 0),
+        count_z: row._count.id,
+        // Cada turno se lleva su propio desglose para poder abrirlo sin pedir
+        // nada más al servidor.
+        payments: (payPorTurno.get(turno) ?? []).map(p => ({ ...p, color: colorPorMetodo.get(p.name) })),
+        detalles: (detPorTurno.get(turno) ?? [])
+          .filter(d => d.val !== 0)
+          .map(d => ({ ...d, color: colorPorDetalle.get(d.name) })),
+      }
+    }))
+
     return {
+      turnos,
       kpi: {
         total_ventas: totalVentas,
         total_z: totalFiscal,
@@ -247,13 +303,20 @@ export default async function reportesRoutes(fastify) {
     const hastaDate = new Date(`${hasta}T23:59:59.999${sufFecha}`)
     const localFilter = { id_local: { in: localIds } }
     const fechaWhere = { [campoFecha]: { gte: desdeDate, lte: hastaDate } }
-    const TIPOS_NO_DEUDA = new Set(['NCA', 'NCB'])
 
-    const [adeudadoAgg, efectivoAgg, pagosEnRango] = await Promise.all([
+    // La deuda es egresos impagos menos ingresos impagos: una nota de crédito
+    // cargada como ingreso resta sola, sin listas de tipos. Ver lib/deuda.js.
+    const { egresos, ingresos } = wheresDeuda({ ...localFilter, ...fechaWhere })
+
+    const [egresosAgg, ingresosAgg, efectivoAgg, pagosEnRango] = await Promise.all([
       fastify.db.pago.aggregate({
-        where: { ...localFilter, pagado: false, ...fechaWhere },
+        where: egresos,
         _sum: { importe: true },
         _count: { id: true }
+      }),
+      fastify.db.pago.aggregate({
+        where: ingresos,
+        _sum: { importe: true }
       }),
       fastify.db.pago.aggregate({
         where: { ...localFilter, ...fechaWhere, metodo_pago: { nombre: { equals: 'Efectivo', mode: 'insensitive' } } },
@@ -290,7 +353,9 @@ export default async function reportesRoutes(fastify) {
       if (rubroNombre === 'Impositivo') totalImpuestos += importe
       else if (rubroNombre === 'Sueldos') totalSueldos += importe
 
-      if (!p.pagado && !TIPOS_NO_DEUDA.has(p.id_tipo)) {
+      // Los ingresos ya salieron del loop en el `continue` de arriba, y el
+      // total los descuenta en deudaNeta: acá alcanza con mirar `pagado`.
+      if (!p.pagado) {
         if (rubroNombre === 'Impositivo') pendImpuestos += importe
         else if (rubroNombre === 'Sueldos') pendSueldos += importe
         else if (!esCmv) pendProveedores += importe
@@ -314,8 +379,8 @@ export default async function reportesRoutes(fastify) {
     const countNoAuditados = pagoIds.length - countAuditados
 
     return {
-      total_adeudado: Number(adeudadoAgg._sum.importe ?? 0),
-      count_adeudado: adeudadoAgg._count.id,
+      total_adeudado: deudaNeta(egresosAgg._sum.importe, ingresosAgg._sum.importe),
+      count_adeudado: egresosAgg._count.id,
       count_auditados: countAuditados,
       count_no_auditados: countNoAuditados,
       total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
@@ -503,5 +568,59 @@ export default async function reportesRoutes(fastify) {
     })
 
     return { data: rows }
+  })
+
+  // ── GET /fuera-de-termino ───────────────────────────────────────────────
+  // Facturas cargadas dentro del rango pedido pero cuyo período es de un mes
+  // anterior al de la carga. Sirve para ajustar un informe ya enviado sin tener
+  // que cruzar Excels a mano: son justamente las que cambian los números de un
+  // mes que el cliente ya recibió. Ver lib/fueraDeTermino.js para el criterio.
+  //
+  // El filtro va en SQL porque compara dos columnas entre sí, algo que el
+  // `where` de Prisma no expresa.
+  fastify.get('/fuera-de-termino', { preHandler: viewHandler }, async (request, reply) => {
+    const { desde, hasta, id_local } = request.query
+
+    if (!desde || !hasta) {
+      return reply.code(400).send({ error: 'desde y hasta son requeridos' })
+    }
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    const localIds = id_local ? [id_local] : request.allowedLocalIds
+    if (!localIds.length) return { data: [], total: 0 }
+
+    // created_at es un instante real -> el rango va en hora de Argentina.
+    const desdeDate = new Date(`${desde}T00:00:00.000-03:00`)
+    const hastaDate = new Date(`${hasta}T23:59:59.999-03:00`)
+
+    // El AT TIME ZONE doble pasa created_at (timestamptz en UTC) a hora local
+    // de Argentina antes de truncar el mes, por el mismo motivo que
+    // lib/fueraDeTermino.js: un pago cargado 22hs del último día del mes es el
+    // día 1 del mes siguiente en UTC y quedaría marcado como atrasado sin serlo.
+    const rows = await fastify.db.$queryRaw`
+      SELECT p.id, p.nro_ord, p.fecha, p.periodo, p.created_at, p.importe,
+             p.id_tipo, p.pagado,
+             pr.nombre AS proveedor,
+             l.nombre  AS local,
+             u.nombre  AS cargado_por
+      FROM pagos p
+      LEFT JOIN proveedores pr ON pr.id = p.id_proveedor
+      LEFT JOIN locales     l  ON l.id  = p.id_local
+      LEFT JOIN users       u  ON u.id  = p.created_by
+      WHERE p.id_local = ANY(${localIds})
+        AND p.created_at >= ${desdeDate}
+        AND p.created_at <= ${hastaDate}
+        AND p.periodo IS NOT NULL
+        AND date_trunc('month', p.periodo)
+              < date_trunc('month', p.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Argentina/Buenos_Aires')
+      ORDER BY p.created_at DESC
+    `
+
+    return {
+      data: rows.map(r => ({ ...r, importe: Number(r.importe ?? 0) })),
+      total: rows.length
+    }
   })
 }

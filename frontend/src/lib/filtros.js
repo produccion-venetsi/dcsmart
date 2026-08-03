@@ -28,6 +28,26 @@ export function normalizarMulti(raw, options = []) {
     .filter(x => x.value != null && x.value !== '')
 }
 
+// Los filtros de fecha pasaron de ser uno solo ({ campo_fecha, desde, hasta })
+// a ser varios rangos combinados con Y. Los presets guardados con el formato
+// viejo se leen igual, para no migrar datos: el viejo solo se lee, siempre se
+// escribe el nuevo.
+export function normalizarRangos(guardado) {
+  const g = guardado || {}
+
+  if (Array.isArray(g.rangos_fecha)) {
+    return g.rangos_fecha
+      .filter(r => r && (r.desde || r.hasta))
+      .map(r => ({ campo: r.campo || 'fecha', desde: r.desde || '', hasta: r.hasta || '' }))
+  }
+
+  if (g.desde || g.hasta) {
+    return [{ campo: g.campo_fecha || 'fecha', desde: g.desde || '', hasta: g.hasta || '' }]
+  }
+
+  return []
+}
+
 // Texto del control cerrado.
 export function resumenSeleccion(value, placeholder, max = MAX_LABELS_RESUMEN) {
   const arr = value || []
