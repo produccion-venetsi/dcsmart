@@ -76,22 +76,42 @@ const DESGLOSE_COLOR = { Sueldos: '#f59e0b', CMV: '#22c55e', Impositivo: '#ef444
 // tarjeta cambiaría de forma según el mes y no se podrían comparar dos locales
 // de un vistazo.
 function DesgloseBarras({ rows, total }) {
+  // La barra se arma de mayor a menor para que los tramos chicos no queden
+  // partidos entre dos grandes y se puedan distinguir. La leyenda sigue el
+  // mismo orden que la barra: leerlas en órdenes distintos obliga a buscar cada
+  // color, que es justo lo que la barra viene a evitar.
+  const ordenadas = [...rows].sort((a, b) => b[1] - a[1])
+  const conMonto = ordenadas.filter(([, val]) => val > 0)
+
   return (
     <div className="pdp-desglose">
-      {rows.map(([label, val]) => {
-        const pct = total > 0 ? (val / total) * 100 : 0
-        return (
-          <div className="pdp-desglose-fila" key={label}>
-            <span className="pdp-desglose-dot" style={{ background: DESGLOSE_COLOR[label] }} />
-            <span className="pdp-desglose-label">{label}</span>
-            <span className="pdp-desglose-barra">
-              <span style={{ width: `${pct}%`, background: DESGLOSE_COLOR[label] }} />
+      <div className="pdp-desglose-stack" role="img"
+        aria-label={conMonto.map(([l, v]) => `${l}: ${fmt$(v)}`).join(', ')}>
+        {conMonto.map(([label, val]) => (
+          <span
+            key={label}
+            style={{ width: `${(val / total) * 100}%`, background: DESGLOSE_COLOR[label] }}
+            title={`${label} · ${fmt$(val)}`}
+          />
+        ))}
+      </div>
+      <div className="pdp-desglose-leyenda">
+        {/* En la leyenda sí van las cuatro, incluso en cero: que Sueldos esté
+            en cero es información, y si desaparecieran las vacías la tarjeta
+            cambiaría de forma según el mes. En la barra no entran porque un
+            tramo de ancho cero no se ve. */}
+        {ordenadas.map(([label, val]) => {
+          const pct = total > 0 ? (val / total) * 100 : 0
+          return (
+            <span className="pdp-desglose-item" key={label}>
+              <span className="pdp-desglose-dot" style={{ background: DESGLOSE_COLOR[label] }} />
+              <span className="pdp-desglose-label">{label}</span>
+              <span className="pdp-desglose-monto">{fmt$(val)}</span>
+              <span className="pdp-desglose-pct">{pct.toFixed(0)}%</span>
             </span>
-            <span className="pdp-desglose-monto">{fmt$(val)}</span>
-            <span className="pdp-desglose-pct">{pct.toFixed(0)}%</span>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
