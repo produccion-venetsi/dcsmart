@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
+import { ROLES_TODOS, ROLES_OPERATIVOS } from '../lib/roles.js'
 import { authApi } from '../api/auth.js'
 import AppLogo from './AppLogo.jsx'
 
@@ -199,15 +200,15 @@ function initials(nombre) {
 }
 
 // `roles`: qué roles ven cada ítem. Si se omite, lo ven todos.
-const ALL = ['super_admin', 'dcsmart', 'admin', 'cajero']
+const ALL = ROLES_TODOS
 
 const NAV_MAIN = [
   { to: '/dashboard',   label: 'Dashboard',   Icon: IcoDashboard, roles: ALL },
   { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja,      roles: ALL },
   { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
-  { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ROLES_OPERATIVOS },
   { to: '/arqueo',      label: 'Arqueo',      Icon: IcoArqueo,    roles: ALL },
-  { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ['super_admin', 'dcsmart', 'admin'] },
+  { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ROLES_OPERATIVOS },
   // Reportes internos de la app de gestión (/reportes). El Analytics externo
   // se abre desde un botón dentro de esa pantalla, no desde el sidebar.
   { key: 'reportes', to: '/reportes', label: 'Reportes', Icon: IcoReportes },

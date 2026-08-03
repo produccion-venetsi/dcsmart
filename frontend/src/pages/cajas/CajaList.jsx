@@ -4,6 +4,7 @@ import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { puedeEditar, puedeBorrarCajas, puedeCrearCajas } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
@@ -1561,9 +1562,11 @@ export default function CajaList() {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const role        = activeApp?.role
-  const canCreate = ['super_admin', 'dcsmart', 'admin', 'cajero'].includes(role)
-  const canEdit    = ['super_admin', 'dcsmart', 'admin'].includes(role)
-  const canDelete  = ['super_admin', 'dcsmart', 'admin'].includes(role)
+  const canCreate = puedeCrearCajas(role)
+  const canEdit    = puedeEditar(role)
+  // Antes decia admin y el backend lo rechazaba con 403: el rol nunca tuvo
+  // can_delete en caja. Ahora la pantalla ofrece lo que el backend permite.
+  const canDelete  = puedeBorrarCajas(role)
   const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
   const canExport  = ['super_admin', 'dcsmart'].includes(role)
   const [exporting, setExporting] = useState(false)

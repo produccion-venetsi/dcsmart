@@ -9,9 +9,11 @@ import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
-import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo } from '../../lib/dates.js'
+import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
+import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
 
 function IcoBack() {
   return (
@@ -99,6 +101,8 @@ export default function PagoForm() {
   const draftKey        = `pago-draft:${id || 'nuevo'}${modoRapido ? `:${tipoParam || ''}` : ''}`
   const restoredFromDraftRef = useRef(false)
   const draftReadyRef        = useRef(false)
+  // El Nro de los modos rápidos sigue a la fecha hasta que alguien lo escribe.
+  const nroManualRef         = useRef(false)
 
   const locales = activeApp?.locales ?? []
 
@@ -169,15 +173,33 @@ export default function PagoForm() {
   const [form, setForm] = useState(() => ({
     fecha: hoy,
     id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : '',
-    pv: '', nro: '',
+    // Carga Avión y MovStock no tienen comprobante fiscal: el número es la
+    // fecha en DDMMYYYY (ver nroDesdeFecha) y se sigue actualizando con ella
+    // mientras nadie lo escriba a mano.
+    pv: '', nro: modoRapido ? nroDesdeFecha(hoy) : '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
     pagado: modoRapido, fecha_pago: modoRapido ? ahoraDateTime : '', periodo: modoRapido ? hoy : '',
-    estado_op: 'CUENTA_CTE', ingresa_egreso: false,
+    // Son plata que sale de la caja del local, no cuenta corriente con un
+    // proveedor: por eso el estado arranca en CAJA en los modos rápidos.
+    estado_op: modoRapido ? 'CAJA' : 'CUENTA_CTE', ingresa_egreso: false,
     periodico: false,
     id_local: activeLocal?.id || '',
     foto_url: '', pdf_url: '',
   }))
+
+  // MovStock descuenta un porcentaje fijo del neto (30% salvo que el local
+  // tenga otro pactado). Se mira el tipo del formulario y no el de la URL: si
+  // alguien cambia el comprobante a otra cosa, el descuento deja de aplicar.
+  const esMovStock = modoRapido && form.id_tipo === 'STK'
+  // Porcentaje del local activo. Se completa cuando llega la ficha del local;
+  // hasta entonces vale el general, que es lo que corresponde a casi todos.
+  const [pctDescuento, setPctDescuento] = useState(DESCUENTO_MOVSTOCK_DEFAULT)
+  // Escribir el descuento a mano lo desengancha del cálculo, igual que el
+  // cashflow con el plazo del proveedor: un valor puesto por una persona no se
+  // pisa en silencio. Es estado y no un ref porque el aviso de abajo del campo
+  // cambia según esto, y un ref no vuelve a renderizar.
+  const [descuentoManual, setDescuentoManual] = useState(false)
 
   // Restaura un borrador guardado (si existe) antes que nada. Cubre el caso
   // de que la pestaña se haya recargado por completo mientras el usuario
@@ -186,6 +208,9 @@ export default function PagoForm() {
     const draft = loadDraft(draftKey)
     if (draft) {
       restoredFromDraftRef.current = true
+      // Lo que se recupera se respeta tal cual: si después se toca la fecha, el
+      // número recuperado no se pisa.
+      if (draft.data.form?.nro) nroManualRef.current = true
       if (draft.data.form)           setForm((f) => ({ ...f, ...draft.data.form }))
       if (draft.data.provSelected)   setProvSelected(draft.data.provSelected)
       if (draft.data.provPlazo != null) setProvPlazo(draft.data.provPlazo)
@@ -225,6 +250,9 @@ export default function PagoForm() {
           const efectivo = mets.find((m) => m.nombre === 'Efectivo')
           if (efectivo) setForm((f) => ({ ...f, id_metodo: f.id_metodo || efectivo.id }))
         }
+        // El porcentaje de descuento sale de la ficha del local. Se guarda
+        // aunque no sea MovStock: el tipo se puede cambiar dentro del form.
+        if (localRes?.data) setPctDescuento(porcentajeDelLocal(localRes.data))
         if (pagoRes) {
           const d = pagoRes.data
           if (d.id_proveedor && d.proveedor) {
@@ -260,7 +288,10 @@ export default function PagoForm() {
             nro_ord:        d.nro_ord        ?? null,
           })
         } else if (localRes?.data?.id_proveedor) {
+          // Carga Avión y MovStock facturan contra el proveedor del propio
+          // local (la sociedad que factura por él), así que viene precargado.
           const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
+          setLocalProveedor(prov)
           setProvSelected(prov)
           setProvPlazo(prov.plazo || null)
           // Sin precarga de rubro, igual que en selectProveedor.
@@ -269,12 +300,39 @@ export default function PagoForm() {
             id_proveedor: prov.id,
             cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
           }))
+        } else if (localRes) {
+          // El local existe pero no tiene proveedor configurado: false (y no
+          // null) para poder distinguirlo de "todavía no cargó" y avisarlo.
+          setLocalProveedor(false)
         }
       })
       .catch(() => { if (!ctrl.signal.aborted) { draftReadyRef.current = true; notify('Error al cargar datos', 'error') } })
 
     return () => ctrl.abort()
   }, [id])
+
+  // Al salir del formulario, el borrador se descarta.
+  //
+  // El borrador existe para sobrevivir a que la pestaña se RECARGUE con el
+  // formulario abierto (Android puede matar el proceso mientras se saca una
+  // foto), no para sobrevivir a que la persona se vaya. Sin esto, cancelar y
+  // volver a entrar traía de vuelta la factura anterior con el cartel de "Se
+  // recuperó la carga que tenías sin guardar", que no es lo que espera nadie
+  // después de cancelar.
+  //
+  // Una recarga de verdad no ejecuta este cleanup, así que el caso de la
+  // cámara sigue cubierto: ahí el borrador se restaura como siempre.
+  const montadoRef = useRef(false)
+  useEffect(() => {
+    montadoRef.current = true
+    return () => {
+      montadoRef.current = false
+      // En desarrollo, StrictMode desmonta y vuelve a montar enseguida. Si eso
+      // pasa, el remount de acá arriba cancela el descarte y el borrador queda
+      // intacto; en una salida real nadie lo vuelve a montar y se borra.
+      setTimeout(() => { if (!montadoRef.current) clearDraft(draftKey) }, 0)
+    }
+  }, [draftKey])
 
   // Guarda un borrador (debounced) cada vez que cambia el formulario o los
   // archivos adjuntos, para poder recuperarlo si la pestaña se recarga (ver
@@ -330,13 +388,41 @@ export default function PagoForm() {
   const pvNroOpcional = esCargaAvion || form.id_tipo === 'B'
 
   // ── Lectura de la factura con IA ─────────────────────────────────────────
-  // Al elegir la foto se leen los datos y se precargan. Nada se guarda: la
-  // persona revisa. Los campos que vinieron de la lectura quedan marcados, para
-  // que se sepa qué revisar y qué escribió uno mismo.
+  // Se dispara desde el botón "Carga con IA" (no al adjuntar una foto, como
+  // antes: se subían fotos de cualquier cosa y se gastaba una llamada al modelo
+  // para nada, y encima se pisaban campos ya escritos a mano).
+  //
+  // Los datos se precargan pero no se guardan solos: la persona revisa. Los
+  // campos que vinieron de la lectura quedan marcados, para que se sepa qué
+  // revisar y qué escribió uno mismo.
   const [leyendoFactura, setLeyendoFactura] = useState(false)
   const [lectura, setLectura] = useState(null) // { marcados, aritmetica, proveedor, totalFactura }
+  // 'foto' | 'pdf' | null: en qué slot cayó el archivo que se está leyendo, para
+  // bloquear ese adjunto (y no el otro) mientras dura la lectura.
+  const [leyendoTipo, setLeyendoTipo] = useState(null)
 
   const marcadoIA = (campo) => (lectura?.marcados?.includes(campo) ? ' campo-ia' : '')
+
+  const esPdf = (file) =>
+    file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name ?? '')
+
+  // El archivo con el que se lee es también el comprobante del pago: se guarda
+  // en el slot que le corresponde según lo que sea, así una sola acción carga
+  // los datos y deja adjuntada la factura. Si ya había algo en ese slot, se
+  // reemplaza — es el archivo del que salen los datos que se están viendo.
+  const cargarConIA = (file) => {
+    if (!file) return
+    if (esPdf(file)) {
+      setPdfFile(file)
+      set('pdf_url', '')
+      setLeyendoTipo('pdf')
+    } else {
+      setFotoFile(file)
+      set('foto_url', '')
+      setLeyendoTipo('foto')
+    }
+    leerFactura(file)
+  }
 
   const leerFactura = async (file) => {
     if (!file) return
@@ -345,7 +431,7 @@ export default function PagoForm() {
     try {
       const { data } = await pagosApi.leerFactura(file)
       if (!data.legible) {
-        notify('No se pudo leer la factura de esa foto. Cargá los datos a mano.', 'info')
+        notify('No se pudieron leer los datos de ese archivo. Quedó adjunto igual: cargá los datos a mano.', 'info')
         return
       }
       const c = data.campos
@@ -387,9 +473,11 @@ export default function PagoForm() {
       })
       notify(`Leí la factura: ${(data.marcados ?? []).length} campos precargados. Revisalos.`, 'success')
     } catch (err) {
+      // El archivo ya quedó adjunto: la lectura falló, la carga a mano no.
       notify(err.response?.data?.error || 'No se pudo leer la factura. Cargá los datos a mano.', 'error')
     } finally {
       setLeyendoFactura(false)
+      setLeyendoTipo(null)
     }
   }
 
@@ -398,24 +486,45 @@ export default function PagoForm() {
   const diasPeriodo  = diasDesdeFinDePeriodo(form.periodo)
   const periodoViejo = periodoDemasiadoViejo(form.periodo)
 
-  // set con efectos encadenados
-  const set = (field, value) => setForm(f => {
-    const next = { ...f, [field]: value }
-    if (field === 'fecha') {
-      next.periodo = value
-      // Solo recalcular el cashflow si estaba vacío o si todavía era el
-      // auto-calculado (fecha anterior + plazo). Un valor puesto a mano
-      // NUNCA se pisa en silencio: el cliente carga vencimientos pactados
-      // que no coinciden con el plazo genérico del proveedor.
-      const autoAnterior = calcCashflow(f.fecha, provPlazo)
-      if (!f.cashflow || f.cashflow === autoAnterior) {
-        next.cashflow = calcCashflow(value, provPlazo) || f.cashflow
+  // set con efectos encadenados.
+  //
+  // Las banderas de "esto lo escribió una persona" se marcan ACÁ y no dentro
+  // del updater: en StrictMode el updater corre dos veces, y un efecto
+  // secundario adentro se ejecuta de más.
+  const set = (field, value) => {
+    // Escribir el número o el descuento a mano los desengancha de su cálculo:
+    // a partir de ahí manda lo que puso la persona.
+    if (field === 'nro') nroManualRef.current = true
+    if (field === 'descuento') setDescuentoManual(true)
+
+    setForm(f => {
+      const next = { ...f, [field]: value }
+      // En MovStock el descuento sale del neto por el porcentaje del local. Se
+      // recalcula mientras nadie lo haya escrito a mano.
+      if (field === 'importe_neto' && esMovStock && !isEditing && !descuentoManual) {
+        next.descuento = descuentoParaInput(value, pctDescuento)
       }
-    }
-    if (field === 'fecha_pago') next.pagado = Boolean(value)
-    if (field === 'pagado' && !value) next.fecha_pago = ''
-    return next
-  })
+      if (field === 'fecha') {
+        next.periodo = value
+        // El número de los movimientos internos es la fecha, así que sigue a
+        // la fecha mientras nadie lo haya tocado.
+        if (modoRapido && !isEditing && !nroManualRef.current) {
+          next.nro = nroDesdeFecha(value) || next.nro
+        }
+        // Solo recalcular el cashflow si estaba vacío o si todavía era el
+        // auto-calculado (fecha anterior + plazo). Un valor puesto a mano
+        // NUNCA se pisa en silencio: el cliente carga vencimientos pactados
+        // que no coinciden con el plazo genérico del proveedor.
+        const autoAnterior = calcCashflow(f.fecha, provPlazo)
+        if (!f.cashflow || f.cashflow === autoAnterior) {
+          next.cashflow = calcCashflow(value, provPlazo) || f.cashflow
+        }
+      }
+      if (field === 'fecha_pago') next.pagado = Boolean(value)
+      if (field === 'pagado' && !value) next.fecha_pago = ''
+      return next
+    })
+  }
 
   // El importe total es Neto + Impuestos − Descuento; nunca se edita a mano.
   const impuestosSum = isEditing
@@ -694,17 +803,17 @@ export default function PagoForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* ── Resultado de leer la foto de la factura ── */}
+        {/* ── Resultado de leer la factura (foto o PDF) ── */}
         {leyendoFactura && (
           <div className="aviso-lectura">
             <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-            <span>Leyendo la factura…</span>
+            <span>Leyendo la factura{leyendoTipo === 'pdf' ? ' (PDF)' : ''}…</span>
           </div>
         )}
         {!leyendoFactura && lectura && (
           <div className="aviso-lectura">
             <div>
-              <strong>Datos precargados de la foto.</strong> Revisá los campos marcados antes de guardar.
+              <strong>Datos precargados de la factura.</strong> Revisá los campos marcados antes de guardar.
               {lectura.proveedor?.estado === 'encontrado' && (
                 <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
               )}
@@ -894,6 +1003,18 @@ export default function PagoForm() {
                 createLabel="crear proveedor"
                 placeholder="Buscar o crear proveedor…"
               />
+              {/* En los modos rápidos el proveedor lo pone el local. Si el local
+                  no lo tiene configurado no hay nada que precargar, y sin este
+                  aviso parece que la precarga está rota cuando en realidad
+                  falta el dato. Hoy son 55 de 59 locales. */}
+              {modoRapido && !isEditing && localProveedor === false && (
+                <span className="aviso-periodo-viejo" style={{ marginTop: 7 }}>
+                  <span>
+                    Este local todavía no tiene proveedor asociado, así que hay que elegirlo a mano.
+                    Se configura una sola vez en <strong>Locales → {activeLocal?.nombre || 'el local'} → Proveedor</strong>.
+                  </span>
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label className="form-label">Rubro / Categoría *</label>
@@ -1013,6 +1134,29 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <input type="number" step="0.01" placeholder="0.00" value={form.descuento} onChange={e => set('descuento', e.target.value)} />
               </div>
+              {/* Se dice de dónde salió el número: si no, aparece un descuento
+                  que nadie escribió y no se sabe si está bien. */}
+              {esMovStock && !isEditing && pctDescuento > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  {descuentoManual
+                    ? `Escrito a mano (el automático de este local es ${pctDescuento}%)`
+                    : `${pctDescuento}% automático de este local`}
+                  {!descuentoManual && form.descuento && (
+                    <button
+                      type="button"
+                      onClick={() => set('descuento', '')}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, marginLeft: 6,
+                        color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
+                        textDecoration: 'underline',
+                      }}
+                      title="Quitar el descuento automático de este pago"
+                    >
+                      quitar
+                    </button>
+                  )}
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label className="form-label" title="Se calcula solo: Neto + Impuestos − Descuento">Importe Total</label>
@@ -1212,14 +1356,24 @@ export default function PagoForm() {
         <div className="form-panel">
           <div className="form-panel-title">Adjuntos</div>
           <div className="form-grid">
+            {/* Al editar no se ofrece: precargar campos encima de un pago ya
+                guardado pisaría datos que alguien revisó. Los dos adjuntos de
+                abajo siguen disponibles para agregar el comprobante. */}
+            {!isEditing && (
+              <CargaIA
+                onArchivo={cargarConIA}
+                leyendo={leyendoFactura}
+                disabled={loading}
+              />
+            )}
             <AdjuntoUpload
               label="Foto"
               accept="image/*"
               value={form.foto_url}
               file={fotoFile}
-              onFileSelected={(f) => { setFotoFile(f); if (!isEditing) leerFactura(f) }}
+              onFileSelected={setFotoFile}
               onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null) }}
-              uploading={uploadingFoto || leyendoFactura}
+              uploading={uploadingFoto || leyendoTipo === 'foto'}
             />
             <AdjuntoUpload
               label="PDF"
@@ -1227,8 +1381,8 @@ export default function PagoForm() {
               value={form.pdf_url}
               file={pdfFile}
               onFileSelected={setPdfFile}
-              onRemove={() => { set('pdf_url', ''); setPdfFile(null) }}
-              uploading={uploadingPdf}
+              onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null) }}
+              uploading={uploadingPdf || leyendoTipo === 'pdf'}
             />
           </div>
         </div>

@@ -149,3 +149,35 @@ export function periodoDemasiadoViejo(periodo, hoy = todayInputDate()) {
   const dias = diasDesdeFinDePeriodo(periodo, hoy)
   return dias !== null && dias >= DIAS_PERIODO_VIEJO
 }
+
+// true si el período cargado no cae en el mismo mes que la fecha de la
+// factura. Es un desfasaje distinto del de arriba: aquel mira si el período ya
+// cerró hace mucho contra HOY, este compara los dos datos de la factura entre
+// sí, así que una factura vieja cargada tarde con su período correcto no lo
+// dispara, y una factura de este mes con el período del anterior sí.
+//
+// No es un error: hay facturas legítimamente imputadas a otro mes (un servicio
+// de junio facturado en julio). Por eso solo se marca, nunca se bloquea.
+//
+// Sin alguno de los dos datos devuelve false: no se puede afirmar nada.
+export function periodoDistintoDeFecha(fecha, periodo) {
+  const f = aFechaCalendario(fecha)
+  const p = aFechaCalendario(periodo)
+  if (!f || !p) return false
+  return f.slice(0, 7) !== p.slice(0, 7)
+}
+
+// ── Número de comprobante de los movimientos internos ───────────────────────
+
+// Carga Avión y MovStock no tienen comprobante fiscal, así que el número lo da
+// la fecha en DDMMYYYY: siempre 8 dígitos, sin que nadie tenga que inventarlo.
+//
+// Se lee el string del <input type="date"> tal cual, sin pasar por Date: el
+// input ya entrega un día calendario en YYYY-MM-DD y construir un Date para
+// volver a sacarle el día es la forma clásica de correrlo por huso horario.
+export function nroDesdeFecha(fecha) {
+  const s = String(fecha ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''
+  const [anio, mes, dia] = s.split('-')
+  return `${dia}${mes}${anio}`
+}

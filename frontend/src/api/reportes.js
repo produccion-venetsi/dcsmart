@@ -5,5 +5,4 @@ export const reportesApi = {
   pagos: (params, signal) => client.get('/reportes/pagos', { params, signal }),
   cmv:   (params, signal) => client.get('/reportes/cmv', { params, signal }),
   balance: (params, signal) => client.get('/reportes/balance', { params, signal }),
-  fueraDeTermino: (params, signal) => client.get('/reportes/fuera-de-termino', { params, signal })
 }

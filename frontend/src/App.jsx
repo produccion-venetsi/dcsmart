@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import ActualizarApp from './components/ActualizarApp.jsx'
+import { ROLES, ROLES_DC, ROLES_OPERATIVOS } from './lib/roles.js'
 import Layout from './components/Layout.jsx'
 import { useAuthStore } from './store/authStore.js'
 
@@ -56,10 +58,11 @@ function PageFallback() {
   )
 }
 
-// Grupos de roles para guardar rutas
-const SUPER       = ['super_admin']
-const ADMIN_PANEL = ['super_admin', 'dcsmart']
-const OPERATIVE   = ['super_admin', 'dcsmart', 'admin']
+// Grupos de roles para guardar rutas. Salen de lib/roles.js para que agregar un
+// rol sea un solo cambio y no una búsqueda por todo el frontend.
+const SUPER       = [ROLES.SUPER]
+const ADMIN_PANEL = ROLES_DC
+const OPERATIVE   = ROLES_OPERATIVOS
 
 // Guard de rol dentro del Layout: la app ya está garantizada por el ProtectedRoute padre.
 function Guard({ roles, children }) {
@@ -91,6 +94,9 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      {/* Fuera del Suspense y de las rutas: el aviso de versión nueva tiene que
+          poder aparecer en cualquier pantalla, incluido el login. */}
+      <ActualizarApp />
       <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell
@@ -81,6 +81,10 @@ function PayTooltip({ active, payload }) {
 export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Qué turno tiene abierto su desglose. Uno solo a la vez: abrir varios llena
+  // la pantalla de filas y se pierde la comparación entre turnos, que es el
+  // punto de la tabla.
+  const [turnoAbierto, setTurnoAbierto] = useState(null)
 
   // tipoTurno es un array: se compara por su CSV, no por identidad de objeto,
   // para no re-disparar el fetch en cada render del padre.
@@ -111,6 +115,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
   const payTotal      = data?.pay_total ?? 0
   const detalles      = data?.detalles ?? []
   const detallesTotal = data?.detalles_total ?? 0
+  const turnos        = data?.turnos ?? []
 
   const fiscalPct = kpi.total_ventas > 0
     ? Math.round((fiscal.fiscal / kpi.total_ventas) * 100) : 0
@@ -268,6 +273,110 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
           )}
         </div>
       </div>
+
+      {/* ── Desglose por turno ── */}
+      {(skel || turnos.length > 0) && (
+        <div className="rep-chart-card" style={{ marginBottom: '1.25rem' }}>
+          <div className="rep-chart-title">Desglose por turno</div>
+          <div className="rep-chart-sub">
+            Tocá un turno para ver sus medios de cobro y sus detalles
+          </div>
+          {skel ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rep-skel" style={{ width: '100%', height: 38, marginBottom: 4 }} />
+            ))
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table rep-turnos-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 22 }}></th>
+                    <th>Turno</th>
+                    <th className="num">Total</th>
+                    <th className="num">Cub</th>
+                    <th className="num">Prom Cub</th>
+                    <th className="num">% Fiscal</th>
+                    <th className="num">Z</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {turnos.map((t) => {
+                    const abierto = turnoAbierto === t.turno
+                    const tieneDesglose = t.payments.length > 0 || t.detalles.length > 0
+                    return (
+                      <Fragment key={t.turno}>
+                        <tr
+                          className={tieneDesglose ? 'row-clickable' : undefined}
+                          onClick={() => tieneDesglose && setTurnoAbierto(abierto ? null : t.turno)}
+                        >
+                          <td className="td-muted">{tieneDesglose ? (abierto ? '▾' : '▸') : ''}</td>
+                          <td style={{ fontWeight: 600 }}>{t.turno}</td>
+                          <td className="num td-number">{fmt(t.total)}</td>
+                          {/* Cubiertos y su promedio quedan en — cuando la caja
+                              no los carga: un 0 se leería como dato real. */}
+                          <td className="num">{t.cubiertos || '—'}</td>
+                          <td className="num">{t.prom_cubierto != null ? fmt(t.prom_cubierto) : '—'}</td>
+                          <td className="num">{t.pct_fiscal != null ? `${t.pct_fiscal}%` : '—'}</td>
+                          <td className="num td-muted">{t.count_z}</td>
+                        </tr>
+                        {abierto && (
+                          <tr>
+                            <td></td>
+                            <td colSpan={6}>
+                              <div className="rep-turno-desglose">
+                                {t.payments.length > 0 && (
+                                  <div>
+                                    <div className="rep-turno-desglose-tit">Medios de cobro</div>
+                                    {t.payments.map((p, i) => (
+                                      <div className="rep-pay-row" key={i}>
+                                        <span className="rep-pay-dot" style={{ background: p.color }} />
+                                        <span className="rep-pay-name">{p.name}</span>
+                                        <span className="rep-pay-amount">{fmt(p.val)}</span>
+                                        <span className="rep-pay-pct">{p.pct}%</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {t.detalles.length > 0 && (
+                                  <div>
+                                    <div className="rep-turno-desglose-tit">Detalles</div>
+                                    {t.detalles.map((d, i) => (
+                                      <div className="rep-pay-row" key={i}>
+                                        <span className="rep-pay-dot" style={{ background: d.color }} />
+                                        <span className="rep-pay-name">{d.name}{d.egreso ? ' (egreso)' : ''}</span>
+                                        <span className="rep-pay-amount">{d.egreso ? '-' : ''}{fmt(d.val)}</span>
+                                        <span className="rep-pay-pct">{d.pct}%</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                  {/* El total repite los KPI de arriba a propósito: es lo que
+                      permite ver de un vistazo que los turnos suman el período
+                      y que no falta ninguno. */}
+                  <tr className="rep-turnos-total">
+                    <td></td>
+                    <td>Total</td>
+                    <td className="num td-number">{fmt(kpi.total_ventas ?? 0)}</td>
+                    <td className="num">{kpi.cubiertos || '—'}</td>
+                    <td className="num">
+                      {kpi.cubiertos > 0 ? fmt(Math.round((kpi.total_ventas ?? 0) / kpi.cubiertos)) : '—'}
+                    </td>
+                    <td className="num">{kpi.pct_z != null ? `${kpi.pct_z}%` : '—'}</td>
+                    <td className="num td-muted">{kpi.count_z ?? 0}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Movimientos / Detalles: gráfico + tabla emparejados por bloque,
           cada bloque desaparece entero si esa fuente no tiene datos ── */}

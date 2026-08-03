@@ -1,6 +1,10 @@
 import { toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
+import {
+  etiquetaTurno, promedioPorCubierto, pctFiscal, ordenarPorTurno,
+  desglosarPorTurno, totalizarPorNombre
+} from '../lib/turnos.js'
 
 // Comprobantes que entran al reporte BALANCE (ver GET /balance). Son los tipos
 // fiscales; el reporte se define por este conjunto, no por lo que el usuario
@@ -79,8 +83,13 @@ export default async function reportesRoutes(fastify) {
 
     // LEFT JOIN (no INNER) -- un movimiento COBRO sin id_metodo asignado no
     // debe desaparecer silenciosamente de la suma, solo queda sin nombre.
+    // Se agrupa TAMBIÉN por turno y el total del período se reconstruye
+    // sumando, en vez de correr dos consultas que agrupan distinto: así el
+    // desglose por turno no puede quedar desalineado con el total de arriba.
     const payRows = await fastify.db.$queryRawUnsafe(`
-      SELECT COALESCE(mp.nombre, 'Sin especificar') AS nombre, SUM(cm.monto) AS total
+      SELECT c.tipo_turno::text AS turno,
+             COALESCE(mp.nombre, 'Sin especificar') AS nombre,
+             SUM(cm.monto) AS total
       FROM caja_movimientos cm
       JOIN cajas c ON cm.id_caja = c.id
       LEFT JOIN metodos_pago mp ON cm.id_metodo = mp.id
@@ -89,18 +98,22 @@ export default async function reportesRoutes(fastify) {
         AND c.fecha_inicio <= $${localIds.length + 2}
         AND cm.tipo = 'COBRO'
         ${payTipoClause}
-      GROUP BY COALESCE(mp.nombre, 'Sin especificar')
+      GROUP BY c.tipo_turno, COALESCE(mp.nombre, 'Sin especificar')
       ORDER BY total DESC
     `, ...payParams)
 
-    const payTotal = payRows.reduce((s, r) => s + Number(r.total), 0)
+    const payTotales = totalizarPorNombre(payRows)
+    const payTotal = payTotales.reduce((s, r) => s + r.val, 0)
     const PAY_COLORS = ['#3FA9DE', '#7FD49B', '#EF6F8E', '#4BC4CC', '#F4C152', '#F08A5D', '#B98CD8', '#9b958c']
-    const payments = payRows.map((r, i) => ({
-      name: r.nombre,
-      val: Number(r.total),
-      pct: payTotal > 0 ? ((Number(r.total) / payTotal) * 100).toFixed(1) : '0.0',
+    const payments = payTotales.map((r, i) => ({
+      ...r,
+      pct: payTotal > 0 ? ((r.val / payTotal) * 100).toFixed(1) : '0.0',
       color: PAY_COLORS[i % PAY_COLORS.length]
     }))
+    // El color se toma del agregado del período para que un mismo método se vea
+    // del mismo color en todos los turnos y en el gráfico de arriba.
+    const colorPorMetodo = new Map(payments.map(p => [p.name, p.color]))
+    const payPorTurno = desglosarPorTurno(payRows)
 
     const digital = payments
       .filter(p => !p.name.toLowerCase().includes('efectivo'))
@@ -156,6 +169,7 @@ export default async function reportesRoutes(fastify) {
     }
     const detRows = await fastify.db.$queryRawUnsafe(`
       SELECT
+        c.tipo_turno::text AS turno,
         COALESCE(dt.nombre, cd.nombre, 'Sin nombre') AS nombre,
         -- 'gasto' es el valor vigente; 'egreso' es el anterior y sigue en cajas
         -- historicas, asi que se aceptan los dos.
@@ -169,26 +183,67 @@ export default async function reportesRoutes(fastify) {
         AND c.fecha_inicio <= $${localIds.length + 2}
         AND (dt.id_app = $${localIds.length + 3} OR dt.id_app IS NULL)
         ${detTipoClause}
-      GROUP BY COALESCE(dt.nombre, cd.nombre, 'Sin nombre')
+      GROUP BY c.tipo_turno, COALESCE(dt.nombre, cd.nombre, 'Sin nombre')
       ORDER BY total DESC
     `, ...detParams)
 
+    const conEgreso = (r) => ({ egreso: Boolean(r.egreso) })
     const DET_COLORS = ['#3FA9DE', '#7FD49B', '#EF6F8E', '#4BC4CC', '#F4C152', '#F08A5D', '#B98CD8', '#9b958c', '#E0938C', '#5FA8D9']
-    const detallesTotal = detRows.reduce((s, r) => s + Number(r.total), 0)
-    const detalles = detRows
-      .filter(r => Number(r.total) !== 0)
+    const detTotales = totalizarPorNombre(detRows, conEgreso)
+    const detallesTotal = detTotales.reduce((s, r) => s + r.val, 0)
+    const detalles = detTotales
+      .filter(r => r.val !== 0)
       .map((r, i) => ({
-        name: r.nombre,
-        val: Number(r.total),
-        egreso: Boolean(r.egreso),
-        pct: detallesTotal > 0 ? ((Number(r.total) / detallesTotal) * 100).toFixed(1) : '0.0',
+        ...r,
+        pct: detallesTotal > 0 ? ((r.val / detallesTotal) * 100).toFixed(1) : '0.0',
         color: DET_COLORS[i % DET_COLORS.length]
       }))
+    const colorPorDetalle = new Map(detalles.map(d => [d.name, d.color]))
+    const detPorTurno = desglosarPorTurno(detRows, conEgreso)
 
     const pctZ      = totalVentas > 0 ? ((totalFiscal / totalVentas) * 100).toFixed(0) : '0'
     const pctNoFisc = totalVentas > 0 ? ((noFiscal / totalVentas) * 100).toFixed(0) : '0'
 
+    // ── Desglose por turno ──────────────────────────────────────────────────
+    // Una fila por turno con lo mismo que los KPI de arriba, más su propio
+    // desglose de métodos y detalles. Con el filtro de turno puesto, salen solo
+    // los turnos filtrados: es el mismo `where` que el resto del reporte.
+    const turnoRows = await fastify.db.caja.groupBy({
+      by: ['tipo_turno'],
+      where: cajaWhere,
+      _sum: { total: true, fiscal: true, comensales: true, tickets: true, efectivo: true },
+      _count: { id: true }
+    })
+
+    const turnos = ordenarPorTurno(turnoRows.map(row => {
+      const turno = etiquetaTurno(row.tipo_turno)
+      const total = Number(row._sum.total ?? 0)
+      const fiscalTurno = Number(row._sum.fiscal ?? 0)
+      const cubiertos = Number(row._sum.comensales ?? 0)
+      const ticketsTurno = Number(row._sum.tickets ?? 0)
+
+      return {
+        turno,
+        total,
+        cubiertos,
+        prom_cubierto: promedioPorCubierto(total, cubiertos),
+        fiscal: fiscalTurno,
+        pct_fiscal: pctFiscal(fiscalTurno, total),
+        tickets: ticketsTurno,
+        ticket_promedio: ticketsTurno > 0 ? Math.round(total / ticketsTurno) : null,
+        efectivo: Number(row._sum.efectivo ?? 0),
+        count_z: row._count.id,
+        // Cada turno se lleva su propio desglose para poder abrirlo sin pedir
+        // nada más al servidor.
+        payments: (payPorTurno.get(turno) ?? []).map(p => ({ ...p, color: colorPorMetodo.get(p.name) })),
+        detalles: (detPorTurno.get(turno) ?? [])
+          .filter(d => d.val !== 0)
+          .map(d => ({ ...d, color: colorPorDetalle.get(d.name) })),
+      }
+    }))
+
     return {
+      turnos,
       kpi: {
         total_ventas: totalVentas,
         total_z: totalFiscal,

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { diasDesdeFinDePeriodo, periodoDemasiadoViejo, DIAS_PERIODO_VIEJO } from './dates.js'
+import { diasDesdeFinDePeriodo, periodoDemasiadoViejo, DIAS_PERIODO_VIEJO, nroDesdeFecha, periodoDistintoDeFecha } from './dates.js'
 
 // El "hoy" va explicito en cada caso: si dependiera del reloj, estos tests
 // pasarian hoy y fallarian el mes que viene.
@@ -72,4 +72,66 @@ test('un valor que no es fecha no rompe ni avisa', () => {
   assert.equal(diasDesdeFinDePeriodo('cualquier cosa', '2026-07-30'), null)
   assert.equal(periodoDemasiadoViejo('2026-13', '2026-07-30'), false)
   assert.equal(periodoDemasiadoViejo(new Date('invalido'), '2026-07-30'), false)
+})
+
+// ── nroDesdeFecha ───────────────────────────────────────────────────────────
+
+test('nroDesdeFecha: la fecha se da vuelta a DDMMYYYY', () => {
+  assert.equal(nroDesdeFecha('2026-08-02'), '02082026')
+  assert.equal(nroDesdeFecha('2026-12-31'), '31122026')
+})
+
+test('nroDesdeFecha: siempre 8 digitos, con el cero de adelante', () => {
+  // El input de Nro es de 8 caracteres y ya rellena con ceros, asi que el dia
+  // 1 al 9 tiene que verse 01, no 1.
+  assert.equal(nroDesdeFecha('2026-08-01').length, 8)
+  assert.equal(nroDesdeFecha('2026-01-09'), '09012026')
+})
+
+test('nroDesdeFecha: no se corre de dia por huso horario', () => {
+  // Se lee el string tal cual. Construir un Date con esto lo interpretaria en
+  // UTC y en Argentina (-03:00) daria el dia anterior.
+  assert.equal(nroDesdeFecha('2026-08-01'), '01082026')
+})
+
+test('nroDesdeFecha: sin fecha o con basura devuelve vacio', () => {
+  assert.equal(nroDesdeFecha(''), '')
+  assert.equal(nroDesdeFecha(null), '')
+  assert.equal(nroDesdeFecha(undefined), '')
+  assert.equal(nroDesdeFecha('02/08/2026'), '')
+  assert.equal(nroDesdeFecha('2026-8-2'), '')
+})
+
+// ── periodoDistintoDeFecha ──────────────────────────────────────────────────
+
+test('periodoDistintoDeFecha: mismo mes que la fecha, no hay desfasaje', () => {
+  assert.equal(periodoDistintoDeFecha('2026-07-15', '2026-07-01'), false)
+  assert.equal(periodoDistintoDeFecha('2026-07-01', '2026-07-31'), false)
+})
+
+test('periodoDistintoDeFecha: periodo de otro mes se marca', () => {
+  // Una factura de julio imputada a junio. Pasa de verdad y es valido, pero
+  // conviene que se vea.
+  assert.equal(periodoDistintoDeFecha('2026-07-05', '2026-06-01'), true)
+})
+
+test('periodoDistintoDeFecha: mismo mes pero otro anio se marca', () => {
+  assert.equal(periodoDistintoDeFecha('2026-01-10', '2025-01-01'), true)
+})
+
+test('periodoDistintoDeFecha: un periodo posterior a la fecha tambien se marca', () => {
+  assert.equal(periodoDistintoDeFecha('2026-06-28', '2026-07-01'), true)
+})
+
+test('periodoDistintoDeFecha: sin alguno de los dos no se afirma nada', () => {
+  assert.equal(periodoDistintoDeFecha('2026-07-05', null), false)
+  assert.equal(periodoDistintoDeFecha(null, '2026-07-01'), false)
+  assert.equal(periodoDistintoDeFecha(null, null), false)
+  assert.equal(periodoDistintoDeFecha('cualquiera', '2026-07-01'), false)
+})
+
+test('periodoDistintoDeFecha: acepta el ISO completo que viene del backend', () => {
+  // En el snapshot del log las fechas vienen como ISO con hora.
+  assert.equal(periodoDistintoDeFecha('2026-07-05T00:00:00.000Z', '2026-06-01T00:00:00.000Z'), true)
+  assert.equal(periodoDistintoDeFecha('2026-07-05T00:00:00.000Z', '2026-07-01T00:00:00.000Z'), false)
 })

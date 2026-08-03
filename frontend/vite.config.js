@@ -13,7 +13,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' y no 'autoUpdate': la app registra el service worker por su
+      // cuenta (ver components/ActualizarApp.jsx) para poder decidir CUÁNDO
+      // recargar. Con 'autoUpdate' + el registro automático que inyectaba el
+      // plugin, el SW nuevo tomaba control de una pestaña que seguía corriendo
+      // el JS viejo y nadie la recargaba nunca: por eso hacía falta
+      // Ctrl+Shift+R después de cada deploy.
+      registerType: 'prompt',
+      // El plugin ya no inyecta su registerSW.js: lo hace ActualizarApp.
+      injectRegister: null,
       manifest: {
         name: 'DCSmart',
         short_name: 'DCSmart',
@@ -32,11 +40,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        // El SW nuevo toma control apenas se instala, sin esperar a que se
-        // cierren todas las pestañas -> los usuarios ven la versión nueva sin
-        // tener que hacer Ctrl+Shift+R. cleanupOutdatedCaches borra los
-        // precaches viejos para no servir assets obsoletos.
-        skipWaiting: true,
+        // skipWaiting NO va acá: el SW nuevo espera, y es ActualizarApp quien
+        // le dice cuándo activarse (y recarga la página en el mismo acto). Con
+        // skipWaiting acá, el SW nuevo se activaba solo mientras la pestaña
+        // seguía ejecutando el bundle viejo -- ese desfasaje es el que hacía
+        // fallar la carga de chunks que ya no existían tras el deploy.
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         // El shell (index.html) NUNCA se sirve desde el precache: siempre se
