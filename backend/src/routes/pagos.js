@@ -816,6 +816,42 @@ export default async function pagosRoutes(fastify) {
     })
   })
 
+  // ── GET /:id/activity-history ──────────────────────────────────────────
+  // Quién creó, editó o eliminó este pago, más reciente primero. Es el mismo
+  // dato que la pantalla Actividad pero acotado a un pago, para no tener que
+  // ir a buscarlo por OP cuando ya se está mirando el detalle.
+  //
+  // Restringido a los roles internos (super_admin y dcsmart), igual que la
+  // fecha de creación y el circuito DC del mismo panel: es información de
+  // control interno, no del operador del local.
+  fastify.get('/:id/activity-history', { preHandler: viewHandler }, async (request, reply) => {
+    if (!['super_admin', 'dcsmart'].includes(request.activeRole)) {
+      return reply.code(403).send({ error: 'Sin acceso al historial de actividad' })
+    }
+
+    const pago = await fastify.db.pago.findUnique({
+      where: { id: request.params.id },
+      select: { id_local: true }
+    })
+    // El pago pudo haberse eliminado y su rastro sigue en el log: por eso no
+    // se responde 404 si no está, solo se valida el acceso cuando existe.
+    if (pago && !request.allowedLocalIds.includes(pago.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    const rows = await fastify.db.activityLog.findMany({
+      where: {
+        tabla: 'pagos',
+        id_registro: request.params.id,
+        id_local: { in: request.allowedLocalIds }
+      },
+      orderBy: { fecha: 'desc' },
+      include: { user: { select: { id: true, nombre: true } } }
+    })
+
+    return rows
+  })
+
   // ── POST /mandar-pdp ───────────────────────────────────────────────────
   // Flujo PDP, etapa 1: mueve los pagos seleccionados a estado PDP
   // (desde la "deuda" en cuenta corriente al armado del PDP).

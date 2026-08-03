@@ -15,7 +15,7 @@ import MultiSelect from '../../components/MultiSelect.jsx'
 import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
-import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
+import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
   A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
@@ -198,7 +198,12 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
 ]
 
-function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false, canSeeCreated = false }) {
+// Mismas etiquetas y colores que la pantalla Actividad, para que el badge se
+// lea igual en los dos lados.
+const ACTIVIDAD_LABEL = { creado: 'Creado', editado: 'Editado', eliminado: 'Eliminado' }
+const ACTIVIDAD_BADGE = { creado: 'badge-green', editado: 'badge-blue', eliminado: 'badge-red' }
+
+function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos = [], canEdit = false, canDelete = false, canAuditDc = false, canSeeCreated = false, canSeeActivity = false }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -214,6 +219,8 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
   const [auditedDc,    setAuditedDc]    = useState(pago.audit_dc)
   const [auditandoDc,  setAuditandoDc]  = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
+  const [activityHistory, setActivityHistory] = useState([])
+  const [loadingActivity, setLoadingActivity] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [periodico,   setPeriodico]   = useState(pago.periodico ?? false)
   const [toggling,    setToggling]    = useState(false)
@@ -275,7 +282,18 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       .finally(() => setLoadingHistory(false))
   }
 
-  useEffect(() => { if (pago) { loadImpuestos(); loadMM(); loadAuditHistory() } }, [pago?.id])
+  // Quién creó / editó / eliminó el pago. Solo se pide si el rol lo puede ver:
+  // para el resto el backend responde 403 y no tiene sentido gastar el request.
+  const loadActivityHistory = () => {
+    if (!canSeeActivity) return
+    setLoadingActivity(true)
+    pagosApi.activityHistory(pago.id)
+      .then(({ data }) => setActivityHistory(data))
+      .catch(() => {})
+      .finally(() => setLoadingActivity(false))
+  }
+
+  useEffect(() => { if (pago) { loadImpuestos(); loadMM(); loadAuditHistory(); loadActivityHistory() } }, [pago?.id])
 
   const handleTogglePeriodico = async () => {
     setToggling(true)
@@ -826,6 +844,58 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
           </tbody>
         </table>
       </div>
+
+      {/* Historial de actividad: quién cargó y quién tocó el pago. Es el mismo
+          dato de la pantalla Actividad pero acotado a este pago, para no tener
+          que ir a buscarlo por OP. Solo roles internos, igual que el resto de
+          la información de control de este panel. */}
+      {canSeeActivity && (
+        <>
+          <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de actividad</div>
+          <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+            <table className="data-table">
+              <thead>
+                <tr><th>Fecha</th><th>Usuario</th><th>Acción</th></tr>
+              </thead>
+              <tbody>
+                {loadingActivity ? (
+                  <tr><td colSpan={3}><span className="skel" style={{ width: '60%' }} /></td></tr>
+                ) : activityHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>
+                      {/* El log arrancó después de que se cargaran muchos pagos:
+                          vacío no significa que nadie lo tocó. */}
+                      Sin actividad registrada para este pago
+                    </td>
+                  </tr>
+                ) : (
+                  activityHistory.map((ev) => (
+                    <tr key={ev.id}>
+                      <td className="td-muted">{fmtDateTimeArg(ev.fecha)}</td>
+                      <td>{ev.user?.nombre ?? '—'}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span className={`badge ${ACTIVIDAD_BADGE[ev.accion] ?? 'badge-muted'}`}>
+                            {ACTIVIDAD_LABEL[ev.accion] ?? ev.accion}
+                          </span>
+                          {periodoDistintoDeFecha(ev.snapshot?.fecha, ev.snapshot?.periodo) && (
+                            <span
+                              className="badge badge-amber"
+                              title={`Quedó con fecha ${fmtDateUTC(ev.snapshot.fecha)} y período ${fmtDateUTC(ev.snapshot.periodo)}.`}
+                            >
+                              Período ≠ mes
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -869,6 +939,9 @@ export default function PagoList() {
   // La fecha de creación de la OP es dato interno: solo la ven DC y super admin,
   // en la tabla y en el detalle.
   const canSeeCreated = ['super_admin', 'dcsmart'].includes(role)
+  // Quién cargó y quién tocó el pago. Mismo criterio: control interno. El
+  // backend valida lo mismo, esto solo evita pedir algo que va a dar 403.
+  const canSeeActivity = ['super_admin', 'dcsmart'].includes(role)
   const [exporting, setExporting] = useState(false)
   const [summary,        setSummary]        = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
@@ -1905,7 +1978,7 @@ export default function PagoList() {
         width={580}
       >
         {selectedPago && (
-          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} canSeeCreated={canSeeCreated} />
+          <PagoDetailPanel pago={selectedPago} navigate={navigate} onDelete={handleDelete} onAudit={patchPagoAudit} onPatch={patchPago} metodos={metodos} canEdit={canEdit} canDelete={canDelete} canAuditDc={canAuditDc} canSeeCreated={canSeeCreated} canSeeActivity={canSeeActivity} />
         )}
       </DrawerPanel>
 

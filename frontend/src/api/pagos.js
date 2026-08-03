@@ -13,6 +13,9 @@ export const pagosApi = {
   remove:     (id)             => client.delete(`/pagos/${id}`),
   audit:        (id, data)     => client.patch(`/pagos/${id}/audit`,        data),
   auditHistory: (id)           => client.get(`/pagos/${id}/audit-history`),
+  // Quién creó / editó / eliminó el pago. Solo para roles internos: el backend
+  // responde 403 al resto.
+  activityHistory: (id)        => client.get(`/pagos/${id}/activity-history`),
   auditDc:      (id, data)     => client.patch(`/pagos/${id}/audit-dc`,     data),
   periodico:  (id)             => client.patch(`/pagos/${id}/periodico`),
   mandarPdp:  (ids)            => client.post('/pagos/mandar-pdp',          { ids }),
