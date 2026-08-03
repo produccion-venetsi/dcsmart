@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import ActualizarApp from './components/ActualizarApp.jsx'
 import Layout from './components/Layout.jsx'
 import { useAuthStore } from './store/authStore.js'
 
@@ -91,6 +92,9 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      {/* Fuera del Suspense y de las rutas: el aviso de versión nueva tiene que
+          poder aparecer en cualquier pantalla, incluido el login. */}
+      <ActualizarApp />
       <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />

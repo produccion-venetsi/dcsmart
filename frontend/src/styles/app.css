@@ -984,6 +984,32 @@ select.campo-ia {
   box-shadow: inset 2px 0 0 var(--gold);
 }
 
+/* Aviso de versión nueva desplegada (components/ActualizarApp.jsx). Flota
+   abajo a la derecha: interrumpe menos que una barra arriba y no tapa el
+   contenido. Si la pestaña se oculta, la app se actualiza sola y esto no
+   llega a verse. */
+.actualizar-app {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--gold-bright);
+  font-size: 13px;
+}
+.actualizar-app-txt { color: var(--t1); }
+@media (max-width: 640px) {
+  .actualizar-app { left: 12px; right: 12px; bottom: 12px; }
+  .actualizar-app-txt { flex: 1; }
+}
+
 /* ── Superficie "IA" ────────────────────────────────────────────────────────
    Dorado de la marca cruzado con azul, más un barrido de brillo. Es el lenguaje
    visual de "esto lo hace la IA" y lo comparten el botón de Carga con IA y el
