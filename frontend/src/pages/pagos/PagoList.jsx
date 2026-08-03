@@ -893,21 +893,6 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
                             {ACTIVIDAD_LABEL[ev.accion] ?? ev.accion}
                           </span>
                         </div>
-                        {/* Las dos fechas se escriben enteras en vez de dejarlas
-                            en un tooltip: es el dato que hay que comparar, y un
-                            title no se ve en celular ni se puede copiar. */}
-                        {periodoDistintoDeFecha(ev.snapshot?.fecha, ev.snapshot?.periodo) && (
-                          <div style={{
-                            display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap',
-                            marginTop: 5, fontSize: 11.5, lineHeight: 1.45, color: 'var(--amber)',
-                          }}>
-                            <span style={{ fontWeight: 700 }}>⚠ Período fuera del mes de la factura:</span>
-                            <span>
-                              factura del <strong>{fmtDateUTC(ev.snapshot.fecha)}</strong>
-                              {' '}imputada a <strong>{fmtMonthUTC(ev.snapshot.periodo)}</strong>
-                            </span>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))
