@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authApi } from '../api/auth.js'
 import { useAppStore } from './appStore.js'
+import { limpiarSesionLocal } from '../lib/sesionExpirada.js'
 
 export const useAuthStore = create(
   persist(
@@ -41,7 +42,10 @@ export const useAuthStore = create(
 
       logout: async () => {
         try { await authApi.logout() } catch {}
-        localStorage.removeItem('token')
+        // Misma limpieza que el interceptor: incluye el persist de zustand, que
+        // si sobrevive vuelve a rehidratar el token viejo (ver el bucle de
+        // recargas documentado en lib/sesionExpirada.js).
+        limpiarSesionLocal(localStorage)
         useAppStore.getState().clearContext()
         set({ user: null, token: null })
       },

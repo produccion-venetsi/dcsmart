@@ -20,3 +20,38 @@ export function normalizarPassword(valor) {
   if (typeof valor !== 'string') return valor
   return valor.trim()
 }
+
+// Verificación tolerante con los hashes creados ANTES de que existiera el trim.
+//
+// El fix de arriba se aplicó al guardar y al verificar al mismo tiempo, pero no
+// re-hasheó nada: los hashes que ya estaban en la base se habían generado con la
+// contraseña tal cual la tipeó quien creó el usuario. Si ahí había un espacio de
+// los que agrega el teclado, el hash es de " clave " y el login —que ahora
+// trimea— compara "clave" y nunca da. La cuenta queda inaccesible sin síntoma
+// visible: la persona escribe bien la contraseña que le pasaron y recibe
+// "Credenciales inválidas" para siempre.
+//
+// Por eso se prueba la versión normalizada y, si no da, la cruda. Primero la
+// normalizada porque es el caso de todos los usuarios nuevos.
+//
+// Esto NO afloja la verificación: las dos variantes son la misma contraseña con
+// espacios en los extremos, que es justo lo que `normalizarPassword` declara
+// irrelevante. Cualquier otra diferencia sigue fallando.
+export async function verificarPassword(tipeado, hash, comparar) {
+  const bcrypt = comparar ?? (await import('bcryptjs')).default.compare
+  if (typeof tipeado !== 'string' || typeof hash !== 'string' || !hash) return false
+
+  const normalizado = normalizarPassword(tipeado)
+  if (!normalizado) return false
+
+  try {
+    if (await bcrypt(normalizado, hash)) return true
+    // Segundo intento solo si el trim cambió algo: si no, sería la misma
+    // comparación otra vez y bcrypt es caro.
+    if (normalizado !== tipeado && await bcrypt(tipeado, hash)) return true
+    return false
+  } catch {
+    // Un hash corrupto o con formato desconocido no autentica a nadie.
+    return false
+  }
+}

@@ -221,6 +221,38 @@ export default async function pagosRoutes(fastify) {
   const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'edit')]
   const deleteHandler = [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'delete')]
 
+  // ── GET /contexto-local/:id_local ─────────────────────────────────────
+  //
+  // Lo mínimo del local que necesitan Carga Avión y MovStock para arrancar: el
+  // proveedor contra el que facturan y el porcentaje de descuento pactado.
+  //
+  // Existe porque `GET /api/locales/:id` pide `locales:view`, que solo tienen
+  // super_admin y dcsmart: para admin y cajero devolvía 403 y dejaba el
+  // formulario inusable. El permiso acá es `pagos:create` — quien puede cargar
+  // un pago en un local puede leer el contexto de ese pago — y el alcance lo
+  // sigue acotando `allowedLocalIds`, sin abrir el módulo Locales entero.
+  fastify.get('/contexto-local/:id_local', { preHandler: createHandler }, async (request, reply) => {
+    const { id_local } = request.params
+    if (!request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+
+    const local = await fastify.db.local.findUnique({
+      where: { id: id_local },
+      select: { id: true, id_proveedor: true, descuento_movstock: true }
+    })
+    if (!local) return reply.code(404).send({ error: 'Local no encontrado' })
+
+    return {
+      id: local.id,
+      id_proveedor: local.id_proveedor,
+      // Decimal de Prisma: se manda como número para que el formulario no tenga
+      // que distinguir "0" de "0.00" ni parsear un string (un local en 0 es un
+      // descuento pactado en cero, no un local sin configurar).
+      descuento_movstock: local.descuento_movstock == null ? null : Number(local.descuento_movstock),
+    }
+  })
+
   // ── GET / ─────────────────────────────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request, reply) => {
     const {

@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { OAuth2Client } from 'google-auth-library'
 import jwt from 'jsonwebtoken'
-import { normalizarPassword } from '../lib/password.js'
+import { normalizarPassword, verificarPassword } from '../lib/password.js'
 import { DIAS_INACTIVIDAD, requiereResetPorInactividad, diasDesdeUltimoLogin } from '../lib/inactividad.js'
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
@@ -81,7 +81,10 @@ export default async function authRoutes(fastify) {
       return reply.code(401).send({ error: 'Credenciales inválidas' })
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash)
+    // Se le pasa la contraseña CRUDA, no la normalizada: verificarPassword
+    // prueba la normalizada y, si no da, la cruda, para no dejar afuera a los
+    // hashes que se guardaron antes de que existiera el trim (ver lib/password.js).
+    const valid = await verificarPassword(request.body.password, user.password_hash)
     if (!valid) {
       return reply.code(401).send({ error: 'Credenciales inválidas' })
     }

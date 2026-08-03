@@ -5,7 +5,6 @@ import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { rubcatApi, rubrosApi, categoriasApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
-import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
@@ -14,6 +13,7 @@ import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
+import { cargarArranquePago, metodoPorDefecto } from '../../lib/arranquePagoForm.js'
 
 function IcoBack() {
   return (
@@ -232,29 +232,39 @@ export default function PagoForm() {
 
   useEffect(() => {
     const ctrl = new AbortController()
-    const metReq   = metodosApi.list()
-    const pagoReq  = isEditing ? pagosApi.get(id, ctrl.signal) : Promise.resolve(null)
-    const localReq = (!isEditing && modoRapido && activeLocal) ? localesApi.get(activeLocal.id) : Promise.resolve(null)
+    // El contexto del local (proveedor + descuento) solo hace falta al crear en
+    // los modos rápidos. Va por pagosApi y no por localesApi: ver el comentario
+    // de `contextoLocal` en api/pagos.js.
+    const pideContexto = !isEditing && modoRapido && Boolean(activeLocal)
 
-    Promise.all([metReq, pagoReq, localReq])
-      .then(async ([{ data: mets }, pagoRes, localRes]) => {
+    cargarArranquePago({
+      metodos:  metodosApi.list(),
+      pago:     isEditing ? pagosApi.get(id, ctrl.signal) : null,
+      contexto: pideContexto ? pagosApi.contextoLocal(activeLocal.id, ctrl.signal) : null,
+    })
+      .then(async ({ metodos: mets, pago: d, contexto, fallas }) => {
         setMetodos(mets)
         draftReadyRef.current = true
+        // Editar sin los datos del pago es peor que no abrir el formulario: se
+        // guardaría un pago existente con los campos en blanco.
+        if (fallas.pago) { notify('Error al cargar datos', 'error'); return }
+        // El contexto sí es opcional: sin él se sigue cargando a mano, con el
+        // descuento general. Antes su 403 se llevaba puestos los métodos de pago.
+        if (fallas.contexto) notify('No se pudo leer la configuración del local: revisá proveedor y descuento', 'info')
         if (restoredFromDraftRef.current) {
           // Ya se restauró el formulario desde el borrador: no lo pisamos con
           // lo que vino del servidor, salvo el historial de impuestos guardados.
-          if (pagoRes) setSavedImp(pagoRes.data.impuestos || [])
+          if (d) setSavedImp(d.impuestos || [])
           return
         }
         if (!isEditing && modoRapido) {
-          const efectivo = mets.find((m) => m.nombre === 'Efectivo')
+          const efectivo = metodoPorDefecto(mets)
           if (efectivo) setForm((f) => ({ ...f, id_metodo: f.id_metodo || efectivo.id }))
         }
         // El porcentaje de descuento sale de la ficha del local. Se guarda
         // aunque no sea MovStock: el tipo se puede cambiar dentro del form.
-        if (localRes?.data) setPctDescuento(porcentajeDelLocal(localRes.data))
-        if (pagoRes) {
-          const d = pagoRes.data
+        if (contexto) setPctDescuento(porcentajeDelLocal(contexto))
+        if (d) {
           if (d.id_proveedor && d.proveedor) {
             setProvSelected(d.proveedor)
             setProvPlazo(d.proveedor.plazo || null)
@@ -287,10 +297,10 @@ export default function PagoForm() {
             pdf_url:        d.pdf_url        || '',
             nro_ord:        d.nro_ord        ?? null,
           })
-        } else if (localRes?.data?.id_proveedor) {
+        } else if (contexto?.id_proveedor) {
           // Carga Avión y MovStock facturan contra el proveedor del propio
           // local (la sociedad que factura por él), así que viene precargado.
-          const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
+          const { data: prov } = await proveedoresApi.get(contexto.id_proveedor, ctrl.signal)
           setLocalProveedor(prov)
           setProvSelected(prov)
           setProvPlazo(prov.plazo || null)
@@ -300,7 +310,7 @@ export default function PagoForm() {
             id_proveedor: prov.id,
             cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
           }))
-        } else if (localRes) {
+        } else if (contexto) {
           // El local existe pero no tiene proveedor configurado: false (y no
           // null) para poder distinguirlo de "todavía no cargó" y avisarlo.
           setLocalProveedor(false)

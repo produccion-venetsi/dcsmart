@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { registerSW } from 'virtual:pwa-register'
+import { puedeAutoRecargar, CLAVE_ULTIMO_AUTO } from '../lib/autoActualizar.js'
 
 // Avisa (y aplica) cuando hay una versión nueva desplegada.
 //
@@ -42,8 +43,18 @@ export default function ActualizarApp() {
   // Pide la versión nueva y recarga. La recarga se programa ANTES de llamar a
   // updateSW: si esa promesa no resuelve, el timeout ya está en marcha y la
   // página se actualiza igual.
-  const aplicar = useCallback(() => {
+  // `automatico` distingue el botón (intención explícita, siempre se aplica) del
+  // disparo al ocultar la pestaña, que se limita a uno por ventana de tiempo:
+  // una versión que se sigue anunciando después de recargar recargaría en bucle.
+  // Ver lib/autoActualizar.js.
+  const aplicar = useCallback((automatico = false) => {
     if (aplicando) return
+    if (automatico) {
+      let ultimo = null
+      try { ultimo = sessionStorage.getItem(CLAVE_ULTIMO_AUTO) } catch { /* modo privado */ }
+      if (!puedeAutoRecargar(Date.now(), ultimo)) return
+      try { sessionStorage.setItem(CLAVE_ULTIMO_AUTO, String(Date.now())) } catch { /* idem */ }
+    }
     setAplicando(true)
     setTimeout(() => window.location.reload(), ESPERA_ANTES_DE_FORZAR_MS)
     try { aplicarRef.current?.(true) } catch { /* se recarga igual */ }
@@ -81,7 +92,7 @@ export default function ActualizarApp() {
       if (document.hidden) {
         // Se va: si ya hay versión nueva, se aplica ahora. Nadie está
         // escribiendo, y al volver ya está actualizada sin haber visto nada.
-        if (disponible) aplicar()
+        if (disponible) aplicar(true)
       } else {
         registrationRef.current?.update().catch(() => {})
       }
@@ -99,7 +110,10 @@ export default function ActualizarApp() {
         Hay una versión nueva de DCSmart.
         {VERSION && <span className="actualizar-app-ver"> Tenés la v{VERSION}.</span>}
       </span>
-      <button type="button" className="btn btn-sm btn-primary" onClick={aplicar} disabled={aplicando}>
+      {/* La flecha importa: `onClick={aplicar}` le pasaría el evento de React
+          como primer argumento y, siendo truthy, el click del botón entraría por
+          el camino automático y podría quedar bloqueado por la guarda. */}
+      <button type="button" className="btn btn-sm btn-primary" onClick={() => aplicar(false)} disabled={aplicando}>
         {aplicando ? 'Actualizando…' : 'Actualizar'}
       </button>
     </div>
