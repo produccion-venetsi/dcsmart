@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { useAppStore } from '../store/appStore'
-import { esSesionExpirada } from '../lib/sesionExpirada.js'
+import { esSesionExpirada, debeNavegarALogin, limpiarSesionLocal } from '../lib/sesionExpirada.js'
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api',
@@ -30,8 +30,16 @@ client.interceptors.response.use(
     // catch del authStore para que se muestre el mensaje: si acá se redirige,
     // la navegación recarga la app y borra el error antes de que se vea.
     if (esSesionExpirada(err.response?.status, err.config?.url)) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+      // Se limpian TODAS las claves de sesión, no solo `token`: el persist de
+      // zustand guarda su propia copia y, si sobrevive a la navegación, App.jsx
+      // la rehidrata, vuelve a pedir /auth/me sin Authorization y el 401
+      // dispara otra recarga. Eso era el bucle del 03/08.
+      limpiarSesionLocal(localStorage)
+      // Y no se navega si ya estamos en /login: asignar la misma URL recarga la
+      // página, y la recarga llegaba antes de que se pudiera tipear la clave.
+      if (debeNavegarALogin(window.location.pathname)) {
+        window.location.href = '/login'
+      }
     }
     if (err.response?.status === 403) {
       const msg = err.response.data?.error || 'Sin acceso a este recurso'

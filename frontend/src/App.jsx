@@ -6,6 +6,7 @@ import ActualizarApp from './components/ActualizarApp.jsx'
 import { ROLES, ROLES_DC, ROLES_OPERATIVOS } from './lib/roles.js'
 import Layout from './components/Layout.jsx'
 import { useAuthStore } from './store/authStore.js'
+import { debeSincronizarUsuario } from './lib/sesionExpirada.js'
 
 // Carga perezosa que se recupera del típico fallo post-deploy: el index.html
 // viejo referencia un chunk hasheado que el build nuevo ya borró (404), el
@@ -87,9 +88,16 @@ export default function App() {
   const token = useAuthStore((s) => s.token)
   const refreshUser = useAuthStore((s) => s.refreshUser)
 
-  // Sincroniza roles/datos del usuario al iniciar la app si hay sesión activa
+  // Sincroniza roles/datos del usuario al iniciar la app si hay sesión activa.
+  //
+  // Se exige el token del store Y el de localStorage: son dos copias distintas y
+  // el interceptor manda al backend la de localStorage. Cuando quedaban
+  // desincronizadas (persist de zustand con el token viejo, localStorage vacío),
+  // esto pedía /auth/me sin Authorization, el 401 limpiaba y recargaba, zustand
+  // rehidrataba el token viejo otra vez y volvía a entrar acá: recarga infinita,
+  // sin poder ni loguearse. Ver lib/sesionExpirada.js.
   useEffect(() => {
-    if (token) refreshUser()
+    if (debeSincronizarUsuario(token, localStorage.getItem('token'))) refreshUser()
   }, [])
 
   return (

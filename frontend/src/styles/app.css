@@ -1005,6 +1005,7 @@ select.campo-ia {
   font-size: 13px;
 }
 .actualizar-app-txt { color: var(--t1); }
+.actualizar-app-ver { color: var(--t3); }
 @media (max-width: 640px) {
   .actualizar-app { left: 12px; right: 12px; bottom: 12px; }
   .actualizar-app-txt { flex: 1; }
