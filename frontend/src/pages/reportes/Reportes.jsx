@@ -7,7 +7,6 @@ import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
 import ReporteBalance from './ReporteBalance.jsx'
-import ReporteFueraDeTermino from './ReporteFueraDeTermino.jsx'
 import './reportes.css'
 
 const ANALYTICS_URL = import.meta.env.VITE_ANALYTICS_URL || 'https://analisis.dcsmart.app'
@@ -65,8 +64,6 @@ const TABS = [
   { key: 'cajas', label: 'Cajas' },
   { key: 'cmv',   label: 'CMV' },
   { key: 'balance', label: 'Balance', soloSuperAdmin: true },
-  // Este filtra por fecha de CARGA, no por fecha de factura como los demás.
-  { key: 'fuera-termino', label: 'Fuera de término' },
 ]
 
 // Solo el reporte de Pagos permite elegir sobre qué campo de fecha se arma
@@ -289,9 +286,6 @@ export default function Reportes() {
         )}
         {tab === 'balance' && isSuperAdmin && (
           <ReporteBalance applied={applied} activeLocal={activeLocal} />
-        )}
-        {tab === 'fuera-termino' && (
-          <ReporteFueraDeTermino applied={applied} activeLocal={activeLocal} />
         )}
 
       </div>
