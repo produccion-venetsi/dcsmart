@@ -14,7 +14,10 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      globals: globals.browser,
+      // __APP_VERSION__ lo inyecta Vite con `define` (ver vite.config.js): no
+      // existe en el código pero sí en el bundle. Sin declararlo acá, eslint lo
+      // marca como no definido en Sidebar y en ActualizarApp.
+      globals: { ...globals.browser, __APP_VERSION__: 'readonly' },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
