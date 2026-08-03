@@ -68,6 +68,13 @@ model User {
   google_id     String?  @unique
   avatar_url    String?
   activo        Boolean  @default(true)
+  // Ultimo ingreso exitoso. Pasados DIAS_INACTIVIDAD dias (ver lib/inactividad)
+  // la contrasena deja de servir y hay que pedir que la reseteen.
+  //
+  // Arranca en NULL para todos los usuarios que ya existen y NULL NO bloquea:
+  // significa "todavia no lo sabemos" y el primer login lo completa. Resetear
+  // la contrasena tambien lo vuelve a NULL, que es como se destraba una cuenta.
+  last_login    DateTime?
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 

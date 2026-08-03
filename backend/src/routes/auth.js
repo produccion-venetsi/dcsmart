@@ -2,8 +2,28 @@ import bcrypt from 'bcryptjs'
 import { OAuth2Client } from 'google-auth-library'
 import jwt from 'jsonwebtoken'
 import { normalizarPassword } from '../lib/password.js'
+import { DIAS_INACTIVIDAD, requiereResetPorInactividad, diasDesdeUltimoLogin } from '../lib/inactividad.js'
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+
+// Cuánto vive el token de sesión. Antes no se pasaba NADA acá, así que los
+// tokens salían sin `exp` y no caducaban nunca: una sesión abierta en 2026
+// seguía sirviendo para siempre, aunque la persona no volviera a entrar.
+const VENCIMIENTO_TOKEN = process.env.JWT_EXPIRES_IN || '7d'
+
+// Firma el token de sesión. Todo el auth pasa por acá para que ninguno se
+// escape sin vencimiento, que es exactamente lo que había pasado.
+function firmarToken(fastify, user) {
+  return fastify.jwt.sign({ id: user.id, email: user.email }, { expiresIn: VENCIMIENTO_TOKEN })
+}
+
+// Deja registrado el ingreso. No se hace await en el camino del login: si esto
+// falla, la persona igual tiene que poder entrar.
+function registrarLogin(fastify, userId) {
+  fastify.db.user
+    .update({ where: { id: userId }, data: { last_login: new Date() } })
+    .catch((err) => fastify.log.error({ err }, `No se pudo registrar last_login de ${userId}`))
+}
 
 export default async function authRoutes(fastify) {
   // POST /api/auth/register
@@ -28,7 +48,8 @@ export default async function authRoutes(fastify) {
       select: { id: true, email: true, nombre: true, avatar_url: true, created_at: true }
     })
 
-    const token = fastify.jwt.sign({ id: user.id, email: user.email })
+    registrarLogin(fastify, user.id)
+    const token = firmarToken(fastify, user)
     reply.setCookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -65,7 +86,19 @@ export default async function authRoutes(fastify) {
       return reply.code(403).send({ error: 'Usuario inactivo' })
     }
 
-    const token = fastify.jwt.sign({ id: user.id, email: user.email })
+    // Se chequea DESPUÉS de validar la contraseña a propósito: antes, cualquiera
+    // podría averiguar qué cuentas están sin uso probando mails.
+    if (requiereResetPorInactividad(user.last_login)) {
+      const dias = diasDesdeUltimoLogin(user.last_login)
+      return reply.code(403).send({
+        error: `Hace ${dias} días que no entrás y por seguridad la contraseña dejó de servir. `
+             + 'Pedí a un administrador que te la resetee para volver a entrar.',
+        motivo: 'inactividad'
+      })
+    }
+
+    registrarLogin(fastify, user.id)
+    const token = firmarToken(fastify, user)
     reply.setCookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -126,7 +159,11 @@ export default async function authRoutes(fastify) {
       return reply.code(403).send({ error: 'Usuario inactivo' })
     }
 
-    const token = fastify.jwt.sign({ id: user.id, email: user.email })
+    // Google no pasa por el corte de inactividad: la cuenta la valida Google en
+    // el momento, que es la garantía que el corte busca dar cuando la única
+    // prueba es una contraseña vieja. Igual queda registrado el ingreso.
+    registrarLogin(fastify, user.id)
+    const token = firmarToken(fastify, user)
     reply.setCookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
