@@ -491,6 +491,37 @@
   color: var(--t3);
   text-align: right;
 }
+/* ── Desglose por turno ─────────────────────────────────────────────────────
+   Tabla comparativa de turnos. Las columnas numéricas van alineadas a la
+   derecha y con cifras de ancho fijo: la tabla existe para comparar montos
+   entre turnos de un vistazo, y con números que bailan no se puede. */
+.rep-turnos-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rep-turnos-table tbody tr.rep-turnos-total td {
+  border-top: 1px solid var(--border-hi);
+  font-weight: 700;
+  color: #fff;
+}
+/* Los dos desgloses del turno abierto, uno al lado del otro mientras entren. */
+.rep-turno-desglose {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0 2rem;
+  padding: 0.5rem 0 0.9rem;
+}
+.rep-turno-desglose-tit {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 6px;
+}
+.rep-turno-desglose .rep-pay-row { height: 32px; }
+
 .rep-pay-total {
   display: grid;
   grid-template-columns: 1fr auto;
