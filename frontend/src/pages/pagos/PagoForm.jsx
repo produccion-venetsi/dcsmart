@@ -9,6 +9,7 @@ import { localesApi } from '../../api/locales.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo } from '../../lib/dates.js'
@@ -330,13 +331,41 @@ export default function PagoForm() {
   const pvNroOpcional = esCargaAvion || form.id_tipo === 'B'
 
   // ── Lectura de la factura con IA ─────────────────────────────────────────
-  // Al elegir la foto se leen los datos y se precargan. Nada se guarda: la
-  // persona revisa. Los campos que vinieron de la lectura quedan marcados, para
-  // que se sepa qué revisar y qué escribió uno mismo.
+  // Se dispara desde el botón "Carga con IA" (no al adjuntar una foto, como
+  // antes: se subían fotos de cualquier cosa y se gastaba una llamada al modelo
+  // para nada, y encima se pisaban campos ya escritos a mano).
+  //
+  // Los datos se precargan pero no se guardan solos: la persona revisa. Los
+  // campos que vinieron de la lectura quedan marcados, para que se sepa qué
+  // revisar y qué escribió uno mismo.
   const [leyendoFactura, setLeyendoFactura] = useState(false)
   const [lectura, setLectura] = useState(null) // { marcados, aritmetica, proveedor, totalFactura }
+  // 'foto' | 'pdf' | null: en qué slot cayó el archivo que se está leyendo, para
+  // bloquear ese adjunto (y no el otro) mientras dura la lectura.
+  const [leyendoTipo, setLeyendoTipo] = useState(null)
 
   const marcadoIA = (campo) => (lectura?.marcados?.includes(campo) ? ' campo-ia' : '')
+
+  const esPdf = (file) =>
+    file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name ?? '')
+
+  // El archivo con el que se lee es también el comprobante del pago: se guarda
+  // en el slot que le corresponde según lo que sea, así una sola acción carga
+  // los datos y deja adjuntada la factura. Si ya había algo en ese slot, se
+  // reemplaza — es el archivo del que salen los datos que se están viendo.
+  const cargarConIA = (file) => {
+    if (!file) return
+    if (esPdf(file)) {
+      setPdfFile(file)
+      set('pdf_url', '')
+      setLeyendoTipo('pdf')
+    } else {
+      setFotoFile(file)
+      set('foto_url', '')
+      setLeyendoTipo('foto')
+    }
+    leerFactura(file)
+  }
 
   const leerFactura = async (file) => {
     if (!file) return
@@ -345,7 +374,7 @@ export default function PagoForm() {
     try {
       const { data } = await pagosApi.leerFactura(file)
       if (!data.legible) {
-        notify('No se pudo leer la factura de esa foto. Cargá los datos a mano.', 'info')
+        notify('No se pudieron leer los datos de ese archivo. Quedó adjunto igual: cargá los datos a mano.', 'info')
         return
       }
       const c = data.campos
@@ -387,9 +416,11 @@ export default function PagoForm() {
       })
       notify(`Leí la factura: ${(data.marcados ?? []).length} campos precargados. Revisalos.`, 'success')
     } catch (err) {
+      // El archivo ya quedó adjunto: la lectura falló, la carga a mano no.
       notify(err.response?.data?.error || 'No se pudo leer la factura. Cargá los datos a mano.', 'error')
     } finally {
       setLeyendoFactura(false)
+      setLeyendoTipo(null)
     }
   }
 
@@ -694,17 +725,17 @@ export default function PagoForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* ── Resultado de leer la foto de la factura ── */}
+        {/* ── Resultado de leer la factura (foto o PDF) ── */}
         {leyendoFactura && (
           <div className="aviso-lectura">
             <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-            <span>Leyendo la factura…</span>
+            <span>Leyendo la factura{leyendoTipo === 'pdf' ? ' (PDF)' : ''}…</span>
           </div>
         )}
         {!leyendoFactura && lectura && (
           <div className="aviso-lectura">
             <div>
-              <strong>Datos precargados de la foto.</strong> Revisá los campos marcados antes de guardar.
+              <strong>Datos precargados de la factura.</strong> Revisá los campos marcados antes de guardar.
               {lectura.proveedor?.estado === 'encontrado' && (
                 <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
               )}
@@ -1212,14 +1243,24 @@ export default function PagoForm() {
         <div className="form-panel">
           <div className="form-panel-title">Adjuntos</div>
           <div className="form-grid">
+            {/* Al editar no se ofrece: precargar campos encima de un pago ya
+                guardado pisaría datos que alguien revisó. Los dos adjuntos de
+                abajo siguen disponibles para agregar el comprobante. */}
+            {!isEditing && (
+              <CargaIA
+                onArchivo={cargarConIA}
+                leyendo={leyendoFactura}
+                disabled={loading}
+              />
+            )}
             <AdjuntoUpload
               label="Foto"
               accept="image/*"
               value={form.foto_url}
               file={fotoFile}
-              onFileSelected={(f) => { setFotoFile(f); if (!isEditing) leerFactura(f) }}
+              onFileSelected={setFotoFile}
               onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null) }}
-              uploading={uploadingFoto || leyendoFactura}
+              uploading={uploadingFoto || leyendoTipo === 'foto'}
             />
             <AdjuntoUpload
               label="PDF"
@@ -1227,8 +1268,8 @@ export default function PagoForm() {
               value={form.pdf_url}
               file={pdfFile}
               onFileSelected={setPdfFile}
-              onRemove={() => { set('pdf_url', ''); setPdfFile(null) }}
-              uploading={uploadingPdf}
+              onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null) }}
+              uploading={uploadingPdf || leyendoTipo === 'pdf'}
             />
           </div>
         </div>
