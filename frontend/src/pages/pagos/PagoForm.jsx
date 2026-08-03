@@ -277,6 +277,29 @@ export default function PagoForm() {
     return () => ctrl.abort()
   }, [id])
 
+  // Al salir del formulario, el borrador se descarta.
+  //
+  // El borrador existe para sobrevivir a que la pestaña se RECARGUE con el
+  // formulario abierto (Android puede matar el proceso mientras se saca una
+  // foto), no para sobrevivir a que la persona se vaya. Sin esto, cancelar y
+  // volver a entrar traía de vuelta la factura anterior con el cartel de "Se
+  // recuperó la carga que tenías sin guardar", que no es lo que espera nadie
+  // después de cancelar.
+  //
+  // Una recarga de verdad no ejecuta este cleanup, así que el caso de la
+  // cámara sigue cubierto: ahí el borrador se restaura como siempre.
+  const montadoRef = useRef(false)
+  useEffect(() => {
+    montadoRef.current = true
+    return () => {
+      montadoRef.current = false
+      // En desarrollo, StrictMode desmonta y vuelve a montar enseguida. Si eso
+      // pasa, el remount de acá arriba cancela el descarte y el borrador queda
+      // intacto; en una salida real nadie lo vuelve a montar y se borra.
+      setTimeout(() => { if (!montadoRef.current) clearDraft(draftKey) }, 0)
+    }
+  }, [draftKey])
+
   // Guarda un borrador (debounced) cada vez que cambia el formulario o los
   // archivos adjuntos, para poder recuperarlo si la pestaña se recarga (ver
   // el efecto de restauración más arriba y frontend/src/lib/formDraft.js).
