@@ -13,6 +13,7 @@ import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
+import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
 
 function IcoBack() {
   return (
@@ -187,6 +188,19 @@ export default function PagoForm() {
     foto_url: '', pdf_url: '',
   }))
 
+  // MovStock descuenta un porcentaje fijo del neto (30% salvo que el local
+  // tenga otro pactado). Se mira el tipo del formulario y no el de la URL: si
+  // alguien cambia el comprobante a otra cosa, el descuento deja de aplicar.
+  const esMovStock = modoRapido && form.id_tipo === 'STK'
+  // Porcentaje del local activo. Se completa cuando llega la ficha del local;
+  // hasta entonces vale el general, que es lo que corresponde a casi todos.
+  const [pctDescuento, setPctDescuento] = useState(DESCUENTO_MOVSTOCK_DEFAULT)
+  // Escribir el descuento a mano lo desengancha del cálculo, igual que el
+  // cashflow con el plazo del proveedor: un valor puesto por una persona no se
+  // pisa en silencio. Es estado y no un ref porque el aviso de abajo del campo
+  // cambia según esto, y un ref no vuelve a renderizar.
+  const [descuentoManual, setDescuentoManual] = useState(false)
+
   // Restaura un borrador guardado (si existe) antes que nada. Cubre el caso
   // de que la pestaña se haya recargado por completo mientras el usuario
   // sacaba una foto con la cámara (ver frontend/src/lib/formDraft.js).
@@ -236,6 +250,9 @@ export default function PagoForm() {
           const efectivo = mets.find((m) => m.nombre === 'Efectivo')
           if (efectivo) setForm((f) => ({ ...f, id_metodo: f.id_metodo || efectivo.id }))
         }
+        // El porcentaje de descuento sale de la ficha del local. Se guarda
+        // aunque no sea MovStock: el tipo se puede cambiar dentro del form.
+        if (localRes?.data) setPctDescuento(porcentajeDelLocal(localRes.data))
         if (pagoRes) {
           const d = pagoRes.data
           if (d.id_proveedor && d.proveedor) {
@@ -469,32 +486,45 @@ export default function PagoForm() {
   const diasPeriodo  = diasDesdeFinDePeriodo(form.periodo)
   const periodoViejo = periodoDemasiadoViejo(form.periodo)
 
-  // set con efectos encadenados
-  const set = (field, value) => setForm(f => {
-    const next = { ...f, [field]: value }
-    // Escribir el número a mano lo desengancha de la fecha para siempre: a
-    // partir de ahí manda lo que puso la persona.
+  // set con efectos encadenados.
+  //
+  // Las banderas de "esto lo escribió una persona" se marcan ACÁ y no dentro
+  // del updater: en StrictMode el updater corre dos veces, y un efecto
+  // secundario adentro se ejecuta de más.
+  const set = (field, value) => {
+    // Escribir el número o el descuento a mano los desengancha de su cálculo:
+    // a partir de ahí manda lo que puso la persona.
     if (field === 'nro') nroManualRef.current = true
-    if (field === 'fecha') {
-      next.periodo = value
-      // El número de los movimientos internos es la fecha, así que sigue a la
-      // fecha mientras nadie lo haya tocado.
-      if (modoRapido && !isEditing && !nroManualRef.current) {
-        next.nro = nroDesdeFecha(value) || next.nro
+    if (field === 'descuento') setDescuentoManual(true)
+
+    setForm(f => {
+      const next = { ...f, [field]: value }
+      // En MovStock el descuento sale del neto por el porcentaje del local. Se
+      // recalcula mientras nadie lo haya escrito a mano.
+      if (field === 'importe_neto' && esMovStock && !isEditing && !descuentoManual) {
+        next.descuento = descuentoParaInput(value, pctDescuento)
       }
-      // Solo recalcular el cashflow si estaba vacío o si todavía era el
-      // auto-calculado (fecha anterior + plazo). Un valor puesto a mano
-      // NUNCA se pisa en silencio: el cliente carga vencimientos pactados
-      // que no coinciden con el plazo genérico del proveedor.
-      const autoAnterior = calcCashflow(f.fecha, provPlazo)
-      if (!f.cashflow || f.cashflow === autoAnterior) {
-        next.cashflow = calcCashflow(value, provPlazo) || f.cashflow
+      if (field === 'fecha') {
+        next.periodo = value
+        // El número de los movimientos internos es la fecha, así que sigue a
+        // la fecha mientras nadie lo haya tocado.
+        if (modoRapido && !isEditing && !nroManualRef.current) {
+          next.nro = nroDesdeFecha(value) || next.nro
+        }
+        // Solo recalcular el cashflow si estaba vacío o si todavía era el
+        // auto-calculado (fecha anterior + plazo). Un valor puesto a mano
+        // NUNCA se pisa en silencio: el cliente carga vencimientos pactados
+        // que no coinciden con el plazo genérico del proveedor.
+        const autoAnterior = calcCashflow(f.fecha, provPlazo)
+        if (!f.cashflow || f.cashflow === autoAnterior) {
+          next.cashflow = calcCashflow(value, provPlazo) || f.cashflow
+        }
       }
-    }
-    if (field === 'fecha_pago') next.pagado = Boolean(value)
-    if (field === 'pagado' && !value) next.fecha_pago = ''
-    return next
-  })
+      if (field === 'fecha_pago') next.pagado = Boolean(value)
+      if (field === 'pagado' && !value) next.fecha_pago = ''
+      return next
+    })
+  }
 
   // El importe total es Neto + Impuestos − Descuento; nunca se edita a mano.
   const impuestosSum = isEditing
@@ -1104,6 +1134,29 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <input type="number" step="0.01" placeholder="0.00" value={form.descuento} onChange={e => set('descuento', e.target.value)} />
               </div>
+              {/* Se dice de dónde salió el número: si no, aparece un descuento
+                  que nadie escribió y no se sabe si está bien. */}
+              {esMovStock && !isEditing && pctDescuento > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  {descuentoManual
+                    ? `Escrito a mano (el automático de este local es ${pctDescuento}%)`
+                    : `${pctDescuento}% automático de este local`}
+                  {!descuentoManual && form.descuento && (
+                    <button
+                      type="button"
+                      onClick={() => set('descuento', '')}
+                      style={{
+                        background: 'none', border: 'none', padding: 0, marginLeft: 6,
+                        color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
+                        textDecoration: 'underline',
+                      }}
+                      title="Quitar el descuento automático de este pago"
+                    >
+                      quitar
+                    </button>
+                  )}
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label className="form-label" title="Se calcula solo: Neto + Impuestos − Descuento">Importe Total</label>
