@@ -149,3 +149,18 @@ export function periodoDemasiadoViejo(periodo, hoy = todayInputDate()) {
   const dias = diasDesdeFinDePeriodo(periodo, hoy)
   return dias !== null && dias >= DIAS_PERIODO_VIEJO
 }
+
+// ── Número de comprobante de los movimientos internos ───────────────────────
+
+// Carga Avión y MovStock no tienen comprobante fiscal, así que el número lo da
+// la fecha en DDMMYYYY: siempre 8 dígitos, sin que nadie tenga que inventarlo.
+//
+// Se lee el string del <input type="date"> tal cual, sin pasar por Date: el
+// input ya entrega un día calendario en YYYY-MM-DD y construir un Date para
+// volver a sacarle el día es la forma clásica de correrlo por huso horario.
+export function nroDesdeFecha(fecha) {
+  const s = String(fecha ?? '')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return ''
+  const [anio, mes, dia] = s.split('-')
+  return `${dia}${mes}${anio}`
+}

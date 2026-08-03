@@ -12,7 +12,7 @@ import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
-import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo } from '../../lib/dates.js'
+import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
 
 function IcoBack() {
   return (
@@ -100,6 +100,8 @@ export default function PagoForm() {
   const draftKey        = `pago-draft:${id || 'nuevo'}${modoRapido ? `:${tipoParam || ''}` : ''}`
   const restoredFromDraftRef = useRef(false)
   const draftReadyRef        = useRef(false)
+  // El Nro de los modos rápidos sigue a la fecha hasta que alguien lo escribe.
+  const nroManualRef         = useRef(false)
 
   const locales = activeApp?.locales ?? []
 
@@ -170,11 +172,16 @@ export default function PagoForm() {
   const [form, setForm] = useState(() => ({
     fecha: hoy,
     id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : '',
-    pv: '', nro: '',
+    // Carga Avión y MovStock no tienen comprobante fiscal: el número es la
+    // fecha en DDMMYYYY (ver nroDesdeFecha) y se sigue actualizando con ella
+    // mientras nadie lo escriba a mano.
+    pv: '', nro: modoRapido ? nroDesdeFecha(hoy) : '',
     importe_neto: '', descuento: '', importe: '',
     id_metodo: '', cashflow: '', observaciones: '',
     pagado: modoRapido, fecha_pago: modoRapido ? ahoraDateTime : '', periodo: modoRapido ? hoy : '',
-    estado_op: 'CUENTA_CTE', ingresa_egreso: false,
+    // Son plata que sale de la caja del local, no cuenta corriente con un
+    // proveedor: por eso el estado arranca en CAJA en los modos rápidos.
+    estado_op: modoRapido ? 'CAJA' : 'CUENTA_CTE', ingresa_egreso: false,
     periodico: false,
     id_local: activeLocal?.id || '',
     foto_url: '', pdf_url: '',
@@ -187,6 +194,9 @@ export default function PagoForm() {
     const draft = loadDraft(draftKey)
     if (draft) {
       restoredFromDraftRef.current = true
+      // Lo que se recupera se respeta tal cual: si después se toca la fecha, el
+      // número recuperado no se pisa.
+      if (draft.data.form?.nro) nroManualRef.current = true
       if (draft.data.form)           setForm((f) => ({ ...f, ...draft.data.form }))
       if (draft.data.provSelected)   setProvSelected(draft.data.provSelected)
       if (draft.data.provPlazo != null) setProvPlazo(draft.data.provPlazo)
@@ -261,6 +271,8 @@ export default function PagoForm() {
             nro_ord:        d.nro_ord        ?? null,
           })
         } else if (localRes?.data?.id_proveedor) {
+          // Carga Avión y MovStock facturan contra el proveedor del propio
+          // local (la sociedad que factura por él), así que viene precargado.
           const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
           setProvSelected(prov)
           setProvPlazo(prov.plazo || null)
@@ -455,8 +467,16 @@ export default function PagoForm() {
   // set con efectos encadenados
   const set = (field, value) => setForm(f => {
     const next = { ...f, [field]: value }
+    // Escribir el número a mano lo desengancha de la fecha para siempre: a
+    // partir de ahí manda lo que puso la persona.
+    if (field === 'nro') nroManualRef.current = true
     if (field === 'fecha') {
       next.periodo = value
+      // El número de los movimientos internos es la fecha, así que sigue a la
+      // fecha mientras nadie lo haya tocado.
+      if (modoRapido && !isEditing && !nroManualRef.current) {
+        next.nro = nroDesdeFecha(value) || next.nro
+      }
       // Solo recalcular el cashflow si estaba vacío o si todavía era el
       // auto-calculado (fecha anterior + plazo). Un valor puesto a mano
       // NUNCA se pisa en silencio: el cliente carga vencimientos pactados
