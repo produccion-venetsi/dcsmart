@@ -6,6 +6,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { TIPOS_LOCAL, labelTipoLocal } from '../../lib/tiposLocal.js'
+import { DESCUENTO_MOVSTOCK_DEFAULT } from '../../lib/descuentoMovstock.js'
 
 const LIMIT = 50
 
@@ -51,7 +52,10 @@ function IcoImage() {
 
 const EMPTY = {
   nombre: '', id_app: '', direccion: '', telefono: '', activo: true,
-  id_proveedor: '', maps_url: '', menu_url: '', mail_facturas: '', tipo_local: ''
+  id_proveedor: '', maps_url: '', menu_url: '', mail_facturas: '', tipo_local: '',
+  // Vacío en el alta significa "el general": el default de la base lo pone en
+  // 30 y no hace falta escribirlo local por local.
+  descuento_movstock: ''
 }
 
 function Seccion({ titulo, children }) {
@@ -171,7 +175,8 @@ export default function Locales() {
       maps_url:      l.maps_url      || '',
       menu_url:      l.menu_url      || '',
       mail_facturas: l.mail_facturas || '',
-      tipo_local:    l.tipo_local    || ''
+      tipo_local:    l.tipo_local    || '',
+      descuento_movstock: l.descuento_movstock == null ? '' : String(Number(l.descuento_movstock))
     })
     setProvSel(l.proveedor || null)
     setPanelOpen(true)
@@ -444,6 +449,28 @@ export default function Locales() {
                     {TIPOS_LOCAL.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
+              </div>
+
+              {/* Descuento automático de MovStock. Se deja vacío salvo que el
+                  local tenga otro pactado: así el general se cambia en un solo
+                  lugar y no hay que revisar 59 fichas. */}
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label className="form-label">Descuento MovStock (%)</label>
+                <div className="form-input-wrap">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder={String(DESCUENTO_MOVSTOCK_DEFAULT)}
+                    value={form.descuento_movstock}
+                    onChange={e => setForm({ ...form, descuento_movstock: e.target.value })}
+                  />
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                  Se descuenta solo del neto al cargar un MovStock.
+                  Vacío = {DESCUENTO_MOVSTOCK_DEFAULT}% general. Poné 0 si este local no tiene descuento.
+                </span>
               </div>
             </div>
           </div>

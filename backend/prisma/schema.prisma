@@ -39,6 +39,12 @@ model Local {
   menu_url      String?
   mail_facturas String?
   tipo_local    TipoLocal?
+  // Descuento automatico que se aplica al cargar un MovStock, en porcentaje
+  // sobre el neto. Es 30% para todos salvo que el local tenga otro pactado, por
+  // eso el default vive en la base: los locales que ya existen quedan en 30 sin
+  // tener que actualizar nada. NULL nunca deberia darse gracias al default,
+  // pero si aparece el codigo lo trata como el 30 general.
+  descuento_movstock Decimal? @default(30) @db.Decimal(5, 2)
   created_at    DateTime   @default(now())
   updated_at    DateTime   @updatedAt
 
