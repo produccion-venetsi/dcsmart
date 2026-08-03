@@ -274,6 +274,7 @@ export default function PagoForm() {
           // Carga Avión y MovStock facturan contra el proveedor del propio
           // local (la sociedad que factura por él), así que viene precargado.
           const { data: prov } = await proveedoresApi.get(localRes.data.id_proveedor, ctrl.signal)
+          setLocalProveedor(prov)
           setProvSelected(prov)
           setProvPlazo(prov.plazo || null)
           // Sin precarga de rubro, igual que en selectProveedor.
@@ -282,6 +283,10 @@ export default function PagoForm() {
             id_proveedor: prov.id,
             cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
           }))
+        } else if (localRes) {
+          // El local existe pero no tiene proveedor configurado: false (y no
+          // null) para poder distinguirlo de "todavía no cargó" y avisarlo.
+          setLocalProveedor(false)
         }
       })
       .catch(() => { if (!ctrl.signal.aborted) { draftReadyRef.current = true; notify('Error al cargar datos', 'error') } })
@@ -968,6 +973,18 @@ export default function PagoForm() {
                 createLabel="crear proveedor"
                 placeholder="Buscar o crear proveedor…"
               />
+              {/* En los modos rápidos el proveedor lo pone el local. Si el local
+                  no lo tiene configurado no hay nada que precargar, y sin este
+                  aviso parece que la precarga está rota cuando en realidad
+                  falta el dato. Hoy son 55 de 59 locales. */}
+              {modoRapido && !isEditing && localProveedor === false && (
+                <span className="aviso-periodo-viejo" style={{ marginTop: 7 }}>
+                  <span>
+                    Este local todavía no tiene proveedor asociado, así que hay que elegirlo a mano.
+                    Se configura una sola vez en <strong>Locales → {activeLocal?.nombre || 'el local'} → Proveedor</strong>.
+                  </span>
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label className="form-label">Rubro / Categoría *</label>
