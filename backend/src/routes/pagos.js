@@ -1,5 +1,5 @@
 import { Storage } from '@google-cloud/storage'
-import { extraerDeImagen, aCamposFormulario, camposConDato, validarAritmetica, matchearMetodoPago } from '../lib/leerFactura.js'
+import { extraerDeArchivo, aCamposFormulario, camposConDato, validarAritmetica, matchearMetodoPago } from '../lib/leerFactura.js'
 import multipart from '@fastify/multipart'
 import { parseNroOrd } from '../lib/nroOrd.js'
 import { sanitizeFolderName, parseGsPath } from '../lib/gcsPaths.js'
@@ -127,9 +127,11 @@ function translatePagoError(err) {
 // cualquier otro tipo de archivo en vez de subirlo tal cual a GCS.
 const EXTENSIONES_ADJUNTO = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'pdf'])
 
-// Para leer con IA solo imagenes: el PDF hay que rasterizarlo primero y no vale
-// la pena para la primera version (casi todas las facturas entran por foto).
-const EXTENSIONES_LECTURA = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'])
+// Para leer con IA: imagenes y PDF. Gemini acepta el PDF nativo por inlineData,
+// asi que no hay que rasterizarlo. Se agrego porque muchos proveedores mandan la
+// factura electronica en PDF y obligar a sacarle una foto a la pantalla se leia
+// peor. Queda afuera 'gif', que si sirve como adjunto pero no como factura.
+const EXTENSIONES_LECTURA = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf'])
 
 // La whitelist de campos de fecha y el manejo de zonas horarias viven en
 // lib/rangosFecha.js, que además soporta varios rangos combinados con AND.
@@ -977,22 +979,32 @@ export default async function pagosRoutes(fastify) {
   })
 
   // ── POST /leer-factura ─────────────────────────────────────────────────────
-  // Lee los datos de la foto de una factura para precargar el formulario. No
+  // Lee los datos de una factura (foto o PDF) para precargar el formulario. No
   // guarda nada: devuelve campos sueltos y la persona los revisa y confirma.
+  // Quien quiera guardar el archivo lo sube aparte por /upload, como cualquier
+  // otro adjunto.
   fastify.post('/leer-factura', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
     const data = await request.file()
     if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
 
     const ext = (data.filename ?? '').split('.').pop().toLowerCase()
     if (!EXTENSIONES_LECTURA.has(ext)) {
-      return reply.code(400).send({ error: `Solo se puede leer una imagen (.${ext} no sirve)` })
+      return reply.code(400).send({ error: `Solo se puede leer una foto o un PDF (.${ext} no sirve)` })
     }
 
-    const buffer = await data.toBuffer()
+    // Pasado el limite de multipart (20 MB) toBuffer() lanza, y sin esto salia
+    // un 500 sin explicacion. Un PDF de factura pesa unos pocos cientos de KB:
+    // si alguien manda algo de 20 MB, casi seguro se equivoco de archivo.
+    let buffer
+    try {
+      buffer = await data.toBuffer()
+    } catch {
+      return reply.code(413).send({ error: 'El archivo es demasiado grande (máximo 20 MB)' })
+    }
 
     let crudo
     try {
-      crudo = await extraerDeImagen(buffer, data.mimetype)
+      crudo = await extraerDeArchivo(buffer, data.mimetype)
     } catch (err) {
       // El formulario tiene que quedar usable a mano si esto falla, asi que el
       // error se informa y no se rompe nada de lo ya cargado.

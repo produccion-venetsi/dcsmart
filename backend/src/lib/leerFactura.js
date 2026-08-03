@@ -1,5 +1,12 @@
-// Lee los datos de una factura desde su foto, para precargar el formulario de
-// pagos. NO guarda nada: devuelve los campos y el usuario los revisa y confirma.
+// Lee los datos de una factura desde su foto o su PDF, para precargar el
+// formulario de pagos. NO guarda nada: devuelve los campos y el usuario los
+// revisa y confirma.
+//
+// Gemini acepta el PDF nativo como `inlineData` igual que una imagen, asi que no
+// hay que rasterizarlo ni pasarle un OCR antes: se manda el buffer tal cual con
+// su mimeType. Con el PDF ademas lee mejor que con una foto, porque el texto es
+// texto y no pixeles — que es justamente el caso de las facturas electronicas
+// que llegan por mail.
 //
 // Usa Gemini via Vertex AI con las credenciales por defecto del proyecto (las
 // mismas que ya usa GCS), asi que no hay API key que administrar: en local sale
@@ -144,7 +151,7 @@ const ESQUEMA = {
       }
     },
     condicion_venta:      { type: 'string', description: 'Texto tal cual de la condición de venta / pago / forma de pago' },
-    legible: { type: 'boolean', description: 'false si la foto no permite leer la factura' }
+    legible: { type: 'boolean', description: 'false si el archivo no permite leer la factura' }
   }
 }
 
@@ -153,7 +160,10 @@ const ESQUEMA = {
 // note.
 const PROMPT = `Sos un asistente que lee facturas argentinas para precargar un formulario de carga.
 
-Extraé los datos de la factura de la imagen. Tené en cuenta:
+Extraé los datos de la factura del archivo adjunto, que puede ser una foto o un PDF. Tené en cuenta:
+
+- Si el archivo tiene VARIAS páginas, los datos salen de la primera factura: el encabezado (tipo, punto de venta, número, fecha, CUIT) está en la primera página, y los totales pueden estar en la última. Leé todas las páginas antes de responder, pero devolvé UNA sola factura, no una por página.
+- Si el archivo contiene más de una factura distinta (varios comprobantes escaneados juntos), devolvé los datos de la PRIMERA nada más.
 
 - El CUIT del EMISOR (quien factura), no el del receptor. Devolvé solo los 11 dígitos.
 - El tipo de comprobante suele estar en una letra grande (A, B, C, M) en el centro del encabezado.
@@ -165,7 +175,7 @@ Extraé los datos de la factura de la imagen. Tené en cuenta:
 
 REGLA IMPORTANTE: si un dato no se ve con claridad, devolvé null en ese campo. NO lo adivines ni lo calcules. Un campo vacío lo completa la persona; un número inventado se guarda mal y nadie se da cuenta.
 
-Si la imagen no es una factura o no se puede leer, devolvé legible: false.`
+Si el archivo no es una factura o no se puede leer, devolvé legible: false.`
 
 // ── Funciones puras (testeadas sin red) ─────────────────────────────────────
 
@@ -269,7 +279,10 @@ const proyectoPorDefecto = () => process.env.GCS_PROJECT_ID || process.env.GOOGL
 
 // Devuelve el JSON crudo del modelo. Lanza si la API falla, para que la ruta
 // pueda responder un error claro sin dejar el formulario a medio llenar.
-export async function extraerDeImagen(buffer, mimeType, { proyecto = proyectoPorDefecto() } = {}) {
+//
+// `mimeType` es el del archivo tal como lo mandó el navegador: image/jpeg,
+// image/png o application/pdf. Gemini los acepta a todos por inlineData.
+export async function extraerDeArchivo(buffer, mimeType, { proyecto = proyectoPorDefecto() } = {}) {
   if (!proyecto) throw new Error('Falta GCS_PROJECT_ID para llamar a Vertex AI')
 
   const auth = getAuth()
