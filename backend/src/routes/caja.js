@@ -134,7 +134,16 @@ export default async function cajaRoutes(fastify) {
       audit: auditedSet.has(c.id),
       // Se devuelve el cuadre calculado y no las colecciones crudas: la lista no
       // las muestra y son varios miles de filas al serializar.
-      cuadre: calcularCuadre({ ...c, movimientos, detalles })
+      cuadre: calcularCuadre({ ...c, movimientos, detalles }),
+      // Suma cruda de los detalles, para la columna "Total Det." del listado.
+      // No sale del cuadre: ahi cobros/gastos/informativos salen de los
+      // movimientos cuando el local carga por movimientos (origen TAPTAP), asi
+      // que no suman los detalles. Los detalles ya venian en la query, esto solo
+      // los totaliza antes de descartarlos.
+      total_detalles: (detalles ?? []).reduce((acc, d) => {
+        const n = Number(d.monto)
+        return acc + (Number.isFinite(n) ? n : 0)
+      }, 0)
     }))
 
     return { data, total, page: Number(page), limit: Number(limit) }
