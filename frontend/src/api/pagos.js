@@ -6,6 +6,10 @@ export const pagosApi = {
   stats:      (params, signal) => client.get('/pagos/stats',               { params, signal }),
   nextNroOrd: (id_local, signal) => client.get('/pagos/next-nro-ord',      { params: { id_local }, signal }),
   checkDuplicado: (params, signal) => client.get('/pagos/check-duplicado', { params, signal }),
+  // Proveedor y descuento del local para arrancar Carga Avión / MovStock. Va
+  // por acá y no por localesApi.get porque eso pide `locales:view`, que admin y
+  // cajero no tienen (ver el comentario del endpoint en routes/pagos.js).
+  contextoLocal: (id_local, signal) => client.get(`/pagos/contexto-local/${id_local}`, { signal }),
   chart:      (params, signal) => client.get('/pagos/chart',               { params, signal }),
   summary:    (params, signal) => client.get('/pagos/summary',             { params, signal }),
   create:     (data)           => client.post('/pagos',                     data),
