@@ -6,6 +6,10 @@ import { useUiStore } from '../../store/uiStore.js'
 import { useAppStore } from '../../store/appStore.js'
 import { fmtDateTimeArg, fmtDateArg } from '../../lib/dates.js'
 import { puedeBorrarMovimientos } from '../../lib/roles.js'
+import TablaDesglose from '../../components/TablaDesglose.jsx'
+import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
+import { agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
+import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
 
 function IcoBack() {
   return (
@@ -51,7 +55,8 @@ const fmtDT = fmtDateTimeArg
 // La diferencia de caja la calcula el backend (lib/cuadreCaja.js) y llega en
 // `caja.cuadre`. Esta pantalla tenía su propia copia de la fórmula, que había
 // divergido de la del listado (le faltaba la rama de TAPTAP y el tipo EGRESO).
-const sumaMontos = (items) => (items ?? []).reduce((acc, i) => acc + Number(i.monto ?? 0), 0)
+// Las sumas crudas por sección salen de lib/desgloses.js, la misma que suma los
+// grupos de la tabla.
 
 export default function CajaDetail() {
   const { id }   = useParams()
@@ -103,7 +108,7 @@ export default function CajaDetail() {
       notify('Movimiento agregado', 'success')
       setNewMov({ tipo: 'INGRESO', monto: '', id_metodo: '' })
       load()
-    } catch { notify('Error al agregar movimiento', 'error') }
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
   }
 
@@ -174,10 +179,11 @@ export default function CajaDetail() {
   if (loading) return <div className="page-loading"><div className="spinner" /></div>
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
-  const totalMov = sumaMontos(caja.movimientos)
   const cuadre = caja.cuadre ?? {}
   const hayDescuadre = cuadre.cuadra === false
   const descuadre = cuadre.diferencia
+
+  const gruposMovimientos = agruparMovimientos(caja.movimientos)
 
   const infoRows = [
     ['Tipo Turno',   caja.tipo_turno ?? '—'],
@@ -193,6 +199,11 @@ export default function CajaDetail() {
     ['Origen',       caja.origin ?? '—'],
     ['Auditado',     caja.audit ? 'Sí' : 'No'],
     ...(canAuditDc ? [['Audit DC', caja.audit_dc ? 'Sí' : 'No']] : []),
+    // Mismas dos sumas que en el drawer del listado, en el mismo lugar: arriba,
+    // no en la cabecera de la tabla. Apilan montos sin signo, así que son
+    // referencia y no reemplazan a la diferencia de caja.
+    ['Total detalles',    fmt$(sumaMontos(caja.detalles))],
+    ['Total movimientos', fmt$(sumaMontos(caja.movimientos))],
   ]
 
   return (
@@ -268,32 +279,22 @@ export default function CajaDetail() {
               <span className="card-title" style={{ margin: 0 }}>
                 Movimientos ({caja.movimientos?.length || 0})
               </span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold-bright)' }}>
-                Total: {fmt$(totalMov)}
-              </span>
             </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Tipo</th>
-                  <th>Método</th>
-                  <th>Monto</th>
-                  <th>Cantidad</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {(caja.movimientos || []).map((m) => (
+            <TablaDesglose
+              grupos={gruposMovimientos}
+              columnas={[{ label: 'Tipo' }, { label: 'Método' }, { label: 'Monto' }, { label: 'Cantidad' }, { label: '' }]}
+              fmtMonto={fmt$}
+              renderFila={(m) => (
                   <tr key={m.id}>
                     {editingMovId === m.id ? (
                       <>
                         <td>
-                          <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
-                            <option>INGRESO</option>
-                            <option>EGRESO</option>
-                            <option>APERTURA</option>
-                            <option>CIERRE</option>
-                          </select>
+                          <TipoMovimientoSelect
+                            className="filter-select"
+                            style={{ width: '100%' }}
+                            value={editMovForm.tipo}
+                            onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
+                          />
                         </td>
                         <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                         <td>
@@ -308,7 +309,7 @@ export default function CajaDetail() {
                     ) : (
                       <>
                         <td>
-                          <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>
+                          <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>
                             {m.tipo}
                           </span>
                         </td>
@@ -328,19 +329,14 @@ export default function CajaDetail() {
                       </>
                     )}
                   </tr>
-                ))}
-                {(!caja.movimientos || caja.movimientos.length === 0) && (
-                  <tr>
-                    <td colSpan={5}>
-                      <div className="table-empty">
-                        <IcoMovs />
-                        <p>Sin movimientos registrados.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              )}
+            />
+            {(!caja.movimientos || caja.movimientos.length === 0) && (
+              <div className="table-empty">
+                <IcoMovs />
+                <p>Sin movimientos registrados.</p>
+              </div>
+            )}
           </div>
 
           {/* Add movement form */}
@@ -350,12 +346,7 @@ export default function CajaDetail() {
               <div className="form-group">
                 <label className="form-label">Tipo</label>
                 <div className="form-input-wrap">
-                  <select value={newMov.tipo} onChange={e => setNewMov({ ...newMov, tipo: e.target.value })}>
-                    <option>INGRESO</option>
-                    <option>EGRESO</option>
-                    <option>APERTURA</option>
-                    <option>CIERRE</option>
-                  </select>
+                  <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov({ ...newMov, tipo })} />
                 </div>
               </div>
               <div className="form-group">

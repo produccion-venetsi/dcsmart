@@ -751,6 +751,9 @@ select option:disabled { color: var(--t4); }
 .td-muted { color: var(--t4) !important; }
 .td-number { font-weight: 700; color: var(--gold-bright) !important; letter-spacing: -0.01em; }
 .td-actions { display: flex; gap: 6px; align-items: center; }
+/* % avión al 100%: no hubo nada fiscal en el turno. Se destaca sólo ese extremo
+   para que salte al recorrer la columna, sin pintar toda la tabla de colores. */
+.td-avion-alto { color: var(--amber) !important; font-weight: 700; }
 
 .table-empty {
   padding: 3.5rem 2rem;
@@ -762,6 +765,101 @@ select option:disabled { color: var(--t4); }
 }
 .table-empty svg { color: var(--t4); opacity: 0.35; }
 .table-empty p { font-size: 13px; color: var(--t4); margin: 0; }
+
+/* ═══════════════════════════════════════════════
+   TABLA DESGLOSE (grupos plegables con subtotal)
+   Las tablas internas de una caja: los movimientos agrupados por tipo y los
+   detalles por clasificación. La jerarquía se lee por el fondo (el grupo pesa
+   más que el subgrupo, el subgrupo más que la fila), no por líneas.
+   ═══════════════════════════════════════════════ */
+.desglose-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--t4);
+  background: #1a2535;
+  border-bottom: 1px solid var(--border);
+}
+.desglose-toggle-todo {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--gold);
+  cursor: pointer;
+}
+.desglose-toggle-todo:hover { color: var(--gold-bright); }
+
+/* La cabecera es un botón a todo el ancho: el área clickeable es la fila
+   entera, no sólo el texto o el chevron. */
+.desglose-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--t1);
+  text-align: left;
+  cursor: pointer;
+}
+.desglose-cabecera.sub { padding-left: 18px; font-size: 11.5px; color: var(--t2); }
+
+.desglose-label { font-weight: 700; letter-spacing: 0.01em; }
+.desglose-cabecera.sub .desglose-label { font-weight: 600; }
+
+.desglose-cant {
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.07);
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--t3);
+  text-align: center;
+}
+
+/* El total del grupo empuja a la derecha y queda alineado con la columna de
+   montos de las filas. */
+.desglose-total {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--gold-bright);
+  letter-spacing: -0.01em;
+}
+.desglose-cabecera.sub .desglose-total { color: var(--gold); font-weight: 600; }
+
+.tabla-desglose .desglose-grupo > td {
+  padding: 8px 10px;
+  background: rgba(201,176,134,0.06);
+  border-bottom: 1px solid var(--border);
+}
+.tabla-desglose .desglose-grupo.abierto > td { background: rgba(201,176,134,0.10); }
+.tabla-desglose .desglose-grupo:hover > td { background: rgba(201,176,134,0.14); }
+
+.tabla-desglose .desglose-subgrupo > td {
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.tabla-desglose .desglose-subgrupo:hover > td { background: rgba(255,255,255,0.06); }
+
+/* Las filas hoja se sangran para que se lea de qué grupo cuelgan. */
+.tabla-desglose tbody tr:not(.desglose-grupo):not(.desglose-subgrupo) > td:first-child {
+  padding-left: 26px;
+}
 
 /* ═══════════════════════════════════════════════
    BUTTONS
@@ -974,6 +1072,20 @@ select option:disabled { color: var(--t4); }
   border-radius: 10px;
 }
 .aviso-lectura strong { font-weight: 700; }
+
+/* Tonos del aviso de lectura. El resultado bueno queda en el azul informativo de
+   arriba: pide revisar los campos, y en verde se leeria como "listo, no toques
+   nada". Estos dos son para cuando la lectura no salio. */
+.aviso-lectura.warn {
+  color: var(--amber);
+  background: var(--amber-bg);
+  border-color: var(--amber-border);
+}
+.aviso-lectura.error {
+  color: var(--red);
+  background: var(--red-bg);
+  border-color: var(--red-border);
+}
 
 /* Campo que vino de la lectura de la foto: se marca para que se sepa qué revisar
    y qué escribió la persona. Solo el borde — cambiarle el fondo lo haría parecer

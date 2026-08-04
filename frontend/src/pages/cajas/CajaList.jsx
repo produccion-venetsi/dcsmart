@@ -14,6 +14,12 @@ import ActionsMenu from '../../components/ActionsMenu.jsx'
 import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import { clasificacionLabel, clasificacionDeDetalle, normalizarClasificacion } from '../../lib/clasificaciones.js'
 import ClasificacionSelect from '../../components/ClasificacionSelect.jsx'
+import TablaDesglose from '../../components/TablaDesglose.jsx'
+import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
+import { agruparDetalles, agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
+import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
+import { fmtPorcentajeAvion, claseAvion, porcentajeAvion } from '../../lib/avion.js'
+import { conTipoElegido } from '../../lib/detalleForm.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
@@ -107,44 +113,79 @@ function IcoDownload() {
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
+
+// Origen de la caja: de dónde salieron los datos. Antes las cargadas a mano
+// mostraban un guión y las de TapTap un gris igual al del resto de la fila, así
+// que había que fijarse para distinguirlas. Ahora cada origen tiene su color.
+const LABEL_ORIGEN = { DCSMART: 'Manual', TAPTAP: 'Tap Tap', FFUDO: 'FFUDO' }
+const BADGE_ORIGEN = { DCSMART: 'badge-blue', TAPTAP: 'badge-purple', FFUDO: 'badge-amber' }
+
+// Semáforo del cuadre en la tabla: ✅ cuadra, ⚠️ no cuadra, guión cuando no se
+// puede saber (una caja sin total cargado no tiene contra qué comparar).
+// El cálculo llega hecho del backend en `caja.cuadre` (lib/cuadreCaja.js).
+function IcoCuadre({ cuadra }) {
+  if (cuadra == null) return <span className="td-muted">—</span>
+  return (
+    <span style={{ color: cuadra ? 'var(--green)' : 'var(--amber)', fontSize: 13 }}>
+      {cuadra ? '✅' : '⚠️'}
+    </span>
+  )
+}
+
+function tituloCuadre(cuadre) {
+  if (!cuadre) return 'Sin datos para calcular el cuadre'
+  if (cuadre.cuadra == null) return 'Sin total cargado: no hay contra qué comparar'
+  const base = `Efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)}`
+    + `${cuadre.gastos ? ` − gastos ${fmt$(cuadre.gastos)}` : ''} = ${fmt$(cuadre.esperado)}`
+    + ` vs. total declarado ${fmt$(cuadre.total)}. Los cobros salen de los ${cuadre.fuente} de esta caja.`
+  if (cuadre.cuadra) return `Cuadra. ${base}`
+  const signo = cuadre.diferencia > 0 ? 'sobra' : 'falta'
+  return `No cuadra: ${signo} ${fmt$(Math.abs(cuadre.diferencia))}. ${base}`
+}
+
+function tituloAvion(caja) {
+  if (caja.total == null || Number(caja.total) <= 0) return 'Sin total cargado'
+  if (caja.fiscal == null) return 'Sin fiscal cargado'
+  return `Total ${fmt$(caja.total)} − fiscal ${fmt$(caja.fiscal)} sobre el total`
+}
 // fecha_inicio/fecha_cierre son instantes reales (con hora), no fechas de
 // calendario a medianoche UTC -- por eso el "día" y la hora completa se
 // muestran siempre en hora de Argentina, no forzando UTC.
 const fmtDate = fmtDateArg
 const fmtDT = fmtDateTimeArg
 
-// Mismas columnas que se ven en la tabla; montos como número plano (sin "$")
-// para que Excel/Sheets los reconozca como numéricos al importar el CSV.
+// Montos como número plano (sin "$") para que Excel/Sheets los reconozca como
+// numéricos al importar el CSV.
+//
+// El CSV lleva MÁS columnas que la tabla, a propósito: de la pantalla se sacaron
+// Fiscal y Cierre porque estorbaban al revisar turnos, pero en una exportación
+// que se abre en Sheets para analizar no molestan y sacarlas sería perder datos.
 const CAJA_CSV_COLUMNS = [
   { label: 'Nro Turno',  get: (c) => c.nro_turno ? `TRN ${c.nro_turno}` : '' },
   { label: 'Tipo',       get: (c) => c.tipo_turno || '' },
   { label: 'Auditado',   get: (c) => c.audit ? 'Sí' : 'No' },
+  { label: 'Cuadra',     get: (c) => c.cuadre?.cuadra == null ? '' : (c.cuadre.cuadra ? 'Sí' : 'No') },
+  { label: 'Diferencia', get: (c) => c.cuadre?.diferencia ?? '' },
   { label: 'Inicio',     get: (c) => c.fecha_inicio ? fmtDate(c.fecha_inicio) : '' },
   { label: 'Cierre',     get: (c) => c.fecha_cierre ? fmtDate(c.fecha_cierre) : '' },
   { label: 'Cajero',     get: (c) => c.cajero || '' },
   { label: 'Total',      get: (c) => c.total ?? '' },
   { label: 'Efectivo',   get: (c) => c.efectivo ?? '' },
+  { label: 'Total Detalles', get: (c) => c.total_detalles ?? '' },
   { label: 'Fiscal',     get: (c) => c.fiscal ?? '' },
-  { label: 'Comensales', get: (c) => c.comensales ?? '' },
-  { label: 'Tickets',    get: (c) => c.tickets ?? '' },
-  { label: 'Origen',     get: (c) => c.origin || '' },
+  // Número sin el signo %, para poder sumar y promediar en la planilla.
+  { label: '% Avión',    get: (c) => porcentajeAvion(c.total, c.fiscal) ?? '' },
+  { label: 'Cub',        get: (c) => c.comensales ?? '' },
+  { label: 'Tkt',        get: (c) => c.tickets ?? '' },
+  { label: 'Origen',     get: (c) => LABEL_ORIGEN[c.origin] ?? c.origin ?? '' },
   { label: 'Local',      get: (c) => c.local?.nombre || '' },
   { label: 'Observaciones', get: (c) => c.observaciones || '' },
 ]
 
 // La diferencia de caja se calcula en el backend (lib/cuadreCaja.js) y viene en
-// `caja.cuadre`. Acá solo se muestran sumas crudas por sección.
-const sumaMontos = (items) => (items ?? []).reduce((acc, i) => acc + Number(i.monto ?? 0), 0)
-
-// Elegir un tipo propone su clasificación, y el usuario puede cambiarla después.
-// Si el tipo no tiene ninguna (nombre libre, sin tipo del catálogo) se conserva
-// la que ya estaba elegida en el formulario.
-const conTipoElegido = (form, tipos, id_tipo, nombre) => ({
-  ...form,
-  id_tipo,
-  nombre,
-  clasificacion: tipos.find((t) => t.id === id_tipo)?.clasificacion ?? form.clasificacion
-})
+// `caja.cuadre`. Acá solo se muestran sumas crudas por sección, con `sumaMontos`
+// de lib/desgloses.js — la misma que suma los grupos, para que el total de la
+// tabla y la suma de sus grupos no puedan divergir.
 
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
@@ -196,12 +237,15 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       .catch(() => {})
   }, [cajaId])
 
+  // El catálogo se pide con o sin local. GET /caja-detalles/tipos ya devuelve los
+  // tipos del grupo (id_local null) y le SUMA los del local cuando se le pasa uno,
+  // así que cortar la llamada por no tener local dejaba el combo vacío teniendo 25
+  // tipos disponibles. En LOS GALGOS los 25 son del grupo: sin local igual salen.
   useEffect(() => {
-    if (!caja?.id_local) return
-    detallesApi.tipos(caja.id_local)
+    detallesApi.tipos(caja?.id_local)
       .then(r => setTipos(r.data || []))
-      .catch(() => {})
-  }, [caja?.id_local])
+      .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
+  }, [caja?.id_local, notify])
 
   const handleAddMov = async (e) => {
     e.preventDefault()
@@ -218,7 +262,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
       setAddingMov(false)
       load()
-    } catch { notify('Error al agregar movimiento', 'error') }
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
   }
 
@@ -355,6 +399,9 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   const hayDescuadre = cuadre.cuadra === false
   const descuadre = cuadre.diferencia
 
+  const gruposDetalles    = agruparDetalles(caja.detalles)
+  const gruposMovimientos = agruparMovimientos(caja.movimientos)
+
   const rows = [
     ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
     ['Tipo Turno', caja.tipo_turno ?? '—'],
@@ -369,6 +416,13 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     ...(cuadre.gastos ? [['Gastos', fmt$(cuadre.gastos)]] : []),
     ['Comensales', caja.comensales ?? '—'],
     ['Tickets',    caja.tickets ?? '—'],
+    // Sumas crudas de cada tabla interna. Antes estaban en la cabecera de su
+    // sección; se mueven acá para no competir con los totales por grupo, que son
+    // los que se usan para revisar el turno. Suman todo sin signo ni sentido
+    // contable (un VACIADO y un COBRO se apilan igual), así que no reemplazan a
+    // Cobros/Gastos ni a la diferencia de caja: quedan de referencia.
+    ['Total detalles',    fmt$(sumaMontos(caja.detalles))],
+    ['Total movimientos', fmt$(sumaMontos(caja.movimientos))],
   ]
 
   return (
@@ -455,10 +509,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       )}
 
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
+      {/* El total ya no vive acá: está arriba, en "Datos del turno". Lo que se
+          muestra en la tabla son los totales por grupo, que es lo que se venía
+          sumando a mano. */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(sumaMontos(caja.detalles))}</span>
           {canEdit && !addingDet && (
             <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
               <IcoPlus /> Añadir
@@ -468,12 +524,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       </div>
       {caja.detalles && caja.detalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-          <table className="data-table">
-            <thead>
-              <tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr>
-            </thead>
-            <tbody>
-              {caja.detalles.map((d) => (
+          <TablaDesglose
+            grupos={gruposDetalles}
+            columnas={[{ label: 'Clasificación' }, { label: 'Nombre' }, { label: 'Monto' }, { label: '' }]}
+            fmtMonto={fmt$2}
+            renderFila={(d) => (
                 <tr key={d.id}>
                   {editingDetId === d.id ? (
                     <>
@@ -520,9 +575,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                     </>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+            )}
+          />
         </div>
       )}
       {(!caja.detalles || caja.detalles.length === 0) && !addingDet && (
@@ -573,7 +627,6 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(sumaMontos(caja.movimientos))}</span>
           {canEdit && !addingMov && (
             <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMov(true)}>
               <IcoPlus /> Añadir
@@ -583,22 +636,21 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       </div>
       {caja.movimientos && caja.movimientos.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-          <table className="data-table">
-            <thead>
-              <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
-            </thead>
-            <tbody>
-              {caja.movimientos.map((m) => (
+          <TablaDesglose
+            grupos={gruposMovimientos}
+            columnas={[{ label: 'Tipo' }, { label: 'Método' }, { label: 'Monto' }, { label: 'Cant.' }, { label: '' }]}
+            fmtMonto={fmt$2}
+            renderFila={(m) => (
                 <tr key={m.id}>
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
-                          <option>INGRESO</option>
-                          <option>EGRESO</option>
-                          <option>APERTURA</option>
-                          <option>CIERRE</option>
-                        </select>
+                        <TipoMovimientoSelect
+                          className="filter-select"
+                          style={{ width: '100%' }}
+                          value={editMovForm.tipo}
+                          onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
+                        />
                       </td>
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
@@ -620,7 +672,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   ) : (
                     <>
                       <td>
-                        <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                        <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
                       </td>
                       <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                       <td className="td-number">{fmt$2(m.monto)}</td>
@@ -640,9 +692,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                     </>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+            )}
+          />
         </div>
       )}
       {(!caja.movimientos || caja.movimientos.length === 0) && !addingMov && (
@@ -654,12 +705,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
             <div className="form-input-wrap">
-              <select value={newMov.tipo} onChange={e => setNewMov({ ...newMov, tipo: e.target.value })}>
-                <option>INGRESO</option>
-                <option>EGRESO</option>
-                <option>APERTURA</option>
-                <option>CIERRE</option>
-              </select>
+              <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov({ ...newMov, tipo })} />
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -756,9 +802,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       setDetalles(data.detalles || [])
       setMovimientos(data.movimientos || [])
     }).catch(() => notify('Error al cargar detalles/movimientos', 'error'))
-    if (idLocal) {
-      detallesApi.tipos(idLocal).then(r => setTipos(r.data || [])).catch(() => {})
-    }
+    detallesApi.tipos(idLocal)
+      .then(r => setTipos(r.data || []))
+      .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
   }
 
   useEffect(() => {
@@ -781,7 +827,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       })
       setDetalles(data.detalles || [])
       setMovimientos(data.movimientos || [])
-      if (data.id_local) detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(() => {})
+      detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(() => {})
     }).catch(() => notify('Error al cargar caja', 'error'))
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [cajaId])
@@ -1119,12 +1165,12 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
-                          <option>INGRESO</option>
-                          <option>EGRESO</option>
-                          <option>APERTURA</option>
-                          <option>CIERRE</option>
-                        </select>
+                        <TipoMovimientoSelect
+                          className="filter-select"
+                          style={{ width: '100%' }}
+                          value={editMovForm.tipo}
+                          onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
+                        />
                       </td>
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
@@ -1146,7 +1192,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   ) : (
                     <>
                       <td>
-                        <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                        <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
                       </td>
                       <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                       <td className="td-number">{fmt$2(m.monto)}</td>
@@ -1176,12 +1222,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Tipo</label>
               <div className="form-input-wrap">
-                <select value={newMov.tipo} onChange={e => setNewMov(f => ({ ...f, tipo: e.target.value }))}>
-                  <option>INGRESO</option>
-                  <option>EGRESO</option>
-                  <option>APERTURA</option>
-                  <option>CIERRE</option>
-                </select>
+                <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov(f => ({ ...f, tipo }))} />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1237,7 +1278,10 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const [metodos, setMetodos] = useState([])
 
   const [pendingDetalles, setPendingDetalles] = useState([])
-  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '', observaciones: '' })
+  // Mismos campos que el alta de detalle del drawer: acá faltaban `clasificacion`
+  // y `nombre`, así que al crear una caja no se podía cargar "Mostrador -
+  // informativo" ni un nombre que no estuviera en el catálogo del local.
+  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
 
   const [pendingMovimientos, setPendingMovimientos] = useState([])
   const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
@@ -1246,12 +1290,15 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
   const targetLocalId = activeLocal?.id || localId
 
+  // El catálogo se pide con o sin local. GET /caja-detalles/tipos ya devuelve los
+  // tipos del grupo (id_local null) y le SUMA los del local cuando se le pasa uno,
+  // así que cortar la llamada por no tener local dejaba el combo vacío teniendo 25
+  // tipos disponibles. En LOS GALGOS los 25 son del grupo: sin local igual salen.
   useEffect(() => {
-    if (!targetLocalId) return
     detallesApi.tipos(targetLocalId)
       .then(r => setTipos(r.data || []))
-      .catch(() => {})
-  }, [targetLocalId])
+      .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
+  }, [targetLocalId, notify])
 
   useEffect(() => {
     metodosApi.list()
@@ -1262,7 +1309,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const addPendingDetalle = () => {
     if (!detForm.monto) return
     setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
-    setDetForm({ id_tipo: '', monto: '', observaciones: '' })
+    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
   }
   const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
 
@@ -1301,6 +1348,10 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
           await detallesApi.create({
             id_caja: nuevoId,
             id_tipo: d.id_tipo || null,
+            // Sin esto el detalle quedaba sin clasificación propia y heredaba la
+            // del tipo del catálogo; sin tipo, cuadreCaja lo asumía cobro.
+            clasificacion: d.clasificacion || null,
+            nombre: d.id_tipo ? null : (d.nombre || null),
             monto: parseFloat(d.monto),
             observaciones: d.observaciones || null
           })
@@ -1434,11 +1485,12 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
       {pendingDetalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">
-            <thead><tr><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {pendingDetalles.map(d => (
                 <tr key={d._key}>
-                  <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || '—'}</td>
+                  <td className="td-muted">{clasificacionLabel(d.clasificacion)}</td>
+                  <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || d.nombre || '—'}</td>
                   <td className="td-number">{fmt$2(d.monto)}</td>
                   <td>
                     <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingDetalle(d._key)}>
@@ -1453,13 +1505,21 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Clasificación *</label>
+          <ClasificacionSelect
+            ayuda
+            value={detForm.clasificacion}
+            onChange={(clasificacion) => setDetForm(f => ({ ...f, clasificacion }))}
+          />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nombre</label>
-          <div className="form-input-wrap">
-            <select value={detForm.id_tipo} onChange={e => setDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
-              <option value="">Ver opciones</option>
-              {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-            </select>
-          </div>
+          <TipoDetalleCombo
+            tipos={tipos}
+            idTipo={detForm.id_tipo}
+            nombre={detForm.nombre}
+            onChange={(id_tipo, nombre) => setDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
+          />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Monto</label>
@@ -1489,7 +1549,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
               {pendingMovimientos.map(m => (
                 <tr key={m._key}>
                   <td>
-                    <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                    <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
                   </td>
                   <td className="td-muted">{metodos.find(x => x.id === m.id_metodo)?.nombre || '—'}</td>
                   <td className="td-number">{fmt$2(m.monto)}</td>
@@ -1509,12 +1569,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Tipo</label>
           <div className="form-input-wrap">
-            <select value={movForm.tipo} onChange={e => setMovForm(f => ({ ...f, tipo: e.target.value }))}>
-              <option>INGRESO</option>
-              <option>EGRESO</option>
-              <option>APERTURA</option>
-              <option>CIERRE</option>
-            </select>
+            <TipoMovimientoSelect value={movForm.tipo} onChange={(tipo) => setMovForm(f => ({ ...f, tipo }))} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
@@ -1798,7 +1853,9 @@ export default function CajaList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacó la columna de acciones (borrar) de la fila (ahora vive en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 13 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  // Nro Turno, Tipo, Auditado, Cuadre, Inicio, Cajero, Total, Efectivo,
+  // Total Det., % Avión, Cub, Tkt, Origen, Foto
+  const colCount = 14 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1935,14 +1992,18 @@ export default function CajaList() {
               <SortTh field="nro_turno">Nro Turno</SortTh>
               <th>Tipo</th>
               <th>Auditado</th>
+              <th title="Cuadre: el total declarado contra efectivo + cobros − gastos">Cuadre</th>
               <SortTh field="fecha_inicio">Inicio</SortTh>
-              <SortTh field="fecha_cierre">Cierre</SortTh>
               <SortTh field="cajero">Cajero</SortTh>
               <SortTh field="total">Total</SortTh>
               <th>Efectivo</th>
-              <th>Fiscal</th>
-              <th>Comensales</th>
-              <th>Tickets</th>
+              {/* Puede dar más que el Total del turno y no es un error: los
+                  detalles informativos (canales de venta, "Total Tarjetas")
+                  desglosan plata que ya está contada en otro detalle. */}
+              <th title="Suma de todos los detalles del turno, incluidos los informativos. Puede superar al Total porque los informativos desglosan algo ya contado.">Total Det.</th>
+              <th title="Parte de la venta que no pasó por fiscal: (Total − Fiscal) / Total">% Avión</th>
+              <th title="Comensales">Cub</th>
+              <th title="Tickets">Tkt</th>
               <th>Origen</th>
               <th>Foto</th>
               {showLocalCol && <th>Local</th>}
@@ -1982,18 +2043,23 @@ export default function CajaList() {
                         {c.audit ? <IcoThumbUp /> : <IcoEye />}
                       </span>
                     </td>
+                    <td style={{ textAlign: 'center' }} title={tituloCuadre(c.cuadre)}>
+                      <IcoCuadre cuadra={c.cuadre?.cuadra} />
+                    </td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
-                    <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
                     <td>{c.cajero || <span className="td-muted">—</span>}</td>
                     <td className="td-number">{fmt$(c.total)}</td>
                     <td className="td-number">{fmt$(c.efectivo)}</td>
-                    <td className="td-number">{fmt$(c.fiscal)}</td>
+                    <td className="td-number">{fmt$(c.total_detalles)}</td>
+                    <td className={claseAvion(c.total, c.fiscal)} style={{ textAlign: 'right' }} title={tituloAvion(c)}>
+                      {fmtPorcentajeAvion(c.total, c.fiscal)}
+                    </td>
                     <td className="td-muted" style={{ textAlign: 'right' }}>{c.comensales ?? '—'}</td>
                     <td className="td-muted" style={{ textAlign: 'right' }}>{c.tickets ?? '—'}</td>
                     <td>
-                      {c.origin && c.origin !== 'DCSMART'
-                        ? <span className="badge badge-muted">{c.origin}</span>
-                        : <span className="td-muted">—</span>}
+                      <span className={`badge ${BADGE_ORIGEN[c.origin] ?? 'badge-muted'}`}>
+                        {LABEL_ORIGEN[c.origin] ?? c.origin ?? '—'}
+                      </span>
                     </td>
                     <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                       {c.foto_url
