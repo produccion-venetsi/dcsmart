@@ -7,6 +7,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { filtroPresetsApi } from '../../api/filtroPresets.js'
 import { useAppStore } from '../../store/appStore.js'
+import { useAuthStore } from '../../store/authStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
@@ -14,8 +15,9 @@ import ActionsMenu from '../../components/ActionsMenu.jsx'
 import MultiSelect from '../../components/MultiSelect.jsx'
 import { esRolDc, puedeEditar, puedeBorrarPagos } from '../../lib/roles.js'
 import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
-import { downloadExcel } from '../../lib/excel.js'
-import { tiposImpuestoPresentes, columnasImpuesto, filaTotales } from '../../lib/exportPagos.js'
+import { downloadExcel, excelBlob } from '../../lib/excel.js'
+import { sheetsDisponible, subirComoSheet } from '../../lib/googleSheets.js'
+import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCredito } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 
 const TIPO_BADGE = {
@@ -115,6 +117,15 @@ function IcoDownload() {
     <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
       <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  )
+}
+// Planilla con grilla: mismo trazo que el resto de los iconos de la barra.
+function IcoSheets() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>
     </svg>
   )
 }
@@ -936,6 +947,8 @@ export default function PagoList() {
   const [searchParams] = useSearchParams()
   const activeLocal = useAppStore((s) => s.activeLocal)
   const activeApp   = useAppStore((s) => s.activeApp)
+  // Solo para sugerirle a Google con qué cuenta crear la planilla.
+  const user        = useAuthStore((s) => s.user)
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -954,6 +967,7 @@ export default function PagoList() {
   // backend valida lo mismo, esto solo evita pedir algo que va a dar 403.
   const canSeeActivity = esRolDc(role)
   const [exporting, setExporting] = useState(false)
+  const [sheetsLoading, setSheetsLoading] = useState(false)
   const [summary,        setSummary]        = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
@@ -1028,36 +1042,66 @@ export default function PagoList() {
   // ── Volver a página 1 cuando cambian filtros / sort / búsqueda ────────────
   useEffect(() => { setPage(1) }, [buildParams])
 
-  // ── Exportar Excel: mismos filtros ya aplicados, pero SIN paginar (limit: 0
-  // → el backend trae todas las filas que matchean el where, no una página) ──
+  // ── Datos del export: mismos filtros ya aplicados, pero SIN paginar
+  // (limit: 0 → el backend trae todas las filas que matchean el where, no una
+  // página). Lo comparten los dos destinos, Excel y Google Sheets, para que la
+  // planilla sea idéntica salga por donde salga. Devuelve null si no hay filas.
+  const prepararExport = useCallback(async () => {
+    const { data } = await pagosApi.list({ ...buildParams(1), limit: 0, include_impuestos: 'true' })
+    if (!data.data.length) return null
+
+    const pagos = data.data
+    // Las columnas de impuesto van entre Neto e Importe.
+    const idxImporte = PAGO_CSV_COLUMNS.findIndex(c => c.label === 'Importe')
+    // conSignoNotaCredito envuelve al final, sobre las columnas ya armadas,
+    // para que las de impuesto entren con el mismo criterio que Neto e
+    // Importe y no haya que acordarse de aplicarlo en cada lado.
+    const columns = conSignoNotaCredito([
+      ...PAGO_CSV_COLUMNS.slice(0, idxImporte),
+      ...columnasImpuesto(tiposImpuestoPresentes(pagos)),
+      ...PAGO_CSV_COLUMNS.slice(idxImporte),
+    ])
+    return { pagos, columns, totalsRow: filaTotales(pagos, columns) }
+  }, [buildParams])
+
   const exportCsv = useCallback(async () => {
     setExporting(true)
     try {
-      const { data } = await pagosApi.list({ ...buildParams(1), limit: 0, include_impuestos: 'true' })
-      if (!data.data.length) { notify('No hay filas para exportar con estos filtros', 'info'); return }
-
-      const pagos = data.data
-      // Las columnas de impuesto van entre Neto e Importe.
-      const idxImporte = PAGO_CSV_COLUMNS.findIndex(c => c.label === 'Importe')
-      const columns = [
-        ...PAGO_CSV_COLUMNS.slice(0, idxImporte),
-        ...columnasImpuesto(tiposImpuestoPresentes(pagos)),
-        ...PAGO_CSV_COLUMNS.slice(idxImporte),
-      ]
-
-      await downloadExcel(
-        `pagos_${todayInputDate()}.xlsx`,
-        pagos,
-        columns,
-        'Pagos',
-        filaTotales(pagos, columns),
-      )
+      const prep = await prepararExport()
+      if (!prep) { notify('No hay filas para exportar con estos filtros', 'info'); return }
+      await downloadExcel(`pagos_${todayInputDate()}.xlsx`, prep.pagos, prep.columns, 'Pagos', prep.totalsRow)
     } catch {
       notify('Error al exportar Excel', 'error')
     } finally {
       setExporting(false)
     }
-  }, [buildParams, notify])
+  }, [prepararExport, notify])
+
+  // ── Abrir en Google Sheets ────────────────────────────────────────────────
+  // Sube la misma planilla al Drive del usuario, convertida a Sheets nativo, y
+  // la abre. Ver lib/googleSheets.js para por qué no pasa por el backend.
+  const abrirEnSheets = useCallback(async () => {
+    // La pestaña se abre acá, todavía dentro del gesto del click: si se abriera
+    // recién al terminar la subida, el navegador la trataría como popup y la
+    // bloquearía.
+    const pestania = window.open('', '_blank')
+    setSheetsLoading(true)
+    try {
+      const prep = await prepararExport()
+      if (!prep) { pestania?.close(); notify('No hay filas para exportar con estos filtros', 'info'); return }
+
+      const blob = await excelBlob(prep.pagos, prep.columns, 'Pagos', prep.totalsRow)
+      const link = await subirComoSheet(`Pagos DCSmart ${todayInputDate()}`, blob, user?.email)
+      if (pestania) pestania.location = link
+      else window.open(link, '_blank')  // el navegador bloqueó igual: segundo intento
+      notify('Planilla creada en tu Google Drive', 'success')
+    } catch (err) {
+      pestania?.close()
+      notify(err?.message || 'No se pudo abrir en Google Sheets', 'error')
+    } finally {
+      setSheetsLoading(false)
+    }
+  }, [prepararExport, notify, user?.email])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -1555,6 +1599,18 @@ export default function PagoList() {
 
       <div className="page-with-filters">
       <div className="page-with-filters-main">
+
+      {/* Sin filtros no se calcula el resumen (es una agregación sobre todos los
+          pagos del local). Se avisa en vez de no mostrar nada, así no parece
+          que la pantalla se rompió. */}
+      {!hayFiltroAplicado && !loading && total > 0 && (
+        <div style={{
+          background: 'var(--bg-elevated)', border: '1px dashed var(--border)', borderRadius: 10,
+          padding: '0.6rem 1rem', marginBottom: '1rem', fontSize: 13, color: 'var(--t3)',
+        }}>
+          Aplicá un filtro para ver los totales del resultado.
+        </div>
+      )}
 
       {(summaryLoading || summary) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
