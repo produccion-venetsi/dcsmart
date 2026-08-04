@@ -557,6 +557,10 @@ export default async function pagosRoutes(fastify) {
       if (!nro) return reply.code(400).send({ error: 'El número de comprobante es obligatorio' })
     }
     if (!cashflow)  return reply.code(400).send({ error: 'El cashflow es obligatorio' })
+    // Obligatorio solo al crear. En el PUT sigue siendo opcional a propósito:
+    // ahí se mandan updates parciales (PagoList patchea importe suelto, sin
+    // tocar el resto del pago) y exigirlo rompería esas ediciones.
+    if (!periodo)   return reply.code(400).send({ error: 'El período es obligatorio' })
 
     if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })

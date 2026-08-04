@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ROLES, ROLES_TODOS, esRolDc, puedeOperar, puedeEditar,
-  puedeBorrarPagos, puedeBorrarCajas, puedeCrearCajas
+  puedeBorrarPagos, puedeBorrarCajas, puedeCrearCajas,
+  esAlcanceGlobal, sinLocalesVeTodos, puedeExportar
 } from './roles.js'
 
 test('externo edita como admin', () => {
@@ -24,6 +25,42 @@ test('externo NO es rol interno de DC', () => {
   assert.equal(esRolDc(ROLES.SUPER), true)
   assert.equal(esRolDc(ROLES.DCSMART), true)
   assert.equal(esRolDc(ROLES.ADMIN), false)
+})
+
+test('exportan super_admin, dcsmart y externo; admin y cajero no', () => {
+  assert.equal(puedeExportar(ROLES.SUPER), true)
+  assert.equal(puedeExportar(ROLES.DCSMART), true)
+  assert.equal(puedeExportar(ROLES.EXTERNO), true)
+  assert.equal(puedeExportar(ROLES.ADMIN), false)
+  assert.equal(puedeExportar(ROLES.CAJERO), false)
+})
+
+test('exportar NO alcanza para ver los datos internos de DC', () => {
+  // La columna "Creado" del export se arma con esRolDc, no con puedeExportar:
+  // externo exporta, pero sin ese dato. Si algun dia los dos coincidieran,
+  // exportar seria una puerta lateral a lo que la tabla esconde.
+  assert.equal(puedeExportar(ROLES.EXTERNO), true)
+  assert.equal(esRolDc(ROLES.EXTERNO), false)
+})
+
+test('externo NO tiene alcance global de locales', () => {
+  // El bug que esto evita: la pantalla de usuarios lo trataba como
+  // super_admin/dcsmart y mostraba "Acceso a todos los grupos y locales",
+  // ademas de no dejar limitarlo a locales especificos.
+  assert.equal(esAlcanceGlobal(ROLES.EXTERNO), false)
+  assert.equal(esAlcanceGlobal(ROLES.ADMIN), false)
+  assert.equal(esAlcanceGlobal(ROLES.CAJERO), false)
+  assert.equal(esAlcanceGlobal(ROLES.SUPER), true)
+  assert.equal(esAlcanceGlobal(ROLES.DCSMART), true)
+})
+
+test('externo y admin: sin locales asignados ven todos los del grupo', () => {
+  // Espeja ROLES_TODOS_LOS_LOCALES del backend (plugins/appContext.js).
+  assert.equal(sinLocalesVeTodos(ROLES.EXTERNO), true)
+  assert.equal(sinLocalesVeTodos(ROLES.ADMIN), true)
+  // El cajero necesita local asignado si o si.
+  assert.equal(sinLocalesVeTodos(ROLES.CAJERO), false)
+  assert.equal(sinLocalesVeTodos(ROLES.SUPER), false)
 })
 
 test('cajero solo crea cajas, no edita ni borra', () => {

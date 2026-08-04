@@ -112,22 +112,33 @@ function CostChart({ title, items, barColor }) {
 export default function ReporteCMV({ applied, activeLocal }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Dos formas de leer el CMV, y la diferencia no es cosmética:
+  //
+  // - Por MES: el costo se toma por período contable (`pago.periodo`), que es
+  //   cómo se carga (una factura de junio que entró en julio pertenece a junio).
+  // - Por RANGO de días: el costo se toma por `pago.fecha`, la misma unidad que
+  //   las ventas, así los días pedidos son exactamente los que se muestran.
+  //
+  // Antes el rango de días se comparaba contra `periodo`, que es mensual: pedir
+  // "últimos 30 días" dejaba afuera meses enteros y el CMV salía absurdamente
+  // bajo contra las ventas del mismo rango. Ver backend lib/rangoCmv.js.
+  const [porMes, setPorMes] = useState(false)
+  const [mes, setMes] = useState(() => String(applied.hasta ?? '').slice(0, 7))
 
   useEffect(() => {
     setData(null)
     setLoading(true)
     const ctrl = new AbortController()
-    const params = {
-      desde: applied.desde,
-      hasta: applied.hasta,
-      ...(activeLocal ? { id_local: activeLocal.id } : {})
-    }
+    const local = activeLocal ? { id_local: activeLocal.id } : {}
+    const params = (porMes && mes)
+      ? { mes, ...local }
+      : { desde: applied.desde, hasta: applied.hasta, ...local }
     reportesApi.cmv(params, ctrl.signal)
       .then((res) => setData(res.data))
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [applied.desde, applied.hasta, activeLocal?.id])
+  }, [porMes, mes, applied.desde, applied.hasta, activeLocal?.id])
 
   const kpis        = data?.kpis ?? []
   const alimentos   = data?.alimentos ?? []
@@ -148,6 +159,28 @@ export default function ReporteCMV({ applied, activeLocal }) {
 
   return (
     <>
+      {/* ── Cómo se lee el costo: por período contable o por días reales ── */}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--t2)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={porMes} onChange={e => setPorMes(e.target.checked)} />
+          Ver por mes cerrado (período contable)
+        </label>
+        {porMes && (
+          <input
+            type="month"
+            className="form-input"
+            style={{ width: 150 }}
+            value={mes}
+            onChange={e => setMes(e.target.value)}
+          />
+        )}
+        <span style={{ fontSize: 11, color: 'var(--t4)' }}>
+          {porMes
+            ? 'Costo por período de la factura; ventas del mismo mes.'
+            : 'Costo y ventas por fecha real, según el rango de arriba.'}
+        </span>
+      </div>
+
       {/* ── Fórmula del CMV Total: Ventas y CMV ($ de pagos) -> CMV Total % ── */}
       {skel ? (
         <div className="rep-chart-card" style={{ marginBottom: 18 }}>

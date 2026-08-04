@@ -48,5 +48,35 @@ export const ROLES_BORRAN = [ROLES.SUPER, ROLES.DCSMART, ROLES.EXTERNO]
 export const puedeBorrarPagos = (rol) => incluye(ROLES_BORRAN, rol)
 export const puedeBorrarCajas = (rol) => incluye(ROLES_BORRAN, rol)
 
+// Los movimientos van con la caja: quien puede borrar una caja entera puede
+// borrar sus movimientos. El botón no tenía ninguna condición y se le mostraba
+// hasta al cajero, que recibía un 403 disfrazado de "Error al eliminar".
+export const puedeBorrarMovimientos = (rol) => incluye(ROLES_BORRAN, rol)
+
 // Crear cajas lo puede hacer también el cajero: es su tarea.
 export const puedeCrearCajas = (rol) => incluye(ROLES_TODOS, rol)
+
+// Exportar la tabla de pagos (Excel y Google Sheets). Incluye a `externo`: es
+// el rol de la gente de afuera que ordena la carga y necesita la planilla. No
+// incluye a `admin` ni a `cajero`.
+//
+// Ojo: exportar no es lo mismo que ver los datos internos. La columna "Creado"
+// del export sigue saliendo solo para ROLES_DC (ver PAGO_CSV_COLUMNS), porque
+// externo tampoco la ve en pantalla.
+export const puedeExportar = (rol) => incluye([...ROLES_DC, ROLES.EXTERNO], rol)
+
+// ── Alcance de locales ──────────────────────────────────────────────────────
+// Espeja ROLES_TODOS_LOS_LOCALES de backend/src/plugins/appContext.js, que es
+// quien decide de verdad. Acá sirve para describir el alcance en la pantalla de
+// usuarios sin volver a hardcodear nombres de rol sueltos.
+
+// Ven todos los locales de todas las apps, siempre. Da la misma lista que
+// ROLES_DC pero responde otra pregunta (alcance, no "es interno de DC"), así
+// que se expresa aparte aunque hoy coincidan.
+export const esAlcanceGlobal = (rol) => incluye(ROLES_DC, rol)
+
+// Roles de app cuyos locales son opcionales: sin ninguno asignado ven todos los
+// del grupo, y asignarles uno los limita a esos. `externo` entra acá igual que
+// `admin` — es un admin que además borra, no un rol con acceso global.
+export const ROLES_LOCALES_OPCIONALES = [ROLES.ADMIN, ROLES.EXTERNO]
+export const sinLocalesVeTodos = (rol) => incluye(ROLES_LOCALES_OPCIONALES, rol)

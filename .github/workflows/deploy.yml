@@ -10,6 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # El patch de la version es la cantidad de commits (ver
+          # frontend/src/lib/version.js). Con el checkout shallow por defecto el
+          # conteo da 1 y la version se quedaria clavada en la de package.json.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

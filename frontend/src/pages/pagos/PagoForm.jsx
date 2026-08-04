@@ -728,6 +728,10 @@ export default function PagoForm() {
     if (!pvNroOpcional && !form.nro) { notify('El número de comprobante es obligatorio', 'error'); return }
     if (!form.cashflow)   { notify('El cashflow es obligatorio', 'error'); return }
     if (!form.importe)   { notify('Ingresá el importe neto (o un impuesto) para calcular el total', 'error'); return }
+    // Solo al crear, igual que el backend: hay facturas viejas guardadas sin
+    // período y exigirlo al editar dejaría esas ediciones trabadas hasta
+    // completar un dato que quizá nadie sabe.
+    if (!isEditing && !form.periodo) { notify('El período es obligatorio', 'error'); return }
 
     // Advertencia, no validación: la factura se guarda igual si el usuario
     // confirma. Puede ser una factura atrasada de verdad, pero también un año
@@ -941,9 +945,9 @@ export default function PagoForm() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Período</label>
+              <label className="form-label">Período {isEditing ? '' : '*'}</label>
               <div className="form-input-wrap">
-                <input type="date" value={form.periodo} onChange={e => set('periodo', e.target.value)} />
+                <input type="date" required={!isEditing} value={form.periodo} onChange={e => set('periodo', e.target.value)} />
               </div>
               {/* Se avisa acá, al elegir el período, y no solo al guardar: si
                   aparece recién al final ya cargó toda la factura al lado del

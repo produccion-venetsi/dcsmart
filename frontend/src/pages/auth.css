@@ -264,21 +264,6 @@
 }
 .pw-toggle:hover { color: var(--t1); background: rgba(255, 255, 255, 0.06); }
 
-/* ---------- forgot password ---------- */
-.auth-forgot {
-  display: flex;
-  justify-content: flex-end;
-  margin: 2px 0 22px;
-}
-.auth-forgot a {
-  color: var(--gold);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-}
-.auth-forgot a:hover { color: var(--gold-bright); }
-
 /* ---------- primary button ---------- */
 .btn-auth-primary {
   display: inline-flex;
@@ -286,6 +271,9 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
+  /* Los 22px que aportaba el "¿Olvidaste tu contraseña?" que vivía acá arriba.
+     Sin esto el botón queda pegado al campo de contraseña. */
+  margin-top: 22px;
   height: 52px;
   font-size: 15px;
   border-radius: 14px;

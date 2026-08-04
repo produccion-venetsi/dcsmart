@@ -13,10 +13,10 @@ import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import ActionsMenu from '../../components/ActionsMenu.jsx'
 import MultiSelect from '../../components/MultiSelect.jsx'
-import { esRolDc, puedeEditar, puedeBorrarPagos } from '../../lib/roles.js'
+import { esRolDc, puedeEditar, puedeBorrarPagos, puedeExportar } from '../../lib/roles.js'
 import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
 import { downloadExcel, excelBlob } from '../../lib/excel.js'
-import { sheetsDisponible, subirComoSheet } from '../../lib/googleSheets.js'
+import { sheetsDisponible, subirComoSheet, pedirAccessToken, precargarGoogle } from '../../lib/googleSheets.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCredito } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 
@@ -184,9 +184,10 @@ function fmtNro(v)   { return v != null ? String(v).padStart(8, '0') : '—' }
 // (sin "$" ni separador de miles) para que Excel/Sheets los reconozca como
 // numéricos al importar el CSV, en vez de como texto.
 const PAGO_CSV_COLUMNS = [
-  // La fecha de creación va primera por pedido explícito. Solo exportan DC y
-  // super admin (canExport), que son los mismos roles que la ven en pantalla,
-  // así que no hace falta condicionarla acá.
+  // La fecha de creación va primera por pedido explícito. Es dato interno: se
+  // saca del archivo para quien no la ve en pantalla (ver canSeeCreated en
+  // prepararExport). Antes no hacía falta condicionarla porque exportaban
+  // exactamente los mismos roles que la veían; ahora `externo` también exporta.
   { label: 'Creado',      get: (p) => p.created_at ? fmtDateTimeArg(p.created_at) : '' },
   { label: 'OP',          get: (p) => p.nro_ord != null ? `OP-${p.nro_ord}` : '' },
   { label: 'Auditado',    get: (p) => p.audit ? 'Sí' : 'No' },
@@ -959,7 +960,9 @@ export default function PagoList() {
   const canEdit     = puedeEditar(role)
   const canDelete   = puedeBorrarPagos(role)
   const canAuditDc  = esRolDc(role)
-  const canExport   = esRolDc(role)
+  // `externo` también exporta: es el rol de la gente de afuera que ordena la
+  // carga y necesita la planilla.
+  const canExport   = puedeExportar(role)
   // La fecha de creación de la OP es dato interno: solo la ven DC y super admin,
   // en la tabla y en el detalle.
   const canSeeCreated = esRolDc(role)
@@ -968,6 +971,9 @@ export default function PagoList() {
   const canSeeActivity = esRolDc(role)
   const [exporting, setExporting] = useState(false)
   const [sheetsLoading, setSheetsLoading] = useState(false)
+  // Se baja el script de Google al entrar a la pantalla, no al apretar el
+  // botón: si llegara tarde, el popup de permisos quedaría fuera del click.
+  useEffect(() => { if (canExport) precargarGoogle() }, [canExport])
   const [summary,        setSummary]        = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
@@ -1051,18 +1057,22 @@ export default function PagoList() {
     if (!data.data.length) return null
 
     const pagos = data.data
+    // "Creado" es dato interno de control: no viaja en el archivo de quien no
+    // lo ve en pantalla. Exportar no puede ser una puerta lateral a un dato
+    // que la tabla esconde.
+    const base = canSeeCreated ? PAGO_CSV_COLUMNS : PAGO_CSV_COLUMNS.filter(c => c.label !== 'Creado')
     // Las columnas de impuesto van entre Neto e Importe.
-    const idxImporte = PAGO_CSV_COLUMNS.findIndex(c => c.label === 'Importe')
+    const idxImporte = base.findIndex(c => c.label === 'Importe')
     // conSignoNotaCredito envuelve al final, sobre las columnas ya armadas,
     // para que las de impuesto entren con el mismo criterio que Neto e
     // Importe y no haya que acordarse de aplicarlo en cada lado.
     const columns = conSignoNotaCredito([
-      ...PAGO_CSV_COLUMNS.slice(0, idxImporte),
+      ...base.slice(0, idxImporte),
       ...columnasImpuesto(tiposImpuestoPresentes(pagos)),
-      ...PAGO_CSV_COLUMNS.slice(idxImporte),
+      ...base.slice(idxImporte),
     ])
     return { pagos, columns, totalsRow: filaTotales(pagos, columns) }
-  }, [buildParams])
+  }, [buildParams, canSeeCreated])
 
   const exportCsv = useCallback(async () => {
     setExporting(true)
@@ -1081,27 +1091,32 @@ export default function PagoList() {
   // Sube la misma planilla al Drive del usuario, convertida a Sheets nativo, y
   // la abre. Ver lib/googleSheets.js para por qué no pasa por el backend.
   const abrirEnSheets = useCallback(async () => {
-    // La pestaña se abre acá, todavía dentro del gesto del click: si se abriera
-    // recién al terminar la subida, el navegador la trataría como popup y la
-    // bloquearía.
-    const pestania = window.open('', '_blank')
     setSheetsLoading(true)
     try {
+      // El permiso de Google va PRIMERO, sin ningún await antes: así el popup
+      // sigue contando como abierto por el click. Si se pidiera después de
+      // traer las filas y armar el archivo, el navegador lo bloquea.
+      const token = await pedirAccessToken(user?.email)
+
       const prep = await prepararExport()
-      if (!prep) { pestania?.close(); notify('No hay filas para exportar con estos filtros', 'info'); return }
+      if (!prep) { notify('No hay filas para exportar con estos filtros', 'info'); return }
 
       const blob = await excelBlob(prep.pagos, prep.columns, 'Pagos', prep.totalsRow)
-      const link = await subirComoSheet(`Pagos DCSmart ${todayInputDate()}`, blob, user?.email)
-      if (pestania) pestania.location = link
-      else window.open(link, '_blank')  // el navegador bloqueó igual: segundo intento
+      const link = await subirComoSheet(`Pagos DCSmart ${todayInputDate()}`, blob, token)
+
+      // Acá ya pasaron varios awaits, así que este window.open puede venir
+      // bloqueado. Si pasa, se ofrece abrirla con un click, que nunca se bloquea.
+      if (!window.open(link, '_blank')) {
+        const abrir = await showConfirm('La planilla ya está creada en tu Google Drive. ¿La abrimos?', 'Planilla lista')
+        if (abrir) window.open(link, '_blank')
+      }
       notify('Planilla creada en tu Google Drive', 'success')
     } catch (err) {
-      pestania?.close()
       notify(err?.message || 'No se pudo abrir en Google Sheets', 'error')
     } finally {
       setSheetsLoading(false)
     }
-  }, [prepararExport, notify, user?.email])
+  }, [prepararExport, notify, showConfirm, user?.email])
 
   const load = useCallback(() => {
     setLoading(true)
