@@ -1086,13 +1086,27 @@ export default function PagoList() {
     return () => ctrl.abort()
   }, [buildParams, page])
 
+  // ── ¿Hay algún filtro que realmente acote la consulta? ─────────────────────
+  // Una fila de fecha vacía no cuenta: el panel siembra una al abrirse y
+  // buildParams la descarta, así que contarla mostraría el resumen de todo el
+  // local creyendo que está filtrado. La búsqueda sí cuenta: acota igual que
+  // un filtro, aunque viva fuera de `filters`.
+  const hayFiltroAplicado = useMemo(() => {
+    if (debouncedSearch.trim()) return true
+    return Object.entries(filters).some(([campo, valor]) => {
+      if (campo === 'rangos_fecha') return valor.some(r => r.desde || r.hasta)
+      return Array.isArray(valor) ? valor.length > 0 : valor !== ''
+    })
+  }, [filters, debouncedSearch])
+
   // ── Resumen agregado (total + deuda + impuestos) ───────────────────────────
-  // Se calcula siempre que la consulta tenga resultados: antes pedía un rango
-  // de fechas, pero la deuda y el total también son útiles filtrando solo por
-  // proveedor. Usa los mismos filtros que la tabla pero sin paginar, porque el
-  // total debe ser de TODOS los pagos filtrados, no solo la página visible.
+  // Solo con al menos un filtro aplicado. Sin filtros, el resumen obliga a la
+  // base a agregar TODOS los pagos del local en cada visita a la pantalla —
+  // son decenas de miles de filas — y el número que sale no le sirve a nadie.
+  // Usa los mismos filtros que la tabla pero sin paginar, porque el total debe
+  // ser de TODOS los pagos filtrados, no solo la página visible.
   useEffect(() => {
-    if (loading || total === 0) { setSummary(null); return }
+    if (loading || total === 0 || !hayFiltroAplicado) { setSummary(null); return }
     const ctrl = new AbortController()
     setSummaryLoading(true)
     pagosApi.summary(buildParams(1), ctrl.signal)
@@ -1100,7 +1114,7 @@ export default function PagoList() {
       .catch(() => { if (!ctrl.signal.aborted) { notify('Error al cargar el resumen', 'error'); setSummary(null) } })
       .finally(() => { if (!ctrl.signal.aborted) setSummaryLoading(false) })
     return () => ctrl.abort()
-  }, [buildParams, loading, total])
+  }, [buildParams, loading, total, hayFiltroAplicado])
 
   // ── Navegación de páginas ──────────────────────────────────────────────────
   const goToPage = (p) => {
@@ -1518,6 +1532,18 @@ export default function PagoList() {
                   : 'Exportar a Excel los pagos con los filtros actuales'}
               >
                 {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
+              </button>
+            )}
+            {canExport && sheetsDisponible() && (
+              <button
+                className="btn btn-secondary"
+                onClick={abrirEnSheets}
+                disabled={sheetsLoading || loading || exportBloqueado}
+                title={exportBloqueado
+                  ? `Hay ${total} pagos y sin filtro de fecha el máximo es ${MAX_EXPORT_SIN_FECHA}. Poné un rango de fechas o afiná los filtros.`
+                  : 'Crear la planilla en tu Google Drive y abrirla en una pestaña nueva'}
+              >
+                {sheetsLoading ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoSheets />} Abrir en Sheets
               </button>
             )}
           </ActionsMenu>
