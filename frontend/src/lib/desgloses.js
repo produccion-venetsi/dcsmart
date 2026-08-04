@@ -12,22 +12,7 @@
 // (components/TablaDesglose.jsx) no decide nada sobre los números.
 
 import { clasificacionDeDetalle, clasificacionLabel, normalizarClasificacion } from './clasificaciones.js'
-
-// Orden del flujo de la caja, no alfabético: primero lo que entra, después lo
-// que sale, y el vaciado al final porque es el cierre del circuito. Un tipo que
-// no esté acá (o que se agregue al enum más adelante) va al final.
-const ORDEN_MOVIMIENTOS = ['INICIAL', 'COBRO', 'INGRESO', 'GASTO', 'EGRESO', 'RETIRO', 'VACIADO']
-
-// Espejo de `TipoMovimiento` en prisma/schema.prisma.
-const LABEL_MOVIMIENTOS = {
-  INICIAL: 'Inicial',
-  COBRO:   'Cobro',
-  INGRESO: 'Ingreso',
-  GASTO:   'Gasto',
-  EGRESO:  'Egreso',
-  RETIRO:  'Retiro',
-  VACIADO: 'Vaciado',
-}
+import { ORDEN_MOVIMIENTOS, LABEL_MOVIMIENTO } from './tiposMovimiento.js'
 
 // Orden de las clasificaciones de detalle: primero lo que suma, después lo que
 // resta, y lo informativo al final porque no entra en la diferencia de caja.
@@ -104,7 +89,9 @@ function agrupar(items, { clave, label, subclave, sublabel, orden = [] }) {
 export function agruparMovimientos(movimientos) {
   return agrupar(movimientos, {
     clave:    (m) => m?.tipo ?? SIN_DATO,
-    label:    (_m, k) => LABEL_MOVIMIENTOS[k] ?? (k === SIN_DATO ? 'Sin tipo' : capitalizar(k)),
+    // Un tipo que no esté en el enum igual se muestra (capitalizado) en vez de
+    // desaparecer: si alguna vez entra un valor raro por SQL, se tiene que ver.
+    label:    (_m, k) => (k === SIN_DATO ? 'Sin tipo' : (LABEL_MOVIMIENTO[k] ?? capitalizar(k))),
     subclave: (m) => m?.metodo_pago?.nombre ?? SIN_DATO,
     sublabel: (_m, k) => (k === SIN_DATO ? 'Sin método' : k),
     orden:    ORDEN_MOVIMIENTOS,

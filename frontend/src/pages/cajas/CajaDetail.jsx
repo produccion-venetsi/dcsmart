@@ -7,7 +7,9 @@ import { useAppStore } from '../../store/appStore.js'
 import { fmtDateTimeArg, fmtDateArg } from '../../lib/dates.js'
 import { puedeBorrarMovimientos } from '../../lib/roles.js'
 import TablaDesglose from '../../components/TablaDesglose.jsx'
+import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
+import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
 
 function IcoBack() {
   return (
@@ -106,7 +108,7 @@ export default function CajaDetail() {
       notify('Movimiento agregado', 'success')
       setNewMov({ tipo: 'INGRESO', monto: '', id_metodo: '' })
       load()
-    } catch { notify('Error al agregar movimiento', 'error') }
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
   }
 
@@ -287,12 +289,12 @@ export default function CajaDetail() {
                     {editingMovId === m.id ? (
                       <>
                         <td>
-                          <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
-                            <option>INGRESO</option>
-                            <option>EGRESO</option>
-                            <option>APERTURA</option>
-                            <option>CIERRE</option>
-                          </select>
+                          <TipoMovimientoSelect
+                            className="filter-select"
+                            style={{ width: '100%' }}
+                            value={editMovForm.tipo}
+                            onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
+                          />
                         </td>
                         <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                         <td>
@@ -307,7 +309,7 @@ export default function CajaDetail() {
                     ) : (
                       <>
                         <td>
-                          <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>
+                          <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>
                             {m.tipo}
                           </span>
                         </td>
@@ -344,12 +346,7 @@ export default function CajaDetail() {
               <div className="form-group">
                 <label className="form-label">Tipo</label>
                 <div className="form-input-wrap">
-                  <select value={newMov.tipo} onChange={e => setNewMov({ ...newMov, tipo: e.target.value })}>
-                    <option>INGRESO</option>
-                    <option>EGRESO</option>
-                    <option>APERTURA</option>
-                    <option>CIERRE</option>
-                  </select>
+                  <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov({ ...newMov, tipo })} />
                 </div>
               </div>
               <div className="form-group">

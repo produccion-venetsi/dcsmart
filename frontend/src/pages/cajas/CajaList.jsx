@@ -15,7 +15,9 @@ import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import { clasificacionLabel, clasificacionDeDetalle, normalizarClasificacion } from '../../lib/clasificaciones.js'
 import ClasificacionSelect from '../../components/ClasificacionSelect.jsx'
 import TablaDesglose from '../../components/TablaDesglose.jsx'
+import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparDetalles, agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
+import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
@@ -221,7 +223,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
       setAddingMov(false)
       load()
-    } catch { notify('Error al agregar movimiento', 'error') }
+    } catch (err) { notify(err.response?.data?.error || 'Error al agregar movimiento', 'error') }
     finally { setSaving(false) }
   }
 
@@ -604,12 +606,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
-                          <option>INGRESO</option>
-                          <option>EGRESO</option>
-                          <option>APERTURA</option>
-                          <option>CIERRE</option>
-                        </select>
+                        <TipoMovimientoSelect
+                          className="filter-select"
+                          style={{ width: '100%' }}
+                          value={editMovForm.tipo}
+                          onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
+                        />
                       </td>
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
@@ -631,7 +633,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                   ) : (
                     <>
                       <td>
-                        <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                        <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
                       </td>
                       <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                       <td className="td-number">{fmt$2(m.monto)}</td>
@@ -664,12 +666,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Tipo</label>
             <div className="form-input-wrap">
-              <select value={newMov.tipo} onChange={e => setNewMov({ ...newMov, tipo: e.target.value })}>
-                <option>INGRESO</option>
-                <option>EGRESO</option>
-                <option>APERTURA</option>
-                <option>CIERRE</option>
-              </select>
+              <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov({ ...newMov, tipo })} />
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -1129,12 +1126,12 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   {editingMovId === m.id ? (
                     <>
                       <td>
-                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.tipo} onChange={e => setEditMovForm(f => ({ ...f, tipo: e.target.value }))}>
-                          <option>INGRESO</option>
-                          <option>EGRESO</option>
-                          <option>APERTURA</option>
-                          <option>CIERRE</option>
-                        </select>
+                        <TipoMovimientoSelect
+                          className="filter-select"
+                          style={{ width: '100%' }}
+                          value={editMovForm.tipo}
+                          onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
+                        />
                       </td>
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
@@ -1156,7 +1153,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                   ) : (
                     <>
                       <td>
-                        <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                        <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
                       </td>
                       <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
                       <td className="td-number">{fmt$2(m.monto)}</td>
@@ -1186,12 +1183,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Tipo</label>
               <div className="form-input-wrap">
-                <select value={newMov.tipo} onChange={e => setNewMov(f => ({ ...f, tipo: e.target.value }))}>
-                  <option>INGRESO</option>
-                  <option>EGRESO</option>
-                  <option>APERTURA</option>
-                  <option>CIERRE</option>
-                </select>
+                <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov(f => ({ ...f, tipo }))} />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1499,7 +1491,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
               {pendingMovimientos.map(m => (
                 <tr key={m._key}>
                   <td>
-                    <span className={`badge ${m.tipo === 'INGRESO' || m.tipo === 'APERTURA' ? 'badge-green' : 'badge-red'}`}>{m.tipo}</span>
+                    <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
                   </td>
                   <td className="td-muted">{metodos.find(x => x.id === m.id_metodo)?.nombre || '—'}</td>
                   <td className="td-number">{fmt$2(m.monto)}</td>
@@ -1519,12 +1511,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Tipo</label>
           <div className="form-input-wrap">
-            <select value={movForm.tipo} onChange={e => setMovForm(f => ({ ...f, tipo: e.target.value }))}>
-              <option>INGRESO</option>
-              <option>EGRESO</option>
-              <option>APERTURA</option>
-              <option>CIERRE</option>
-            </select>
+            <TipoMovimientoSelect value={movForm.tipo} onChange={(tipo) => setMovForm(f => ({ ...f, tipo }))} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
