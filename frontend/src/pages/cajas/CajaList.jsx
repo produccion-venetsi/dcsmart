@@ -246,12 +246,15 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       .catch(() => {})
   }, [cajaId])
 
+  // El catálogo se pide con o sin local. GET /caja-detalles/tipos ya devuelve los
+  // tipos del grupo (id_local null) y le SUMA los del local cuando se le pasa uno,
+  // así que cortar la llamada por no tener local dejaba el combo vacío teniendo 25
+  // tipos disponibles. En LOS GALGOS los 25 son del grupo: sin local igual salen.
   useEffect(() => {
-    if (!caja?.id_local) return
-    detallesApi.tipos(caja.id_local)
+    detallesApi.tipos(caja?.id_local)
       .then(r => setTipos(r.data || []))
-      .catch(() => {})
-  }, [caja?.id_local])
+      .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
+  }, [caja?.id_local, notify])
 
   const handleAddMov = async (e) => {
     e.preventDefault()
@@ -808,9 +811,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       setDetalles(data.detalles || [])
       setMovimientos(data.movimientos || [])
     }).catch(() => notify('Error al cargar detalles/movimientos', 'error'))
-    if (idLocal) {
-      detallesApi.tipos(idLocal).then(r => setTipos(r.data || [])).catch(() => {})
-    }
+    detallesApi.tipos(idLocal)
+      .then(r => setTipos(r.data || []))
+      .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
   }
 
   useEffect(() => {
@@ -833,7 +836,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       })
       setDetalles(data.detalles || [])
       setMovimientos(data.movimientos || [])
-      if (data.id_local) detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(() => {})
+      detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(() => {})
     }).catch(() => notify('Error al cargar caja', 'error'))
     metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
   }, [cajaId])
@@ -1284,7 +1287,10 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const [metodos, setMetodos] = useState([])
 
   const [pendingDetalles, setPendingDetalles] = useState([])
-  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '', observaciones: '' })
+  // Mismos campos que el alta de detalle del drawer: acá faltaban `clasificacion`
+  // y `nombre`, así que al crear una caja no se podía cargar "Mostrador -
+  // informativo" ni un nombre que no estuviera en el catálogo del local.
+  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
 
   const [pendingMovimientos, setPendingMovimientos] = useState([])
   const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
@@ -1293,12 +1299,15 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
 
   const targetLocalId = activeLocal?.id || localId
 
+  // El catálogo se pide con o sin local. GET /caja-detalles/tipos ya devuelve los
+  // tipos del grupo (id_local null) y le SUMA los del local cuando se le pasa uno,
+  // así que cortar la llamada por no tener local dejaba el combo vacío teniendo 25
+  // tipos disponibles. En LOS GALGOS los 25 son del grupo: sin local igual salen.
   useEffect(() => {
-    if (!targetLocalId) return
     detallesApi.tipos(targetLocalId)
       .then(r => setTipos(r.data || []))
-      .catch(() => {})
-  }, [targetLocalId])
+      .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
+  }, [targetLocalId, notify])
 
   useEffect(() => {
     metodosApi.list()
@@ -1309,7 +1318,7 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
   const addPendingDetalle = () => {
     if (!detForm.monto) return
     setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
-    setDetForm({ id_tipo: '', monto: '', observaciones: '' })
+    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
   }
   const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
 
@@ -1348,6 +1357,10 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
           await detallesApi.create({
             id_caja: nuevoId,
             id_tipo: d.id_tipo || null,
+            // Sin esto el detalle quedaba sin clasificación propia y heredaba la
+            // del tipo del catálogo; sin tipo, cuadreCaja lo asumía cobro.
+            clasificacion: d.clasificacion || null,
+            nombre: d.id_tipo ? null : (d.nombre || null),
             monto: parseFloat(d.monto),
             observaciones: d.observaciones || null
           })
@@ -1481,11 +1494,12 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
       {pendingDetalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">
-            <thead><tr><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {pendingDetalles.map(d => (
                 <tr key={d._key}>
-                  <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || '—'}</td>
+                  <td className="td-muted">{clasificacionLabel(d.clasificacion)}</td>
+                  <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || d.nombre || '—'}</td>
                   <td className="td-number">{fmt$2(d.monto)}</td>
                   <td>
                     <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingDetalle(d._key)}>
@@ -1500,13 +1514,21 @@ function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Clasificación *</label>
+          <ClasificacionSelect
+            ayuda
+            value={detForm.clasificacion}
+            onChange={(clasificacion) => setDetForm(f => ({ ...f, clasificacion }))}
+          />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nombre</label>
-          <div className="form-input-wrap">
-            <select value={detForm.id_tipo} onChange={e => setDetForm(f => ({ ...f, id_tipo: e.target.value }))}>
-              <option value="">Ver opciones</option>
-              {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-            </select>
-          </div>
+          <TipoDetalleCombo
+            tipos={tipos}
+            idTipo={detForm.id_tipo}
+            nombre={detForm.nombre}
+            onChange={(id_tipo, nombre) => setDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
+          />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Monto</label>
