@@ -50,3 +50,19 @@ export const puedeBorrarCajas = (rol) => incluye(ROLES_BORRAN, rol)
 
 // Crear cajas lo puede hacer también el cajero: es su tarea.
 export const puedeCrearCajas = (rol) => incluye(ROLES_TODOS, rol)
+
+// ── Alcance de locales ──────────────────────────────────────────────────────
+// Espeja ROLES_TODOS_LOS_LOCALES de backend/src/plugins/appContext.js, que es
+// quien decide de verdad. Acá sirve para describir el alcance en la pantalla de
+// usuarios sin volver a hardcodear nombres de rol sueltos.
+
+// Ven todos los locales de todas las apps, siempre. Da la misma lista que
+// ROLES_DC pero responde otra pregunta (alcance, no "es interno de DC"), así
+// que se expresa aparte aunque hoy coincidan.
+export const esAlcanceGlobal = (rol) => incluye(ROLES_DC, rol)
+
+// Roles de app cuyos locales son opcionales: sin ninguno asignado ven todos los
+// del grupo, y asignarles uno los limita a esos. `externo` entra acá igual que
+// `admin` — es un admin que además borra, no un rol con acceso global.
+export const ROLES_LOCALES_OPCIONALES = [ROLES.ADMIN, ROLES.EXTERNO]
+export const sinLocalesVeTodos = (rol) => incluye(ROLES_LOCALES_OPCIONALES, rol)
