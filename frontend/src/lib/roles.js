@@ -56,6 +56,15 @@ export const puedeBorrarMovimientos = (rol) => incluye(ROLES_BORRAN, rol)
 // Crear cajas lo puede hacer también el cajero: es su tarea.
 export const puedeCrearCajas = (rol) => incluye(ROLES_TODOS, rol)
 
+// Exportar la tabla de pagos (Excel y Google Sheets). Incluye a `externo`: es
+// el rol de la gente de afuera que ordena la carga y necesita la planilla. No
+// incluye a `admin` ni a `cajero`.
+//
+// Ojo: exportar no es lo mismo que ver los datos internos. La columna "Creado"
+// del export sigue saliendo solo para ROLES_DC (ver PAGO_CSV_COLUMNS), porque
+// externo tampoco la ve en pantalla.
+export const puedeExportar = (rol) => incluye([...ROLES_DC, ROLES.EXTERNO], rol)
+
 // ── Alcance de locales ──────────────────────────────────────────────────────
 // Espeja ROLES_TODOS_LOS_LOCALES de backend/src/plugins/appContext.js, que es
 // quien decide de verdad. Acá sirve para describir el alcance en la pantalla de
