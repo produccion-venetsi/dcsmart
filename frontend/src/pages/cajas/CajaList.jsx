@@ -18,6 +18,7 @@ import TablaDesglose from '../../components/TablaDesglose.jsx'
 import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparDetalles, agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
 import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
+import { fmtPorcentajeAvion, claseAvion, porcentajeAvion } from '../../lib/avion.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
@@ -111,27 +112,71 @@ function IcoDownload() {
 
 function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
+
+// Origen de la caja: de dónde salieron los datos. Antes las cargadas a mano
+// mostraban un guión y las de TapTap un gris igual al del resto de la fila, así
+// que había que fijarse para distinguirlas. Ahora cada origen tiene su color.
+const LABEL_ORIGEN = { DCSMART: 'Manual', TAPTAP: 'Tap Tap', FFUDO: 'FFUDO' }
+const BADGE_ORIGEN = { DCSMART: 'badge-blue', TAPTAP: 'badge-purple', FFUDO: 'badge-amber' }
+
+// Semáforo del cuadre en la tabla: ✅ cuadra, ⚠️ no cuadra, guión cuando no se
+// puede saber (una caja sin total cargado no tiene contra qué comparar).
+// El cálculo llega hecho del backend en `caja.cuadre` (lib/cuadreCaja.js).
+function IcoCuadre({ cuadra }) {
+  if (cuadra == null) return <span className="td-muted">—</span>
+  return (
+    <span style={{ color: cuadra ? 'var(--green)' : 'var(--amber)', fontSize: 13 }}>
+      {cuadra ? '✅' : '⚠️'}
+    </span>
+  )
+}
+
+function tituloCuadre(cuadre) {
+  if (!cuadre) return 'Sin datos para calcular el cuadre'
+  if (cuadre.cuadra == null) return 'Sin total cargado: no hay contra qué comparar'
+  const base = `Efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)}`
+    + `${cuadre.gastos ? ` − gastos ${fmt$(cuadre.gastos)}` : ''} = ${fmt$(cuadre.esperado)}`
+    + ` vs. total declarado ${fmt$(cuadre.total)}. Los cobros salen de los ${cuadre.fuente} de esta caja.`
+  if (cuadre.cuadra) return `Cuadra. ${base}`
+  const signo = cuadre.diferencia > 0 ? 'sobra' : 'falta'
+  return `No cuadra: ${signo} ${fmt$(Math.abs(cuadre.diferencia))}. ${base}`
+}
+
+function tituloAvion(caja) {
+  if (caja.total == null || Number(caja.total) <= 0) return 'Sin total cargado'
+  if (caja.fiscal == null) return 'Sin fiscal cargado'
+  return `Total ${fmt$(caja.total)} − fiscal ${fmt$(caja.fiscal)} sobre el total`
+}
 // fecha_inicio/fecha_cierre son instantes reales (con hora), no fechas de
 // calendario a medianoche UTC -- por eso el "día" y la hora completa se
 // muestran siempre en hora de Argentina, no forzando UTC.
 const fmtDate = fmtDateArg
 const fmtDT = fmtDateTimeArg
 
-// Mismas columnas que se ven en la tabla; montos como número plano (sin "$")
-// para que Excel/Sheets los reconozca como numéricos al importar el CSV.
+// Montos como número plano (sin "$") para que Excel/Sheets los reconozca como
+// numéricos al importar el CSV.
+//
+// El CSV lleva MÁS columnas que la tabla, a propósito: de la pantalla se sacaron
+// Fiscal y Cierre porque estorbaban al revisar turnos, pero en una exportación
+// que se abre en Sheets para analizar no molestan y sacarlas sería perder datos.
 const CAJA_CSV_COLUMNS = [
   { label: 'Nro Turno',  get: (c) => c.nro_turno ? `TRN ${c.nro_turno}` : '' },
   { label: 'Tipo',       get: (c) => c.tipo_turno || '' },
   { label: 'Auditado',   get: (c) => c.audit ? 'Sí' : 'No' },
+  { label: 'Cuadra',     get: (c) => c.cuadre?.cuadra == null ? '' : (c.cuadre.cuadra ? 'Sí' : 'No') },
+  { label: 'Diferencia', get: (c) => c.cuadre?.diferencia ?? '' },
   { label: 'Inicio',     get: (c) => c.fecha_inicio ? fmtDate(c.fecha_inicio) : '' },
   { label: 'Cierre',     get: (c) => c.fecha_cierre ? fmtDate(c.fecha_cierre) : '' },
   { label: 'Cajero',     get: (c) => c.cajero || '' },
   { label: 'Total',      get: (c) => c.total ?? '' },
   { label: 'Efectivo',   get: (c) => c.efectivo ?? '' },
+  { label: 'Total Detalles', get: (c) => c.total_detalles ?? '' },
   { label: 'Fiscal',     get: (c) => c.fiscal ?? '' },
-  { label: 'Comensales', get: (c) => c.comensales ?? '' },
-  { label: 'Tickets',    get: (c) => c.tickets ?? '' },
-  { label: 'Origen',     get: (c) => c.origin || '' },
+  // Número sin el signo %, para poder sumar y promediar en la planilla.
+  { label: '% Avión',    get: (c) => porcentajeAvion(c.total, c.fiscal) ?? '' },
+  { label: 'Cub',        get: (c) => c.comensales ?? '' },
+  { label: 'Tkt',        get: (c) => c.tickets ?? '' },
+  { label: 'Origen',     get: (c) => LABEL_ORIGEN[c.origin] ?? c.origin ?? '' },
   { label: 'Local',      get: (c) => c.local?.nombre || '' },
   { label: 'Observaciones', get: (c) => c.observaciones || '' },
 ]
@@ -1795,7 +1840,9 @@ export default function CajaList() {
   // La columna "Local" se oculta si ya hay un local puntual seleccionado (es redundante).
   // Se sacó la columna de acciones (borrar) de la fila (ahora vive en el detalle).
   const showLocalCol = !activeLocal
-  const colCount = 13 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
+  // Nro Turno, Tipo, Auditado, Cuadre, Inicio, Cajero, Total, Efectivo,
+  // Total Det., % Avión, Cub, Tkt, Origen, Foto
+  const colCount = 14 + (showLocalCol ? 1 : 0) + (selectionMode ? 1 : 0)
 
   return (
     <div className="page">
@@ -1932,14 +1979,18 @@ export default function CajaList() {
               <SortTh field="nro_turno">Nro Turno</SortTh>
               <th>Tipo</th>
               <th>Auditado</th>
+              <th title="Cuadre: el total declarado contra efectivo + cobros − gastos">Cuadre</th>
               <SortTh field="fecha_inicio">Inicio</SortTh>
-              <SortTh field="fecha_cierre">Cierre</SortTh>
               <SortTh field="cajero">Cajero</SortTh>
               <SortTh field="total">Total</SortTh>
               <th>Efectivo</th>
-              <th>Fiscal</th>
-              <th>Comensales</th>
-              <th>Tickets</th>
+              {/* Puede dar más que el Total del turno y no es un error: los
+                  detalles informativos (canales de venta, "Total Tarjetas")
+                  desglosan plata que ya está contada en otro detalle. */}
+              <th title="Suma de todos los detalles del turno, incluidos los informativos. Puede superar al Total porque los informativos desglosan algo ya contado.">Total Det.</th>
+              <th title="Parte de la venta que no pasó por fiscal: (Total − Fiscal) / Total">% Avión</th>
+              <th title="Comensales">Cub</th>
+              <th title="Tickets">Tkt</th>
               <th>Origen</th>
               <th>Foto</th>
               {showLocalCol && <th>Local</th>}
@@ -1979,18 +2030,23 @@ export default function CajaList() {
                         {c.audit ? <IcoThumbUp /> : <IcoEye />}
                       </span>
                     </td>
+                    <td style={{ textAlign: 'center' }} title={tituloCuadre(c.cuadre)}>
+                      <IcoCuadre cuadra={c.cuadre?.cuadra} />
+                    </td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
-                    <td className="td-muted">{fmtDate(c.fecha_cierre)}</td>
                     <td>{c.cajero || <span className="td-muted">—</span>}</td>
                     <td className="td-number">{fmt$(c.total)}</td>
                     <td className="td-number">{fmt$(c.efectivo)}</td>
-                    <td className="td-number">{fmt$(c.fiscal)}</td>
+                    <td className="td-number">{fmt$(c.total_detalles)}</td>
+                    <td className={claseAvion(c.total, c.fiscal)} style={{ textAlign: 'right' }} title={tituloAvion(c)}>
+                      {fmtPorcentajeAvion(c.total, c.fiscal)}
+                    </td>
                     <td className="td-muted" style={{ textAlign: 'right' }}>{c.comensales ?? '—'}</td>
                     <td className="td-muted" style={{ textAlign: 'right' }}>{c.tickets ?? '—'}</td>
                     <td>
-                      {c.origin && c.origin !== 'DCSMART'
-                        ? <span className="badge badge-muted">{c.origin}</span>
-                        : <span className="td-muted">—</span>}
+                      <span className={`badge ${BADGE_ORIGEN[c.origin] ?? 'badge-muted'}`}>
+                        {LABEL_ORIGEN[c.origin] ?? c.origin ?? '—'}
+                      </span>
                     </td>
                     <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                       {c.foto_url

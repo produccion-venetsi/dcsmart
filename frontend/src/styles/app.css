@@ -751,6 +751,9 @@ select option:disabled { color: var(--t4); }
 .td-muted { color: var(--t4) !important; }
 .td-number { font-weight: 700; color: var(--gold-bright) !important; letter-spacing: -0.01em; }
 .td-actions { display: flex; gap: 6px; align-items: center; }
+/* % avión al 100%: no hubo nada fiscal en el turno. Se destaca sólo ese extremo
+   para que salte al recorrer la columna, sin pintar toda la tabla de colores. */
+.td-avion-alto { color: var(--amber) !important; font-weight: 700; }
 
 .table-empty {
   padding: 3.5rem 2rem;
