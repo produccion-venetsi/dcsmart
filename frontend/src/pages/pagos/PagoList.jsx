@@ -16,7 +16,7 @@ import MultiSelect from '../../components/MultiSelect.jsx'
 import { esRolDc, puedeEditar, puedeBorrarPagos } from '../../lib/roles.js'
 import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
 import { downloadExcel, excelBlob } from '../../lib/excel.js'
-import { sheetsDisponible, subirComoSheet } from '../../lib/googleSheets.js'
+import { sheetsDisponible, subirComoSheet, pedirAccessToken, precargarGoogle } from '../../lib/googleSheets.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCredito } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 
@@ -968,6 +968,9 @@ export default function PagoList() {
   const canSeeActivity = esRolDc(role)
   const [exporting, setExporting] = useState(false)
   const [sheetsLoading, setSheetsLoading] = useState(false)
+  // Se baja el script de Google al entrar a la pantalla, no al apretar el
+  // botón: si llegara tarde, el popup de permisos quedaría fuera del click.
+  useEffect(() => { if (canExport) precargarGoogle() }, [canExport])
   const [summary,        setSummary]        = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
@@ -1081,27 +1084,32 @@ export default function PagoList() {
   // Sube la misma planilla al Drive del usuario, convertida a Sheets nativo, y
   // la abre. Ver lib/googleSheets.js para por qué no pasa por el backend.
   const abrirEnSheets = useCallback(async () => {
-    // La pestaña se abre acá, todavía dentro del gesto del click: si se abriera
-    // recién al terminar la subida, el navegador la trataría como popup y la
-    // bloquearía.
-    const pestania = window.open('', '_blank')
     setSheetsLoading(true)
     try {
+      // El permiso de Google va PRIMERO, sin ningún await antes: así el popup
+      // sigue contando como abierto por el click. Si se pidiera después de
+      // traer las filas y armar el archivo, el navegador lo bloquea.
+      const token = await pedirAccessToken(user?.email)
+
       const prep = await prepararExport()
-      if (!prep) { pestania?.close(); notify('No hay filas para exportar con estos filtros', 'info'); return }
+      if (!prep) { notify('No hay filas para exportar con estos filtros', 'info'); return }
 
       const blob = await excelBlob(prep.pagos, prep.columns, 'Pagos', prep.totalsRow)
-      const link = await subirComoSheet(`Pagos DCSmart ${todayInputDate()}`, blob, user?.email)
-      if (pestania) pestania.location = link
-      else window.open(link, '_blank')  // el navegador bloqueó igual: segundo intento
+      const link = await subirComoSheet(`Pagos DCSmart ${todayInputDate()}`, blob, token)
+
+      // Acá ya pasaron varios awaits, así que este window.open puede venir
+      // bloqueado. Si pasa, se ofrece abrirla con un click, que nunca se bloquea.
+      if (!window.open(link, '_blank')) {
+        const abrir = await showConfirm('La planilla ya está creada en tu Google Drive. ¿La abrimos?', 'Planilla lista')
+        if (abrir) window.open(link, '_blank')
+      }
       notify('Planilla creada en tu Google Drive', 'success')
     } catch (err) {
-      pestania?.close()
       notify(err?.message || 'No se pudo abrir en Google Sheets', 'error')
     } finally {
       setSheetsLoading(false)
     }
-  }, [prepararExport, notify, user?.email])
+  }, [prepararExport, notify, showConfirm, user?.email])
 
   const load = useCallback(() => {
     setLoading(true)
