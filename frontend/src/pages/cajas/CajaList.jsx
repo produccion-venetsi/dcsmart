@@ -14,6 +14,8 @@ import ActionsMenu from '../../components/ActionsMenu.jsx'
 import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import { clasificacionLabel, clasificacionDeDetalle, normalizarClasificacion } from '../../lib/clasificaciones.js'
 import ClasificacionSelect from '../../components/ClasificacionSelect.jsx'
+import TablaDesglose from '../../components/TablaDesglose.jsx'
+import { agruparDetalles, agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
@@ -133,8 +135,9 @@ const CAJA_CSV_COLUMNS = [
 ]
 
 // La diferencia de caja se calcula en el backend (lib/cuadreCaja.js) y viene en
-// `caja.cuadre`. Acá solo se muestran sumas crudas por sección.
-const sumaMontos = (items) => (items ?? []).reduce((acc, i) => acc + Number(i.monto ?? 0), 0)
+// `caja.cuadre`. Acá solo se muestran sumas crudas por sección, con `sumaMontos`
+// de lib/desgloses.js — la misma que suma los grupos, para que el total de la
+// tabla y la suma de sus grupos no puedan divergir.
 
 // Elegir un tipo propone su clasificación, y el usuario puede cambiarla después.
 // Si el tipo no tiene ninguna (nombre libre, sin tipo del catálogo) se conserva
@@ -355,6 +358,9 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   const hayDescuadre = cuadre.cuadra === false
   const descuadre = cuadre.diferencia
 
+  const gruposDetalles    = agruparDetalles(caja.detalles)
+  const gruposMovimientos = agruparMovimientos(caja.movimientos)
+
   const rows = [
     ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
     ['Tipo Turno', caja.tipo_turno ?? '—'],
@@ -369,6 +375,13 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     ...(cuadre.gastos ? [['Gastos', fmt$(cuadre.gastos)]] : []),
     ['Comensales', caja.comensales ?? '—'],
     ['Tickets',    caja.tickets ?? '—'],
+    // Sumas crudas de cada tabla interna. Antes estaban en la cabecera de su
+    // sección; se mueven acá para no competir con los totales por grupo, que son
+    // los que se usan para revisar el turno. Suman todo sin signo ni sentido
+    // contable (un VACIADO y un COBRO se apilan igual), así que no reemplazan a
+    // Cobros/Gastos ni a la diferencia de caja: quedan de referencia.
+    ['Total detalles',    fmt$(sumaMontos(caja.detalles))],
+    ['Total movimientos', fmt$(sumaMontos(caja.movimientos))],
   ]
 
   return (
@@ -455,10 +468,12 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       )}
 
       {/* ── DETALLES ─────────────────────────────────────────────────────── */}
+      {/* El total ya no vive acá: está arriba, en "Datos del turno". Lo que se
+          muestra en la tabla son los totales por grupo, que es lo que se venía
+          sumando a mano. */}
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(sumaMontos(caja.detalles))}</span>
           {canEdit && !addingDet && (
             <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
               <IcoPlus /> Añadir
@@ -468,12 +483,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       </div>
       {caja.detalles && caja.detalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-          <table className="data-table">
-            <thead>
-              <tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr>
-            </thead>
-            <tbody>
-              {caja.detalles.map((d) => (
+          <TablaDesglose
+            grupos={gruposDetalles}
+            columnas={[{ label: 'Clasificación' }, { label: 'Nombre' }, { label: 'Monto' }, { label: '' }]}
+            fmtMonto={fmt$2}
+            renderFila={(d) => (
                 <tr key={d.id}>
                   {editingDetId === d.id ? (
                     <>
@@ -520,9 +534,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                     </>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+            )}
+          />
         </div>
       )}
       {(!caja.detalles || caja.detalles.length === 0) && !addingDet && (
@@ -573,7 +586,6 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: 'var(--gold-bright)', fontWeight: 700, textTransform: 'none', letterSpacing: 0 }}>{fmt$2(sumaMontos(caja.movimientos))}</span>
           {canEdit && !addingMov && (
             <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMov(true)}>
               <IcoPlus /> Añadir
@@ -583,12 +595,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       </div>
       {caja.movimientos && caja.movimientos.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-          <table className="data-table">
-            <thead>
-              <tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr>
-            </thead>
-            <tbody>
-              {caja.movimientos.map((m) => (
+          <TablaDesglose
+            grupos={gruposMovimientos}
+            columnas={[{ label: 'Tipo' }, { label: 'Método' }, { label: 'Monto' }, { label: 'Cant.' }, { label: '' }]}
+            fmtMonto={fmt$2}
+            renderFila={(m) => (
                 <tr key={m.id}>
                   {editingMovId === m.id ? (
                     <>
@@ -640,9 +651,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                     </>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+            )}
+          />
         </div>
       )}
       {(!caja.movimientos || caja.movimientos.length === 0) && !addingMov && (
