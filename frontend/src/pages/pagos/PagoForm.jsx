@@ -407,6 +407,10 @@ export default function PagoForm() {
   // revisar y qué escribió uno mismo.
   const [leyendoFactura, setLeyendoFactura] = useState(false)
   const [lectura, setLectura] = useState(null) // { marcados, aritmetica, proveedor, totalFactura }
+  // Cuando la lectura no sale: { tono: 'warn' | 'error', titulo, detalle }. Se
+  // muestra junto al botón, igual que el resultado bueno. Antes era un toast
+  // arriba y se lo perdía la misma persona que no veía el aviso de éxito.
+  const [fallaLectura, setFallaLectura] = useState(null)
   // 'foto' | 'pdf' | null: en qué slot cayó el archivo que se está leyendo, para
   // bloquear ese adjunto (y no el otro) mientras dura la lectura.
   const [leyendoTipo, setLeyendoTipo] = useState(null)
@@ -438,10 +442,15 @@ export default function PagoForm() {
     if (!file) return
     setLeyendoFactura(true)
     setLectura(null)
+    setFallaLectura(null)
     try {
       const { data } = await pagosApi.leerFactura(file)
       if (!data.legible) {
-        notify('No se pudieron leer los datos de ese archivo. Quedó adjunto igual: cargá los datos a mano.', 'info')
+        setFallaLectura({
+          tono: 'warn',
+          titulo: 'No se pudieron leer los datos de ese archivo.',
+          detalle: 'Quedó adjunto igual: cargá los datos a mano.'
+        })
         return
       }
       const c = data.campos
@@ -481,10 +490,14 @@ export default function PagoForm() {
         metodo: data.metodo,
         totalFactura: c.importe
       })
-      notify(`Leí la factura: ${(data.marcados ?? []).length} campos precargados. Revisalos.`, 'success')
+
     } catch (err) {
       // El archivo ya quedó adjunto: la lectura falló, la carga a mano no.
-      notify(err.response?.data?.error || 'No se pudo leer la factura. Cargá los datos a mano.', 'error')
+      setFallaLectura({
+        tono: 'error',
+        titulo: err.response?.data?.error || 'No se pudo leer la factura.',
+        detalle: 'El archivo quedó adjunto: cargá los datos a mano.'
+      })
     } finally {
       setLeyendoFactura(false)
       setLeyendoTipo(null)
@@ -817,46 +830,6 @@ export default function PagoForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* ── Resultado de leer la factura (foto o PDF) ── */}
-        {leyendoFactura && (
-          <div className="aviso-lectura">
-            <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-            <span>Leyendo la factura{leyendoTipo === 'pdf' ? ' (PDF)' : ''}…</span>
-          </div>
-        )}
-        {!leyendoFactura && lectura && (
-          <div className="aviso-lectura">
-            <div>
-              <strong>Datos precargados de la factura.</strong> Revisá los campos marcados antes de guardar.
-              {lectura.proveedor?.estado === 'encontrado' && (
-                <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
-              )}
-              {lectura.proveedor?.estado === 'no_encontrado' && (
-                <> No hay proveedor con CUIT <strong>{lectura.proveedor.cuit}</strong>
-                  {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
-                  : elegilo o crealo a mano.</>
-              )}
-              {/* Si leyó la condición de venta pero no la pudo mapear, se dice
-                  qué decía la factura para que la persona elija con ese dato. */}
-              {lectura.metodo && !lectura.metodo.id && (
-                <div style={{ marginTop: 6 }}>
-                  La factura dice <strong>«{lectura.metodo.texto}»</strong> como condición de venta,
-                  pero no coincide con ningún método de pago del sistema: elegilo a mano.
-                </div>
-              )}
-              {/* El total no se precarga (se calcula solo), asi que si la factura
-                  decia otro numero conviene avisarlo: o se leyo mal un importe, o
-                  falta un impuesto. */}
-              {lectura.aritmetica?.verificable && lectura.aritmetica.cuadra === false && (
-                <div style={{ marginTop: 6 }}>
-                  ⚠ La factura dice <strong>{fmtMoneda(lectura.totalFactura)}</strong> pero neto + impuestos − descuento
-                  da <strong>{fmtMoneda(lectura.aritmetica.esperado)}</strong>. Revisá los importes.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* ── Toggle Ingreso / Egreso ── */}
         <div style={{
           padding: '1rem 1.25rem',
@@ -1380,13 +1353,75 @@ export default function PagoForm() {
                 disabled={loading}
               />
             )}
+
+            {/* ── Resultado de leer la factura ──────────────────────────────
+                Vive acá, pegado al botón que lo dispara, y no arriba del
+                formulario: el botón está al final (Adjuntos) y el aviso quedaba
+                fuera de la pantalla, así que se apretaba "Carga con IA", los
+                campos se llenaban solos y nadie se enteraba de que había un
+                resultado que revisar. Ocupa todo el ancho del panel para que se
+                lea completo. */}
+            {(leyendoFactura || lectura || fallaLectura) && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                {leyendoFactura && (
+                  <div className="aviso-lectura" style={{ marginBottom: 0 }}>
+                    <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                    <span>Leyendo la factura{leyendoTipo === 'pdf' ? ' (PDF)' : ''}…</span>
+                  </div>
+                )}
+
+                {/* La lectura falló o el archivo no era legible. Antes salía como
+                    toast arriba y se perdía; el archivo igual quedó adjunto. */}
+                {!leyendoFactura && fallaLectura && (
+                  <div className={`aviso-lectura ${fallaLectura.tono}`} style={{ marginBottom: 0 }}>
+                    <div>
+                      <strong>{fallaLectura.titulo}</strong> {fallaLectura.detalle}
+                    </div>
+                  </div>
+                )}
+
+                {!leyendoFactura && lectura && (
+                  <div className="aviso-lectura" style={{ marginBottom: 0 }}>
+                    <div>
+                      <strong>Leí la factura: {(lectura.marcados ?? []).length} campos precargados.</strong>{' '}
+                      Revisá los que quedaron marcados antes de guardar.
+                      {lectura.proveedor?.estado === 'encontrado' && (
+                        <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
+                      )}
+                      {lectura.proveedor?.estado === 'no_encontrado' && (
+                        <> No hay proveedor con CUIT <strong>{lectura.proveedor.cuit}</strong>
+                          {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
+                          : elegilo o crealo a mano.</>
+                      )}
+                      {/* Si leyó la condición de venta pero no la pudo mapear, se dice
+                          qué decía la factura para que la persona elija con ese dato. */}
+                      {lectura.metodo && !lectura.metodo.id && (
+                        <div style={{ marginTop: 6 }}>
+                          La factura dice <strong>«{lectura.metodo.texto}»</strong> como condición de venta,
+                          pero no coincide con ningún método de pago del sistema: elegilo a mano.
+                        </div>
+                      )}
+                      {/* El total no se precarga (se calcula solo), asi que si la factura
+                          decia otro numero conviene avisarlo: o se leyo mal un importe, o
+                          falta un impuesto. */}
+                      {lectura.aritmetica?.verificable && lectura.aritmetica.cuadra === false && (
+                        <div style={{ marginTop: 6 }}>
+                          ⚠ La factura dice <strong>{fmtMoneda(lectura.totalFactura)}</strong> pero neto + impuestos − descuento
+                          da <strong>{fmtMoneda(lectura.aritmetica.esperado)}</strong>. Revisá los importes.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <AdjuntoUpload
               label="Foto"
               accept="image/*"
               value={form.foto_url}
               file={fotoFile}
               onFileSelected={setFotoFile}
-              onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null) }}
+              onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null); setFallaLectura(null) }}
               uploading={uploadingFoto || leyendoTipo === 'foto'}
             />
             <AdjuntoUpload
@@ -1395,7 +1430,7 @@ export default function PagoForm() {
               value={form.pdf_url}
               file={pdfFile}
               onFileSelected={setPdfFile}
-              onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null) }}
+              onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null); setFallaLectura(null) }}
               uploading={uploadingPdf || leyendoTipo === 'pdf'}
             />
           </div>
