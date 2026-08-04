@@ -35,6 +35,42 @@ export function columnasImpuesto(tipos) {
   }))
 }
 
+// ── Signo de las notas de crédito en el export ──────────────────────────────
+// En la base todos los montos son positivos y la dirección vive en
+// `ingresa_egreso` (ver backend/src/lib/deuda.js). Eso funciona adentro de la
+// app, pero en una planilla el que mira quiere que la fila TOTAL le dé el neto
+// real, y para eso la nota de crédito tiene que restar sola.
+//
+// El criterio es el TIPO de comprobante, no `ingresa_egreso`: hay 8 notas de
+// crédito cargadas como egreso (documentado en deuda.js) que por dirección
+// quedarían sumando. Por tipo salen bien igual.
+const TIPOS_NOTA_CREDITO = ['NCA', 'NCB']
+
+export function esNotaCredito(pago) {
+  return TIPOS_NOTA_CREDITO.includes(pago?.id_tipo)
+}
+
+// Envuelve las columnas de plata para que las filas de nota de crédito salgan
+// en negativo. "Columna de plata" es exactamente `total: true`, el mismo
+// marcador que usa filaTotales: así el signo del detalle y el de la suma no
+// pueden divergir, y un tipo de impuesto nuevo lo hereda sin tocar nada.
+export function conSignoNotaCredito(columns) {
+  return columns.map((col) => {
+    if (!col.total) return col
+    return {
+      ...col,
+      get: (pago) => {
+        const valor = col.get(pago)
+        if (valor === '' || valor == null) return valor
+        if (!esNotaCredito(pago)) return valor
+        // `|| 0` normaliza el -0 que sale de invertir un 0: Excel lo muestra
+        // como 0 pero lo guarda como -0, y en un filtro se lee raro.
+        return -Number(valor) || 0
+      },
+    }
+  })
+}
+
 // Que columna se suma en la fila TOTAL es una propiedad de la columna
 // (col.total === true), no algo que se adivina mirando si sus valores
 // "parecen" numeros. Sniffing por valor sumaba OP/PV/Nro sin cero a la
