@@ -5,6 +5,7 @@ import { movimientosApi } from '../../api/movimientos.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAppStore } from '../../store/appStore.js'
 import { fmtDateTimeArg, fmtDateArg } from '../../lib/dates.js'
+import { puedeBorrarMovimientos } from '../../lib/roles.js'
 
 function IcoBack() {
   return (
@@ -60,6 +61,9 @@ export default function CajaDetail() {
   const showPrompt  = useUiStore((s) => s.showPrompt)
   const role       = useAppStore((s) => s.activeApp)?.role
   const canAuditDc = ['super_admin', 'dcsmart'].includes(role)
+  // El backend exige caja_movimientos.delete; mostrar el botón a quien no lo
+  // tiene sólo lleva a un 403 que acá se ve como "Error al eliminar".
+  const canDeleteMov = puedeBorrarMovimientos(role)
   const [auditandoDc, setAuditandoDc] = useState(false)
 
   const [caja,    setCaja]    = useState(null)
@@ -315,9 +319,11 @@ export default function CajaDetail() {
                           <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditMov(m)}>
                             <IcoEdit />
                           </button>
-                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                            <IcoTrash />
-                          </button>
+                          {canDeleteMov && (
+                            <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
+                              <IcoTrash />
+                            </button>
+                          )}
                         </td>
                       </>
                     )}
