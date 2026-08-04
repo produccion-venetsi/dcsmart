@@ -28,7 +28,10 @@ function coerce(value) {
   return s
 }
 
-export async function downloadExcel(filename, rows, columns, sheetName = 'Datos', totalsRow = null) {
+// Arma el workbook en memoria. Lo usan los dos caminos de salida — bajar el
+// archivo y subirlo a Google Drive — para que la planilla sea exactamente la
+// misma en los dos, incluidos anchos de columna y fila de totales.
+async function buildWorkbook(rows, columns, sheetName, totalsRow) {
   const XLSX = await import('xlsx')
   const header = columns.map((c) => c.label)
   const body = rows.map((row) => columns.map((c) => coerce(c.get(row))))
@@ -46,5 +49,17 @@ export async function downloadExcel(filename, rows, columns, sheetName = 'Datos'
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
+  return { XLSX, wb }
+}
+
+export async function downloadExcel(filename, rows, columns, sheetName = 'Datos', totalsRow = null) {
+  const { XLSX, wb } = await buildWorkbook(rows, columns, sheetName, totalsRow)
   XLSX.writeFile(wb, filename)
+}
+
+// Mismo workbook, pero como Blob para subirlo por HTTP en vez de bajarlo.
+export async function excelBlob(rows, columns, sheetName = 'Datos', totalsRow = null) {
+  const { XLSX, wb } = await buildWorkbook(rows, columns, sheetName, totalsRow)
+  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 }

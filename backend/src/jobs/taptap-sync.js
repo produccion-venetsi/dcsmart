@@ -27,15 +27,27 @@ const LOCALES_TAPTAP = [
   { groupId: 'picsa',            id_local: 'KSYVVXZN' },
   { groupId: 'bebop',            id_local: 'UYPLAVIG' },
   { groupId: 'casonaazopardo',   id_local: 'OLHGEOYQ' },  // ALDOS — POIUYTR (config original) no existe en la base
+  { groupId: 'luckylouis',       id_local: 'd6944000-861e-43dd-a229-bee1c1533255' },  // LUCKY LOUIS
 ]
 
+// El maxid que espera la API es NUMÉRICO. No alcanza con ordenar id_externo
+// como string: las cajas de LUCERO migradas por CSV en agosto 2026 quedaron con
+// id_externo del sistema viejo (ej. 'XRWQBEGX'), que gana cualquier orden
+// alfabético y terminaba viajando como ?maxid=XRWQBEGX. Además hay ids con
+// sufijo de caja ('208475237_0'), donde el orden string tampoco respeta el valor
+// ('99999_0' > '100000'). Por eso: se toma la parte numérica previa al '_', se
+// descarta lo que no sea numérico, y se compara como bigint.
 async function obtenerMaxId(id_local) {
-  const ultimo = await prisma.caja.findFirst({
-    where: { id_local, origin: 'TAPTAP', id_externo: { not: null } },
-    orderBy: { id_externo: 'desc' }, // string, pero los ids de TapTap crecen en longitud junto con el valor en este rango, ok para maxid
-    select: { id_externo: true },
-  })
-  return ultimo?.id_externo || '0'
+  const filas = await prisma.$queryRaw`
+    SELECT MAX(split_part(id_externo, '_', 1)::bigint) AS maxid
+    FROM cajas
+    WHERE id_local = ${id_local}
+      AND origin = 'TAPTAP'
+      AND id_externo IS NOT NULL
+      AND split_part(id_externo, '_', 1) ~ '^[0-9]+$'
+  `
+  const maxid = filas[0]?.maxid
+  return maxid != null ? String(maxid) : '0'
 }
 
 // Resuelve (o crea) el MetodoPago para un monedaname de TapTap, cacheando
@@ -116,14 +128,30 @@ async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
   return { turnosNuevos }
 }
 
+// Sin argumentos procesa todos los locales (lo que hace el Cloud Run Job).
+// Con argumentos, sólo esos groupId: `node taptap-sync.js luckylouis` -- sirve
+// para el alta de un local nuevo sin tocar el resto.
+function localesAProcesar() {
+  const filtro = process.argv.slice(2)
+  if (!filtro.length) return LOCALES_TAPTAP
+  const elegidos = LOCALES_TAPTAP.filter((l) => filtro.includes(l.groupId))
+  const desconocidos = filtro.filter((g) => !LOCALES_TAPTAP.some((l) => l.groupId === g))
+  if (desconocidos.length) throw new Error(`groupId no configurado: ${desconocidos.join(', ')}`)
+  return elegidos
+}
+
 async function main() {
+  const locales = localesAProcesar()
+  if (locales.length !== LOCALES_TAPTAP.length) {
+    console.log(`Corrida parcial: ${locales.map((l) => l.groupId).join(', ')}`)
+  }
   const run = await prisma.tapTapSyncRun.create({ data: {} })
   const cacheMetodos = new Map()
   const cacheDetalleTipos = new Map()
   const resultado = {}
   let ok = true
 
-  for (const local of LOCALES_TAPTAP) {
+  for (const local of locales) {
     try {
       resultado[local.id_local] = await procesarLocal(local, cacheMetodos, cacheDetalleTipos)
       console.log(`[${local.groupId}] ${resultado[local.id_local].turnosNuevos} turnos nuevos`)
