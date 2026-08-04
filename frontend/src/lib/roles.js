@@ -48,6 +48,11 @@ export const ROLES_BORRAN = [ROLES.SUPER, ROLES.DCSMART, ROLES.EXTERNO]
 export const puedeBorrarPagos = (rol) => incluye(ROLES_BORRAN, rol)
 export const puedeBorrarCajas = (rol) => incluye(ROLES_BORRAN, rol)
 
+// Los movimientos van con la caja: quien puede borrar una caja entera puede
+// borrar sus movimientos. El botón no tenía ninguna condición y se le mostraba
+// hasta al cajero, que recibía un 403 disfrazado de "Error al eliminar".
+export const puedeBorrarMovimientos = (rol) => incluye(ROLES_BORRAN, rol)
+
 // Crear cajas lo puede hacer también el cajero: es su tarea.
 export const puedeCrearCajas = (rol) => incluye(ROLES_TODOS, rol)
 

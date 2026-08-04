@@ -22,6 +22,15 @@ export function sheetsDisponible() {
   return !!import.meta.env.VITE_GOOGLE_CLIENT_ID
 }
 
+// Se llama al montar la pantalla. El script tarda en bajar, y si se cargara
+// recién al apretar el botón, `requestAccessToken()` quedaría detrás de un
+// await y el navegador ya no lo trataría como parte del click: bloquea la
+// ventana de Google. Precargando, el popup se abre dentro del gesto.
+export function precargarGoogle() {
+  if (!sheetsDisponible()) return
+  cargarGis().catch(() => {})  // si falla, el botón lo reporta al usarse
+}
+
 // El script de GIS puede haberlo cargado el Login. Se comparte la promesa para
 // no insertar dos <script> si se aprieta el botón dos veces seguidas.
 let gisPromise = null
@@ -50,10 +59,17 @@ function cargarGis() {
 // token que expira en pleno viaje.
 let tokenCache = { value: null, expiraEn: 0 }
 
-async function pedirAccessToken(hintEmail) {
-  if (tokenCache.value && Date.now() < tokenCache.expiraEn) return tokenCache.value
-  await cargarGis()
+// Tiene que llamarse SINCRÓNICAMENTE desde el handler del click. Si GIS ya está
+// cargado no hay ningún await antes de `requestAccessToken()`, así que el popup
+// de Google sigue contando como abierto por el usuario. Ese era el bug: con un
+// `await` de red en el medio, el navegador lo bloqueaba.
+export function pedirAccessToken(hintEmail) {
+  if (tokenCache.value && Date.now() < tokenCache.expiraEn) return Promise.resolve(tokenCache.value)
+  if (window.google?.accounts?.oauth2) return solicitarToken(hintEmail)
+  return cargarGis().then(() => solicitarToken(hintEmail))
+}
 
+function solicitarToken(hintEmail) {
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
@@ -65,6 +81,12 @@ async function pedirAccessToken(hintEmail) {
       // termina creando la planilla en un Drive personal por error.
       ...(hintEmail ? { hint: hintEmail } : {}),
       callback: (resp) => {
+        if (resp?.error === 'access_denied') {
+          // Pasa cuando la pantalla de consentimiento de OAuth sigue en modo
+          // "Testing": sólo los testers cargados a mano pueden autorizar.
+          reject(new Error('Google bloqueó el acceso: la app todavía no está publicada en la consola de Google. Avisale a sistemas.'))
+          return
+        }
         if (!resp?.access_token) { reject(new Error(resp?.error || 'Google no devolvió un token')); return }
         tokenCache = {
           value: resp.access_token,
@@ -72,18 +94,20 @@ async function pedirAccessToken(hintEmail) {
         }
         resolve(resp.access_token)
       },
-      error_callback: (err) => reject(new Error(err?.type === 'popup_closed'
-        ? 'Se cerró la ventana de Google sin dar permiso'
-        : 'Google rechazó el permiso')),
+      error_callback: (err) => reject(new Error(
+        err?.type === 'popup_closed'  ? 'Se cerró la ventana de Google sin dar permiso' :
+        err?.type === 'popup_failed_to_open' ? 'El navegador bloqueó la ventana de Google. Permití las ventanas emergentes de este sitio y probá de nuevo.' :
+        'Google rechazó el permiso'
+      )),
     })
     client.requestAccessToken()
   })
 }
 
-// Sube el blob y devuelve el webViewLink de la planilla ya convertida.
-export async function subirComoSheet(nombre, blob, hintEmail) {
-  const token = await pedirAccessToken(hintEmail)
-
+// Sube el blob y devuelve el webViewLink de la planilla ya convertida. Recibe
+// el token ya obtenido: pedirlo acá lo dejaría detrás de la subida y del armado
+// del archivo, que es justo lo que hace que el navegador bloquee el popup.
+export async function subirComoSheet(nombre, blob, token) {
   // mimeType de destino = Google Sheets: Drive convierte el xlsx al subirlo,
   // así queda una planilla editable y no un adjunto para descargar.
   const metadata = { name: nombre, mimeType: 'application/vnd.google-apps.spreadsheet' }

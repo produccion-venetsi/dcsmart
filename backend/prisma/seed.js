@@ -35,6 +35,19 @@ const MATRIX = {
     // individual, otorgable por usuario desde Admin → Usuarios (Task 7).
     reportes: [F,F,F,F], arqueo: [T,T,F,F],
   },
+  externo: {
+    // Igual que admin salvo que SÍ borra: pagos (y sus impuestos, que van por
+    // pagos.delete), cajas (y sus detalles, por caja.delete) y los movimientos
+    // de esas cajas. Es para gente de afuera que ordena la carga de un local y
+    // necesita deshacer, no sólo corregir.
+    //
+    // Faltaba en este archivo: el rol se creó directo en la base, así que el
+    // seed no lo conocía.
+    caja: [T,T,T,T], caja_movimientos: [T,T,T,T], pagos: [T,T,T,T],
+    proveedores: [T,T,T,F], rubros: [T,F,F,F], categorias: [T,F,F,F],
+    metodos_pago: [T,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
+    reportes: [F,F,F,F], arqueo: [T,T,F,F],
+  },
   cajero: {
     caja: [T,T,F,F], caja_movimientos: [T,T,F,F], pagos: [T,T,F,F],
     proveedores: [T,F,F,F], rubros: [T,F,F,F], categorias: [T,F,F,F],
@@ -54,6 +67,7 @@ const ROLE_DESC = {
   super_admin: 'Acceso total al sistema',
   dcsmart:     'Operación total salvo gestión de usuarios y tabla rubcat',
   admin:       'Crea y edita datos operativos (sin borrar) de su app/locales',
+  externo:     'Como admin, pero puede borrar pagos, cajas y sus movimientos, detalles e impuestos',
   cajero:      'Ve y crea cajas y pagos de un local',
   reportes:    'Solo ve Reportes, sin acceso a Cajas/Pagos/Proveedores',
 }
