@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   ROLES, ROLES_TODOS, esRolDc, puedeOperar, puedeEditar,
   puedeBorrarPagos, puedeBorrarCajas, puedeCrearCajas,
-  esAlcanceGlobal, sinLocalesVeTodos
+  esAlcanceGlobal, sinLocalesVeTodos, puedeExportar
 } from './roles.js'
 
 test('externo edita como admin', () => {
@@ -25,6 +25,22 @@ test('externo NO es rol interno de DC', () => {
   assert.equal(esRolDc(ROLES.SUPER), true)
   assert.equal(esRolDc(ROLES.DCSMART), true)
   assert.equal(esRolDc(ROLES.ADMIN), false)
+})
+
+test('exportan super_admin, dcsmart y externo; admin y cajero no', () => {
+  assert.equal(puedeExportar(ROLES.SUPER), true)
+  assert.equal(puedeExportar(ROLES.DCSMART), true)
+  assert.equal(puedeExportar(ROLES.EXTERNO), true)
+  assert.equal(puedeExportar(ROLES.ADMIN), false)
+  assert.equal(puedeExportar(ROLES.CAJERO), false)
+})
+
+test('exportar NO alcanza para ver los datos internos de DC', () => {
+  // La columna "Creado" del export se arma con esRolDc, no con puedeExportar:
+  // externo exporta, pero sin ese dato. Si algun dia los dos coincidieran,
+  // exportar seria una puerta lateral a lo que la tabla esconde.
+  assert.equal(puedeExportar(ROLES.EXTERNO), true)
+  assert.equal(esRolDc(ROLES.EXTERNO), false)
 })
 
 test('externo NO tiene alcance global de locales', () => {
