@@ -1073,6 +1073,20 @@ select option:disabled { color: var(--t4); }
 }
 .aviso-lectura strong { font-weight: 700; }
 
+/* Tonos del aviso de lectura. El resultado bueno queda en el azul informativo de
+   arriba: pide revisar los campos, y en verde se leeria como "listo, no toques
+   nada". Estos dos son para cuando la lectura no salio. */
+.aviso-lectura.warn {
+  color: var(--amber);
+  background: var(--amber-bg);
+  border-color: var(--amber-border);
+}
+.aviso-lectura.error {
+  color: var(--red);
+  background: var(--red-bg);
+  border-color: var(--red-border);
+}
+
 /* Campo que vino de la lectura de la foto: se marca para que se sepa qué revisar
    y qué escribió la persona. Solo el borde — cambiarle el fondo lo haría parecer
    deshabilitado, que es lo contrario de lo que se quiere. */
