@@ -19,6 +19,7 @@ import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparDetalles, agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
 import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
 import { fmtPorcentajeAvion, claseAvion, porcentajeAvion } from '../../lib/avion.js'
+import { conTipoElegido } from '../../lib/detalleForm.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
@@ -185,16 +186,6 @@ const CAJA_CSV_COLUMNS = [
 // `caja.cuadre`. Acá solo se muestran sumas crudas por sección, con `sumaMontos`
 // de lib/desgloses.js — la misma que suma los grupos, para que el total de la
 // tabla y la suma de sus grupos no puedan divergir.
-
-// Elegir un tipo propone su clasificación, y el usuario puede cambiarla después.
-// Si el tipo no tiene ninguna (nombre libre, sin tipo del catálogo) se conserva
-// la que ya estaba elegida en el formulario.
-const conTipoElegido = (form, tipos, id_tipo, nombre) => ({
-  ...form,
-  id_tipo,
-  nombre,
-  clasificacion: tipos.find((t) => t.id === id_tipo)?.clasificacion ?? form.clasificacion
-})
 
 function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
