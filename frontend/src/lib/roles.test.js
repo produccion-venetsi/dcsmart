@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ROLES, ROLES_TODOS, esRolDc, puedeOperar, puedeEditar,
-  puedeBorrarPagos, puedeBorrarCajas, puedeCrearCajas
+  puedeBorrarPagos, puedeBorrarCajas, puedeCrearCajas,
+  esAlcanceGlobal, sinLocalesVeTodos
 } from './roles.js'
 
 test('externo edita como admin', () => {
@@ -24,6 +25,26 @@ test('externo NO es rol interno de DC', () => {
   assert.equal(esRolDc(ROLES.SUPER), true)
   assert.equal(esRolDc(ROLES.DCSMART), true)
   assert.equal(esRolDc(ROLES.ADMIN), false)
+})
+
+test('externo NO tiene alcance global de locales', () => {
+  // El bug que esto evita: la pantalla de usuarios lo trataba como
+  // super_admin/dcsmart y mostraba "Acceso a todos los grupos y locales",
+  // ademas de no dejar limitarlo a locales especificos.
+  assert.equal(esAlcanceGlobal(ROLES.EXTERNO), false)
+  assert.equal(esAlcanceGlobal(ROLES.ADMIN), false)
+  assert.equal(esAlcanceGlobal(ROLES.CAJERO), false)
+  assert.equal(esAlcanceGlobal(ROLES.SUPER), true)
+  assert.equal(esAlcanceGlobal(ROLES.DCSMART), true)
+})
+
+test('externo y admin: sin locales asignados ven todos los del grupo', () => {
+  // Espeja ROLES_TODOS_LOS_LOCALES del backend (plugins/appContext.js).
+  assert.equal(sinLocalesVeTodos(ROLES.EXTERNO), true)
+  assert.equal(sinLocalesVeTodos(ROLES.ADMIN), true)
+  // El cajero necesita local asignado si o si.
+  assert.equal(sinLocalesVeTodos(ROLES.CAJERO), false)
+  assert.equal(sinLocalesVeTodos(ROLES.SUPER), false)
 })
 
 test('cajero solo crea cajas, no edita ni borra', () => {

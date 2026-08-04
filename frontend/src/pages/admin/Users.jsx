@@ -6,6 +6,7 @@ import { rolesApi }  from '../../api/roles.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { fmtDateArg } from '../../lib/dates.js'
+import { esAlcanceGlobal, sinLocalesVeTodos } from '../../lib/roles.js'
 import DrawerPanel   from '../../components/DrawerPanel.jsx'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -822,15 +823,20 @@ export default function Users() {
               ) : (
                 <div style={{ marginBottom: '1rem' }}>
                   {userRoles.map((r) => {
-                    const isAdmin    = r.role?.nombre === 'admin'
+                    // `externo` es un admin que además borra, no un rol con
+                    // acceso global: se le limitan los locales igual que a un
+                    // admin. Antes caía en el `else` de `scoped` y la card le
+                    // decía "Acceso a todos los grupos y locales", que además
+                    // de falso escondía el selector para acotarlo.
+                    const comoAdmin  = sinLocalesVeTodos(r.role?.nombre)
                     const isCajero   = r.role?.nombre === 'cajero'
-                    const scoped     = isAdmin || isCajero
+                    const scoped     = !esAlcanceGlobal(r.role?.nombre)
                     const granted    = accessByApp[r.id_app] ?? []
                     const grantedIds = new Set(granted.map(l => l.id))
                     const appLocales = localesByApp[r.id_app] ?? []
                     const available  = appLocales.filter(l => !grantedIds.has(l.id))
-                    // admin sin locales específicos = todos los locales
-                    const adminAllLocals = isAdmin && granted.length === 0
+                    // admin/externo sin locales específicos = todos los locales
+                    const adminAllLocals = comoAdmin && granted.length === 0
 
                     return (
                       <div key={r.id} style={{
@@ -897,7 +903,7 @@ export default function Users() {
                                       fontSize: 11, color: 'var(--t2)',
                                     }}>
                                       {l.nombre}
-                                      {amISuperAdmin && isAdmin && (
+                                      {amISuperAdmin && comoAdmin && (
                                         <button
                                           onClick={() => handleRemoveLocal(r.id_app, l.id)}
                                           disabled={accessBusy}
@@ -917,8 +923,8 @@ export default function Users() {
                                 </span>
                               )}
 
-                              {/* Admin: agregar más locales (quitar todos = vuelve a "todos los locales") */}
-                              {amISuperAdmin && isAdmin && available.length > 0 && (
+                              {/* Admin/externo: agregar más locales (quitar todos = vuelve a "todos los locales") */}
+                              {amISuperAdmin && comoAdmin && available.length > 0 && (
                                 <select
                                   className="filter-select"
                                   value=""
@@ -1022,9 +1028,9 @@ export default function Users() {
                             </div>
                           </div>
 
-                          {roleName === 'admin' && (
+                          {sinLocalesVeTodos(roleName) && (
                             <>
-                              {/* Admin: todos los locales O específicos */}
+                              {/* Admin/externo: todos los locales O específicos */}
                               <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                                 <label className="checkbox-wrap">
                                   <input
