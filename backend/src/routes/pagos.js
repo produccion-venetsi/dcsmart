@@ -7,6 +7,7 @@ import { partirIdsPorEstado } from '../lib/estadoOp.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
+import { buildAuditFilter } from '../lib/auditFilter.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -69,30 +70,6 @@ async function getAuditedDcSet(fastify, pagoIds) {
   } catch (err) {
     fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedDcSet)')
     return new Set()
-  }
-}
-
-// Construye el filtro Prisma { id: { in/notIn } } para auditados/no-auditados.
-// Si `audit` es undefined, no filtra (devuelve {}). Ante un error de la tabla
-// `audits`, devolvemos {} (sin filtrar) para no romper la consulta de pagos.
-async function buildAuditFilter(fastify, audit, allowedLocalIds) {
-  if (audit === undefined) return {}
-  try {
-    const pagosInScope = await fastify.db.pago.findMany({
-      where: { id_local: { in: allowedLocalIds } },
-      select: { id: true }
-    })
-    const pagoIds = pagosInScope.map(p => p.id)
-    if (!pagoIds.length) return audit === 'true' ? { id: { in: [] } } : {}
-    const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'pagos', id_registro: { in: pagoIds }, audit_dc: false, vigente: true, accion: 'auditado' },
-      select: { id_registro: true }
-    })
-    const auditedIds = [...new Set(rows.map(r => r.id_registro))]
-    return audit === 'true' ? { id: { in: auditedIds } } : { id: { notIn: auditedIds } }
-  } catch (err) {
-    fastify.log.error({ err }, 'No se pudo leer la tabla audits (buildAuditFilter)')
-    return {}
   }
 }
 
@@ -173,7 +150,7 @@ async function buildPagosWhere(fastify, request, query) {
   const metodoIds = parseCsvParam(id_metodo)
   const estadoOps = parseCsvParam(estado_op)
 
-  const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
+  const auditFilter = await buildAuditFilter(fastify, audit, 'pagos', request.allowedLocalIds)
 
   const qStr = q?.trim()
   let qFilter = {}
@@ -378,7 +355,7 @@ export default async function pagosRoutes(fastify) {
       ? { rubcat: { ...(id_rub ? { id_rub } : {}), ...(id_cat ? { id_cat } : {}) } }
       : id_rubcat ? { id_rubcat } : {}
 
-    const auditFilter = await buildAuditFilter(fastify, audit, request.allowedLocalIds)
+    const auditFilter = await buildAuditFilter(fastify, audit, 'pagos', request.allowedLocalIds)
 
     const where = {
       ...localFilter,

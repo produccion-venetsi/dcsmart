@@ -3,6 +3,7 @@ import { Storage } from '@google-cloud/storage'
 import { toTipoTurnoEnum, fromTipoTurnoEnum, toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 import { calcularCuadre } from '../lib/cuadreCaja.js'
+import { buildAuditFilter } from '../lib/auditFilter.js'
 
 // El estado de auditoría de una caja se guarda en la tabla `audits`
 // (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
@@ -19,27 +20,6 @@ async function getAuditedCajaSet(fastify, cajaIds) {
   } catch (err) {
     fastify.log.error({ err }, 'No se pudo leer la tabla audits (getAuditedCajaSet)')
     return new Set()
-  }
-}
-
-async function buildCajaAuditFilter(fastify, audit, allowedLocalIds) {
-  if (audit === undefined) return {}
-  try {
-    const cajasInScope = await fastify.db.caja.findMany({
-      where: { id_local: { in: allowedLocalIds } },
-      select: { id: true }
-    })
-    const cajaIds = cajasInScope.map(c => c.id)
-    if (!cajaIds.length) return audit === 'true' ? { id: { in: [] } } : {}
-    const rows = await fastify.db.audit.findMany({
-      where: { tabla: 'cajas', id_registro: { in: cajaIds }, audit_dc: false, vigente: true, accion: 'auditado' },
-      select: { id_registro: true }
-    })
-    const auditedIds = [...new Set(rows.map(r => r.id_registro))]
-    return audit === 'true' ? { id: { in: auditedIds } } : { id: { notIn: auditedIds } }
-  } catch (err) {
-    fastify.log.error({ err }, 'No se pudo leer la tabla audits (buildCajaAuditFilter)')
-    return {}
   }
 }
 
@@ -83,7 +63,7 @@ export default async function cajaRoutes(fastify) {
     }
 
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
-    const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
+    const auditFilter = await buildAuditFilter(fastify, audit, 'cajas', request.allowedLocalIds)
 
     // tipo_turno puede traer varios valores separados por coma.
     const tipoTurnos = toTipoTurnoEnumList(parseCsvParam(tipo_turno))
@@ -158,7 +138,7 @@ export default async function cajaRoutes(fastify) {
     }
 
     const localFilter = { id_local: { in: id_local ? [id_local] : request.allowedLocalIds } }
-    const auditFilter = await buildCajaAuditFilter(fastify, audit, request.allowedLocalIds)
+    const auditFilter = await buildAuditFilter(fastify, audit, 'cajas', request.allowedLocalIds)
 
     // tipo_turno puede traer varios valores separados por coma.
     const tipoTurnos = toTipoTurnoEnumList(parseCsvParam(tipo_turno))
