@@ -8,6 +8,7 @@ import { parseCsvParam } from '../lib/queryParams.js'
 import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
+import { avisarDesauditado } from '../lib/avisos.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -681,7 +682,9 @@ export default async function pagosRoutes(fastify) {
   fastify.patch('/:id/audit', { preHandler: editHandler }, async (request, reply) => {
     const pago = await fastify.db.pago.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      // nro_ord se usa para la etiqueta del aviso al auditor, en el mismo select
+      // en vez de una segunda consulta.
+      select: { id_local: true, nro_ord: true }
     })
     if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
 
@@ -721,6 +724,17 @@ export default async function pagosRoutes(fastify) {
       return accion
     })
 
+    // Despues del commit: el aviso lee el historial y necesita ver el evento nuevo.
+    if (nextAccion === 'desauditado') {
+      await avisarDesauditado(fastify, {
+        tabla: 'pagos',
+        id_registro: request.params.id,
+        id_local: pago.id_local,
+        quienDesaudita: request.user.id,
+        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago'
+      })
+    }
+
     return { ok: true, audit: nextAccion === 'auditado' }
   })
 
@@ -731,7 +745,7 @@ export default async function pagosRoutes(fastify) {
   fastify.patch('/:id/audit-dc', { preHandler: [fastify.authenticate, fastify.appContext, fastify.requireDc] }, async (request, reply) => {
     const pago = await fastify.db.pago.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      select: { id_local: true, nro_ord: true }
     })
     if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
 
@@ -773,8 +787,12 @@ export default async function pagosRoutes(fastify) {
       })
 
       let accionNormal = currentNormal?.accion === 'auditado' ? 'auditado' : 'desauditado'
+      // Solo hay que avisar si la cascada CAMBIO el circuito normal. Si ya estaba
+      // desauditado, no hubo nada que revertir y un aviso seria ruido.
+      let cascadeo = false
 
       if (accionNormal !== accionDc) {
+        cascadeo = true
         await tx.audit.updateMany({
           where: { tabla: 'pagos', id_registro: request.params.id, audit_dc: false, vigente: true },
           data: { vigente: false }
@@ -798,10 +816,24 @@ export default async function pagosRoutes(fastify) {
         accionNormal = accionDc
       }
 
-      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado' }
+      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado', cascadeo }
     })
 
-    return { ok: true, ...result }
+    // La cascada arrastro el circuito normal a desauditado: el auditor del local
+    // tiene que enterarse, igual que si lo hubieran desauditado por el circuito
+    // normal. Una sola notificacion por evento.
+    if (result.cascadeo && result.audit === false) {
+      await avisarDesauditado(fastify, {
+        tabla: 'pagos',
+        id_registro: request.params.id,
+        id_local: pago.id_local,
+        quienDesaudita: request.user.id,
+        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago'
+      })
+    }
+
+    const { cascadeo, ...payload } = result
+    return { ok: true, ...payload }
   })
 
   // ── GET /:id/audit-history ─────────────────────────────────────────────

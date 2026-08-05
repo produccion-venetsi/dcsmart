@@ -89,6 +89,7 @@ model User {
   app_usage        UserAppUsage[]
   activity_logs    ActivityLog[]     @relation("ActivityLogUser")
   filtro_presets   FiltroPreset[]    @relation("FiltroPresetUser")
+  notificaciones   Notificacion[]    @relation("NotificacionUser")
 
   @@map("users")
 }
@@ -642,6 +643,35 @@ model TapTapSyncRun {
 // migrar de nuevo. El tope de 5 por usuario y modulo se valida en la ruta, no
 // en el esquema: Postgres no puede expresar "maximo N filas por grupo" sin un
 // trigger, y un trigger seria mas dificil de encontrar que la validacion.
+// Avisos dirigidos a un usuario. Hoy solo se emiten cuando alguien revierte una
+// auditoria: el auditor tiene que enterarse de que le desauditaron algo sin
+// depender de que revise la pantalla de Auditorias.
+//
+// `tabla` + `id_registro` es el mismo patron polimorfico que usa Audit, y por el
+// mismo motivo: el aviso puede apuntar a un pago o a una caja, y no se le puede
+// poner una FK a las dos. Sirven para armar el link, no para integridad.
+model Notificacion {
+  id          String   @id @default(uuid())
+  id_user     String
+  tipo        String
+  titulo      String
+  cuerpo      String?
+  tabla       String?
+  id_registro String?
+  id_local    String?
+  leida       Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  user User @relation("NotificacionUser", fields: [id_user], references: [id])
+
+  // id_user va primero en los dos indices: todas las consultas son "las mias".
+  // El primero cubre ademas la FK, que Prisma no indexa sola -- ver el PR #114,
+  // donde justamente cuatro FK sin indice escaneaban tablas enteras.
+  @@index([id_user, leida])
+  @@index([id_user, created_at])
+  @@map("notificaciones")
+}
+
 model FiltroPreset {
   id         String   @id @default(uuid())
   id_user    String
