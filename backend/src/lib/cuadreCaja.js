@@ -62,7 +62,10 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0
 }
 
-const esEfectivo = (nombreMetodo) => /efectivo/i.test(String(nombreMetodo ?? ''))
+// Se exporta porque el reporte de Pagos separa "en efectivo" del resto de las
+// formas de pago y tiene que usar la MISMA regla: si algun dia entra un metodo
+// "Efectivo USD", el cuadre de caja y la reporteria cambian juntos.
+export const esEfectivo = (nombreMetodo) => /efectivo/i.test(String(nombreMetodo ?? ''))
 
 // La clasificacion del propio detalle gana sobre la de su tipo: el usuario la
 // elige al cargar el detalle y puede diferir a proposito (un "Rappi" que en una

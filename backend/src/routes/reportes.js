@@ -2,6 +2,7 @@ import { toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 import { resolverRangoCmv } from '../lib/rangoCmv.js'
+import { agregarPorDireccion } from '../lib/direccionPagos.js'
 import {
   etiquetaTurno, promedioPorCubierto, pctFiscal, ordenarPorTurno,
   desglosarPorTurno, totalizarPorNombre
@@ -287,6 +288,9 @@ export default async function reportesRoutes(fastify) {
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
       return {
+        // El spread mantiene la forma de la respuesta igual con scope vacio: el
+        // frontend nunca tiene que distinguir "sin locales" de "sin datos".
+        ...agregarPorDireccion([]),
         total_adeudado: 0, count_adeudado: 0,
         count_auditados: 0, count_no_auditados: 0,
         total_efectivo: 0, count_efectivo: 0,
@@ -328,6 +332,9 @@ export default async function reportesRoutes(fastify) {
         where: { ...localFilter, ...fechaWhere },
         select: {
           id: true, importe: true, pagado: true, ingresa_egreso: true, id_tipo: true,
+          // metodo_pago hace falta para separar "en efectivo" del resto de las
+          // formas; el rubro, para el desglose completo en torta.
+          metodo_pago: { select: { nombre: true } },
           rubcat: { select: { rubro: { select: { nombre: true } } } }
         }
       })
@@ -380,10 +387,14 @@ export default async function reportesRoutes(fastify) {
     const countNoAuditados = pagoIds.length - countAuditados
 
     return {
+      ...agregarPorDireccion(pagosEnRango),
       total_adeudado: deudaNeta(egresosAgg._sum.importe, ingresosAgg._sum.importe),
       count_adeudado: egresosAgg._count.id,
       count_auditados: countAuditados,
       count_no_auditados: countNoAuditados,
+      // OJO: total_efectivo/count_efectivo suman las DOS direcciones en un solo
+      // numero. Se dejan por compatibilidad, pero la pantalla ya no los usa: usa
+      // efectivo.ingresos y efectivo.egresos de agregarPorDireccion.
       total_efectivo: Number(efectivoAgg._sum.importe ?? 0),
       count_efectivo: efectivoAgg._count.id,
       total_gastos: totalGastos,
