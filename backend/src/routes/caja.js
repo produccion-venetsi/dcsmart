@@ -4,6 +4,7 @@ import { toTipoTurnoEnum, fromTipoTurnoEnum, toTipoTurnoEnumList } from '../lib/
 import { parseCsvParam } from '../lib/queryParams.js'
 import { calcularCuadre } from '../lib/cuadreCaja.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
+import { avisarDesauditado } from '../lib/avisos.js'
 
 // El estado de auditoría de una caja se guarda en la tabla `audits`
 // (modelo Audit) con tabla='cajas' e id_registro=caja.id, igual que en pagos.
@@ -366,7 +367,8 @@ export default async function cajaRoutes(fastify) {
   fastify.patch('/:id/audit', { preHandler: editHandler }, async (request, reply) => {
     const caja = await fastify.db.caja.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      // nro_turno se usa para la etiqueta del aviso al auditor.
+      select: { id_local: true, nro_turno: true }
     })
     if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
 
@@ -406,6 +408,17 @@ export default async function cajaRoutes(fastify) {
       return accion
     })
 
+    // Despues del commit: el aviso lee el historial y necesita ver el evento nuevo.
+    if (nextAccion === 'desauditado') {
+      await avisarDesauditado(fastify, {
+        tabla: 'cajas',
+        id_registro: request.params.id,
+        id_local: caja.id_local,
+        quienDesaudita: request.user.id,
+        etiqueta: caja.nro_turno ? `Turno ${caja.nro_turno}` : 'una caja'
+      })
+    }
+
     return { ok: true, audit: nextAccion === 'auditado' }
   })
 
@@ -414,7 +427,7 @@ export default async function cajaRoutes(fastify) {
   fastify.patch('/:id/audit-dc', { preHandler: [fastify.authenticate, fastify.appContext, fastify.requireDc] }, async (request, reply) => {
     const caja = await fastify.db.caja.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      select: { id_local: true, nro_turno: true }
     })
     if (!caja) return reply.code(404).send({ error: 'Caja no encontrada' })
 
@@ -456,8 +469,12 @@ export default async function cajaRoutes(fastify) {
       })
 
       let accionNormal = currentNormal?.accion === 'auditado' ? 'auditado' : 'desauditado'
+      // Solo hay que avisar si la cascada CAMBIO el circuito normal. Si ya estaba
+      // desauditado, no hubo nada que revertir y un aviso seria ruido.
+      let cascadeo = false
 
       if (accionNormal !== accionDc) {
+        cascadeo = true
         await tx.audit.updateMany({
           where: { tabla: 'cajas', id_registro: request.params.id, audit_dc: false, vigente: true },
           data: { vigente: false }
@@ -481,10 +498,23 @@ export default async function cajaRoutes(fastify) {
         accionNormal = accionDc
       }
 
-      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado' }
+      return { audit_dc: accionDc === 'auditado', audit: accionNormal === 'auditado', cascadeo }
     })
 
-    return { ok: true, ...result }
+    // Igual que en pagos: si la cascada arrastro el circuito normal a
+    // desauditado, el auditor del local tiene que enterarse.
+    if (result.cascadeo && result.audit === false) {
+      await avisarDesauditado(fastify, {
+        tabla: 'cajas',
+        id_registro: request.params.id,
+        id_local: caja.id_local,
+        quienDesaudita: request.user.id,
+        etiqueta: caja.nro_turno ? `Turno ${caja.nro_turno}` : 'una caja'
+      })
+    }
+
+    const { cascadeo, ...payload } = result
+    return { ok: true, ...payload }
   })
 
   // ── GET /:id/audit-history ─────────────────────────────────────────────

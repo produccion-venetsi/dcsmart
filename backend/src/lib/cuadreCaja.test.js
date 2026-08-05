@@ -84,14 +84,42 @@ test('detecta el descuadre chico de tipeo (caso real de 878: $40)', () => {
   assert.equal(r.cuadra, false)
 })
 
-test('los gastos restan', () => {
+test('los gastos de un detalle SUMAN: el efectivo del cierre ya esta neto de ellos', () => {
+  // Cuando la caja se carga por detalles, `efectivo` es la plata CONTADA en el
+  // cajon al cerrar, y los gastos ya salieron de ahi. Para reconstruir la venta
+  // hay que devolverlos: venta = contado + gastos_pagados + cobros_no_efectivo.
   const r = calcularCuadre({
-    total: 900, efectivo: 100,
+    total: 1300, efectivo: 100,
     detalles: [det(1000, 'cobro'), det(200, 'gasto')]
   })
   assert.equal(r.cobros, 1000)
   assert.equal(r.gastos, 200)
-  assert.equal(r.esperado, 900)
+  assert.equal(r.esperado, 1300)
+  assert.equal(r.cuadra, true)
+})
+
+test('caja real de produccion: LOS GALGOS cuadra exacto sumando los gastos', () => {
+  // Caja migrada de LOS GALGOS. Con la formula anterior (gastos restando) daba
+  // una diferencia de 74.800, que es exactamente 2x los gastos: la firma del
+  // signo invertido. Es el ancla de regresion de este arreglo.
+  const r = calcularCuadre({
+    total: 3284530, efectivo: 789030,
+    detalles: [det(2458100, 'ingreso'), det(37400, 'egreso')]
+  })
+  assert.equal(r.cobros, 2458100)
+  assert.equal(r.gastos, 37400)
+  assert.equal(r.esperado, 3284530)
+  assert.equal(r.diferencia, 0)
+  assert.equal(r.cuadra, true)
+})
+
+test('sin gastos la formula no cambia', () => {
+  // Todas las cajas TapTap caen aca: tienen cero gastos. El arreglo no las toca.
+  const r = calcularCuadre({
+    total: 1100, efectivo: 100, detalles: [det(1000, 'cobro')]
+  })
+  assert.equal(r.gastos, 0)
+  assert.equal(r.esperado, 1100)
   assert.equal(r.cuadra, true)
 })
 

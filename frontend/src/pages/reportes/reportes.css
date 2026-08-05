@@ -459,6 +459,70 @@
   margin: 2px 0;
 }
 
+/* ── torta de N gajos (components/Donut.jsx) ──
+   El circulo estaba estilado inline en ReporteCajas para el caso de dos gajos
+   fijos. Aca vive la version generica, que ademas necesita:
+   - el color del hueco y de la separacion entre gajos, que tiene que ser el de la
+     tarjeta (no transparente: el conic-gradient pinta detras del mask)
+   - una leyenda que se pueda leer con muchas filas */
+.rep-kpi {
+  /* Superficie efectiva de la tarjeta: --bg-app (#19232f) con --bg-card
+     (blanco al 4,2%) encima. Es el color contra el que se valido la paleta del
+     donut, y el que usan el hueco y los separadores entre gajos. */
+  --rep-donut-gap: #232c38;
+}
+.rep-donut {
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 22px;
+  /* El agujero del donut. Con mask en vez de un circulo encima, para que el
+     hueco funcione sea cual sea el fondo de la tarjeta. */
+  mask: radial-gradient(circle, transparent 46%, #000 47%);
+  -webkit-mask: radial-gradient(circle, transparent 46%, #000 47%);
+}
+.rep-donut-legend {
+  min-width: 0;
+  flex: 1;
+}
+.rep-donut-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rep-donut-pct {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--t3);
+  min-width: 44px;
+  text-align: right;
+}
+.rep-donut-cola {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.rep-donut-cola > summary {
+  font-size: 12px;
+  color: var(--t3);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.rep-donut-cola > summary:hover { color: var(--t2); }
+
+/* Con la torta y la leyenda al lado, en pantalla angosta no entran: se apilan. */
+@media (max-width: 700px) {
+  .rep-donut-wrap { flex-direction: column; align-items: flex-start; }
+  .rep-donut { margin: 0 0 14px; }
+  .rep-donut-legend { width: 100%; }
+}
+
+.rep-kpi-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) {
+  .rep-kpi-grid.cols-2 { grid-template-columns: 1fr; }
+}
+
 /* ── payment detail table ── */
 .rep-pay-row {
   display: grid;
