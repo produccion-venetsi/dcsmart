@@ -1372,6 +1372,19 @@ export default function CajaList() {
       .then(({ data }) => {
         setCajas(data.data)
         setTotal(data.total)
+        // ?caja=<id> abre el detalle de esa caja, venga de donde venga. El drawer
+        // la trae por id (ver CajaDetailPanel), asi que NO hace falta que este en
+        // la pagina cargada ni que pase los filtros: sirve para linkear una caja
+        // puntual desde un aviso, un mail o donde sea.
+        const cajaId = searchParams.get('caja')
+        if (!autoOpenedRef.current && cajaId) {
+          autoOpenedRef.current = true
+          openDetail(cajaId)
+          return
+        }
+        // ?turno=<nro> es el mecanismo anterior. Se mantiene, pero solo puede
+        // encontrar cajas de la pagina actual y falla con las que no tienen numero
+        // de turno cargado, que son muchas: para linkear conviene ?caja=<id>.
         const turno = searchParams.get('turno')
         if (!autoOpenedRef.current && turno) {
           const match = data.data.find(c => c.nro_turno === turno)

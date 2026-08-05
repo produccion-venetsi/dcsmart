@@ -3,12 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { avisosApi } from '../../api/notificaciones.js'
 import { useUiStore } from '../../store/uiStore.js'
 
-// A donde lleva cada aviso segun de que habla. Un pago se abre en su formulario de
-// edicion (es donde se ve el estado de auditoria); una caja, en su detalle.
+// A donde lleva cada aviso segun de que habla.
+//
+// Un pago va a su formulario de edicion, que es a donde lleva tambien el listado.
+//
+// Una caja va al LISTADO con ?caja=<id>, que abre el drawer de detalle. NO a
+// /cajas/<id>: esa ruta renderiza pages/cajas/CajaDetail.jsx, una segunda pantalla
+// de detalle a la que no linkeaba nada de la app y que tiene menos cosas que el
+// drawer (que es la que la gente conoce). Mandar ahi desde un aviso de auditoria
+// significaba caer en una pantalla que el usuario nunca habia visto.
 function destinoDe(aviso) {
   if (!aviso?.id_registro) return null
   if (aviso.tabla === 'pagos') return `/pagos/${aviso.id_registro}/editar`
-  if (aviso.tabla === 'cajas') return `/cajas/${aviso.id_registro}`
+  if (aviso.tabla === 'cajas') return `/cajas?caja=${aviso.id_registro}`
   return null
 }
 
