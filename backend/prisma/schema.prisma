@@ -89,6 +89,7 @@ model User {
   app_usage        UserAppUsage[]
   activity_logs    ActivityLog[]     @relation("ActivityLogUser")
   filtro_presets   FiltroPreset[]    @relation("FiltroPresetUser")
+  notificaciones   Notificacion[]    @relation("NotificacionUser")
 
   @@map("users")
 }
@@ -263,6 +264,8 @@ model Proveedor {
   pagos   Pago[]
   locales Local[]
 
+  // Ver el comentario en Impuesto: las FK necesitan su índice a mano.
+  @@index([id_rubcat])
   @@map("proveedores")
 }
 
@@ -375,6 +378,12 @@ model CajaDetalle {
   caja         Caja         @relation(fields: [id_caja], references: [id])
   detalle_tipo DetalleTipo? @relation(fields: [id_tipo], references: [id])
 
+  // Postgres NO indexa las FK solo, y Prisma tampoco: sin estos índices toda
+  // consulta por id_caja escaneaba la tabla entera. El listado de cajas trae
+  // los detalles de cada caja de la página para calcular el cuadre y el total,
+  // asi que eran dos escaneos completos por pantalla. Medido: 3,2 ms -> 0,46 ms.
+  @@index([id_caja])
+  @@index([id_tipo])
   @@map("caja_detalles")
 }
 
@@ -433,6 +442,8 @@ model CajaMovimiento {
   caja        Caja        @relation(fields: [id_caja], references: [id])
   metodo_pago MetodoPago? @relation(fields: [id_metodo], references: [id])
 
+  // Ver el comentario en CajaDetalle: mismo motivo. Medido: 2,1 ms -> 0,44 ms.
+  @@index([id_caja])
   @@map("caja_movimientos")
 }
 
@@ -522,6 +533,10 @@ model Impuesto {
 
   pago Pago @relation(fields: [id_pago], references: [id])
 
+  // El más importante de todos: sin este índice, cada lectura de los impuestos
+  // de un pago escaneaba las 30 mil filas de la tabla para devolver dos.
+  // Medido: 3,4 ms -> 0,10 ms, y 352 páginas leídas -> 4.
+  @@index([id_pago])
   @@map("impuestos")
 }
 
@@ -628,6 +643,35 @@ model TapTapSyncRun {
 // migrar de nuevo. El tope de 5 por usuario y modulo se valida en la ruta, no
 // en el esquema: Postgres no puede expresar "maximo N filas por grupo" sin un
 // trigger, y un trigger seria mas dificil de encontrar que la validacion.
+// Avisos dirigidos a un usuario. Hoy solo se emiten cuando alguien revierte una
+// auditoria: el auditor tiene que enterarse de que le desauditaron algo sin
+// depender de que revise la pantalla de Auditorias.
+//
+// `tabla` + `id_registro` es el mismo patron polimorfico que usa Audit, y por el
+// mismo motivo: el aviso puede apuntar a un pago o a una caja, y no se le puede
+// poner una FK a las dos. Sirven para armar el link, no para integridad.
+model Notificacion {
+  id          String   @id @default(uuid())
+  id_user     String
+  tipo        String
+  titulo      String
+  cuerpo      String?
+  tabla       String?
+  id_registro String?
+  id_local    String?
+  leida       Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  user User @relation("NotificacionUser", fields: [id_user], references: [id])
+
+  // id_user va primero en los dos indices: todas las consultas son "las mias".
+  // El primero cubre ademas la FK, que Prisma no indexa sola -- ver el PR #114,
+  // donde justamente cuatro FK sin indice escaneaban tablas enteras.
+  @@index([id_user, leida])
+  @@index([id_user, created_at])
+  @@map("notificaciones")
+}
+
 model FiltroPreset {
   id         String   @id @default(uuid())
   id_user    String

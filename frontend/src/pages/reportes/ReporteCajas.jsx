@@ -115,6 +115,11 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
   const payTotal      = data?.pay_total ?? 0
   const detalles      = data?.detalles ?? []
   const detallesTotal = data?.detalles_total ?? 0
+  const descuadre       = data?.descuadre ?? { absoluto: 0, cantidad_cajas: 0, sin_total: 0 }
+  // Agrupado por clasificación (Cobros / Gastos / Informativos). Es distinto del
+  // `detalles` de arriba, que es plano por nombre: este es el que explica el
+  // descuadre, porque los informativos no entran en la diferencia de caja.
+  const desgloseDetalles = data?.desglose_detalles ?? []
   const turnos        = data?.turnos ?? []
 
   const fiscalPct = kpi.total_ventas > 0
@@ -173,6 +178,57 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
           {skel
             ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
             : <div className="rep-kpi-value med">{fmt(kpi.efectivo)}</div>}
+        </div>
+      </div>
+
+      {/* ── Control de caja: cantidad, detalles y descuadre ──
+          El descuadre se suma en valor ABSOLUTO: un faltante y un sobrante iguales
+          no se cancelan, porque son dos errores de carga y no cero. Sale del mismo
+          calcularCuadre que usa el listado de cajas. Ver lib/descuadreAgregado.js. */}
+      <div className="rep-kpi-grid cols-4">
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Total cajas</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(63,182,189,.16)' }}><IcoZ /></span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '40%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{kpi.count_z ?? 0}</div>}
+          <div className="rep-kpi-sub">turnos del período</div>
+        </div>
+
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Total detalles</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(206,172,129,.18)' }}><IcoTicket /></span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '60%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{fmt(detallesTotal)}</div>}
+          <div className="rep-kpi-sub">suma de los detalles cargados</div>
+        </div>
+
+        <div className={'rep-kpi' + ((descuadre.cantidad_cajas ?? 0) > 0 ? ' danger' : '')} style={{ gridColumn: 'span 2' }}>
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Descuadre</span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '50%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{fmt(descuadre.absoluto)}</div>}
+          <div className="rep-kpi-sub">
+            {descuadre.cantidad_cajas ?? 0} de {kpi.count_z ?? 0} cajas descuadran (desvío sumado en valor absoluto)
+            {(descuadre.sin_total ?? 0) > 0 && ` · ${descuadre.sin_total} sin total cargado, no se pueden comparar`}
+          </div>
+          {!skel && desgloseDetalles.length > 0 && (
+            <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: 10 }}>
+              {desgloseDetalles.map((g) => (
+                <div key={g.clasificacion}>
+                  <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>{g.label} ({g.cantidad})</div>
+                  <div className="rep-kpi-value" style={{ fontSize: 16 }}>{fmt(g.total)}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

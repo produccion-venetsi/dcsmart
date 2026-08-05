@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import ActualizarApp from './components/ActualizarApp.jsx'
-import { ROLES, ROLES_DC, ROLES_OPERATIVOS } from './lib/roles.js'
+import { ROLES, ROLES_DC, ROLES_OPERATIVOS, ROLES_RESTRINGIDOS } from './lib/roles.js'
 import Layout from './components/Layout.jsx'
 import { useAuthStore } from './store/authStore.js'
 import { debeSincronizarUsuario } from './lib/sesionExpirada.js'
@@ -50,6 +50,9 @@ const MetodosPago   = lazyWithReload(() => import('./pages/admin/MetodosPago.jsx
 const Roles         = lazyWithReload(() => import('./pages/admin/Roles.jsx'))
 const DetalleTipos  = lazyWithReload(() => import('./pages/admin/DetalleTipos.jsx'))
 const ArqueoList    = lazyWithReload(() => import('./pages/arqueo/ArqueoList.jsx'))
+const Avisos        = lazyWithReload(() => import('./pages/avisos/Avisos.jsx'))
+const Cargar        = lazyWithReload(() => import('./pages/cargar/Cargar.jsx'))
+const CajaNueva     = lazyWithReload(() => import('./pages/cajas/CajaNueva.jsx'))
 
 function PageFallback() {
   return (
@@ -69,11 +72,15 @@ const OPERATIVE   = ROLES_OPERATIVOS
 function Guard({ roles, children }) {
   return <ProtectedRoute requireApp roles={roles}>{children}</ProtectedRoute>
 }
-// Dashboard/Cajas/Pagos: requieren app activa, pero el rol "reportes"
-// (restringido a Reportes) no puede entrar -- se lo manda a /reportes.
+// Dashboard/Cajas/Pagos: requieren app activa, pero los roles restringidos a una
+// sola tarea (`reportes`, `data_entry`) no pueden entrar -- se los manda a su home
+// (ver homeDeRol en lib/roles.js).
 function OperativeGuard({ children }) {
-  return <ProtectedRoute requireApp excludeRoles={['reportes']}>{children}</ProtectedRoute>
+  return <ProtectedRoute requireApp excludeRoles={ROLES_RESTRINGIDOS}>{children}</ProtectedRoute>
 }
+// Pantallas de carga: las ven los operativos, el cajero y data_entry. No usan
+// OperativeGuard justamente porque data_entry tiene que poder entrar.
+const CARGAN = [...ROLES_OPERATIVOS, ROLES.CAJERO, ROLES.DATA_ENTRY]
 // Reportes: requiere app activa + el permiso real (no el nombre del rol).
 function ReportesGuard({ children }) {
   return <ProtectedRoute requireApp reportesOnly>{children}</ProtectedRoute>
@@ -135,9 +142,15 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard"                  element={<OperativeGuard><Dashboard /></OperativeGuard>} />
           <Route path="cajas"                      element={<OperativeGuard><CajaList /></OperativeGuard>} />
+          {/* `cajas/nueva` va ANTES de `cajas/:id`: si no, :id la captura y se
+              intenta abrir una caja con id "nueva". */}
+          <Route path="cajas/nueva"                element={<Guard roles={CARGAN}><CajaNueva /></Guard>} />
           <Route path="cajas/:id"                  element={<OperativeGuard><CajaDetail /></OperativeGuard>} />
           <Route path="pagos"                      element={<OperativeGuard><PagoList /></OperativeGuard>} />
-          <Route path="pagos/nuevo"                element={<OperativeGuard><PagoForm /></OperativeGuard>} />
+          <Route path="pagos/nuevo"                element={<Guard roles={CARGAN}><PagoForm /></Guard>} />
+          <Route path="cargar"                     element={<Guard roles={[ROLES.DATA_ENTRY]}><Cargar /></Guard>} />
+          {/* Avisos no exige app activa ni rol: son del usuario, no de la app. */}
+          <Route path="avisos"                     element={<ProtectedRoute requireApp={false}><Avisos /></ProtectedRoute>} />
           <Route path="pagos/:id/editar"           element={<OperativeGuard><PagoForm /></OperativeGuard>} />
           <Route path="pdp"                        element={<Guard roles={OPERATIVE}><PdpDashboard /></Guard>} />
           <Route path="proveedores"                element={<Guard roles={OPERATIVE}><ProveedorList /></Guard>} />

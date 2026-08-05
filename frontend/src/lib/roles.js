@@ -14,6 +14,10 @@ export const ROLES = {
   ADMIN:   'admin',
   EXTERNO: 'externo',
   CAJERO:  'cajero',
+  // Solo carga datos: ve los formularios de alta y nada mas. No aparece en
+  // ROLES_TODOS ni en ROLES_OPERATIVOS a proposito -- esas listas significan
+  // "opera la app", y este perfil no opera.
+  DATA_ENTRY: 'data_entry',
 }
 
 // Roles internos de DCSmart. Ven el circuito DC, la fecha de creación de las
@@ -53,8 +57,11 @@ export const puedeBorrarCajas = (rol) => incluye(ROLES_BORRAN, rol)
 // hasta al cajero, que recibía un 403 disfrazado de "Error al eliminar".
 export const puedeBorrarMovimientos = (rol) => incluye(ROLES_BORRAN, rol)
 
-// Crear cajas lo puede hacer también el cajero: es su tarea.
-export const puedeCrearCajas = (rol) => incluye(ROLES_TODOS, rol)
+// Crear cajas lo puede hacer también el cajero (es su tarea) y data_entry (es su
+// única tarea). Se define una lista propia en vez de ensanchar ROLES_TODOS, que
+// significa "todos los que operan la app" y data_entry no opera.
+export const ROLES_CREAN_CAJAS = [...ROLES_TODOS, ROLES.DATA_ENTRY]
+export const puedeCrearCajas = (rol) => incluye(ROLES_CREAN_CAJAS, rol)
 
 // Exportar la tabla de pagos (Excel y Google Sheets). Incluye a `externo`: es
 // el rol de la gente de afuera que ordena la carga y necesita la planilla. No
@@ -64,6 +71,33 @@ export const puedeCrearCajas = (rol) => incluye(ROLES_TODOS, rol)
 // del export sigue saliendo solo para ROLES_DC (ver PAGO_CSV_COLUMNS), porque
 // externo tampoco la ve en pantalla.
 export const puedeExportar = (rol) => incluye([...ROLES_DC, ROLES.EXTERNO], rol)
+
+// ── Home por rol ────────────────────────────────────────────────────────────
+//
+// A dónde va cada rol cuando entra, y a dónde se lo manda si intenta una ruta que
+// no le corresponde. Los roles restringidos a una sola pantalla tienen la suya; el
+// resto va al dashboard.
+//
+// Antes esto era un `<Navigate to="/reportes">` hardcodeado dentro de
+// ProtectedRoute. Servía mientras `reportes` era el único rol restringido; con el
+// segundo (`data_entry`) habría mandado a los cargadores de datos a una pantalla
+// de reportes que no pueden ver.
+
+const HOME_POR_ROL = {
+  reportes:   '/reportes',
+  data_entry: '/cargar',
+}
+
+export const HOME_POR_DEFECTO = '/dashboard'
+
+export function homeDeRol(rol) {
+  return HOME_POR_ROL[rol] ?? HOME_POR_DEFECTO
+}
+
+// Roles que NO operan la app: se los saca de las pantallas operativas y se los
+// manda a su home. Sale de HOME_POR_ROL para que agregar un rol restringido sea un
+// solo cambio.
+export const ROLES_RESTRINGIDOS = Object.keys(HOME_POR_ROL)
 
 // ── Alcance de locales ──────────────────────────────────────────────────────
 // Espeja ROLES_TODOS_LOS_LOCALES de backend/src/plugins/appContext.js, que es
