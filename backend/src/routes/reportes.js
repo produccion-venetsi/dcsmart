@@ -3,6 +3,7 @@ import { parseCsvParam } from '../lib/queryParams.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 import { resolverRangoCmv } from '../lib/rangoCmv.js'
 import { agregarPorDireccion } from '../lib/direccionPagos.js'
+import { agregarDescuadre, agruparDetallesReporte } from '../lib/descuadreAgregado.js'
 import {
   etiquetaTurno, promedioPorCubierto, pctFiscal, ordenarPorTurno,
   desglosarPorTurno, totalizarPorNombre
@@ -29,7 +30,11 @@ export default async function reportesRoutes(fastify) {
 
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
-      return { kpi: {}, secondary: [], weekly: [], fiscal: {}, payments: [], pay_total: 0 }
+      return {
+        kpi: {}, secondary: [], weekly: [], fiscal: {}, payments: [], pay_total: 0,
+        descuadre: { absoluto: 0, cantidad_cajas: 0, sin_total: 0 },
+        desglose_detalles: []
+      }
     }
 
     // fecha_inicio es un instante real (con hora) -- el rango se interpreta
@@ -54,6 +59,32 @@ export default async function reportesRoutes(fastify) {
       _sum: { total: true, efectivo: true, fiscal: true, tickets: true, comensales: true },
       _count: { id: true }
     })
+
+    // Se traen las colecciones por caja para poder aplicar calcularCuadre a cada
+    // una: el descuadre del periodo no se puede sacar de un agregado, porque un
+    // faltante y un sobrante iguales se cancelarian. Desde los indices de FK del
+    // 2026-08-05 esto no escanea tablas enteras (un mes de LOS GALGOS son ~90
+    // cajas y ~630 detalles).
+    const cajasConHijos = await fastify.db.caja.findMany({
+      where: cajaWhere,
+      select: {
+        total: true,
+        efectivo: true,
+        movimientos: { select: { tipo: true, monto: true, metodo_pago: { select: { nombre: true } } } },
+        detalles: {
+          select: {
+            monto: true, tipo: true, nombre: true,
+            detalle_tipo: { select: { nombre: true, clasificacion: true } }
+          }
+        }
+      }
+    })
+
+    const descuadre = agregarDescuadre(cajasConHijos)
+    // El desglose sale de los mismos detalles que ya se trajeron, sin otra
+    // consulta. No se calcula un total de detalles aca: ya existe abajo como
+    // `detalles_total`, que sale del SQL crudo y ademas filtra por app.
+    const desgloseDetalles = agruparDetallesReporte(cajasConHijos.flatMap(c => c.detalles ?? []))
 
     const totalVentas   = Number(cajaAgg._sum.total    ?? 0)
     const totalFiscal   = Number(cajaAgg._sum.fiscal   ?? 0)
@@ -267,7 +298,9 @@ export default async function reportesRoutes(fastify) {
       payments,
       pay_total: payTotal,
       detalles,
-      detalles_total: detallesTotal
+      detalles_total: detallesTotal,
+      descuadre,
+      desglose_detalles: desgloseDetalles
     }
   })
 
