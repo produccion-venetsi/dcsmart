@@ -399,15 +399,15 @@ export default async function reportesRoutes(fastify) {
 
   // ── GET /cmv ────────────────────────────────────────────────────────────
   fastify.get('/cmv', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta, mes } = request.query
+    const { id_local, desde, hasta, mes, mes_desde, mes_hasta } = request.query
 
-    // Dos modos, y en ninguno se comparan unidades distintas (ver lib/rangoCmv.js):
-    // `mes` lee el CMV por período contable; `desde`/`hasta` lo lee por fecha
-    // real, la misma unidad que las ventas.
-    const rango = resolverRangoCmv({ mes, desde, hasta })
+    // El CMV va SIEMPRE por período contable (ver lib/rangoCmv.js): pedirlo por
+    // mes y por rango de días daba dos números distintos para el mismo julio.
+    // Un rango de días se acepta pero se redondea a los meses que toca.
+    const rango = resolverRangoCmv({ mes, mes_desde, mes_hasta, desde, hasta })
     if (!rango) {
       return reply.code(400).send({
-        error: 'Pedí un mes (YYYY-MM) o un rango válido de desde/hasta (YYYY-MM-DD, desde <= hasta)'
+        error: 'Pedí un mes (YYYY-MM), un rango de meses (mes_desde/mes_hasta) o un rango de días (YYYY-MM-DD), siempre con el inicio antes del fin'
       })
     }
 
@@ -417,14 +417,14 @@ export default async function reportesRoutes(fastify) {
 
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
-      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00' }
+      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00', mes_desde: rango.mesDesde, mes_hasta: rango.mesHasta }
     }
 
     // Las fechas salen todas de resolverRangoCmv: fecha_inicio (Caja) es un
     // instante real y va con el offset de Argentina; periodo/fecha (Pago) se
     // guardan a medianoche UTC del día elegido y van en UTC puro. Mezclarlos
     // corría el filtro 3 horas.
-    const { campoPago, pagoDesde, pagoHasta, ventasDesde, ventasHasta } = rango
+    const { campoPago, pagoDesde, pagoHasta, ventasDesde, ventasHasta, mesDesde, mesHasta } = rango
     // El nombre de columna se interpola en el SQL, así que no se confía en que
     // venga bien de arriba: solo estos dos valores son aceptables.
     if (campoPago !== 'periodo' && campoPago !== 'fecha') {
@@ -502,6 +502,11 @@ export default async function reportesRoutes(fastify) {
     const mMax = movstock.length ? Math.max(...movstock.map(m => m.val)) : 1
 
     return {
+      // Qué meses se leyeron realmente. Si entró un rango de días se redondeó a
+      // meses completos, y la pantalla tiene que poder decirlo en vez de dar por
+      // buenos los días que pidió el usuario.
+      mes_desde: mesDesde,
+      mes_hasta: mesHasta,
       ventas_total: ventasTotal,
       cmv_total_monto: totalGeneral,
       cmv_total_pct: cmvTotal.toFixed(2),
