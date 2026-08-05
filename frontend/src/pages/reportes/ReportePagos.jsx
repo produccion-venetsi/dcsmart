@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { reportesApi } from '../../api/reportes.js'
+import Donut from '../../components/Donut.jsx'
 
 const fmtCurrency = new Intl.NumberFormat('es-AR', {
   style: 'currency', currency: 'ARS', maximumFractionDigits: 0
@@ -77,7 +78,79 @@ export default function ReportePagos({ applied, activeLocal, campoFecha }) {
 
   return (
     <>
-      {/* ── KPI cards ── */}
+      {/* ── Dirección: lo que entra y lo que sale ──
+          `ingresa_egreso` es la dirección de la operación; los importes son
+          siempre positivos. Antes acá había una sola tarjeta "En efectivo" que
+          sumaba las dos direcciones en un número, y ningún total de ingresos. */}
+      <div className="rep-kpi-grid cols-4">
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Total ingresos</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(95,201,140,.18)' }}><IcoCheck /></span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '60%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{fmt(d.total_ingresos)}</div>}
+          <div className="rep-kpi-sub">operaciones que ingresan, en el período</div>
+        </div>
+
+        <div className="rep-kpi danger">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Total egresos</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(196,107,99,.2)' }}><IcoTrendDown /></span>
+          </div>
+          {skel
+            ? <div className="rep-skel" style={{ width: '60%', height: 32, marginBottom: 12 }} />
+            : <div className="rep-kpi-value med">{fmt(d.total_egresos)}</div>}
+          <div className="rep-kpi-sub">operaciones que egresan, en el período</div>
+        </div>
+
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">En efectivo</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(63,182,189,.16)' }}><IcoCash /></span>
+          </div>
+          {skel ? (
+            <div className="rep-skel" style={{ width: '70%', height: 32, marginBottom: 12 }} />
+          ) : (
+            <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginBottom: 8 }}>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Ingresos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 18 }}>{fmt(d.efectivo?.ingresos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Egresos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 18 }}>{fmt(d.efectivo?.egresos)}</div>
+              </div>
+            </div>
+          )}
+          <div className="rep-kpi-sub">método de pago Efectivo</div>
+        </div>
+
+        <div className="rep-kpi">
+          <div className="rep-kpi-head">
+            <span className="rep-kpi-label">Resto de las formas</span>
+            <span className="rep-kpi-icon" style={{ background: 'rgba(201,176,134,.18)' }}><IcoWallet /></span>
+          </div>
+          {skel ? (
+            <div className="rep-skel" style={{ width: '70%', height: 32, marginBottom: 12 }} />
+          ) : (
+            <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginBottom: 8 }}>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Ingresos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 18 }}>{fmt(d.resto?.ingresos)}</div>
+              </div>
+              <div>
+                <div className="rep-kpi-sub" style={{ marginBottom: 2 }}>Egresos</div>
+                <div className="rep-kpi-value" style={{ fontSize: 18 }}>{fmt(d.resto?.egresos)}</div>
+              </div>
+            </div>
+          )}
+          <div className="rep-kpi-sub">todo lo que no es efectivo, incluye sin método</div>
+        </div>
+      </div>
+
+      {/* ── Deuda y auditoría ── */}
       <div className="rep-kpi-grid cols-4">
         <div className="rep-kpi danger">
           <div className="rep-kpi-head">
@@ -114,20 +187,6 @@ export default function ReportePagos({ applied, activeLocal, campoFecha }) {
 
         <div className="rep-kpi">
           <div className="rep-kpi-head">
-            <span className="rep-kpi-label">En efectivo</span>
-            <span className="rep-kpi-icon" style={{ background: 'rgba(63,182,189,.16)' }}><IcoCash /></span>
-          </div>
-          {skel
-            ? <div className="rep-skel" style={{ width: '55%', height: 32, marginBottom: 12 }} />
-            : <div className="rep-kpi-value med">{fmt(d.total_efectivo)}</div>}
-          <div className="rep-kpi-sub">{d.count_efectivo ?? 0} pagos en efectivo</div>
-        </div>
-      </div>
-
-      {/* ── Gastos y Pendientes por rubro ── */}
-      <div className="rep-kpi-grid cols-4">
-        <div className="rep-kpi">
-          <div className="rep-kpi-head">
             <span className="rep-kpi-label">Gastos</span>
             <span className="rep-kpi-icon" style={{ background: 'rgba(201,176,134,.18)' }}><IcoWallet /></span>
           </div>
@@ -136,8 +195,11 @@ export default function ReportePagos({ applied, activeLocal, campoFecha }) {
             : <div className="rep-kpi-value med">{fmt(d.total_gastos)}</div>}
           <div className="rep-kpi-sub">total de egresos del período</div>
         </div>
+      </div>
 
-        <div className="rep-kpi" style={{ gridColumn: 'span 3' }}>
+      {/* ── Pendientes por rubro ── */}
+      <div className="rep-kpi-grid cols-4">
+        <div className="rep-kpi" style={{ gridColumn: 'span 4' }}>
           <div className="rep-kpi-head">
             <span className="rep-kpi-label">Pendientes</span>
             <span className="rep-kpi-icon" style={{ background: 'rgba(212,149,42,.18)' }}><IcoAlert /></span>
@@ -190,6 +252,23 @@ export default function ReportePagos({ applied, activeLocal, campoFecha }) {
           )}
           <div className="rep-kpi-sub">todos los egresos del período (pagados o no), sin CMV</div>
         </div>
+      </div>
+
+      {/* ── Rubros completos, en torta, separados por dirección ──
+          Se dibujan hasta 7 gajos y la cola va a "Otros", que se puede desplegar
+          para ver los rubros que quedaron agrupados. Ver components/Donut.jsx. */}
+      <div className="rep-kpi-grid cols-2">
+        {skel ? (
+          <>
+            <div className="rep-kpi"><div className="rep-skel" style={{ width: '100%', height: 170 }} /></div>
+            <div className="rep-kpi"><div className="rep-skel" style={{ width: '100%', height: 170 }} /></div>
+          </>
+        ) : (
+          <>
+            <Donut titulo="Rubros — Egresos"  segmentos={d.rubros?.egresos}  vacioLabel="Sin egresos en el período" />
+            <Donut titulo="Rubros — Ingresos" segmentos={d.rubros?.ingresos} vacioLabel="Sin ingresos en el período" />
+          </>
+        )}
       </div>
     </>
   )
