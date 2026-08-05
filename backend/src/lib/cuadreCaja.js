@@ -7,19 +7,40 @@
 //
 // LA REGLA
 //
-//   diferencia = total - (efectivo + cobros - gastos)
+//   por DETALLES:     diferencia = total - (efectivo + cobros + gastos)
+//   por MOVIMIENTOS:  diferencia = total - (efectivo + cobros - gastos)
 //
-// `total` es la VENTA del turno y `efectivo` es lo COBRADO en efectivo (no el
-// saldo del cajon: se verifico contra produccion que `efectivo` coincide con la
-// suma de los cobros en efectivo en 135 de 135 cajas TapTap). Por eso el fondo
-// inicial, los retiros y los vaciados no participan: mueven plata del cajon,
-// no cambian lo vendido.
+// `total` es la VENTA del turno. El fondo inicial, los retiros y los vaciados no
+// participan: mueven plata del cajon, no cambian lo vendido.
 //
 // De donde salen los cobros depende de como carga el local:
 //   - por DETALLES: los tipos con rol de cobro o gasto (origen DCSMART)
 //   - por MOVIMIENTOS: los cobros que NO son en efectivo, porque el efectivo
 //     ya esta en el campo `efectivo` y contarlo dos veces lo duplicaria
 //     (origen TAPTAP)
+//
+// EL SIGNO DE LOS GASTOS ES DISTINTO SEGUN LA FUENTE, y no es un descuido:
+//
+//   - Cargando por DETALLES, `efectivo` es la plata CONTADA en el cajon al
+//     cerrar, y los gastos del turno ya salieron de ahi. Para reconstruir la
+//     venta hay que devolverlos. Ejemplo real de LOS GALGOS: venta 7.954.340,
+//     contado 361.050, cobros no-efectivo 7.229.300, gastos 364.000 ->
+//     361.050 + 7.229.300 + 364.000 = 7.954.350. Restandolos daba 727.990 de
+//     diferencia sobre una caja que en realidad cuadra.
+//
+//   - Cargando por MOVIMIENTOS, `efectivo` es lo COBRADO en efectivo (se
+//     verifico contra produccion: coincide con la suma de los cobros en
+//     efectivo en 135 de 135 cajas TapTap), y los gastos son salidas que no
+//     son venta, asi que restan.
+//
+// Este modulo restaba los gastos en las dos ramas. La verificacion de las 135
+// cajas TapTap no lo detecto porque NINGUNA caja TapTap tiene gastos: el
+// termino siempre valia cero y nunca se ejercito. Medido sobre las 6.434 cajas
+// con total cargado, sumar los gastos en la rama de detalles deja 302 cajas mas
+// cuadrando exacto y baja el desvio absoluto total un 14%. Hay 9 cajas de LOS
+// GALGOS que cuadraban con el signo viejo y dejan de cuadrar; estan todas entre
+// el 26/1 y el 2/2 de 2025, o sea son de una epoca de carga distinta, no una
+// regla que compita.
 //
 // Los tipos con rol informativo no entran nunca: son desglose de algo que ya
 // esta contado (canales de venta, "Total Tarjetas", ajustes internos de TapTap).
@@ -123,7 +144,12 @@ export function calcularCuadre(caja) {
   }
 
   const efectivo = num(caja.efectivo)
-  const esperado = efectivo + cobros - gastos
+  // Ver "EL SIGNO DE LOS GASTOS" arriba: por detalles el efectivo es el contado
+  // al cierre (ya neto de los gastos) y hay que devolverlos; por movimientos es
+  // lo cobrado en efectivo y los gastos son salidas que restan.
+  const esperado = fuente === 'detalles'
+    ? efectivo + cobros + gastos
+    : efectivo + cobros - gastos
 
   // Sin total cargado no hay nada contra que comparar
   if (caja.total == null) {
