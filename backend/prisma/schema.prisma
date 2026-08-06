@@ -470,6 +470,7 @@ model Pago {
   periodo        DateTime?
   ingresa_egreso Boolean   @default(true)
   periodico      Boolean   @default(false)
+  cargado_con_ia Boolean   @default(false)
   id_local       String?
   created_by     String?
   created_at     DateTime  @default(now())

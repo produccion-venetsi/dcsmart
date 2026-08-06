@@ -145,6 +145,14 @@ function IcoThumbUp() {
     </svg>
   )
 }
+function IcoSparkles() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
+      <path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+    </svg>
+  )
+}
 function IcoEye() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -528,6 +536,9 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
         )}
         {pago.id_tipo && (
           <span className={`badge ${TIPO_BADGE[pago.id_tipo] ?? 'badge-muted'}`}>{pago.id_tipo}</span>
+        )}
+        {pago.cargado_con_ia && (
+          <span className="badge badge-gold" style={{ gap: 4 }}><IcoSparkles /> Carga con IA</span>
         )}
       </div>
 
@@ -1731,7 +1742,14 @@ export default function PagoList() {
                       {p.audit ? <IcoThumbUp /> : <IcoEye />}
                     </span>
                   </td>
-                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
+                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>
+                    {p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}
+                    {p.cargado_con_ia && (
+                      <span style={{ color: 'var(--gold-bright)', marginLeft: 5 }} title="Cargado con IA">
+                        <IcoSparkles />
+                      </span>
+                    )}
+                  </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                   <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 160, fontSize: 12 }}>
