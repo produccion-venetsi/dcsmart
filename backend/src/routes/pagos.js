@@ -732,7 +732,8 @@ export default async function pagosRoutes(fastify) {
         id_registro: request.params.id,
         id_local: pago.id_local,
         quienDesaudita: request.user.id,
-        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago'
+        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago',
+        observaciones
       })
     }
 
@@ -829,7 +830,8 @@ export default async function pagosRoutes(fastify) {
         id_registro: request.params.id,
         id_local: pago.id_local,
         quienDesaudita: request.user.id,
-        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago'
+        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago',
+        observaciones
       })
     }
 
