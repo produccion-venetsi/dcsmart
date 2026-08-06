@@ -109,47 +109,27 @@ function CostChart({ title, items, barColor }) {
   )
 }
 
-// "2026-07" -> "julio 2026", para que la leyenda diga qué se está mirando sin
-// obligar a leer un YYYY-MM.
-const MESES_NOMBRE = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-function nombreMes(mes) {
-  if (!/^\d{4}-\d{2}$/.test(String(mes ?? ''))) return ''
-  const [anio, m] = mes.split('-').map(Number)
-  return `${MESES_NOMBRE[m - 1]} ${anio}`
-}
-
-export default function ReporteCMV({ meses, activeLocal }) {
+export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  // El CMV se lee SIEMPRE por período contable (`pago.periodo`): una factura de
-  // junio cargada en julio pertenece a junio. Antes había un segundo modo que
-  // filtraba `pago.fecha` cuando se pedía por rango de días, y el mismo julio
-  // daba dos totales distintos según por dónde se pidiera (en 878COOP:
-  // 10.989.797,80 por fecha contra 11.758.312,04 por período). Por eso este
-  // reporte tiene su propio filtro de MESES y no el rango de días de las otras
-  // pestañas. Ver backend/src/lib/rangoCmv.js.
+  // El CMV se lee por período contable (`pago.periodo`): una factura de junio
+  // cargada en julio pertenece a junio. El filtro es "Mes de período" (un mes
+  // puntual) o las fechas Inicio/Fin de siempre, redondeadas a los meses que
+  // tocan -- lo que se haya tocado último (ver Reportes.jsx). Ver
+  // backend/src/lib/rangoCmv.js.
 
   useEffect(() => {
     setData(null)
     setLoading(true)
     const ctrl = new AbortController()
     const local = activeLocal ? { id_local: activeLocal.id } : {}
-    reportesApi.cmv({ mes_desde: meses.mesDesde, mes_hasta: meses.mesHasta, ...local }, ctrl.signal)
+    const params = modo === 'mes' ? { mes, ...local } : { desde, hasta, ...local }
+    reportesApi.cmv(params, ctrl.signal)
       .then((res) => setData(res.data))
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [meses.mesDesde, meses.mesHasta, activeLocal?.id])
-
-  // Qué meses contestó el backend, no los que se pidieron: si algún día vuelve a
-  // entrar un rango de días, se redondea a meses y la pantalla tiene que decirlo.
-  const periodoLeido = (() => {
-    const d = nombreMes(data?.mes_desde)
-    const h = nombreMes(data?.mes_hasta)
-    if (!d) return ''
-    return d === h ? d : `${d} a ${h}`
-  })()
+  }, [modo, mes, desde, hasta, activeLocal?.id])
 
   const kpis        = data?.kpis ?? []
   const alimentos   = data?.alimentos ?? []
@@ -170,16 +150,6 @@ export default function ReporteCMV({ meses, activeLocal }) {
 
   return (
     <>
-      {/* ── Qué se está mirando: el CMV es mensual y va por período contable ── */}
-      <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--t2)' }}>
-          {periodoLeido ? `Período contable: ${periodoLeido}` : 'Período contable'}
-        </span>
-        <span style={{ fontSize: 11, color: 'var(--t4)' }}>
-          Costo por período de la factura (una factura de junio cargada en julio cuenta en junio); ventas de esos mismos meses.
-        </span>
-      </div>
-
       {/* ── Fórmula del CMV Total: Ventas y CMV ($ de pagos) -> CMV Total % ── */}
       {skel ? (
         <div className="rep-chart-card" style={{ marginBottom: 18 }}>
