@@ -70,6 +70,9 @@ export default async function reportesRoutes(fastify) {
       select: {
         total: true,
         efectivo: true,
+        // calcularCuadre decide la fuente (detalles/movimientos) por origin:
+        // sin este campo, toda caja se leeria como no-TapTap.
+        origin: true,
         movimientos: { select: { tipo: true, monto: true, metodo_pago: { select: { nombre: true } } } },
         detalles: {
           select: {

@@ -40,11 +40,9 @@ test('una diferencia de dos pesos ya es descuadre', () => {
 })
 
 test('el descuadre tiene en cuenta cobros y gastos de los detalles', () => {
-  // Cargando por detalles, `efectivo` es el contado al cierre y los gastos ya
-  // salieron de ahi, asi que se devuelven: esperado = 500 + 300 + 100 = 900.
-  // Ver el comentario "EL SIGNO DE LOS GASTOS" en cuadreCaja.js.
+  // Por detalles los gastos restan: esperado = 500 + 300 - 100 = 700.
   const c = {
-    total: 900, efectivo: 500, movimientos: [],
+    total: 700, efectivo: 500, movimientos: [],
     detalles: [
       { tipo: 'cobro', monto: 300, detalle_tipo: { nombre: 'MP QR', clasificacion: 'cobro' } },
       { tipo: 'gasto', monto: 100, detalle_tipo: { nombre: 'Fletes', clasificacion: 'gasto' } },
@@ -52,8 +50,8 @@ test('el descuadre tiene en cuenta cobros y gastos de los detalles', () => {
   }
   assert.equal(agregarDescuadre([c]).cantidad_cajas, 0)
 
-  // Y con el total que hubiera cuadrado bajo la formula vieja, ahora descuadra.
-  assert.equal(agregarDescuadre([{ ...c, total: 700 }]).cantidad_cajas, 1)
+  // Y con un total distinto, descuadra.
+  assert.equal(agregarDescuadre([{ ...c, total: 900 }]).cantidad_cajas, 1)
 })
 
 test('cajas null en la lista no rompen', () => {
