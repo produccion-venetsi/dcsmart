@@ -10,7 +10,11 @@ export const localesApi = {
   uploadLogo: (id, file) => {
     const fd = new FormData()
     fd.append('file', file)
-    return client.post(`/locales/${id}/logo`, fd)
+    // El cliente fuerza Content-Type: application/json por defecto (ver
+    // client.js) y no lo pisa solo por mandar un FormData -- sin este
+    // override el backend rechaza con 406 "the request is not multipart"
+    // (FST_INVALID_MULTIPART_CONTENT_TYPE). Mismo fix que pagosApi.upload.
+    return client.post(`/locales/${id}/logo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
   },
   removeLogo: (id) => client.delete(`/locales/${id}/logo`),
 
