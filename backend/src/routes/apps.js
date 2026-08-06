@@ -1,3 +1,5 @@
+import { asegurarCatalogoEstandar } from '../lib/detalleTiposEstandar.js'
+
 export default async function appsRoutes(fastify) {
   const preHandler = [fastify.authenticate, fastify.can('apps', 'view')]
 
@@ -34,6 +36,7 @@ export default async function appsRoutes(fastify) {
       const app = await fastify.db.app.create({
         data: { nombre, slug, activo: activo ?? true }
       })
+      await asegurarCatalogoEstandar(fastify.db, app.id)
       return reply.code(201).send(app)
     } catch (err) {
       if (err.code === 'P2002') return reply.code(409).send({ error: 'El slug ya existe' })
