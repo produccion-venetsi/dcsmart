@@ -1243,23 +1243,28 @@ select.campo-ia {
   100% { left: 120%; }
 }
 
-/* Botón "Carga con IA" del formulario de pagos (components/CargaIA.jsx). */
+/* Botón "Carga con IA" del formulario de pagos (components/CargaIA.jsx).
+   Mismo tamaño/forma que .adjunto-dropzone (Foto/PDF) para que las tres
+   queden a la par en el grid -- este es el que va resaltado (degradado
+   dorado + brillo), los otros dos son neutros. */
 .btn-ia {
   position: relative;
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 8px;
   width: 100%;
-  padding: 12px 18px;
-  border-radius: 12px;
+  padding: 28px 16px;
+  border-radius: 14px;
   border: 1px solid var(--ia-borde);
   background: var(--ia-grad);
   color: var(--gold-bright);
   font-family: 'Montserrat', system-ui, sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.01em;
+  text-align: center;
   cursor: pointer;
   overflow: hidden;
   animation: ia-glow 2.8s ease-in-out infinite;
@@ -1288,14 +1293,7 @@ select.campo-ia {
 }
 .btn-ia:disabled::after { animation: none; display: none; }
 
-.carga-ia { grid-column: 1 / -1; }
-.carga-ia-sub {
-  margin-top: 7px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--t3);
-}
-.carga-ia-sub strong { color: var(--gold-bright); font-weight: 700; }
+.carga-ia { position: relative; }
 
 .carga-ia-menu {
   position: absolute;
