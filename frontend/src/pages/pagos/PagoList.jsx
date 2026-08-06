@@ -19,14 +19,8 @@ import { downloadExcel, excelBlob } from '../../lib/excel.js'
 import { sheetsDisponible, subirComoSheet, pedirAccessToken, precargarGoogle } from '../../lib/googleSheets.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCredito } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
+import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
 
-const TIPO_BADGE = {
-  A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
-  'DC (1)': 'badge-purple', 'DC (2)': 'badge-purple',
-  DC_1: 'badge-purple', DC_2: 'badge-purple',
-  DDJJ: 'badge-red', FF: 'badge-purple', LF: 'badge-blue', M: 'badge-muted', NCA: 'badge-amber',
-  NCB: 'badge-amber', NDA: 'badge-amber', ND: 'badge-amber', STK: 'badge-blue', X: 'badge-muted',
-}
 const ESTADO_BADGE = {
   CAJA: 'badge-muted', CUENTA_CTE: 'badge-amber', MP_PDP: 'badge-blue', PDP: 'badge-green',
 }
@@ -148,6 +142,14 @@ function IcoThumbUp() {
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M7 11v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3z"/>
       <path d="M7 11l4-8a2 2 0 0 1 2 2v5h5.5a2 2 0 0 1 1.94 2.5l-1.5 6A2 2 0 0 1 16.97 21H7"/>
+    </svg>
+  )
+}
+function IcoSparkles() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
+      <path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
     </svg>
   )
 }
@@ -534,6 +536,9 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
         )}
         {pago.id_tipo && (
           <span className={`badge ${TIPO_BADGE[pago.id_tipo] ?? 'badge-muted'}`}>{pago.id_tipo}</span>
+        )}
+        {pago.cargado_con_ia && (
+          <span className="badge badge-gold" style={{ gap: 4 }}><IcoSparkles /> Carga con IA</span>
         )}
       </div>
 
@@ -1737,7 +1742,14 @@ export default function PagoList() {
                       {p.audit ? <IcoThumbUp /> : <IcoEye />}
                     </span>
                   </td>
-                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>{p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}</td>
+                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>
+                    {p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}
+                    {p.cargado_con_ia && (
+                      <span style={{ color: 'var(--gold-bright)', marginLeft: 5 }} title="Cargado con IA">
+                        <IcoSparkles />
+                      </span>
+                    )}
+                  </td>
                   <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
                   <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
                   <td style={{ minWidth: 160, fontSize: 12 }}>

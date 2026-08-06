@@ -791,6 +791,9 @@ export default function PagoForm() {
         periodo:    form.periodo    || null,
         cashflow:   form.cashflow   || null,
         id_local:   activeLocal?.id || form.id_local || null,
+        // Se marca en el momento de crear -- no se ofrece "Carga con IA" al
+        // editar (ver el comentario en Adjuntos), así que solo importa acá.
+        ...(!isEditing ? { cargado_con_ia: Boolean(lectura) } : {}),
       }
       if (isEditing) {
         await pagosApi.update(id, payload)

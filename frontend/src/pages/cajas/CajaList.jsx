@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
@@ -38,6 +38,24 @@ function IcoPlus() {
   return (
     <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  )
+}
+// Mismos accesos rápidos que la pantalla de Pagos (PagoList.jsx): crean un
+// pago en modo rápido sin pasar por Pagos. Mismos íconos, para que se
+// reconozcan como el mismo atajo en las dos pantallas.
+function IcoPlane() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+  )
+}
+function IcoBox() {
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+      <path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
     </svg>
   )
 }
@@ -1271,6 +1289,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
 const LIMIT = 100
 
 export default function CajaList() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { activeApp, activeLocal } = useAppStore()
   const locales     = activeApp?.locales ?? []
@@ -1601,6 +1620,12 @@ export default function CajaList() {
               <IcoCheckSquare /> {selectionMode ? 'Cancelar selección' : 'Seleccionar'}
             </button>
           )}
+          <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=B')} title="Carga Avión">
+            <IcoPlane /> Carga Avión
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigate('/pagos/nuevo?modo=rapido&tipo=STK')} title="MovStock">
+            <IcoBox /> MovStock
+          </button>
           {canExport && (
             <button className="btn btn-secondary" onClick={exportCsv} disabled={exporting} title="Exportar a Excel las cajas con los filtros actuales">
               {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
