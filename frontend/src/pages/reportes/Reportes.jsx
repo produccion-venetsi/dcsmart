@@ -3,6 +3,7 @@ import { useAppStore } from '../../store/appStore.js'
 import { authApi } from '../../api/auth.js'
 import { todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
+import MesPicker from '../../components/MesPicker.jsx'
 import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
@@ -161,8 +162,10 @@ export default function Reportes() {
 
   // El rango de meses del CMV vive aparte del de días: son unidades distintas y
   // mezclarlas era el bug. Cambiar de pestaña no se lleva puesto el otro filtro.
-  const initialMeses = getPresetMeses('mes')
-  const [presetMes,     setPresetMes]     = useState('mes')
+  // Default en 3 meses (no "este mes"): un solo mes rara vez alcanza para ver
+  // una tendencia de costos.
+  const initialMeses = getPresetMeses('3m')
+  const [presetMes,     setPresetMes]     = useState('3m')
   const [mesDesde,      setMesDesde]      = useState(initialMeses.mesDesde)
   const [mesHasta,      setMesHasta]      = useState(initialMeses.mesHasta)
   const [appliedMeses,  setAppliedMeses]  = useState(initialMeses)
@@ -302,19 +305,13 @@ export default function Reportes() {
                 <>
                   <div className="rep-filter-col">
                     <div className="rep-filter-label">Mes de inicio</div>
-                    <div className="rep-date-input">
-                      <IcoCalendar />
-                      <input type="month" value={mesDesde} max={mesHasta}
-                        onChange={(e) => { setMesDesde(e.target.value); setPresetMes('') }} />
-                    </div>
+                    <MesPicker value={mesDesde} max={mesHasta}
+                      onChange={(v) => { setMesDesde(v); setPresetMes('') }} />
                   </div>
                   <div className="rep-filter-col">
                     <div className="rep-filter-label">Mes de fin</div>
-                    <div className="rep-date-input">
-                      <IcoCalendar />
-                      <input type="month" value={mesHasta} min={mesDesde}
-                        onChange={(e) => { setMesHasta(e.target.value); setPresetMes('') }} />
-                    </div>
+                    <MesPicker value={mesHasta} min={mesDesde}
+                      onChange={(v) => { setMesHasta(v); setPresetMes('') }} />
                   </div>
                 </>
               ) : (
