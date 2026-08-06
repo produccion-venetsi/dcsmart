@@ -436,12 +436,15 @@ function PdpColumn({
                         />
                       )}
                       <span className="pdp-row-ord">{p.nro_ord != null ? `OP-${p.nro_ord}` : '—'}</span>
-                      <span className="pdp-row-date">{fmtDate(p.fecha)}</span>
+                      {/* Tipo de comprobante (A, B, STK, etc.): antes solo se veía
+                          al abrir el detalle del pago. */}
+                      <span className="pdp-row-tipo" title="Tipo de comprobante">{p.id_tipo || '—'}</span>
+                      <span className="pdp-row-date" title="Fecha de factura">{fmtDate(p.fecha)} (FF)</span>
                       {/* Fecha de cashflow: cuándo se estima que sale la plata.
                           Es el dato con el que se arma el plan de pago, así que
                           va en la fila y no escondido en el detalle. */}
                       <span className="pdp-row-cf" title="Fecha de cashflow">
-                        {p.cashflow ? fmtDate(p.cashflow) : '—'}
+                        {p.cashflow ? fmtDate(p.cashflow) : '—'} (FC)
                       </span>
                       {/* Una nota de crédito descuenta: se muestra en negativo y
                           en verde para que no se lea como una deuda más. */}
