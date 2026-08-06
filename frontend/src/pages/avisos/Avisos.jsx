@@ -95,7 +95,10 @@ export default function Avisos() {
                 onClick={() => abrir(a)}
               >
                 <span className="aviso-punto" aria-hidden={a.leida ? 'true' : undefined} />
-                <span className="aviso-titulo">{a.titulo}</span>
+                <span className="aviso-texto">
+                  <span className="aviso-titulo">{a.titulo}</span>
+                  {a.cuerpo && <span className="aviso-cuerpo">{a.cuerpo}</span>}
+                </span>
                 <span className="aviso-fecha">{fechaCorta(a.created_at)}</span>
               </button>
             ))}

@@ -10,7 +10,7 @@ import { destinatarioDeAviso } from './notificacionDesauditado.js'
 // IMPORTANTE: llamar DESPUES de que la transaccion del desauditar hizo commit.
 // Este helper lee el historial de `audits` y necesita ver el evento nuevo para
 // decidir bien, sobre todo en la cascada de audit-dc.
-export async function avisarDesauditado(fastify, { tabla, id_registro, id_local, quienDesaudita, etiqueta }) {
+export async function avisarDesauditado(fastify, { tabla, id_registro, id_local, quienDesaudita, etiqueta, observaciones }) {
   try {
     // Solo el circuito normal (audit_dc: false): el circuito DC es interno de
     // DCSmart y no genera avisos hacia el auditor del local.
@@ -27,7 +27,7 @@ export async function avisarDesauditado(fastify, { tabla, id_registro, id_local,
         id_user,
         tipo: 'desauditado',
         titulo: `Se revirtió una auditoría: ${etiqueta}`,
-        cuerpo: null,
+        cuerpo: observaciones || null,
         tabla,
         id_registro,
         id_local
