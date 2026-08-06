@@ -9,6 +9,7 @@ import FotoViewer from '../../components/FotoViewer.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
 import { pdpApi } from '../../api/pdp.js'
 import { fmtDateUTC, fmtMonthUTC, fmtDateArg, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
+import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -436,12 +437,20 @@ function PdpColumn({
                         />
                       )}
                       <span className="pdp-row-ord">{p.nro_ord != null ? `OP-${p.nro_ord}` : '—'}</span>
-                      <span className="pdp-row-date">{fmtDate(p.fecha)}</span>
+                      {/* Tipo de comprobante (A, B, STK, etc.): antes solo se veía
+                          al abrir el detalle del pago. Mismo badge de color que
+                          la tabla de Pagos y su detalle (TIPO_BADGE). */}
+                      {p.id_tipo && (
+                        <span className={`badge pdp-row-tipo ${TIPO_BADGE[p.id_tipo] ?? 'badge-muted'}`}>
+                          {p.id_tipo}
+                        </span>
+                      )}
+                      <span className="pdp-row-date" title="Fecha de factura">{fmtDate(p.fecha)} (FF)</span>
                       {/* Fecha de cashflow: cuándo se estima que sale la plata.
                           Es el dato con el que se arma el plan de pago, así que
                           va en la fila y no escondido en el detalle. */}
                       <span className="pdp-row-cf" title="Fecha de cashflow">
-                        {p.cashflow ? fmtDate(p.cashflow) : '—'}
+                        {p.cashflow ? fmtDate(p.cashflow) : '—'} (FC)
                       </span>
                       {/* Una nota de crédito descuenta: se muestra en negativo y
                           en verde para que no se lea como una deuda más. */}

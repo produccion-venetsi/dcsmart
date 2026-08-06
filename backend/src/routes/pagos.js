@@ -520,7 +520,7 @@ export default async function pagosRoutes(fastify) {
       nro_ord, fecha, id_proveedor, id_rubcat, id_tipo, pv, nro,
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
-      periodo, ingresa_egreso, periodico, id_local, impuestos
+      periodo, ingresa_egreso, periodico, id_local, impuestos, cargado_con_ia
     } = request.body
 
     if (!fecha) return reply.code(400).send({ error: 'La fecha de la factura es obligatoria' })
@@ -572,6 +572,7 @@ export default async function pagosRoutes(fastify) {
           periodo:        periodo        ? new Date(periodo)        : null,
           ingresa_egreso: ingresa_egreso ?? true,
           periodico:      periodico      ?? false,
+          cargado_con_ia: cargado_con_ia ?? false,
           id_local,
           created_by:     request.user.id,
           ...(impuestos && impuestos.length > 0 ? {
@@ -731,7 +732,8 @@ export default async function pagosRoutes(fastify) {
         id_registro: request.params.id,
         id_local: pago.id_local,
         quienDesaudita: request.user.id,
-        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago'
+        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago',
+        observaciones
       })
     }
 
@@ -828,7 +830,8 @@ export default async function pagosRoutes(fastify) {
         id_registro: request.params.id,
         id_local: pago.id_local,
         quienDesaudita: request.user.id,
-        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago'
+        etiqueta: pago.nro_ord != null ? `OP-${pago.nro_ord}` : 'un pago',
+        observaciones
       })
     }
 

@@ -12,7 +12,7 @@ import { useRef, useState } from 'react'
 
 function IcoSparkles() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z" />
       <path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
     </svg>
@@ -79,16 +79,12 @@ export default function CargaIA({ onArchivo, leyendo, disabled }) {
         onDragOver={(e) => { if (!bloqueado) { e.preventDefault(); setDragOver(true) } }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { if (bloqueado) return; e.preventDefault(); setDragOver(false); elegir(e.dataTransfer.files) }}
+        title="Solo para facturas: subí la foto o el PDF y se completan los campos solos. El archivo queda adjunto al pago."
       >
         {leyendo
-          ? <><span className="spinner" style={{ width: 15, height: 15, borderWidth: 2 }} /> Leyendo la factura...</>
-          : <><IcoSparkles /> Carga con IA</>}
+          ? <><span className="spinner" style={{ width: 22, height: 22, borderWidth: 2 }} /><span>Leyendo la factura...</span></>
+          : <><IcoSparkles /><span>Carga con IA</span></>}
       </button>
-
-      <div className="carga-ia-sub">
-        Solo para <strong>facturas</strong>: subí la foto o el PDF y se completan los campos solos.
-        El archivo queda adjunto al pago.
-      </div>
 
       {menuOpen && !bloqueado && (
         <>

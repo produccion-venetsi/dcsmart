@@ -3,6 +3,7 @@ import { useAppStore } from '../../store/appStore.js'
 import { authApi } from '../../api/auth.js'
 import { todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
+import MesPicker from '../../components/MesPicker.jsx'
 import ReportePagos from './ReportePagos.jsx'
 import ReporteCajas from './ReporteCajas.jsx'
 import ReporteCMV from './ReporteCMV.jsx'
@@ -56,33 +57,14 @@ const PRESETS = [
   { key: '12m', label: 'Últimos 12 meses' },
 ]
 
-// ── CMV: el filtro es de MESES, no de días ──────────────────────────────────
-// El CMV se lee por período contable (`pago.periodo`, mensual). Un rango de días
-// libre daba números distintos a los del mismo mes pedido como período, así que
-// acá la unidad es el mes y no hay forma de pedir medio mes. Ver
-// backend/src/lib/rangoCmv.js.
+// ── CMV: además de las fechas de siempre, un campo de MES de período ────────
+// El CMV se lee por período contable (`pago.periodo`, mensual): una factura de
+// junio cargada en julio pertenece a junio. El campo de fecha (Inicio/Fin) y el
+// de Mes de período son excluyentes -- el que se toca último es el que manda,
+// no se combinan. Ver backend/src/lib/rangoCmv.js.
 function mesActual() {
   return todayInputDate().slice(0, 7)
 }
-function addMonthsMes(mes, months) {
-  const [y, m] = mes.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1 + months, 1)).toISOString().slice(0, 7)
-}
-
-function getPresetMeses(preset) {
-  const actual = mesActual()
-  if (preset === 'anterior') { const m = addMonthsMes(actual, -1); return { mesDesde: m, mesHasta: m } }
-  if (preset === '3m')  return { mesDesde: addMonthsMes(actual, -2),  mesHasta: actual }
-  if (preset === '12m') return { mesDesde: addMonthsMes(actual, -11), mesHasta: actual }
-  return { mesDesde: actual, mesHasta: actual }
-}
-
-const PRESETS_MES = [
-  { key: 'mes',      label: 'Este mes' },
-  { key: 'anterior', label: 'Mes anterior' },
-  { key: '3m',       label: 'Últimos 3 meses' },
-  { key: '12m',      label: 'Últimos 12 meses' },
-]
 
 // Balance solo para super_admin: expone CUIT y razón social de los proveedores.
 // El backend lo exige igual (requireSuperAdmin en GET /reportes/balance), esto
@@ -159,13 +141,13 @@ export default function Reportes() {
   const [hasta,   setHasta]   = useState(initial.hasta)
   const [applied, setApplied] = useState({ desde: initial.desde, hasta: initial.hasta })
 
-  // El rango de meses del CMV vive aparte del de días: son unidades distintas y
-  // mezclarlas era el bug. Cambiar de pestaña no se lleva puesto el otro filtro.
-  const initialMeses = getPresetMeses('mes')
-  const [presetMes,     setPresetMes]     = useState('mes')
-  const [mesDesde,      setMesDesde]      = useState(initialMeses.mesDesde)
-  const [mesHasta,      setMesHasta]      = useState(initialMeses.mesHasta)
-  const [appliedMeses,  setAppliedMeses]  = useState(initialMeses)
+  // CMV: campo de mes de período, aparte de las fechas de siempre. `cmvModo`
+  // (borrador) recuerda cuál de los dos se tocó último; `appliedModo` es el que
+  // efectivamente se usó al generar. No se combinan los dos a la vez.
+  const [mes,         setMes]         = useState(mesActual())
+  const [cmvModo,     setCmvModo]     = useState('fechas')
+  const [appliedMes,  setAppliedMes]  = useState(mesActual())
+  const [appliedModo, setAppliedModo] = useState('fechas')
 
   const esCmv = tab === 'cmv'
 
@@ -175,30 +157,24 @@ export default function Reportes() {
     setDesde(r.desde)
     setHasta(r.hasta)
     setApplied({ desde: r.desde, hasta: r.hasta })
-  }, [])
-
-  const handlePresetMes = useCallback((key) => {
-    const r = getPresetMeses(key)
-    setPresetMes(key)
-    setMesDesde(r.mesDesde)
-    setMesHasta(r.mesHasta)
-    setAppliedMeses(r)
+    setCmvModo('fechas')
   }, [])
 
   const handleGenerate = useCallback(() => {
     if (esCmv) {
-      // Un rango invertido daría 400: se ordena solo antes de pedirlo, que es lo
-      // que quiso decir quien lo cargó.
-      const [a, b] = mesDesde <= mesHasta ? [mesDesde, mesHasta] : [mesHasta, mesDesde]
-      setPresetMes('')
-      setMesDesde(a)
-      setMesHasta(b)
-      setAppliedMeses({ mesDesde: a, mesHasta: b })
+      if (cmvModo === 'mes') {
+        setAppliedModo('mes')
+        setAppliedMes(mes)
+      } else {
+        setAppliedModo('fechas')
+        setPreset('')
+        setApplied({ desde, hasta })
+      }
       return
     }
     setPreset('')
     setApplied({ desde, hasta })
-  }, [esCmv, mesDesde, mesHasta, desde, hasta])
+  }, [esCmv, cmvModo, mes, desde, hasta])
 
   return (
     <div className="page">
@@ -296,62 +272,39 @@ export default function Reportes() {
                   />
                 </div>
               )}
-              {/* El CMV se pide por mes: no hay medio mes que mostrar, porque el
-                  costo se lee del período contable de la factura. */}
-              {esCmv ? (
-                <>
-                  <div className="rep-filter-col">
-                    <div className="rep-filter-label">Mes de inicio</div>
-                    <div className="rep-date-input">
-                      <IcoCalendar />
-                      <input type="month" value={mesDesde} max={mesHasta}
-                        onChange={(e) => { setMesDesde(e.target.value); setPresetMes('') }} />
-                    </div>
-                  </div>
-                  <div className="rep-filter-col">
-                    <div className="rep-filter-label">Mes de fin</div>
-                    <div className="rep-date-input">
-                      <IcoCalendar />
-                      <input type="month" value={mesHasta} min={mesDesde}
-                        onChange={(e) => { setMesHasta(e.target.value); setPresetMes('') }} />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="rep-filter-col">
-                    <div className="rep-filter-label">Inicio</div>
-                    <div className="rep-date-input">
-                      <IcoCalendar />
-                      <input type="date" value={desde} max={hasta}
-                        onChange={(e) => { setDesde(e.target.value); setPreset('') }} />
-                    </div>
-                  </div>
-                  <div className="rep-filter-col">
-                    <div className="rep-filter-label">Fin</div>
-                    <div className="rep-date-input">
-                      <IcoCalendar />
-                      <input type="date" value={hasta} min={desde}
-                        onChange={(e) => { setHasta(e.target.value); setPreset('') }} />
-                    </div>
-                  </div>
-                </>
+              <div className="rep-filter-col">
+                <div className="rep-filter-label">Inicio</div>
+                <div className="rep-date-input">
+                  <IcoCalendar />
+                  <input type="date" value={desde} max={hasta}
+                    onChange={(e) => { setDesde(e.target.value); setPreset(''); setCmvModo('fechas') }} />
+                </div>
+              </div>
+              <div className="rep-filter-col">
+                <div className="rep-filter-label">Fin</div>
+                <div className="rep-date-input">
+                  <IcoCalendar />
+                  <input type="date" value={hasta} min={desde}
+                    onChange={(e) => { setHasta(e.target.value); setPreset(''); setCmvModo('fechas') }} />
+                </div>
+              </div>
+              {/* Solo CMV tiene además este campo: el costo se lee del período
+                  contable de la factura, no de una fecha real. */}
+              {esCmv && (
+                <div className="rep-filter-col">
+                  <div className="rep-filter-label">Mes de período</div>
+                  <MesPicker value={mes}
+                    onChange={(v) => { setMes(v); setCmvModo('mes') }} />
+                </div>
               )}
             </div>
             <div className="rep-presets">
-              {esCmv
-                ? PRESETS_MES.map((p) => (
-                    <button key={p.key}
-                      className={'rep-preset-btn' + (presetMes === p.key ? ' active' : '')}
-                      onClick={() => handlePresetMes(p.key)}
-                    >{p.label}</button>
-                  ))
-                : PRESETS.map((p) => (
-                    <button key={p.key}
-                      className={'rep-preset-btn' + (preset === p.key ? ' active' : '')}
-                      onClick={() => handlePreset(p.key)}
-                    >{p.label}</button>
-                  ))}
+              {PRESETS.map((p) => (
+                <button key={p.key}
+                  className={'rep-preset-btn' + (preset === p.key ? ' active' : '')}
+                  onClick={() => handlePreset(p.key)}
+                >{p.label}</button>
+              ))}
             </div>
           </div>
           <div className="rep-filters-side">
@@ -370,7 +323,7 @@ export default function Reportes() {
           <ReporteCajas applied={applied} activeLocal={activeLocal} tipoTurno={tipoTurno} />
         )}
         {tab === 'cmv' && (
-          <ReporteCMV meses={appliedMeses} activeLocal={activeLocal} />
+          <ReporteCMV modo={appliedModo} mes={appliedMes} desde={applied.desde} hasta={applied.hasta} activeLocal={activeLocal} />
         )}
         {tab === 'balance' && isSuperAdmin && (
           <ReporteBalance applied={applied} activeLocal={activeLocal} />

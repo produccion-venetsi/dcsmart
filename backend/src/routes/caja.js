@@ -415,7 +415,8 @@ export default async function cajaRoutes(fastify) {
         id_registro: request.params.id,
         id_local: caja.id_local,
         quienDesaudita: request.user.id,
-        etiqueta: caja.nro_turno ? `Turno ${caja.nro_turno}` : 'una caja'
+        etiqueta: caja.nro_turno ? `Turno ${caja.nro_turno}` : 'una caja',
+        observaciones
       })
     }
 
@@ -509,7 +510,8 @@ export default async function cajaRoutes(fastify) {
         id_registro: request.params.id,
         id_local: caja.id_local,
         quienDesaudita: request.user.id,
-        etiqueta: caja.nro_turno ? `Turno ${caja.nro_turno}` : 'una caja'
+        etiqueta: caja.nro_turno ? `Turno ${caja.nro_turno}` : 'una caja',
+        observaciones
       })
     }
 
