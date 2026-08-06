@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   ROLES, ROLES_TODOS, esRolDc, puedeOperar, puedeEditar,
   puedeBorrarPagos, puedeBorrarCajas, puedeCrearCajas,
-  esAlcanceGlobal, sinLocalesVeTodos, puedeExportar
+  esAlcanceGlobal, sinLocalesVeTodos, puedeExportar,
+  puedeBorrarMovimientos, homeDeRol, HOME_POR_DEFECTO, ROLES_RESTRINGIDOS
 } from './roles.js'
 
 test('externo edita como admin', () => {
@@ -90,4 +91,59 @@ test('un rol desconocido no puede nada', () => {
 
 test('ROLES_TODOS tiene los cinco roles', () => {
   assert.deepEqual([...ROLES_TODOS].sort(), ['admin', 'cajero', 'dcsmart', 'externo', 'super_admin'])
+})
+
+// ── Perfil Data Entry ───────────────────────────────────────────────────────
+
+test('data_entry existe como rol', () => {
+  assert.equal(ROLES.DATA_ENTRY, 'data_entry')
+})
+
+test('data_entry puede crear cajas: es su tarea', () => {
+  assert.equal(puedeCrearCajas(ROLES.DATA_ENTRY), true)
+})
+
+test('data_entry no opera, no edita, no exporta, no borra y no es de DC', () => {
+  for (const fn of [puedeOperar, puedeEditar, puedeExportar, esRolDc,
+                    puedeBorrarPagos, puedeBorrarCajas, puedeBorrarMovimientos]) {
+    assert.equal(fn(ROLES.DATA_ENTRY), false, fn.name)
+  }
+})
+
+test('data_entry no entra en ROLES_TODOS: esa lista significa "opera la app"', () => {
+  assert.equal(ROLES_TODOS.includes(ROLES.DATA_ENTRY), false)
+})
+
+// ── Home por rol ────────────────────────────────────────────────────────────
+// Reemplaza el <Navigate to="/reportes"> que estaba hardcodeado en
+// ProtectedRoute y que con un segundo rol restringido dejaba de servir.
+
+test('cada rol restringido tiene su propio home', () => {
+  assert.equal(homeDeRol('reportes'), '/reportes')
+  assert.equal(homeDeRol(ROLES.DATA_ENTRY), '/cargar')
+})
+
+test('los roles que operan van al dashboard', () => {
+  for (const rol of [ROLES.SUPER, ROLES.DCSMART, ROLES.ADMIN, ROLES.EXTERNO, ROLES.CAJERO]) {
+    assert.equal(homeDeRol(rol), HOME_POR_DEFECTO, rol)
+  }
+})
+
+test('un rol desconocido o sin rol tambien cae en el default', () => {
+  assert.equal(homeDeRol(undefined), HOME_POR_DEFECTO)
+  assert.equal(homeDeRol(null), HOME_POR_DEFECTO)
+  assert.equal(homeDeRol('rol_que_no_existe'), HOME_POR_DEFECTO)
+})
+
+test('ROLES_RESTRINGIDOS lista exactamente los roles con home propio', () => {
+  assert.deepEqual([...ROLES_RESTRINGIDOS].sort(), ['data_entry', 'reportes'])
+})
+
+test('ningun rol restringido va al dashboard, y ninguno que opera tiene home propio', () => {
+  for (const rol of ROLES_RESTRINGIDOS) {
+    assert.notEqual(homeDeRol(rol), HOME_POR_DEFECTO, rol)
+  }
+  for (const rol of ROLES_TODOS) {
+    assert.equal(ROLES_RESTRINGIDOS.includes(rol), false, rol)
+  }
 })

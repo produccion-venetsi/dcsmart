@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
-import { ROLES_TODOS, ROLES_OPERATIVOS } from '../lib/roles.js'
+import { ROLES_TODOS, ROLES_OPERATIVOS, ROLES } from '../lib/roles.js'
 import { authApi } from '../api/auth.js'
+import { avisosApi } from '../api/notificaciones.js'
 import AppLogo from './AppLogo.jsx'
 
 // URL de dcsmart-costos (plataforma de costos, backend/base separados).
@@ -184,6 +185,14 @@ function IcoTag() {
     </svg>
   )
 }
+function IcoCampana() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+    </svg>
+  )
+}
 function IcoLogout() {
   return (
     <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -241,6 +250,33 @@ export default function Sidebar() {
   const activeLocal    = useAppStore((s) => s.activeLocal)
   const setActiveLocal = useAppStore((s) => s.setActiveLocal)
   const [avatarFailed, setAvatarFailed] = useState(false)
+  const [avisosSinLeer, setAvisosSinLeer] = useState(0)
+
+  // Contador de avisos sin leer. Polling cada 60s, no websockets: para un aviso de
+  // auditoria un minuto de demora no cambia nada, y no justifica una conexion
+  // abierta. Con la pestana oculta no se pide nada, para no pegarle a la API de
+  // fondo en las pestanas que quedan abiertas todo el dia.
+  //
+  // Y se pide tambien al volver a ser visible: si no, una pestana que arranca en
+  // segundo plano se saltea el primer pedido y muestra el contador en cero hasta
+  // que pase un minuto entero despues de que la miren.
+  useEffect(() => {
+    let cancelado = false
+    const traer = () => {
+      if (document.hidden) return
+      avisosApi.list({ limit: 1 })
+        .then((r) => { if (!cancelado) setAvisosSinLeer(r.data?.no_leidas ?? 0) })
+        .catch(() => { /* sin contador no se rompe nada */ })
+    }
+    traer()
+    const id = setInterval(traer, 60000)
+    document.addEventListener('visibilitychange', traer)
+    return () => {
+      cancelado = true
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', traer)
+    }
+  }, [])
 
   const handleLogout = async () => {
     await logout()
@@ -279,15 +315,23 @@ export default function Sidebar() {
 
   const role       = activeApp?.role
   const isGlobal   = role === 'super_admin' || role === 'dcsmart'
-  const isReportesOnly = role === 'reportes'
 
   const visibleFor = (item) => {
     if (item.key === 'reportes') return !!activeApp?.can_reportes
     return !item.roles || item.roles.includes(role)
   }
-  const mainItems = isReportesOnly
-    ? NAV_MAIN.filter(i => i.key === 'reportes')
-    : NAV_MAIN.filter(visibleFor)
+
+  // Los roles restringidos a una sola tarea ven SOLO su propia navegacion, no el
+  // menu operativo filtrado: `reportes` no opera y `data_entry` solo carga.
+  const NAV_RESTRINGIDA = {
+    reportes: NAV_MAIN.filter(i => i.key === 'reportes'),
+    [ROLES.DATA_ENTRY]: [
+      { to: '/cargar',      label: 'Cargar',      Icon: IcoDashboard },
+      { to: '/pagos/nuevo', label: 'Cargar pago', Icon: IcoPagos },
+      { to: '/cajas/nueva', label: 'Cargar caja', Icon: IcoCaja },
+    ],
+  }
+  const mainItems = NAV_RESTRINGIDA[role] ?? NAV_MAIN.filter(visibleFor)
 
   // Admin: independiente de la app activa -- evalúa TODAS las asignaciones
   // de rol del usuario, no la app elegida (para cuando no hay app activa).
@@ -350,6 +394,21 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
+        {/* Avisos va primero y fuera del filtro por rol: cualquiera puede recibir
+            uno, incluidos `reportes` y `data_entry`. */}
+        <NavLink
+          to="/avisos"
+          className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+          onClick={closeMobileNav}
+          title={collapsed ? 'Avisos' : undefined}
+        >
+          <IcoCampana />
+          <span className="nav-item-label">Avisos</span>
+          {avisosSinLeer > 0 && (
+            <span className="nav-item-badge" title={`${avisosSinLeer} sin leer`}>{avisosSinLeer}</span>
+          )}
+        </NavLink>
+
         {mainItems.map(({ key, to, label, Icon, external }) => external ? (
           <button
             key={key}

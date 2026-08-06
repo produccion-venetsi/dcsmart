@@ -109,46 +109,47 @@ function CostChart({ title, items, barColor }) {
   )
 }
 
-export default function ReporteCMV({ applied, activeLocal }) {
+// "2026-07" -> "julio 2026", para que la leyenda diga qué se está mirando sin
+// obligar a leer un YYYY-MM.
+const MESES_NOMBRE = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+function nombreMes(mes) {
+  if (!/^\d{4}-\d{2}$/.test(String(mes ?? ''))) return ''
+  const [anio, m] = mes.split('-').map(Number)
+  return `${MESES_NOMBRE[m - 1]} ${anio}`
+}
+
+export default function ReporteCMV({ meses, activeLocal }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  // Dos formas de leer el CMV, y la diferencia no es cosmética:
-  //
-  // - Por PERÍODO: el costo se toma por período contable (`pago.periodo`), que
-  //   es cómo se carga (una factura de junio que entró en julio pertenece a
-  //   junio). Dentro de este modo hay dos maneras de acotarlo: un mes completo,
-  //   o un rango de días específico (una quincena, una semana) -- el rango pisa
-  //   al mes si se completa, y si se deja vacío manda el mes. Sirven las dos:
-  //   hay quien pide el mes cerrado y quien pide una semana puntual.
-  // - Por RANGO de días (fecha real): el costo se toma por `pago.fecha`, la
-  //   misma unidad que las ventas, así los días pedidos son exactamente los que
-  //   se muestran.
-  //
-  // Antes el rango de días se comparaba contra `periodo`, que es mensual: pedir
-  // "últimos 30 días" dejaba afuera meses enteros y el CMV salía absurdamente
-  // bajo contra las ventas del mismo rango. Ver backend lib/rangoCmv.js.
-  const [porMes, setPorMes] = useState(false)
-  const [mes, setMes] = useState(() => String(applied.hasta ?? '').slice(0, 7))
-  const [periodoDesde, setPeriodoDesde] = useState('')
-  const [periodoHasta, setPeriodoHasta] = useState('')
-  const rangoPeriodoCompleto = Boolean(periodoDesde && periodoHasta)
+  // El CMV se lee SIEMPRE por período contable (`pago.periodo`): una factura de
+  // junio cargada en julio pertenece a junio. Antes había un segundo modo que
+  // filtraba `pago.fecha` cuando se pedía por rango de días, y el mismo julio
+  // daba dos totales distintos según por dónde se pidiera (en 878COOP:
+  // 10.989.797,80 por fecha contra 11.758.312,04 por período). Por eso este
+  // reporte tiene su propio filtro de MESES y no el rango de días de las otras
+  // pestañas. Ver backend/src/lib/rangoCmv.js.
 
   useEffect(() => {
     setData(null)
     setLoading(true)
     const ctrl = new AbortController()
     const local = activeLocal ? { id_local: activeLocal.id } : {}
-    const params = !porMes
-      ? { desde: applied.desde, hasta: applied.hasta, ...local }
-      : rangoPeriodoCompleto
-        ? { periodoDesde, periodoHasta, ...local }
-        : { mes, ...local }
-    reportesApi.cmv(params, ctrl.signal)
+    reportesApi.cmv({ mes_desde: meses.mesDesde, mes_hasta: meses.mesHasta, ...local }, ctrl.signal)
       .then((res) => setData(res.data))
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [porMes, mes, periodoDesde, periodoHasta, rangoPeriodoCompleto, applied.desde, applied.hasta, activeLocal?.id])
+  }, [meses.mesDesde, meses.mesHasta, activeLocal?.id])
+
+  // Qué meses contestó el backend, no los que se pidieron: si algún día vuelve a
+  // entrar un rango de días, se redondea a meses y la pantalla tiene que decirlo.
+  const periodoLeido = (() => {
+    const d = nombreMes(data?.mes_desde)
+    const h = nombreMes(data?.mes_hasta)
+    if (!d) return ''
+    return d === h ? d : `${d} a ${h}`
+  })()
 
   const kpis        = data?.kpis ?? []
   const alimentos   = data?.alimentos ?? []
@@ -169,46 +170,13 @@ export default function ReporteCMV({ applied, activeLocal }) {
 
   return (
     <>
-      {/* ── Cómo se lee el costo: por período contable o por días reales ── */}
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--t2)', cursor: 'pointer' }}>
-          <input type="checkbox" checked={porMes} onChange={e => setPorMes(e.target.checked)} />
-          Ver por período contable
-        </label>
-        {porMes && (
-          <>
-            <input
-              type="month"
-              className="form-input"
-              style={{ width: 150, opacity: rangoPeriodoCompleto ? 0.5 : 1 }}
-              value={mes}
-              onChange={e => setMes(e.target.value)}
-              title={rangoPeriodoCompleto ? 'Se usa el rango de abajo mientras esté completo' : 'Mes completo'}
-            />
-            <span style={{ fontSize: 11, color: 'var(--t4)' }}>o rango específico:</span>
-            <input
-              type="date"
-              className="form-input"
-              style={{ width: 140 }}
-              value={periodoDesde}
-              onChange={e => setPeriodoDesde(e.target.value)}
-            />
-            <span style={{ fontSize: 11, color: 'var(--t4)' }}>–</span>
-            <input
-              type="date"
-              className="form-input"
-              style={{ width: 140 }}
-              value={periodoHasta}
-              onChange={e => setPeriodoHasta(e.target.value)}
-            />
-          </>
-        )}
+      {/* ── Qué se está mirando: el CMV es mensual y va por período contable ── */}
+      <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--t2)' }}>
+          {periodoLeido ? `Período contable: ${periodoLeido}` : 'Período contable'}
+        </span>
         <span style={{ fontSize: 11, color: 'var(--t4)' }}>
-          {porMes
-            ? (rangoPeriodoCompleto
-              ? 'Costo por período de la factura, acotado al rango; ventas de esos mismos días.'
-              : 'Costo por período de la factura; ventas del mismo mes.')
-            : 'Costo y ventas por fecha real, según el rango de arriba.'}
+          Costo por período de la factura (una factura de junio cargada en julio cuenta en junio); ventas de esos mismos meses.
         </span>
       </div>
 

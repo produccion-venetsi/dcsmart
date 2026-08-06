@@ -27,6 +27,7 @@ import auditoriasRoutes from './routes/auditorias.js'
 import arqueoRoutes from './routes/arqueo.js'
 import activityLogRoutes from './routes/activity_log.js'
 import filtroPresetsRoutes from './routes/filtro_presets.js'
+import notificacionesRoutes from './routes/notificaciones.js'
 
 // Serializar BigInt como string en JSON (para columnas como pagos.nro con IDs de MP)
 BigInt.prototype.toJSON = function () { return this.toString() }
@@ -100,6 +101,7 @@ await app.register(auditoriasRoutes, { prefix: '/api/auditorias' })
 await app.register(arqueoRoutes, { prefix: '/api/arqueo' })
 await app.register(activityLogRoutes, { prefix: '/api/activity-log' })
 await app.register(filtroPresetsRoutes, { prefix: '/api/filtro-presets' })
+await app.register(notificacionesRoutes, { prefix: '/api/notificaciones' })
 
 app.get('/health', async () => ({ status: 'ok' }))
 

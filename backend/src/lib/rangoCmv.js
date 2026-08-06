@@ -1,36 +1,42 @@
-// Rango del reporte de CMV: qué campo del pago se filtra y con qué fechas.
+// Rango del reporte de CMV: el CMV se lee SIEMPRE por período contable.
 //
-// El bug que esto arregla: el reporte sumaba las VENTAS por día real
-// (`caja.fecha_inicio`) y el CMV por PERÍODO (`pago.periodo`), usando el mismo
-// par de fechas para los dos. Pero `periodo` es mensual y se guarda como el día
-// 1 del mes, así que un rango como "últimos 30 días" (04/07 al 03/08) pedía
-// `periodo >= 2026-07-04` y dejaba afuera julio entero, que vive en 2026-07-01.
-// Medido en LOS GALGOS: mostraba 1.465.211,80 de CMV (5 pagos, solo agosto)
-// cuando julio solo ya suma 57.115.386,50 en 247 pagos. El porcentaje de CMV
-// sobre ventas comparaba un mes incompleto contra 30 días de ventas.
+// La historia de esto, en dos capas.
 //
-// Ahora hay tres modos y en ninguno se mezclan las unidades:
+// Primero el reporte sumaba las VENTAS por día real (`caja.fecha_inicio`) y el
+// CMV por PERÍODO (`pago.periodo`) usando el mismo par de fechas para los dos.
+// Como `periodo` es mensual y se guarda como el día 1 del mes, un rango como
+// "últimos 30 días" (04/07 al 03/08) pedía `periodo >= 2026-07-04` y dejaba
+// julio entero afuera. En LOS GALGOS mostraba 1.465.211,80 de CMV (5 pagos,
+// solo agosto) cuando julio solo ya suma 57.115.386,50 en 247 pagos.
 //
-// - `periodoDesde`/`periodoHasta`: el CMV va por `periodo`, igual criterio
-//   contable que el mes, pero acotado a un rango de días específico (una
-//   quincena, una semana) en vez de forzar el mes completo.
-// - `mes` (YYYY-MM): el CMV va por `periodo` acotado a ese mes completo, que es
-//   la lectura contable (una factura de junio cargada en julio pertenece a
-//   junio). Las ventas se toman de los días de ese mismo mes.
-// - `desde`/`hasta`: el CMV va por `fecha`, la misma unidad que las ventas, así
-//   un rango de días arbitrario da exactamente los días pedidos.
+// El arreglo de entonces fue partir en dos modos: por mes el CMV iba por
+// `periodo`, por rango de días iba por `fecha`. Eso sacó los ceros pero dejó una
+// trampa peor: el mismo "julio" daba dos números según por dónde lo pidieras. En
+// 878COOP, julio 2026 daba 10.989.797,80 (96 pagos) filtrando por fecha y
+// 11.758.312,04 (100 pagos) filtrando por período — el modo fecha sumaba un pago
+// de período mayo cargado en julio y perdía 5 pagos de período julio cargados en
+// junio. Ninguno de los dos números estaba "mal": medían cosas distintas.
 //
-// Prioridad si viene más de uno: periodoDesde/periodoHasta > mes > desde/hasta.
-// En la pantalla, el rango de período es un campo optativo al lado del mes: si
-// se completa, pisa al mes; si no, el mes sigue mandando (ver ReporteCMV.jsx).
+// Ahora hay una sola unidad y un solo criterio: el CMV es mensual y se filtra
+// por `periodo`, que es la lectura contable (una factura de junio cargada en
+// julio pertenece a junio). Las ventas se toman de los días de esos mismos meses
+// completos, así el numerador y el denominador del % hablan del mismo tiempo.
+//
+// La entrada acepta un mes, un rango de meses, o un rango de días. El rango de
+// días se REDONDEA a los meses que toca (no se puede comparar un día contra un
+// campo mensual sin perder meses enteros), y el resultado dice en `mesDesde`/
+// `mesHasta` qué se mostró realmente para que la pantalla no mienta.
 //
 // Sobre las zonas horarias, que ya mordieron antes en este proyecto:
-// `pago.periodo` y `pago.fecha` se guardan a medianoche UTC del día elegido (no
-// son instantes reales), así que se comparan en UTC puro. `caja.fecha_inicio` sí
-// es un instante real y va con el offset de Argentina.
+// `pago.periodo` se guarda a medianoche UTC del día elegido (no es un instante
+// real), así que se compara en UTC puro. `caja.fecha_inicio` sí es un instante
+// real y va con el offset de Argentina.
 
 const AR_OFFSET = '-03:00'
 
+// El querystring manda `mes_hasta=` vacío cuando el input está sin llenar: eso
+// es ausencia, no un valor inválido.
+const vino = (v) => v !== undefined && v !== null && v !== ''
 const esDia = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
 const esMes = (v) => typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v)
 
@@ -39,37 +45,50 @@ function ultimoDiaDelMes(anio, mes) {
   return new Date(Date.UTC(anio, mes, 0)).getUTCDate()
 }
 
-function rangoPorDia(desde, hasta, campoPago) {
-  return {
-    campoPago,
-    pagoDesde:   new Date(`${desde}T00:00:00.000Z`),
-    pagoHasta:   new Date(`${hasta}T23:59:59.999Z`),
-    ventasDesde: new Date(`${desde}T00:00:00.000${AR_OFFSET}`),
-    ventasHasta: new Date(`${hasta}T23:59:59.999${AR_OFFSET}`),
-  }
-}
-
-export function resolverRangoCmv(query) {
-  const { mes, desde, hasta, periodoDesde, periodoHasta } = query ?? {}
-
-  if (esDia(periodoDesde) && esDia(periodoHasta)) {
-    // Un rango al revés devolvería cero sin decir por qué: mejor un 400.
-    if (periodoDesde > periodoHasta) return null
-    return rangoPorDia(periodoDesde, periodoHasta, 'periodo')
+// Los dos extremos del rango, ya normalizados a meses (YYYY-MM). Devuelve null
+// si no hay con qué armarlo o si el rango está invertido.
+function resolverMeses({ mes, mes_desde, mes_hasta, desde, hasta }) {
+  // Ausente y mal escrito no son lo mismo. Un extremo que no vino se tolera (el
+  // otro vale como mes único: dejar la pantalla vacía por un input a medio
+  // llenar es peor que asumir lo obvio), pero un extremo presente y malformado
+  // es un error del que pide y se responde como tal.
+  const md = vino(mes_desde) ? (esMes(mes_desde) ? mes_desde : false) : null
+  const mh = vino(mes_hasta) ? (esMes(mes_hasta) ? mes_hasta : false) : null
+  if (md === false || mh === false) return null
+  if (md || mh) {
+    const a = md || mh
+    const b = mh || md
+    return a <= b ? [a, b] : null
   }
 
-  if (esMes(mes)) {
-    const [anio, m] = mes.split('-').map(Number)
-    const ultimo = ultimoDiaDelMes(anio, m)
-    const primerDia = `${mes}-01`
-    const ultimoDia = `${mes}-${String(ultimo).padStart(2, '0')}`
-    return rangoPorDia(primerDia, ultimoDia, 'periodo')
-  }
+  if (esMes(mes)) return [mes, mes]
 
   if (esDia(desde) && esDia(hasta)) {
+    // Se valida por día antes de redondear: 31/07 a 01/07 colapsaría al mismo
+    // mes y pasaría como válido, pero el input está mal y conviene decirlo.
     if (desde > hasta) return null
-    return rangoPorDia(desde, hasta, 'fecha')
+    return [desde.slice(0, 7), hasta.slice(0, 7)]
   }
 
   return null
+}
+
+export function resolverRangoCmv(query) {
+  const meses = resolverMeses(query ?? {})
+  if (!meses) return null
+
+  const [mesDesde, mesHasta] = meses
+  const [anioFin, mFin] = mesHasta.split('-').map(Number)
+  const primerDia = `${mesDesde}-01`
+  const ultimoDia = `${mesHasta}-${String(ultimoDiaDelMes(anioFin, mFin)).padStart(2, '0')}`
+
+  return {
+    mesDesde,
+    mesHasta,
+    campoPago: 'periodo',
+    pagoDesde:   new Date(`${primerDia}T00:00:00.000Z`),
+    pagoHasta:   new Date(`${ultimoDia}T23:59:59.999Z`),
+    ventasDesde: new Date(`${primerDia}T00:00:00.000${AR_OFFSET}`),
+    ventasHasta: new Date(`${ultimoDia}T23:59:59.999${AR_OFFSET}`),
+  }
 }
