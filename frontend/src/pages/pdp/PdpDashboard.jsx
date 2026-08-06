@@ -9,6 +9,7 @@ import FotoViewer from '../../components/FotoViewer.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
 import { pdpApi } from '../../api/pdp.js'
 import { fmtDateUTC, fmtMonthUTC, fmtDateArg, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
+import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -437,8 +438,13 @@ function PdpColumn({
                       )}
                       <span className="pdp-row-ord">{p.nro_ord != null ? `OP-${p.nro_ord}` : '—'}</span>
                       {/* Tipo de comprobante (A, B, STK, etc.): antes solo se veía
-                          al abrir el detalle del pago. */}
-                      <span className="pdp-row-tipo" title="Tipo de comprobante">{p.id_tipo || '—'}</span>
+                          al abrir el detalle del pago. Mismo badge de color que
+                          la tabla de Pagos y su detalle (TIPO_BADGE). */}
+                      {p.id_tipo && (
+                        <span className={`badge pdp-row-tipo ${TIPO_BADGE[p.id_tipo] ?? 'badge-muted'}`}>
+                          {p.id_tipo}
+                        </span>
+                      )}
                       <span className="pdp-row-date" title="Fecha de factura">{fmtDate(p.fecha)} (FF)</span>
                       {/* Fecha de cashflow: cuándo se estima que sale la plata.
                           Es el dato con el que se arma el plan de pago, así que

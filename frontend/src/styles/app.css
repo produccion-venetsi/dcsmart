@@ -2525,7 +2525,7 @@ tr.row-clickable:hover td {
 .pdp-row.sel { background: rgba(201,176,134,0.10); }
 .pdp-row.sel:hover { background: rgba(201,176,134,0.14); }
 .pdp-row-ord { font-weight: 600; color: var(--t1); min-width: 64px; }
-.pdp-row-tipo { color: var(--t1); font-weight: 600; font-size: 11px; min-width: 24px; }
+.pdp-row-tipo { flex-shrink: 0; }
 .pdp-row-date { color: var(--t3); white-space: nowrap; }
 /* Fecha de cashflow. Va en el medio y se come el espacio sobrante para que los
    importes queden alineados a la derecha en toda la columna. */

@@ -19,14 +19,8 @@ import { downloadExcel, excelBlob } from '../../lib/excel.js'
 import { sheetsDisponible, subirComoSheet, pedirAccessToken, precargarGoogle } from '../../lib/googleSheets.js'
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCredito } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
+import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
 
-const TIPO_BADGE = {
-  A: 'badge-blue', B: 'badge-green', C: 'badge-muted', CM: 'badge-amber',
-  'DC (1)': 'badge-purple', 'DC (2)': 'badge-purple',
-  DC_1: 'badge-purple', DC_2: 'badge-purple',
-  DDJJ: 'badge-red', FF: 'badge-purple', LF: 'badge-blue', M: 'badge-muted', NCA: 'badge-amber',
-  NCB: 'badge-amber', NDA: 'badge-amber', ND: 'badge-amber', STK: 'badge-blue', X: 'badge-muted',
-}
 const ESTADO_BADGE = {
   CAJA: 'badge-muted', CUENTA_CTE: 'badge-amber', MP_PDP: 'badge-blue', PDP: 'badge-green',
 }
