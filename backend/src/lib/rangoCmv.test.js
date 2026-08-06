@@ -38,6 +38,35 @@ test('con rango de dias: el CMV va por FECHA, la misma unidad que las ventas', (
   assert.equal(r.ventasDesde.toISOString(), '2026-07-04T03:00:00.000Z')
 })
 
+test('con rango de periodo: el CMV va por PERIODO, para pedir una quincena o semana especifica', () => {
+  const r = resolverRangoCmv({ periodoDesde: '2026-07-01', periodoHasta: '2026-07-15' })
+  assert.equal(r.campoPago, 'periodo')
+  assert.equal(r.pagoDesde.toISOString(), '2026-07-01T00:00:00.000Z')
+  assert.equal(r.pagoHasta.toISOString(), '2026-07-15T23:59:59.999Z')
+  assert.equal(r.ventasDesde.toISOString(), '2026-07-01T03:00:00.000Z')
+})
+
+test('el rango de periodo tiene prioridad sobre el mes y sobre el rango de fecha', () => {
+  const r = resolverRangoCmv({
+    periodoDesde: '2026-07-01', periodoHasta: '2026-07-15',
+    mes: '2026-01',
+    desde: '2026-02-01', hasta: '2026-02-28',
+  })
+  assert.equal(r.campoPago, 'periodo')
+  assert.equal(r.pagoDesde.toISOString(), '2026-07-01T00:00:00.000Z')
+  assert.equal(r.pagoHasta.toISOString(), '2026-07-15T23:59:59.999Z')
+})
+
+test('rango de periodo invertido no se acepta, ni cae de vuelta al mes', () => {
+  assert.equal(resolverRangoCmv({ periodoDesde: '2026-07-15', periodoHasta: '2026-07-01', mes: '2026-01' }), null)
+})
+
+test('rango de periodo incompleto (falta un lado) cae al mes', () => {
+  const r = resolverRangoCmv({ periodoDesde: '2026-07-01', mes: '2026-01' })
+  assert.equal(r.campoPago, 'periodo')
+  assert.equal(r.pagoDesde.toISOString(), '2026-01-01T00:00:00.000Z')
+})
+
 test('el mes tiene prioridad sobre el rango si vienen los dos', () => {
   const r = resolverRangoCmv({ mes: '2026-07', desde: '2026-01-01', hasta: '2026-01-31' })
   assert.equal(r.campoPago, 'periodo')

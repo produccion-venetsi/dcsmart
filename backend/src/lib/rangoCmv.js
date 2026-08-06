@@ -9,13 +9,20 @@
 // cuando julio solo ya suma 57.115.386,50 en 247 pagos. El porcentaje de CMV
 // sobre ventas comparaba un mes incompleto contra 30 días de ventas.
 //
-// Ahora hay dos modos y en ninguno se mezclan las unidades:
+// Ahora hay tres modos y en ninguno se mezclan las unidades:
 //
+// - `periodoDesde`/`periodoHasta`: el CMV va por `periodo`, igual criterio
+//   contable que el mes, pero acotado a un rango de días específico (una
+//   quincena, una semana) en vez de forzar el mes completo.
 // - `mes` (YYYY-MM): el CMV va por `periodo` acotado a ese mes completo, que es
 //   la lectura contable (una factura de junio cargada en julio pertenece a
 //   junio). Las ventas se toman de los días de ese mismo mes.
 // - `desde`/`hasta`: el CMV va por `fecha`, la misma unidad que las ventas, así
 //   un rango de días arbitrario da exactamente los días pedidos.
+//
+// Prioridad si viene más de uno: periodoDesde/periodoHasta > mes > desde/hasta.
+// En la pantalla, el rango de período es un campo optativo al lado del mes: si
+// se completa, pisa al mes; si no, el mes sigue mandando (ver ReporteCMV.jsx).
 //
 // Sobre las zonas horarias, que ya mordieron antes en este proyecto:
 // `pago.periodo` y `pago.fecha` se guardan a medianoche UTC del día elegido (no
@@ -32,33 +39,36 @@ function ultimoDiaDelMes(anio, mes) {
   return new Date(Date.UTC(anio, mes, 0)).getUTCDate()
 }
 
+function rangoPorDia(desde, hasta, campoPago) {
+  return {
+    campoPago,
+    pagoDesde:   new Date(`${desde}T00:00:00.000Z`),
+    pagoHasta:   new Date(`${hasta}T23:59:59.999Z`),
+    ventasDesde: new Date(`${desde}T00:00:00.000${AR_OFFSET}`),
+    ventasHasta: new Date(`${hasta}T23:59:59.999${AR_OFFSET}`),
+  }
+}
+
 export function resolverRangoCmv(query) {
-  const { mes, desde, hasta } = query ?? {}
+  const { mes, desde, hasta, periodoDesde, periodoHasta } = query ?? {}
+
+  if (esDia(periodoDesde) && esDia(periodoHasta)) {
+    // Un rango al revés devolvería cero sin decir por qué: mejor un 400.
+    if (periodoDesde > periodoHasta) return null
+    return rangoPorDia(periodoDesde, periodoHasta, 'periodo')
+  }
 
   if (esMes(mes)) {
     const [anio, m] = mes.split('-').map(Number)
     const ultimo = ultimoDiaDelMes(anio, m)
     const primerDia = `${mes}-01`
     const ultimoDia = `${mes}-${String(ultimo).padStart(2, '0')}`
-    return {
-      campoPago: 'periodo',
-      pagoDesde:   new Date(`${primerDia}T00:00:00.000Z`),
-      pagoHasta:   new Date(`${ultimoDia}T23:59:59.999Z`),
-      ventasDesde: new Date(`${primerDia}T00:00:00.000${AR_OFFSET}`),
-      ventasHasta: new Date(`${ultimoDia}T23:59:59.999${AR_OFFSET}`),
-    }
+    return rangoPorDia(primerDia, ultimoDia, 'periodo')
   }
 
   if (esDia(desde) && esDia(hasta)) {
-    // Un rango al revés devolvería cero sin decir por qué: mejor un 400.
     if (desde > hasta) return null
-    return {
-      campoPago: 'fecha',
-      pagoDesde:   new Date(`${desde}T00:00:00.000Z`),
-      pagoHasta:   new Date(`${hasta}T23:59:59.999Z`),
-      ventasDesde: new Date(`${desde}T00:00:00.000${AR_OFFSET}`),
-      ventasHasta: new Date(`${hasta}T23:59:59.999${AR_OFFSET}`),
-    }
+    return rangoPorDia(desde, hasta, 'fecha')
   }
 
   return null

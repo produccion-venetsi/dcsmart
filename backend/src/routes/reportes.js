@@ -399,15 +399,15 @@ export default async function reportesRoutes(fastify) {
 
   // ── GET /cmv ────────────────────────────────────────────────────────────
   fastify.get('/cmv', { preHandler: viewHandler }, async (request, reply) => {
-    const { id_local, desde, hasta, mes } = request.query
+    const { id_local, desde, hasta, mes, periodoDesde, periodoHasta } = request.query
 
-    // Dos modos, y en ninguno se comparan unidades distintas (ver lib/rangoCmv.js):
-    // `mes` lee el CMV por período contable; `desde`/`hasta` lo lee por fecha
-    // real, la misma unidad que las ventas.
-    const rango = resolverRangoCmv({ mes, desde, hasta })
+    // Tres modos, y en ninguno se comparan unidades distintas (ver lib/rangoCmv.js):
+    // `periodoDesde`/`periodoHasta` y `mes` leen el CMV por período contable;
+    // `desde`/`hasta` lo lee por fecha real, la misma unidad que las ventas.
+    const rango = resolverRangoCmv({ mes, desde, hasta, periodoDesde, periodoHasta })
     if (!rango) {
       return reply.code(400).send({
-        error: 'Pedí un mes (YYYY-MM) o un rango válido de desde/hasta (YYYY-MM-DD, desde <= hasta)'
+        error: 'Pedí un mes (YYYY-MM), un rango de período (periodoDesde/periodoHasta) o un rango de fecha (desde/hasta) válido, YYYY-MM-DD con desde <= hasta'
       })
     }
 

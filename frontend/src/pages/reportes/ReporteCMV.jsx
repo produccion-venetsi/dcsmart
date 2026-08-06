@@ -114,31 +114,41 @@ export default function ReporteCMV({ applied, activeLocal }) {
   const [loading, setLoading] = useState(true)
   // Dos formas de leer el CMV, y la diferencia no es cosmética:
   //
-  // - Por MES: el costo se toma por período contable (`pago.periodo`), que es
-  //   cómo se carga (una factura de junio que entró en julio pertenece a junio).
-  // - Por RANGO de días: el costo se toma por `pago.fecha`, la misma unidad que
-  //   las ventas, así los días pedidos son exactamente los que se muestran.
+  // - Por PERÍODO: el costo se toma por período contable (`pago.periodo`), que
+  //   es cómo se carga (una factura de junio que entró en julio pertenece a
+  //   junio). Dentro de este modo hay dos maneras de acotarlo: un mes completo,
+  //   o un rango de días específico (una quincena, una semana) -- el rango pisa
+  //   al mes si se completa, y si se deja vacío manda el mes. Sirven las dos:
+  //   hay quien pide el mes cerrado y quien pide una semana puntual.
+  // - Por RANGO de días (fecha real): el costo se toma por `pago.fecha`, la
+  //   misma unidad que las ventas, así los días pedidos son exactamente los que
+  //   se muestran.
   //
   // Antes el rango de días se comparaba contra `periodo`, que es mensual: pedir
   // "últimos 30 días" dejaba afuera meses enteros y el CMV salía absurdamente
   // bajo contra las ventas del mismo rango. Ver backend lib/rangoCmv.js.
   const [porMes, setPorMes] = useState(false)
   const [mes, setMes] = useState(() => String(applied.hasta ?? '').slice(0, 7))
+  const [periodoDesde, setPeriodoDesde] = useState('')
+  const [periodoHasta, setPeriodoHasta] = useState('')
+  const rangoPeriodoCompleto = Boolean(periodoDesde && periodoHasta)
 
   useEffect(() => {
     setData(null)
     setLoading(true)
     const ctrl = new AbortController()
     const local = activeLocal ? { id_local: activeLocal.id } : {}
-    const params = (porMes && mes)
-      ? { mes, ...local }
-      : { desde: applied.desde, hasta: applied.hasta, ...local }
+    const params = !porMes
+      ? { desde: applied.desde, hasta: applied.hasta, ...local }
+      : rangoPeriodoCompleto
+        ? { periodoDesde, periodoHasta, ...local }
+        : { mes, ...local }
     reportesApi.cmv(params, ctrl.signal)
       .then((res) => setData(res.data))
       .catch((err) => { if (!ctrl.signal.aborted) console.error(err) })
       .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
     return () => ctrl.abort()
-  }, [porMes, mes, applied.desde, applied.hasta, activeLocal?.id])
+  }, [porMes, mes, periodoDesde, periodoHasta, rangoPeriodoCompleto, applied.desde, applied.hasta, activeLocal?.id])
 
   const kpis        = data?.kpis ?? []
   const alimentos   = data?.alimentos ?? []
@@ -163,20 +173,41 @@ export default function ReporteCMV({ applied, activeLocal }) {
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--t2)', cursor: 'pointer' }}>
           <input type="checkbox" checked={porMes} onChange={e => setPorMes(e.target.checked)} />
-          Ver por mes cerrado (período contable)
+          Ver por período contable
         </label>
         {porMes && (
-          <input
-            type="month"
-            className="form-input"
-            style={{ width: 150 }}
-            value={mes}
-            onChange={e => setMes(e.target.value)}
-          />
+          <>
+            <input
+              type="month"
+              className="form-input"
+              style={{ width: 150, opacity: rangoPeriodoCompleto ? 0.5 : 1 }}
+              value={mes}
+              onChange={e => setMes(e.target.value)}
+              title={rangoPeriodoCompleto ? 'Se usa el rango de abajo mientras esté completo' : 'Mes completo'}
+            />
+            <span style={{ fontSize: 11, color: 'var(--t4)' }}>o rango específico:</span>
+            <input
+              type="date"
+              className="form-input"
+              style={{ width: 140 }}
+              value={periodoDesde}
+              onChange={e => setPeriodoDesde(e.target.value)}
+            />
+            <span style={{ fontSize: 11, color: 'var(--t4)' }}>–</span>
+            <input
+              type="date"
+              className="form-input"
+              style={{ width: 140 }}
+              value={periodoHasta}
+              onChange={e => setPeriodoHasta(e.target.value)}
+            />
+          </>
         )}
         <span style={{ fontSize: 11, color: 'var(--t4)' }}>
           {porMes
-            ? 'Costo por período de la factura; ventas del mismo mes.'
+            ? (rangoPeriodoCompleto
+              ? 'Costo por período de la factura, acotado al rango; ventas de esos mismos días.'
+              : 'Costo por período de la factura; ventas del mismo mes.')
             : 'Costo y ventas por fecha real, según el rango de arriba.'}
         </span>
       </div>
