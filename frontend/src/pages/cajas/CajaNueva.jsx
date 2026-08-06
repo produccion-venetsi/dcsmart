@@ -16,11 +16,15 @@ export default function CajaNueva() {
   const locales = activeApp?.locales ?? []
 
   // Al terminar, cada rol vuelve a donde puede: los restringidos a su home, el
-  // resto al detalle de la caja que acaba de crear.
+  // resto al listado con el detalle de la caja nueva abierto.
+  //
+  // Va a /cajas?caja=<id> y no a /cajas/<id>: esa ruta renderiza CajaDetail.jsx,
+  // otra pantalla de detalle a la que no linkea nada de la app y que muestra menos
+  // que el drawer del listado.
   const volver = (nuevoId) => {
     const home = homeDeRol(role)
     if (home !== HOME_POR_DEFECTO) { navigate(home); return }
-    navigate(nuevoId ? `/cajas/${nuevoId}` : '/cajas')
+    navigate(nuevoId ? `/cajas?caja=${nuevoId}` : '/cajas')
   }
 
   return (
