@@ -56,6 +56,7 @@ model Local {
   arqueos       Arqueo[]
   local_access  UserLocalAccess[]
   detalle_tipos DetalleTipo[]
+  movimientos_cm MovimientoCM[]
 
   @@map("locales")
 }
@@ -90,6 +91,8 @@ model User {
   activity_logs    ActivityLog[]     @relation("ActivityLogUser")
   filtro_presets   FiltroPreset[]    @relation("FiltroPresetUser")
   notificaciones   Notificacion[]    @relation("NotificacionUser")
+  mov_cm_creados   MovimientoCM[]    @relation("MovimientoCMCreatedBy")
+  mov_cm_recibidos MovimientoCM[]    @relation("MovimientoCMRecibidaBy")
 
   @@map("users")
 }
@@ -489,6 +492,8 @@ model Pago {
   pdp         Pdp?          @relation(fields: [id_pdp], references: [id])
   impuestos   Impuesto[]
   multimoneda MultiMoneda[]
+  // Solo existe si la op es de tipo CM y alguien la gestionó en Caja Mayor.
+  movimiento_cm MovimientoCM?
 
   @@index([id_local, fecha])
   @@index([pagado])
@@ -688,3 +693,117 @@ model FiltroPreset {
   @@index([id_user, modulo])
   @@map("filtro_presets")
 }
+
+// ─── CAJA MAYOR ──────────────────────────────────────────────────────────────
+// Reemplazo del AppSheet DC-CAJA MAYOR (app CM-PERROS-334067). Solo super_admin,
+// sobre TODOS los locales de todos los grupos a la vez -- ver routes/caja_mayor.js.
+//
+// Cuando se carga un Pago con id_tipo = 'CM', se COPIA acá como un movimiento con
+// estado ENVIADA: el local mandó la plata al CM y el CM después confirma que la
+// recibió. La copia es el registro del envío, y queda relacionada con la op por
+// `id_pago` -- que es único, así una op no puede entrar dos veces.
+//
+// Se copia en vez de leerse al vuelo porque el seguimiento es de lo que se envió:
+// si después alguien corrige el pago en gestión, la copia se sincroniza (ver
+// sincronizarMovimientoCM en lib/cajaMayor.js) para que el saldo no mienta, pero
+// el movimiento existe desde el momento de la carga y no depende de que alguien
+// lo toque en el módulo.
+
+// Ciclo de una op que sale de gestión hacia la caja mayor: el local la ENVIA y el
+// CM confirma que la RECIBIÓ. La app vieja llamaba ENVIADA "ESTUDIO" (1271 filas
+// ahí contra 364 recibidas) -- mismo estado, nombre que no decía nada.
+//
+// Los movimientos que nacen en el módulo (PROPIO, APERTURA) no tienen este ciclo:
+// nadie los envía. Quedan en ENVIADA y el módulo no les ofrece el botón.
+enum EstadoCM {
+  ENVIADA
+  RECIBIDA
+
+  @@map("estado_cm")
+}
+
+enum MonedaCM {
+  ARS
+  USD
+  EUR
+  BRL
+
+  @@map("moneda_cm")
+}
+
+// De dónde salió el movimiento. Es lo que decide qué se puede editar: los PAGO
+// son espejo de una op de gestión (acá solo se gestiona su estado), el resto
+// nace y se edita en este módulo.
+//
+// En la app vieja esto era la columna `Movimiento`, un Yes/No: true para lo que
+// llegaba de gestión (1622 filas con Orden OP-) y false para lo cargado a mano
+// (1603 con Orden CM-). Acá es un enum porque además hay que distinguir el saldo
+// de apertura, que allá se cargaba como un movimiento normal con la observación
+// "Saldo Inicial" a mano (6 filas así en el export).
+enum OrigenCM {
+  PAGO     // op de gestión con id_tipo = 'CM'
+  PROPIO   // cargado a mano en el módulo
+  APERTURA // saldo inicial del local, uno por local y moneda
+
+  @@map("origen_cm")
+}
+
+model MovimientoCM {
+  id       String   @id @default(uuid())
+  id_local String
+  origen   OrigenCM
+  moneda   MonedaCM @default(ARS)
+
+  // Solo para origen PAGO: la op de gestión de la que es copia. Único, así una op
+  // no puede entrar dos veces a la caja mayor -- es lo que hace que la copia sea
+  // idempotente y no haya que cruzar por fecha+importe.
+  id_pago String? @unique
+
+  // Copiados del pago cuando origen = PAGO; propios en los demás casos. Nullable
+  // solo porque la columna existía antes de que la copia fuera explícita: en la
+  // práctica los movimientos siempre los tienen.
+  fecha   DateTime?
+  importe Decimal?  @db.Decimal(12, 2) // siempre positivo, la dirección va en `ingreso`
+
+  // Dirección respecto de la CAJA MAYOR (no del local): true = entra plata a la
+  // caja mayor. Al copiar se calcula con direccionCajaMayor() en lib/cajaMayor.js;
+  // si alguien la corrige a mano queda `direccion_manual` en true y desde entonces
+  // la sincronización no la vuelve a tocar.
+  ingreso          Boolean?
+  direccion_manual Boolean @default(false)
+
+  estado           EstadoCM  @default(ENVIADA)
+  recibe           String?
+  extrae           String?
+  fecha_extraccion DateTime?
+  observaciones    String?
+
+  // Quién y cuándo la marcó RECIBIDA. Es el dato que hoy no queda en ningún lado
+  // cuando alguien aprieta el botón en AppSheet.
+  recibida_at DateTime?
+  recibida_by String?
+
+  created_by String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  local    Local @relation(fields: [id_local], references: [id])
+  pago     Pago? @relation(fields: [id_pago], references: [id])
+  creador  User? @relation("MovimientoCMCreatedBy", fields: [created_by], references: [id])
+  receptor User? @relation("MovimientoCMRecibidaBy", fields: [recibida_by], references: [id])
+
+  // El listado siempre pide por local + moneda y ordena por fecha; el saldo
+  // filtra por estado. Las FK van indexadas a propósito: Prisma no las indexa
+  // sola y ya hubo cinco casos de lentitud por eso (ver PR #114).
+  @@index([id_local, moneda, fecha])
+  @@index([estado])
+  @@index([created_by])
+  @@index([recibida_by])
+  @@map("movimientos_cm")
+}
+
+// Nota: NO hay tabla de cambio de moneda. La app vieja tenía una (`CAMBIO`, con
+// importe, cotización y monedas de compra/venta) y quedó con CERO filas en dos
+// años de uso, así que no se replicó. La caja en dólares sí existe y está viva
+// -- 217 filas en CM_DOLAR -- pero se resuelve con la columna `moneda` de arriba,
+// no con una tabla espejo como hacía AppSheet.
