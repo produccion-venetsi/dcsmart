@@ -177,6 +177,17 @@ function IcoActivity() {
     </svg>
   )
 }
+// Caja fuerte: la caja mayor es donde se junta la plata que sale de los locales.
+function IcoCajaMayor() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2"/>
+      <circle cx="12" cy="12" r="3.5"/>
+      <line x1="12" y1="4" x2="12" y2="8.5"/>
+      <line x1="12" y1="15.5" x2="12" y2="20"/>
+    </svg>
+  )
+}
 function IcoTag() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -237,6 +248,7 @@ const NAV_ADMIN = [
   { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
   { to: '/auditorias',          label: 'Auditorías',    Icon: IcoAuditorias, roles: ['super_admin'] },
   { to: '/actividad',           label: 'Actividad',     Icon: IcoActivity,   roles: ['super_admin'] },
+  { to: '/caja-mayor',          label: 'Caja Mayor',    Icon: IcoCajaMayor,  roles: ['super_admin'] },
 ]
 
 export default function Sidebar() {
