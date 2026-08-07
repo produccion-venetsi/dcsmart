@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { usersApi }  from '../../api/users.js'
 import { appsApi }   from '../../api/apps.js'
 import { localesApi } from '../../api/locales.js'
@@ -8,6 +8,11 @@ import { useAuthStore } from '../../store/authStore.js'
 import { fmtDateArg } from '../../lib/dates.js'
 import { esAlcanceGlobal, sinLocalesVeTodos } from '../../lib/roles.js'
 import DrawerPanel   from '../../components/DrawerPanel.jsx'
+import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
+import {
+  filtrarUsuarios, conteoPorRol, agruparUsuarios, AGRUPACIONES,
+  bloqueAbierto, subAbierto, alternar, todoAbierto, todasLasClaves, claveSub,
+} from '../../lib/filtroUsuarios.js'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -105,6 +110,15 @@ export default function Users() {
   const [users,   setUsers]   = useState([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
+  // Filtros de la lista. Grupo y local van en cascada (el local solo dentro del
+  // grupo elegido) y `agrupar` separa la tabla en bloques en vez de filtrar.
+  const [fApp,     setFApp]     = useState('')
+  const [fLocal,   setFLocal]   = useState('')
+  const [fRol,     setFRol]     = useState('')
+  const [fEstado,  setFEstado]  = useState('activos')
+  const [agrupar,  setAgrupar]  = useState('rol-grupo')
+  // Bloques abiertos, por título. Arranca vacío: todo colapsado.
+  const [abiertos, setAbiertos] = useState(new Set())
 
   // Detail drawer
   const [panelOpen,  setPanelOpen]  = useState(false)
@@ -439,13 +453,49 @@ export default function Users() {
   // Render
   // ─────────────────────────────────────────────────────────────────────────
 
-  const filteredUsers = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return users
-    return users.filter(u =>
-      u.nombre?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
-    )
-  }, [users, search])
+  // id_local -> id_app, para poder resolver el filtro por local (un admin sin
+  // locales asignados alcanza todos los de su grupo -- ver lib/filtroUsuarios.js).
+  const localesPorId = useMemo(
+    () => new Map(locales.map(l => [l.id, l.id_app])),
+    [locales]
+  )
+
+  const filteredUsers = useMemo(
+    () => filtrarUsuarios(users, {
+      texto: search, idApp: fApp, idLocal: fLocal, rol: fRol, estado: fEstado,
+    }, localesPorId),
+    [users, search, fApp, fLocal, fRol, fEstado, localesPorId]
+  )
+
+  // Los conteos salen de la lista COMPLETA, no de la filtrada: sirven para saber
+  // cuántos hay de cada rol antes de elegirlo, no para describir lo que ya se ve.
+  const conteoRoles = useMemo(() => conteoPorRol(users), [users])
+
+  // Los grupos que existen, para el selector. Salen de la lista de locales porque
+  // es la que ya trae el id y el nombre del grupo de cada uno.
+  const gruposDeLocales = useMemo(() => {
+    const m = new Map()
+    for (const l of locales) if (l.id_app && !m.has(l.id_app)) m.set(l.id_app, l.grupo ?? '—')
+    return [...m.entries()].map(([id, nombre]) => ({ id, nombre }))
+  }, [locales])
+
+  const appsPorId = useMemo(() => new Map(apps.map(a => [a.id, a.nombre])), [apps])
+
+  const bloques = useMemo(
+    () => agruparUsuarios(filteredUsers, agrupar, { appsPorId }),
+    [filteredUsers, agrupar, appsPorId]
+  )
+
+  const hayFiltro = Boolean(search || fApp || fLocal || fRol || fEstado !== 'activos')
+  const limpiarFiltros = () => {
+    setSearch(''); setFApp(''); setFLocal(''); setFRol(''); setFEstado('activos')
+  }
+
+  // Con un filtro puesto se muestran todos abiertos, así que el botón de expandir
+  // no tiene nada que hacer: se esconde en vez de quedar sin efecto.
+  const abiertoTodo = todoAbierto(bloques, abiertos)
+  const alternarTodos = () =>
+    setAbiertos(abiertoTodo ? new Set() : new Set(todasLasClaves(bloques)))
 
   return (
     <div className="page">
@@ -462,14 +512,67 @@ export default function Users() {
         </div>
       </div>
 
-      <div className="filter-bar">
-        <div className="form-input-wrap" style={{ maxWidth: 320 }}>
-          <input
-            type="text"
-            placeholder="Buscar por nombre o email..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      <div className="filter-bar" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Buscar</label>
+          <div className="form-input-wrap" style={{ width: 260 }}>
+            <input
+              type="text"
+              placeholder="Nombre o email"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <SelectorGrupoLocal
+          grupos={gruposDeLocales}
+          locales={locales}
+          idApp={fApp}
+          idLocal={fLocal}
+          onChange={({ idApp, idLocal }) => { setFApp(idApp); setFLocal(idLocal) }}
+        />
+
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Rol</label>
+          <select className="filter-select" value={fRol} onChange={e => setFRol(e.target.value)} style={{ minWidth: 150 }}>
+            <option value="">Todos los roles</option>
+            {roles.map(r => (
+              <option key={r.id} value={r.nombre}>
+                {r.nombre}{conteoRoles.get(r.nombre) ? ` (${conteoRoles.get(r.nombre)})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Estado</label>
+          <select className="filter-select" value={fEstado} onChange={e => setFEstado(e.target.value)}>
+            <option value="activos">Activos</option>
+            <option value="inactivos">Inactivos</option>
+            <option value="">Todos</option>
+          </select>
+        </div>
+
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Separar por</label>
+          <select className="filter-select" value={agrupar} onChange={e => setAgrupar(e.target.value)}>
+            {AGRUPACIONES.map(a => <option key={a.valor} value={a.valor}>{a.label}</option>)}
+          </select>
+        </div>
+
+        <div className="form-group" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: 12.5, color: 'var(--t3)', whiteSpace: 'nowrap' }}>
+            {loading ? '' : `${filteredUsers.length} de ${users.length}`}
+          </span>
+          {hayFiltro && (
+            <button className="btn btn-sm btn-secondary" onClick={limpiarFiltros}>Limpiar</button>
+          )}
+          {!hayFiltro && agrupar && bloques.length > 1 && (
+            <button className="btn btn-sm btn-secondary" onClick={alternarTodos}>
+              {abiertoTodo ? 'Colapsar todo' : 'Expandir todo'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -496,8 +599,68 @@ export default function Users() {
               ))
             ) : (
               <>
-                {filteredUsers.map((u) => (
-                  <tr key={u.id} className="row-clickable" onClick={() => openDetail(u)}>
+                {/* Dos niveles: rol arriba, grupo adentro. Los DOS arrancan
+                    colapsados -- con 47 usuarios en 6 roles la lista abierta es una
+                    pared -- y se abren de a uno o todos juntos. Con un filtro puesto
+                    se muestran abiertos: quien busca un nombre quiere ver al usuario,
+                    no un bloque cerrado que no dice si está adentro. */}
+                {bloques.map((bloque) => {
+                  const abierto = bloqueAbierto(bloque.titulo, { abiertos, hayFiltro })
+                  return (
+                  <Fragment key={bloque.titulo ?? '_'}>
+                    {bloque.titulo && (
+                      <tr
+                        className="row-clickable"
+                        onClick={() => setAbiertos(a => alternar(a, bloque.titulo))}
+                      >
+                        <td colSpan={5} style={{
+                          background: 'var(--bg-input)',
+                          borderTop: '1px solid var(--glass-border)',
+                          padding: '0.5rem 0.9rem',
+                          fontSize: 11.5, letterSpacing: '0.05em', textTransform: 'uppercase',
+                          color: 'var(--t1)', fontWeight: 700,
+                          userSelect: 'none',
+                        }}>
+                          {/* El chevron dice si está abierto sin tener que mirar
+                              si hay filas debajo. */}
+                          <span style={{
+                            display: 'inline-block', width: 14, color: 'var(--t3)',
+                            transform: abierto ? 'rotate(90deg)' : 'none',
+                            transition: 'transform 0.15s var(--ease)',
+                          }}>▸</span>
+                          {bloque.titulo}
+                          <span style={{ color: 'var(--t3)', fontWeight: 500, letterSpacing: 0, textTransform: 'none' }}>
+                            {' · '}{bloque.total} {bloque.total === 1 ? 'usuario' : 'usuarios'}
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    {abierto && bloque.sub.map((sub) => {
+                      const subEstaAbierto = subAbierto(bloque.titulo, sub.titulo, { abiertos, hayFiltro })
+                      return (
+                      <Fragment key={`${bloque.titulo ?? ''}-${sub.titulo ?? '_'}`}>
+                        {sub.titulo && (
+                          <tr
+                            className="row-clickable"
+                            onClick={() => setAbiertos(a => alternar(a, claveSub(bloque.titulo, sub.titulo)))}
+                          >
+                            <td colSpan={5} style={{
+                              padding: '0.35rem 0.9rem 0.35rem 1.6rem',
+                              fontSize: 11, color: 'var(--t2)', fontWeight: 600,
+                              userSelect: 'none',
+                            }}>
+                              <span style={{
+                                display: 'inline-block', width: 13, color: 'var(--t3)',
+                                transform: subEstaAbierto ? 'rotate(90deg)' : 'none',
+                                transition: 'transform 0.15s var(--ease)',
+                              }}>▸</span>
+                              {sub.titulo}
+                              <span style={{ color: 'var(--t3)', fontWeight: 400 }}> · {sub.users.length}</span>
+                            </td>
+                          </tr>
+                        )}
+                        {subEstaAbierto && sub.users.map((u) => (
+                  <tr key={`${bloque.titulo ?? ''}-${sub.titulo ?? ''}-${u.id}`} className="row-clickable" onClick={() => openDetail(u)}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Avatar u={u} />
@@ -538,13 +701,28 @@ export default function Users() {
                       )}
                     </td>
                   </tr>
-                ))}
+                        ))}
+                      </Fragment>
+                      )
+                    })}
+                  </Fragment>
+                  )
+                })}
                 {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan={5}>
                       <div className="table-empty">
                         <IcoUsers />
-                        <p>{users.length === 0 ? 'No hay usuarios registrados.' : 'No hay usuarios que coincidan con la búsqueda.'}</p>
+                        <p>
+                          {users.length === 0
+                            ? 'No hay usuarios registrados.'
+                            : 'Ningún usuario coincide con los filtros.'}
+                        </p>
+                        {users.length > 0 && hayFiltro && (
+                          <button className="btn btn-sm btn-secondary" onClick={limpiarFiltros}>
+                            Limpiar filtros
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
