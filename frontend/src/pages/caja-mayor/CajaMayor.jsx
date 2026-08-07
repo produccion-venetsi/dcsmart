@@ -16,7 +16,7 @@ import {
   ESTADOS, ESTADO_LABEL, MONEDAS, ORIGEN_LABEL, fmtMonto, filtroDeSeleccion,
 } from '../../lib/cajaMayor.js'
 import MovimientoForm from './MovimientoForm.jsx'
-import SelectorGrupoLocal from './SelectorGrupoLocal.jsx'
+import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
 
 const LIMIT = 100
 

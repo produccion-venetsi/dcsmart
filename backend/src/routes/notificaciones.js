@@ -26,9 +26,35 @@ export default async function notificacionesRoutes(fastify) {
       })
     ])
 
+    // El nombre del local y su grupo, para que la pantalla pueda decir de dónde es
+    // el aviso y llevar al usuario ahí. `Notificacion` guarda `id_local` sin
+    // relación (no hay FK), así que se resuelven aparte y en una sola consulta.
+    //
+    // Se piden sin filtrar por acceso a propósito: si el aviso es de un local que el
+    // usuario ya no maneja, el mensaje tiene que poder nombrarlo en vez de decir
+    // "sin acceso" a secas.
+    const idsLocal = [...new Set(data.map(n => n.id_local).filter(Boolean))]
+    const locales = idsLocal.length
+      ? await fastify.db.local.findMany({
+        where: { id: { in: idsLocal } },
+        select: { id: true, nombre: true, id_app: true, app: { select: { id: true, nombre: true } } },
+      })
+      : []
+    const porId = new Map(locales.map(l => [l.id, l]))
+
     // `no_leidas` es el total real, no cuantas vinieron en `data`: el badge tiene
     // que decir 120 aunque la pagina traiga 20.
-    return { data, no_leidas }
+    return {
+      data: data.map(n => {
+        const l = n.id_local ? porId.get(n.id_local) : null
+        return {
+          ...n,
+          local: l ? { id: l.id, nombre: l.nombre } : null,
+          grupo: l?.app ? { id: l.app.id, nombre: l.app.nombre } : null,
+        }
+      }),
+      no_leidas,
+    }
   })
 
   // ── PATCH /leer-todas ─────────────────────────────────────────────────

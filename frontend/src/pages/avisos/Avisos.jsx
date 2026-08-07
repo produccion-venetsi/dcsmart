@@ -1,23 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { avisosApi } from '../../api/notificaciones.js'
+import { authApi } from '../../api/auth.js'
 import { useUiStore } from '../../store/uiStore.js'
-
-// A donde lleva cada aviso segun de que habla.
-//
-// Un pago va a su formulario de edicion, que es a donde lleva tambien el listado.
-//
-// Una caja va al LISTADO con ?caja=<id>, que abre el drawer de detalle. NO a
-// /cajas/<id>: esa ruta renderiza pages/cajas/CajaDetail.jsx, una segunda pantalla
-// de detalle a la que no linkeaba nada de la app y que tiene menos cosas que el
-// drawer (que es la que la gente conoce). Mandar ahi desde un aviso de auditoria
-// significaba caer en una pantalla que el usuario nunca habia visto.
-function destinoDe(aviso) {
-  if (!aviso?.id_registro) return null
-  if (aviso.tabla === 'pagos') return `/pagos/${aviso.id_registro}/editar`
-  if (aviso.tabla === 'cajas') return `/cajas?caja=${aviso.id_registro}`
-  return null
-}
+import { useAppStore } from '../../store/appStore.js'
+import { resolverApertura, mensajeDeCambio } from '../../lib/destinoAviso.js'
 
 function fechaCorta(iso) {
   if (!iso) return ''
@@ -32,6 +19,14 @@ export default function Avisos() {
   const notify = useUiStore((s) => s.notify)
   const [avisos, setAvisos] = useState([])
   const [loading, setLoading] = useState(true)
+  // Las apps y locales que el usuario maneja: con esto se resuelve si el local del
+  // aviso está a su alcance y a qué grupo pertenece.
+  const [misApps, setMisApps] = useState([])
+
+  const appActiva = useAppStore((s) => s.activeApp)
+  const localActivo = useAppStore((s) => s.activeLocal)
+  const setActiveApp = useAppStore((s) => s.setActiveApp)
+  const setActiveLocal = useAppStore((s) => s.setActiveLocal)
 
   const cargar = useCallback(() => {
     avisosApi.list({ limit: 100 })
@@ -42,15 +37,49 @@ export default function Avisos() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  // Si falla, `misApps` queda vacío y abrir un aviso de otro local avisa que no hay
+  // acceso en vez de mandar a un 403. Se prefiere eso a bloquear la pantalla.
+  useEffect(() => {
+    authApi.myApps()
+      .then((r) => setMisApps(r.data ?? []))
+      .catch(() => setMisApps([]))
+  }, [])
+
   const abrir = async (aviso) => {
-    // Se marca leido antes de navegar, pero un fallo no bloquea: peor caso el
-    // aviso queda sin leer y el contador no baja.
-    if (!aviso.leida) {
-      try { await avisosApi.marcarLeida(aviso.id) } catch { /* se navega igual */ }
+    const plan = resolverApertura(aviso, { misApps, appActiva, localActivo })
+
+    // Un aviso que no se puede abrir NO se marca leído: si se marcara, el usuario
+    // perdería el registro y el aviso de una sola vez, que es lo que pasaba antes.
+    if (plan.accion === 'sin-acceso') {
+      notify(plan.mensaje, 'error')
+      return
     }
-    const destino = destinoDe(aviso)
-    if (destino) navigate(destino)
-    else cargar()
+
+    const marcarLeida = async () => {
+      if (!aviso.leida) {
+        try { await avisosApi.marcarLeida(aviso.id) } catch { /* se abre igual */ }
+      }
+    }
+
+    if (plan.accion === 'solo-marcar') {
+      await marcarLeida()
+      cargar()
+      return
+    }
+
+    // El aviso es de otro local: se mueve el contexto antes de navegar, si no el
+    // backend responde 403 (corta por allowedLocalIds) y con cajas el drawer no
+    // abre porque el listado filtra por el local activo.
+    if (plan.accion === 'cambiar-contexto') {
+      // setActiveApp limpia el local, así que el orden importa: primero la app.
+      if (plan.cambiaGrupo) setActiveApp(plan.app)
+      setActiveLocal(plan.local)
+      // Se avisa siempre: el usuario apretó un aviso, no pidió cambiar de local.
+      notify(mensajeDeCambio(plan), 'info')
+    }
+
+    await marcarLeida()
+    navigate(plan.ruta)
   }
 
   const leerTodas = async () => {
@@ -98,6 +127,13 @@ export default function Avisos() {
                 <span className="aviso-texto">
                   <span className="aviso-titulo">{a.titulo}</span>
                   {a.cuerpo && <span className="aviso-cuerpo">{a.cuerpo}</span>}
+                  {/* De qué local es, cuando no es el que se está mirando: se ve
+                      antes de clickear y no después de que cambió el contexto. */}
+                  {a.local && a.local.id !== localActivo?.id && (
+                    <span className="aviso-cuerpo" style={{ color: 'var(--t3)' }}>
+                      {[a.grupo?.nombre, a.local.nombre].filter(Boolean).join(' / ')}
+                    </span>
+                  )}
                 </span>
                 <span className="aviso-fecha">{fechaCorta(a.created_at)}</span>
               </button>
