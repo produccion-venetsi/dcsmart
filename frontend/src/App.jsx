@@ -42,6 +42,7 @@ const ProveedorForm = lazyWithReload(() => import('./pages/proveedores/Proveedor
 const Reportes      = lazyWithReload(() => import('./pages/reportes/Reportes.jsx'))
 const Auditorias    = lazyWithReload(() => import('./pages/auditorias/Auditorias.jsx'))
 const ActivityLog   = lazyWithReload(() => import('./pages/activity-log/ActivityLog.jsx'))
+const CajaMayor     = lazyWithReload(() => import('./pages/caja-mayor/CajaMayor.jsx'))
 const Users         = lazyWithReload(() => import('./pages/admin/Users.jsx'))
 const Apps          = lazyWithReload(() => import('./pages/admin/Apps.jsx'))
 const Locales       = lazyWithReload(() => import('./pages/admin/Locales.jsx'))
@@ -160,6 +161,9 @@ export default function App() {
           <Route path="arqueo"                      element={<OperativeGuard><ArqueoList /></OperativeGuard>} />
           <Route path="auditorias"                  element={<GlobalGuard roles={SUPER}><Auditorias /></GlobalGuard>} />
           <Route path="actividad"                   element={<GlobalGuard roles={SUPER}><ActivityLog /></GlobalGuard>} />
+          {/* Caja Mayor es global a propósito: se ven todos los grupos juntos, sin
+              depender de la app activa (ver routes/caja_mayor.js en el backend). */}
+          <Route path="caja-mayor"                  element={<GlobalGuard roles={SUPER}><CajaMayor /></GlobalGuard>} />
           <Route path="admin/users"                element={<GlobalGuard roles={SUPER}><Users /></GlobalGuard>} />
           <Route path="admin/apps"                 element={<GlobalGuard roles={ADMIN_PANEL}><Apps /></GlobalGuard>} />
           <Route path="admin/locales"              element={<GlobalGuard roles={ADMIN_PANEL}><Locales /></GlobalGuard>} />
