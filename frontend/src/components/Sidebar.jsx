@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
@@ -7,6 +7,7 @@ import { ROLES_TODOS, ROLES_OPERATIVOS, ROLES } from '../lib/roles.js'
 import { authApi } from '../api/auth.js'
 import { avisosApi } from '../api/notificaciones.js'
 import AppLogo from './AppLogo.jsx'
+import { MODOS, modoACorregir, destinoDeModo, modoInicial } from '../lib/modoTrabajo.js'
 
 // URL de dcsmart-costos (plataforma de costos, backend/base separados).
 const COSTOS_URL = import.meta.env.VITE_COSTOS_URL || 'https://costos.dcsmart.app'
@@ -261,6 +262,9 @@ export default function Sidebar() {
   const activeApp      = useAppStore((s) => s.activeApp)
   const activeLocal    = useAppStore((s) => s.activeLocal)
   const setActiveLocal = useAppStore((s) => s.setActiveLocal)
+  const modo           = useAppStore((s) => s.modo)
+  const setModo        = useAppStore((s) => s.setModo)
+  const location       = useLocation()
   const [avatarFailed, setAvatarFailed] = useState(false)
   const [avisosSinLeer, setAvisosSinLeer] = useState(0)
 
@@ -289,6 +293,18 @@ export default function Sidebar() {
       document.removeEventListener('visibilitychange', traer)
     }
   }, [])
+
+  // El modo arranca según lo guardado, o se deduce de si ya había un grupo elegido.
+  useEffect(() => {
+    if (modo == null) setModo(modoInicial(modo, { hayGrupo: Boolean(activeApp) }))
+  }, [modo, activeApp, setModo])
+
+  // Y se corrige si la ruta pertenece al otro modo: pasa con un link guardado o con
+  // el botón atrás, y mostrar una pantalla que el menú niega es peor que cambiar.
+  useEffect(() => {
+    const corregido = modoACorregir(location.pathname, modo)
+    if (corregido) setModo(corregido)
+  }, [location.pathname, modo, setModo])
 
   const handleLogout = async () => {
     await logout()
@@ -348,7 +364,23 @@ export default function Sidebar() {
   // Admin: independiente de la app activa -- evalúa TODAS las asignaciones
   // de rol del usuario, no la app elegida (para cuando no hay app activa).
   const globalRoleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
-  const adminItems = NAV_ADMIN.filter(item => !item.roles || item.roles.some(r => globalRoleNames.includes(r)))
+  const adminItemsPermitidos = NAV_ADMIN.filter(item => !item.roles || item.roles.some(r => globalRoleNames.includes(r)))
+
+  // Quien puede administrar ve el switch y un solo bloque a la vez. Quien no tiene
+  // acceso a nada de admin no cambia de comportamiento: ve lo operativo, como antes.
+  const puedeAdministrar = adminItemsPermitidos.length > 0
+  const enModoAdmin = puedeAdministrar && modo === MODOS.ADMIN
+
+  const adminItems = enModoAdmin ? adminItemsPermitidos : []
+  const itemsOperativos = puedeAdministrar && enModoAdmin ? [] : mainItems
+
+  const esSuperAdmin = globalRoleNames.includes('super_admin')
+  const cambiarModo = (nuevo) => {
+    if (nuevo === modo) return
+    setModo(nuevo)
+    closeMobileNav()
+    navigate(destinoDeModo(nuevo, { esSuperAdmin, hayGrupo: Boolean(activeApp) }))
+  }
 
   return (
     <>
@@ -362,8 +394,33 @@ export default function Sidebar() {
         <AppLogo variant="horizontal" />
       </div>
 
-      {/* App / Local context */}
-      {activeApp && !collapsed && (
+      {/* Switch de modo. Va arriba del contexto y se ve incluso sin grupo elegido:
+          es lo que permite volver a operar desde admin sin pasar por el selector.
+          Solo para quien tiene algo de admin: al resto no le cambia nada. */}
+      {puedeAdministrar && !collapsed && (
+        <div className="sidebar-modo">
+          <button
+            type="button"
+            className={'sidebar-modo-btn' + (enModoAdmin ? ' active' : '')}
+            onClick={() => cambiarModo(MODOS.ADMIN)}
+          >
+            Administrar
+          </button>
+          <button
+            type="button"
+            className={'sidebar-modo-btn' + (!enModoAdmin ? ' active' : '')}
+            onClick={() => cambiarModo(MODOS.OPERAR)}
+            title={activeApp ? undefined : 'Vas a elegir un grupo'}
+          >
+            Operar
+          </button>
+        </div>
+      )}
+
+      {/* App / Local context. En modo admin no se muestra: lo que se administra no
+          depende del grupo ni del local elegido, y dejarlo a la vista era justo lo
+          que hacía creer que sí. */}
+      {activeApp && !enModoAdmin && !collapsed && (
         <div className="sidebar-context">
           {isGlobal ? (
             <div style={{
@@ -421,7 +478,7 @@ export default function Sidebar() {
           )}
         </NavLink>
 
-        {mainItems.map(({ key, to, label, Icon, external }) => external ? (
+        {itemsOperativos.map(({ key, to, label, Icon, external }) => external ? (
           <button
             key={key}
             type="button"
