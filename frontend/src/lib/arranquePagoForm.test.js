@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cargarArranquePago, metodoPorDefecto } from './arranquePagoForm.js'
+import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from './arranquePagoForm.js'
 
 const METODOS = [
   { id: 'm1', nombre: 'Transferencia' },
@@ -65,4 +65,27 @@ test('metodoPorDefecto encuentra Efectivo y no explota si no esta', () => {
   assert.equal(metodoPorDefecto([{ id: 'm1', nombre: 'Transferencia' }]), null)
   assert.equal(metodoPorDefecto([]), null)
   assert.equal(metodoPorDefecto(null), null)
+})
+
+// ── metodo de arranque por tipo ──────────────────────────────────────────────
+
+test('MovStock arranca con Intercompany, no con Efectivo', () => {
+  // No mueve plata: es mercadería entre empresas del grupo.
+  assert.equal(metodoDeArranque('STK'), 'Intercompany')
+})
+
+test('Carga Avion y el resto siguen arrancando con Efectivo', () => {
+  assert.equal(metodoDeArranque('B'), 'Efectivo')
+  assert.equal(metodoDeArranque('A'), 'Efectivo')
+  assert.equal(metodoDeArranque(undefined), 'Efectivo')
+  assert.equal(metodoDeArranque(null), 'Efectivo')
+})
+
+test('metodoPorDefecto resuelve el metodo de MovStock contra la lista real', () => {
+  const conInter = [...METODOS, { id: 'm3', nombre: 'Intercompany' }]
+  assert.equal(metodoPorDefecto(conInter, metodoDeArranque('STK'))?.id, 'm3')
+  assert.equal(metodoPorDefecto(conInter, metodoDeArranque('B'))?.id, 'm2')
+  // Si el método no está en la lista devuelve null y el llamador decide: no se
+  // inventa un id, que terminaría en un 400 al guardar.
+  assert.equal(metodoPorDefecto(METODOS, metodoDeArranque('STK')), null)
 })

@@ -13,7 +13,7 @@ import Combobox from '../../components/Combobox.jsx'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
-import { cargarArranquePago, metodoPorDefecto } from '../../lib/arranquePagoForm.js'
+import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
 
 function IcoBack() {
   return (
@@ -258,8 +258,10 @@ export default function PagoForm() {
           return
         }
         if (!isEditing && modoRapido) {
-          const efectivo = metodoPorDefecto(mets)
-          if (efectivo) setForm((f) => ({ ...f, id_metodo: f.id_metodo || efectivo.id }))
+          // Carga Avión arranca en Efectivo y MovStock en Intercompany: ver
+          // metodoDeArranque en lib/arranquePagoForm.js.
+          const met = metodoPorDefecto(mets, metodoDeArranque(tipoParam))
+          if (met) setForm((f) => ({ ...f, id_metodo: f.id_metodo || met.id }))
         }
         // El porcentaje de descuento sale de la ficha del local. Se guarda
         // aunque no sea MovStock: el tipo se puede cambiar dentro del form.

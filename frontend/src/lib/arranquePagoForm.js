@@ -13,6 +13,18 @@
 
 const METODO_DEFAULT = 'Efectivo'
 
+// MovStock (tipo STK) no mueve plata: es mercadería que pasa de una empresa del
+// grupo a otra, así que el método es Intercompany y no Efectivo. Ya era lo que se
+// usaba en la práctica -- 2970 de los 3007 MovStock cargados tienen Intercompany --
+// pero el formulario arrancaba en Efectivo y había que cambiarlo a mano cada vez;
+// los 21 que quedaron en Efectivo son los que se olvidaron.
+const METODO_POR_TIPO = { STK: 'Intercompany' }
+
+// Con qué método arranca un modo rápido según el tipo de comprobante.
+export function metodoDeArranque(tipo) {
+  return METODO_POR_TIPO[tipo] ?? METODO_DEFAULT
+}
+
 // `pago` y `contexto` son opcionales: se pasa null cuando no corresponde
 // pedirlos (crear en vez de editar, o un modo que no necesita el local).
 export async function cargarArranquePago({ metodos, pago, contexto }) {
