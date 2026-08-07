@@ -84,33 +84,31 @@ test('detecta el descuadre chico de tipeo (caso real de 878: $40)', () => {
   assert.equal(r.cuadra, false)
 })
 
-test('los gastos de un detalle SUMAN: el efectivo del cierre ya esta neto de ellos', () => {
-  // Cuando la caja se carga por detalles, `efectivo` es la plata CONTADA en el
-  // cajon al cerrar, y los gastos ya salieron de ahi. Para reconstruir la venta
-  // hay que devolverlos: venta = contado + gastos_pagados + cobros_no_efectivo.
+test('los gastos de un detalle RESTAN', () => {
   const r = calcularCuadre({
-    total: 1300, efectivo: 100,
+    total: 900, efectivo: 100,
     detalles: [det(1000, 'cobro'), det(200, 'gasto')]
   })
   assert.equal(r.cobros, 1000)
   assert.equal(r.gastos, 200)
-  assert.equal(r.esperado, 1300)
+  assert.equal(r.esperado, 900)
   assert.equal(r.cuadra, true)
 })
 
-test('caja real de produccion: LOS GALGOS cuadra exacto sumando los gastos', () => {
-  // Caja migrada de LOS GALGOS. Con la formula anterior (gastos restando) daba
-  // una diferencia de 74.800, que es exactamente 2x los gastos: la firma del
-  // signo invertido. Es el ancla de regresion de este arreglo.
+test('caja real de produccion: LOS GALGOS ya no cuadra restando los gastos', () => {
+  // La misma caja cuadraba exacto cuando los gastos SUMABAN (fix c0fdf51). Con
+  // la resta vuelve a dar una diferencia de 74.800, que es 2x los gastos -- la
+  // firma de un signo de gasto invertido respecto de lo esperado. Documentado
+  // a proposito: es la consecuencia conocida y aceptada de este cambio.
   const r = calcularCuadre({
     total: 3284530, efectivo: 789030,
     detalles: [det(2458100, 'ingreso'), det(37400, 'egreso')]
   })
   assert.equal(r.cobros, 2458100)
   assert.equal(r.gastos, 37400)
-  assert.equal(r.esperado, 3284530)
-  assert.equal(r.diferencia, 0)
-  assert.equal(r.cuadra, true)
+  assert.equal(r.esperado, 3209730)
+  assert.equal(r.diferencia, 74800)
+  assert.equal(r.cuadra, false)
 })
 
 test('sin gastos la formula no cambia', () => {
@@ -144,9 +142,9 @@ test('funciona sin efectivo cargado (null o cero)', () => {
 
 // ── Cuadre por movimientos (origen TAPTAP) ──────────────────────────────────
 
-test('con movimientos de cobro se valida por movimientos', () => {
+test('con origin TAPTAP se valida por movimientos, sin importar los detalles', () => {
   const r = calcularCuadre({
-    total: 1000, efectivo: 300,
+    total: 1000, efectivo: 300, origin: 'TAPTAP',
     detalles: [det(999999, 'informativo')],
     movimientos: [mov('COBRO', 300, 'Efectivo'), mov('COBRO', 700, 'Mercado Pago')]
   })
@@ -159,37 +157,41 @@ test('con movimientos de cobro se valida por movimientos', () => {
 
 test('el fondo inicial y los vaciados no afectan la diferencia', () => {
   const base = [mov('COBRO', 800, 'Mercado Pago')]
-  const sinRuido = calcularCuadre({ total: 800, efectivo: 0, movimientos: base })
+  const sinRuido = calcularCuadre({ total: 800, efectivo: 0, origin: 'TAPTAP', movimientos: base })
   const conRuido = calcularCuadre({
-    total: 800, efectivo: 0,
+    total: 800, efectivo: 0, origin: 'TAPTAP',
     movimientos: [...base, mov('INICIAL', 5000, 'Efectivo'), mov('VACIADO', 3000, 'Mercado Pago'), mov('RETIRO', 900, 'Efectivo')]
   })
   assert.equal(sinRuido.diferencia, conRuido.diferencia)
   assert.equal(conRuido.cuadra, true)
 })
 
-test('una caja con solo movimientos informativos se valida por detalles', () => {
-  // Caso real: caja que solo tiene el fondo inicial cargado como movimiento
+test('con origin distinto de TAPTAP se valida por detalles, aunque haya movimientos cargados', () => {
+  // Caso real: ATTE 04/08/2026 turno 1 (origin DCSMART) tenia un gasto suelto
+  // cargado como movimiento ademas de los cobros por detalle. Antes, ese
+  // movimiento activaba la fuente 'movimientos' e ignoraba los detalles
+  // enteros. Ahora la fuente depende solo del origin.
   const r = calcularCuadre({
     total: 500, efectivo: 100,
     detalles: [det(400, 'cobro')],
-    movimientos: [mov('INICIAL', 5000, 'Efectivo')]
+    movimientos: [mov('GASTO', 5000, 'Efectivo')]
   })
   assert.equal(r.fuente, 'detalles')
   assert.equal(r.cuadra, true)
 })
 
-test('los gastos en movimientos restan, salvo que sean en efectivo', () => {
-  // Un gasto pagado en efectivo ya esta reflejado en caja.efectivo
+test('los gastos en movimientos restan siempre, incluso en efectivo', () => {
+  // A diferencia de un cobro (que duplicaria caja.efectivo), un gasto en
+  // efectivo no duplica nada: salio del cajon igual que cualquier otro gasto.
   const enEfectivo = calcularCuadre({
-    total: 700, efectivo: 0,
+    total: 600, efectivo: 0, origin: 'TAPTAP',
     movimientos: [mov('COBRO', 700, 'Mercado Pago'), mov('GASTO', 100, 'Efectivo')]
   })
-  assert.equal(enEfectivo.gastos, 0)
+  assert.equal(enEfectivo.gastos, 100)
   assert.equal(enEfectivo.cuadra, true)
 
   const conTarjeta = calcularCuadre({
-    total: 600, efectivo: 0,
+    total: 600, efectivo: 0, origin: 'TAPTAP',
     movimientos: [mov('COBRO', 700, 'Mercado Pago'), mov('GASTO', 100, 'Credito')]
   })
   assert.equal(conTarjeta.gastos, 100)

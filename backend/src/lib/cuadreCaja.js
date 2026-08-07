@@ -7,40 +7,26 @@
 //
 // LA REGLA
 //
-//   por DETALLES:     diferencia = total - (efectivo + cobros + gastos)
-//   por MOVIMIENTOS:  diferencia = total - (efectivo + cobros - gastos)
+//   diferencia = total - (efectivo + cobros - gastos)
 //
 // `total` es la VENTA del turno. El fondo inicial, los retiros y los vaciados no
 // participan: mueven plata del cajon, no cambian lo vendido.
 //
-// De donde salen los cobros depende de como carga el local:
-//   - por DETALLES: los tipos con rol de cobro o gasto (origen DCSMART)
-//   - por MOVIMIENTOS: los cobros que NO son en efectivo, porque el efectivo
-//     ya esta en el campo `efectivo` y contarlo dos veces lo duplicaria
-//     (origen TAPTAP)
+// LA FUENTE (de donde salen cobros/gastos) la define `caja.origin`, no lo que
+// esta caja puntual tenga cargado:
+//   - origin !== TAPTAP: por DETALLES (los tipos con rol de cobro o gasto).
+//   - origin === TAPTAP: por MOVIMIENTOS (los cobros que NO son en efectivo,
+//     porque el efectivo ya esta en el campo `efectivo` y contarlo de nuevo lo
+//     duplicaria; los gastos SI restan aunque sean en efectivo, porque un
+//     gasto no duplica nada, solo salio del cajon).
 //
-// EL SIGNO DE LOS GASTOS ES DISTINTO SEGUN LA FUENTE, y no es un descuido:
-//
-//   - Cargando por DETALLES, `efectivo` es la plata CONTADA en el cajon al
-//     cerrar, y los gastos del turno ya salieron de ahi. Para reconstruir la
-//     venta hay que devolverlos. Ejemplo real de LOS GALGOS: venta 7.954.340,
-//     contado 361.050, cobros no-efectivo 7.229.300, gastos 364.000 ->
-//     361.050 + 7.229.300 + 364.000 = 7.954.350. Restandolos daba 727.990 de
-//     diferencia sobre una caja que en realidad cuadra.
-//
-//   - Cargando por MOVIMIENTOS, `efectivo` es lo COBRADO en efectivo (se
-//     verifico contra produccion: coincide con la suma de los cobros en
-//     efectivo en 135 de 135 cajas TapTap), y los gastos son salidas que no
-//     son venta, asi que restan.
-//
-// Este modulo restaba los gastos en las dos ramas. La verificacion de las 135
-// cajas TapTap no lo detecto porque NINGUNA caja TapTap tiene gastos: el
-// termino siempre valia cero y nunca se ejercito. Medido sobre las 6.434 cajas
-// con total cargado, sumar los gastos en la rama de detalles deja 302 cajas mas
-// cuadrando exacto y baja el desvio absoluto total un 14%. Hay 9 cajas de LOS
-// GALGOS que cuadraban con el signo viejo y dejan de cuadrar; estan todas entre
-// el 26/1 y el 2/2 de 2025, o sea son de una epoca de carga distinta, no una
-// regla que compita.
+// Antes la fuente se elegia mirando si la caja tenia movimientos "utiles"
+// cargados, y una caja no-TapTap con un movimiento suelto (tipico: un gasto
+// cargado por movimiento ademas de los cobros por detalle) hacia que se
+// ignoraran TODOS los detalles reales. Caso real: ATTE 04/08/2026 turno 1, un
+// gasto de $1.000 en efectivo activaba la rama de movimientos e ignoraba
+// $3.559.398 en detalles (MP Point/QR), dejando un sobrante fantasma de
+// $3.883.481 en una caja cuyo descuadre real era mucho menor.
 //
 // Los tipos con rol informativo no entran nunca: son desglose de algo que ya
 // esta contado (canales de venta, "Total Tarjetas", ajustes internos de TapTap).
@@ -113,11 +99,9 @@ export function calcularCuadre(caja) {
   const detalles = caja.detalles ?? []
   const movimientos = caja.movimientos ?? []
 
-  // Se valida por movimientos solo si hay cobros o gastos cargados ahi. Si el
-  // local carga en detalles (o si los movimientos son todos informativos, como
-  // una caja que solo tiene el fondo inicial), se valida por detalles.
-  const movimientosUtiles = movimientos.filter((m) => rolDeMovimiento(m) !== 'informativo')
-  const fuente = movimientosUtiles.length > 0 ? 'movimientos' : 'detalles'
+  // La fuente la define como carga el local (origin), no lo que esta caja
+  // puntual tenga cargado. Ver el comentario de arriba.
+  const fuente = caja.origin === 'TAPTAP' ? 'movimientos' : 'detalles'
 
   let cobros = 0
   let gastos = 0
@@ -128,8 +112,10 @@ export function calcularCuadre(caja) {
       const rol = rolDeMovimiento(m)
       const monto = num(m.monto)
       if (rol === 'informativo') { informativos += monto; continue }
-      // El efectivo ya viene en caja.efectivo: sumarlo de nuevo lo duplicaria
-      if (esEfectivo(m.metodo_pago?.nombre)) { informativos += monto; continue }
+      // El efectivo ya viene en caja.efectivo: sumar un COBRO en efectivo de
+      // nuevo lo duplicaria. Un GASTO en efectivo no duplica nada -- salio del
+      // cajon igual que cualquier otro gasto, y no restarlo lo esconde.
+      if (rol === 'cobro' && esEfectivo(m.metodo_pago?.nombre)) { informativos += monto; continue }
       if (rol === 'cobro') cobros += monto
       else if (rol === 'gasto') gastos += monto
     }
@@ -144,12 +130,7 @@ export function calcularCuadre(caja) {
   }
 
   const efectivo = num(caja.efectivo)
-  // Ver "EL SIGNO DE LOS GASTOS" arriba: por detalles el efectivo es el contado
-  // al cierre (ya neto de los gastos) y hay que devolverlos; por movimientos es
-  // lo cobrado en efectivo y los gastos son salidas que restan.
-  const esperado = fuente === 'detalles'
-    ? efectivo + cobros + gastos
-    : efectivo + cobros - gastos
+  const esperado = efectivo + cobros - gastos
 
   // Sin total cargado no hay nada contra que comparar
   if (caja.total == null) {
