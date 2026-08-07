@@ -10,6 +10,10 @@ import { DESCUENTO_MOVSTOCK_DEFAULT } from '../../lib/descuentoMovstock.js'
 
 const LIMIT = 50
 
+// Columnas de la tabla. Se usa en el skeleton y en la fila de "sin resultados":
+// si queda desfasado de los <th>, la tabla se desalinea al cargar y al estar vacía.
+const COLUMNAS = 11
+
 function IcoLocalesEmpty() {
   return (
     <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
@@ -287,8 +291,15 @@ export default function Locales() {
               <th>Nombre</th>
               <th>Grupo</th>
               <th>Tipo</th>
+              {/* El proveedor del local es con quien se factura a sí mismo en los
+                  modos rápidos (Carga Avión y MovStock lo usan como proveedor por
+                  defecto), así que saber si está cargado importa. */}
+              <th>Proveedor</th>
+              <th>Mail facturas</th>
+              <th style={{ textAlign: 'right' }}>Desc. MovStock</th>
               <th>Dirección</th>
               <th>Teléfono</th>
+              <th>Links</th>
               <th>Estado</th>
               <th></th>
             </tr>
@@ -297,7 +308,7 @@ export default function Locales() {
             {loading ? (
               Array.from({ length: 6 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 7 }, (_, j) => (
+                  {Array.from({ length: COLUMNAS }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 9) % 40}%` }} /></td>
                   ))}
                 </tr>
@@ -314,8 +325,89 @@ export default function Locales() {
                     </td>
                     <td><span className="badge badge-muted">{l.app?.nombre}</span></td>
                     <td className="td-muted">{labelTipoLocal(l.tipo_local)}</td>
-                    <td className="td-muted">{l.direccion || '—'}</td>
+
+                    {/* Sin proveedor, Carga Avión y MovStock no pueden facturar
+                        contra el local: se avisa en vez de mostrar un guion que no
+                        distingue "no tiene" de "no se cargó". */}
+                    <td style={{ maxWidth: 200 }}>
+                      {l.proveedor ? (
+                        <div
+                          style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          title={[l.proveedor.razon_social, l.proveedor.cuit].filter(Boolean).join(' · ')}
+                        >
+                          {l.proveedor.nombre || l.proveedor.razon_social || '(sin nombre)'}
+                        </div>
+                      ) : (
+                        <span className="badge badge-amber" title="Carga Avión y MovStock necesitan el proveedor del local">
+                          Sin proveedor
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="td-muted" style={{ maxWidth: 180 }}>
+                      {l.mail_facturas ? (
+                        <div
+                          style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          title={l.mail_facturas}
+                        >
+                          {l.mail_facturas}
+                        </div>
+                      ) : '—'}
+                    </td>
+
+                    {/* El descuento que MovStock aplica sobre el neto. Se marca
+                        cuando difiere del general: es plata y conviene que salte. */}
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {(() => {
+                        const pct = Number(l.descuento_movstock ?? DESCUENTO_MOVSTOCK_DEFAULT)
+                        const esDefault = pct === Number(DESCUENTO_MOVSTOCK_DEFAULT)
+                        return (
+                          <span
+                            style={{ color: esDefault ? 'var(--t3)' : 'var(--amber)', fontWeight: esDefault ? 400 : 700 }}
+                            title={esDefault
+                              ? `El general (${DESCUENTO_MOVSTOCK_DEFAULT}%)`
+                              : `Pactado distinto del general (${DESCUENTO_MOVSTOCK_DEFAULT}%)`}
+                          >
+                            {pct}%
+                          </span>
+                        )
+                      })()}
+                    </td>
+
+                    <td className="td-muted" style={{ maxWidth: 220 }}>
+                      {l.direccion ? (
+                        <div
+                          style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          title={l.direccion}
+                        >
+                          {l.direccion}
+                        </div>
+                      ) : '—'}
+                    </td>
                     <td className="td-muted">{l.telefono  || '—'}</td>
+
+                    {/* Maps y menú: iconos y no la URL entera, que ocuparía media
+                        tabla. El click no abre el drawer del local. */}
+                    <td>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {l.maps_url && (
+                          <a
+                            href={l.maps_url} target="_blank" rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Ver en Maps" style={{ fontSize: 12 }}
+                          >Maps</a>
+                        )}
+                        {l.menu_url && (
+                          <a
+                            href={l.menu_url} target="_blank" rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Ver el menú" style={{ fontSize: 12 }}
+                          >Menú</a>
+                        )}
+                        {!l.maps_url && !l.menu_url && <span className="td-muted">—</span>}
+                      </div>
+                    </td>
+
                     <td>
                       <span className={`badge ${l.activo ? 'badge-green' : 'badge-muted'}`}>
                         {l.activo ? 'Activo' : 'Inactivo'}
@@ -332,7 +424,7 @@ export default function Locales() {
                 ))}
                 {locales.length === 0 && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={COLUMNAS}>
                       <div className="table-empty">
                         <IcoLocalesEmpty />
                         <p>No hay locales registrados.</p>
