@@ -8,6 +8,18 @@ import { useNavigate } from 'react-router-dom'
 import { clientesApi } from '../../api/clientes.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { nombreClienteODefault } from '../../lib/clientes.js'
+import { CUADRANTES, CUADRANTE_INFO } from '../../lib/cuentaCorriente.js'
+
+// Los dos numeros que importan de un vistazo en el listado: lo que falta cobrar y lo
+// que falta pagar. Los cerrados (gastos e ingresos ya movidos) estan en la ficha; aca
+// solo estorbarian.
+const PENDIENTES = [CUADRANTES.A_COBRAR, CUADRANTES.GASTOS_PENDIENTES]
+
+const fmtPlata = (n) => {
+  const v = Number(n)
+  if (!v) return null
+  return `$${Math.abs(v).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
+}
 
 const LIMIT = 50
 
@@ -117,7 +129,8 @@ export default function ClienteList() {
         <div className="page-head-left">
           <h1 className="page-title">Clientes</h1>
           <p className="page-sub">
-            A nombre de quién se generó un gasto. Su cuenta corriente es lo que te debe o tiene a favor.
+            Con quién el local tiene una cuenta abierta. La columna <strong>Sin cerrar</strong> es
+            lo que falta cobrar y lo que falta pagar; el detalle completo está en la cuenta de cada uno.
           </p>
         </div>
         <div className="page-actions">
@@ -163,6 +176,7 @@ export default function ClienteList() {
               <th>Razón social</th>
               <th>CUIT</th>
               <th>Contacto</th>
+              <th>Sin cerrar</th>
               <th>Estado</th>
               <th></th>
             </tr>
@@ -171,14 +185,14 @@ export default function ClienteList() {
             {loading ? (
               Array.from({ length: 6 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 6 }, (_, j) => (
+                  {Array.from({ length: 7 }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 11) % 40}%` }} /></td>
                   ))}
                 </tr>
               ))
             ) : clientes.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div className="table-empty">
                     <IcoClientesEmpty />
                     <p>
@@ -207,6 +221,24 @@ export default function ClienteList() {
                     title={[c.mail, c.telefono].filter(Boolean).join(' · ') || undefined}>
                     {[c.mail, c.telefono].filter(Boolean).join(' · ') || '—'}
                   </div>
+                </td>
+                {/* Solo lo pendiente, y solo si hay: una fila con dos ceros es
+                    ruido en una tabla que se recorre buscando quien debe. */}
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  {PENDIENTES.some((k) => Number(c.cuenta?.[k])) ? (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {PENDIENTES.map((k) => {
+                        const monto = fmtPlata(c.cuenta?.[k])
+                        if (!monto) return null
+                        const info = CUADRANTE_INFO[k]
+                        return (
+                          <span key={k} className={`badge ${info.badge}`} title={info.ayuda}>
+                            {info.label}: {monto}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  ) : <span className="td-muted">—</span>}
                 </td>
                 <td>
                   <span className={`badge ${c.activo ? 'badge-green' : 'badge-muted'}`}>
