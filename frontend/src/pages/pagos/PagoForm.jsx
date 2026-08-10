@@ -1152,9 +1152,11 @@ export default function PagoForm() {
                   placeholder="Buscar cliente…"
                 />
                 <p className="form-hint" style={{ marginTop: 4, marginBottom: 0 }}>
-                  A nombre de quién se generó este gasto. Va a su cuenta corriente
-                  cuando la op quede pagada. Solo se listan los clientes activos; se
-                  dan de alta en <Link to="/clientes">Clientes</Link>.
+                  Con quién es la cuenta. Entra a su cuenta corriente <strong>ya</strong>,
+                  sin esperar el pago: como egreso es un gasto pendiente y como ingreso
+                  es plata a cobrar. Al marcarla pagada pasa a gasto o a ingreso, y el
+                  saldo no cambia. Solo se listan los clientes activos; se dan de alta
+                  en <Link to="/clientes">Clientes</Link>.
                 </p>
               </div>
             )}
