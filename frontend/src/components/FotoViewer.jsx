@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import client from '../api/client'
+import {
+  transformCss, resetearVista, etiquetaVista, rotarDerecha, rotarIzquierda,
+  estaDeCostado, VISTA_INICIAL,
+} from '../lib/visorImagen.js'
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +27,21 @@ function IcoPdf() {
   )
 }
 
+function IcoRotarDer() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 1 1-3.2-6.9" /><polyline points="21 4 21 10 15 10" />
+    </svg>
+  )
+}
+function IcoRotarIzq() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 3.2-6.9" /><polyline points="3 4 3 10 9 10" />
+    </svg>
+  )
+}
+
 function IcoClose() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -40,13 +59,15 @@ const ZOOM_STEP = 1.25
 function clampScale(s) { return Math.max(MIN_SCALE, Math.min(MAX_SCALE, s)) }
 
 function ImageLightbox({ src, onClose }) {
-  const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
+  const [view, setView] = useState(VISTA_INICIAL)
   const [dragging, setDragging] = useState(false)
   const containerRef = useRef(null)
   const dragOrigin   = useRef(null)   // { startX, startY, originX, originY }
   const pinchRef     = useRef(null)   // last pinch distance + midpoint
 
-  const reset = useCallback(() => setView({ scale: 1, x: 0, y: 0 }), [])
+  // Endereza el zoom y el arrastre pero NO la rotacion: quien giro una factura para
+  // poder leerla no espera que un doble click la vuelva a poner de costado.
+  const reset = useCallback(() => setView(v => resetearVista(v)), [])
 
   // ── Non-passive wheel → zoom toward cursor ───────────────────────────────
   useEffect(() => {
@@ -75,6 +96,10 @@ function ImageLightbox({ src, onClose }) {
       if (e.key === '0')          reset()
       if (e.key === '+' || e.key === '=') setView(v => ({ ...v, scale: clampScale(v.scale * ZOOM_STEP) }))
       if (e.key === '-')          setView(v => ({ ...v, scale: clampScale(v.scale / ZOOM_STEP) }))
+      // R gira a la derecha, Shift+R a la izquierda.
+      if (e.key === 'r' || e.key === 'R') {
+        setView(v => ({ ...v, rot: e.shiftKey ? rotarIzquierda(v.rot) : rotarDerecha(v.rot) }))
+      }
       // Arrow keys pan when zoomed
       const PAN = 40 / (view.scale || 1)
       if (e.key === 'ArrowLeft')  setView(v => ({ ...v, x: v.x + PAN }))
@@ -152,6 +177,8 @@ function ImageLightbox({ src, onClose }) {
   const onTouchEnd = () => { dragOrigin.current = null; pinchRef.current = null; setDragging(false) }
 
   // ── Zoom button helpers ───────────────────────────────────────────────────
+  const rotarDer = (e) => { e.stopPropagation(); setView(v => ({ ...v, rot: rotarDerecha(v.rot) })) }
+  const rotarIzq = (e) => { e.stopPropagation(); setView(v => ({ ...v, rot: rotarIzquierda(v.rot) })) }
   const zoomIn  = (e) => { e.stopPropagation(); setView(v => ({ ...v, scale: clampScale(v.scale * ZOOM_STEP) })) }
   const zoomOut = (e) => { e.stopPropagation(); setView(v => ({ ...v, scale: clampScale(v.scale / ZOOM_STEP) })) }
   const doReset = (e) => { e.stopPropagation(); reset() }
@@ -202,9 +229,13 @@ function ImageLightbox({ src, onClose }) {
           draggable={false}
           onDoubleClick={onDblClick}
           style={{
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+            transform: transformCss(view),
             transformOrigin: 'center center',
-            maxWidth: '90vw', maxHeight: '90vh',
+            // Rotada 90 grados, el ALTO de la imagen ocupa el ancho de la pantalla:
+            // con los limites sin invertir, una foto vertical girada se salia de la
+            // ventana y no habia forma de verla entera.
+            maxWidth: estaDeCostado(view.rot) ? '90vh' : '90vw',
+            maxHeight: estaDeCostado(view.rot) ? '90vw' : '90vh',
             borderRadius: view.scale <= 1 ? 12 : 4,
             boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
             pointerEvents: 'auto',
@@ -224,14 +255,23 @@ function ImageLightbox({ src, onClose }) {
           border: '1px solid rgba(255,255,255,0.12)',
         }}
       >
+        <button style={btnStyle} onClick={rotarIzq} title="Girar a la izquierda (Shift+R)" aria-label="Girar a la izquierda">
+          <IcoRotarIzq />
+        </button>
+        <button style={btnStyle} onClick={rotarDer} title="Girar a la derecha (R)" aria-label="Girar a la derecha">
+          <IcoRotarDer />
+        </button>
+
+        <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.18)', margin: '0 2px' }} />
+
         <button style={btnStyle} onClick={zoomOut} title="Alejar (-)">−</button>
 
         <button
-          style={{ ...btnStyle, width: 56, fontSize: 12, fontWeight: 600, letterSpacing: '0.03em' }}
+          style={{ ...btnStyle, width: 76, fontSize: 12, fontWeight: 600, letterSpacing: '0.03em' }}
           onClick={doReset}
-          title="Restablecer (0)"
+          title="Restablecer zoom (0). La rotación se mantiene."
         >
-          {Math.round(view.scale * 100)}%
+          {etiquetaVista(view)}
         </button>
 
         <button style={btnStyle} onClick={zoomIn} title="Acercar (+)">+</button>
@@ -244,7 +284,7 @@ function ImageLightbox({ src, onClose }) {
           fontSize: 11, color: 'rgba(255,255,255,0.4)', pointerEvents: 'none',
           whiteSpace: 'nowrap',
         }}>
-          Rueda para hacer zoom · Doble clic para ampliar · Arrastrá para mover
+          Rueda para hacer zoom · Doble clic para ampliar · Arrastrá para mover · R para girar
         </div>
       )}
     </div>
