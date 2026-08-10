@@ -9,6 +9,7 @@ import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
 import { avisarDesauditado } from '../lib/avisos.js'
+import { datosCopiaDePago, datosSincroDePago, vaACajaMayor } from '../lib/cajaMayor.js'
 
 // parseFloat('') / parseFloat(null) dan NaN -- a diferencia de `|| null`,
 // esto no confunde un 0 real (valor válido y frecuente, ej. descuento=0)
@@ -35,6 +36,95 @@ async function logActivity(fastify, { id_registro, id_local, accion, id_user, sn
     })
   } catch (err) {
     fastify.log.error({ err }, `No se pudo registrar activity_log (${accion}) para pago ${id_registro}`)
+  }
+}
+
+// ─── COPIA A CAJA MAYOR ──────────────────────────────────────────────────────
+// Una op de tipo CM es plata que el local manda a la caja mayor. Al cargarla se
+// copia a `movimientos_cm` con estado ENVIADA, y ahí el CM confirma la recepción
+// (módulo Caja Mayor, solo super_admin). La copia queda ligada por `id_pago`, que
+// es único: llamar dos veces no duplica.
+//
+// Igual que logActivity, no puede tumbar la operación principal: si la copia falla,
+// se loguea y el pago se guarda igual. El módulo tiene un upsert de respaldo que
+// crea la copia la primera vez que alguien gestiona esa op.
+async function copiarPagoACajaMayor(fastify, pago) {
+  if (!vaACajaMayor(pago)) return
+  try {
+    // La dirección depende del rubro (ver direccionCajaMayor). El pago que llega
+    // acá no siempre lo trae incluido, así que se resuelve acá en vez de cambiar
+    // el `include` de cada endpoint que crea o edita pagos.
+    const conRubro = pago.rubcat !== undefined ? pago : {
+      ...pago,
+      rubcat: pago.id_rubcat
+        ? await fastify.db.rubCat.findUnique({
+          where: { id: pago.id_rubcat },
+          select: { rubro: { select: { nombre: true } } },
+        })
+        : null,
+    }
+
+    const existente = await fastify.db.movimientoCM.findUnique({
+      where: { id_pago: pago.id }, select: { direccion_manual: true },
+    })
+    await fastify.db.movimientoCM.upsert({
+      where: { id_pago: pago.id },
+      // Si ya existía (reintento, o el pago volvió a ser CM), se sincroniza sin
+      // pisar el estado ni lo que el CM haya cargado a mano.
+      update: datosSincroDePago(conRubro, existente),
+      create: { ...datosCopiaDePago(conRubro), created_by: pago.created_by ?? null },
+    })
+  } catch (err) {
+    fastify.log.error({ err }, `No se pudo copiar el pago ${pago.id} a caja mayor`)
+  }
+}
+
+// Un pago editado puede entrar, salir o quedarse en la caja mayor:
+//   - sigue siendo CM  -> se sincroniza la copia (importe, fecha, local)
+//   - dejó de ser CM   -> se borra la copia, salvo que el CM ya la haya recibido:
+//                         en ese caso se deja y el módulo la muestra desfasada,
+//                         porque borrar plata ya confirmada descuadra el saldo.
+//   - pasó a ser CM    -> se crea la copia
+async function sincronizarCajaMayor(fastify, pago) {
+  if (vaACajaMayor(pago)) return copiarPagoACajaMayor(fastify, pago)
+  try {
+    const copia = await fastify.db.movimientoCM.findUnique({
+      where: { id_pago: pago.id }, select: { id: true, estado: true },
+    })
+    if (!copia) return
+    if (copia.estado === 'RECIBIDA') {
+      fastify.log.warn(
+        `El pago ${pago.id} dejó de ser CM pero su movimiento de caja mayor ya estaba RECIBIDA: se deja para no descuadrar el saldo`
+      )
+      return
+    }
+    await fastify.db.movimientoCM.delete({ where: { id: copia.id } })
+  } catch (err) {
+    fastify.log.error({ err }, `No se pudo sincronizar caja mayor para el pago ${pago.id}`)
+  }
+}
+
+// Al borrar el pago, su copia en la caja mayor deja de tener sentido: la FK es
+// ON DELETE SET NULL, así que sin esto quedaría un movimiento de origen PAGO con
+// id_pago en null, imposible de editar (el módulo no deja tocar los PAGO) y de
+// rastrear. Se borra, salvo que el CM ya lo haya marcado RECIBIDA: en ese caso la
+// plata entró de verdad y quitarla del saldo descuadraría la caja. Ahí queda con
+// id_pago en null y el módulo lo muestra sin trazabilidad, que es lo honesto.
+async function borrarCopiaCajaMayor(fastify, idPago) {
+  try {
+    const copia = await fastify.db.movimientoCM.findUnique({
+      where: { id_pago: idPago }, select: { id: true, estado: true },
+    })
+    if (!copia) return
+    if (copia.estado === 'RECIBIDA') {
+      fastify.log.warn(
+        `Se borró el pago ${idPago} pero su movimiento de caja mayor estaba RECIBIDA: queda en el saldo, sin la op de origen`
+      )
+      return
+    }
+    await fastify.db.movimientoCM.delete({ where: { id: copia.id } })
+  } catch (err) {
+    fastify.log.error({ err }, `No se pudo borrar la copia de caja mayor del pago ${idPago}`)
   }
 }
 
@@ -590,6 +680,8 @@ export default async function pagosRoutes(fastify) {
         id_registro: pago.id, id_local, accion: 'creado',
         id_user: request.user.id, snapshot: toSnapshotSafe(pago)
       })
+      // Op de tipo CM: se copia a la caja mayor como ENVIADA.
+      await copiarPagoACajaMayor(fastify, pago)
       return reply.code(201).send(pago)
     } catch (err) {
       return reply.code(400).send({ error: translatePagoError(err) })
@@ -670,6 +762,8 @@ export default async function pagosRoutes(fastify) {
         id_registro: pago.id, id_local: pago.id_local, accion: 'editado',
         id_user: request.user.id, snapshot: toSnapshotSafe(pago)
       })
+      // La op puede haber entrado, salido o quedado en la caja mayor.
+      await sincronizarCajaMayor(fastify, pago)
       return pago
     } catch (err) {
       return reply.code(400).send({ error: translatePagoError(err) })
@@ -1202,6 +1296,13 @@ export default async function pagosRoutes(fastify) {
       id_registro: existing.id, id_local: existing.id_local, accion: 'eliminado',
       id_user: request.user.id, snapshot: toSnapshotSafe(existing)
     })
+
+    // Su copia en la caja mayor. La FK es ON DELETE SET NULL, así que si no se
+    // hace nada el movimiento sobrevive con id_pago en null: un movimiento de
+    // origen PAGO sin pago, que nadie puede editar ni rastrear. Se borra, salvo
+    // que el CM ya lo haya recibido -- ahí la plata entró de verdad y sacarla del
+    // saldo sería peor que dejar el rastro.
+    await borrarCopiaCajaMayor(fastify, existing.id)
 
     // Eliminar registros dependientes antes que el pago (FK constraints)
     await fastify.db.impuesto.deleteMany({ where: { id_pago: request.params.id } })

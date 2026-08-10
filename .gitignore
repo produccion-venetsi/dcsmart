@@ -33,3 +33,11 @@ Thumbs.db
 old-pdp-app/
 *.csv
 .superpowers/
+
+# Material de referencia de la app AppSheet vieja de Caja Mayor: export de las
+# Sheets y capturas. Es contexto para el modulo, no fuente de la app.
+app vieja caja mayor/
+
+# Reporte que genera scripts/listar-locales-sin-proveedor.mjs: es material de
+# trabajo para resolver los locales a mano, no fuente.
+backend/locales-sin-proveedor.txt

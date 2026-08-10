@@ -8,6 +8,25 @@
 // gastronomicos en el campo viejo y ninguno como general, asi que filtrar
 // dejaria a un local de indumentaria o arquitectura sin ningun proveedor para
 // elegir. Ordenar no puede dejar a nadie sin opciones.
+//
+// ── INVARIANTE: `tipos_afines` nunca puede ser NULL ─────────────────────────
+// Los dos where que devuelve esta funcion tienen que cubrir juntos exactamente
+// lo mismo que el where original. Eso se rompe si la columna tiene NULL, porque
+// en Postgres cualquier operacion de array contra NULL da NULL y no false:
+//
+//   NULL @> ARRAY['Gastronomía']   ->  NULL
+//   NOT (NULL OR false)            ->  NULL   <- la fila no entra en NINGUN grupo
+//
+// Pasó de verdad: la columna se agrego nullable y sin default, asi que las 4984
+// filas que ya existian quedaron en NULL. El buscador de proveedores del detalle
+// del local devolvia 2 resultados de 260 al buscar "car" -- el afin daba 0 y el
+// resto daba 2, y los otros 258 desaparecian. Se arreglo poniendo '{}' en esas
+// filas y dejando la columna NOT NULL DEFAULT '{}'.
+//
+// Ojo: `prisma migrate diff` NO detecta esto. Para Prisma un array nullable y
+// `TipoLocal[]` son lo mismo (lee NULL como []), asi que el schema se ve limpio
+// mientras las consultas fallan. Si el buscador vuelve a devolver de menos, lo
+// primero a mirar es `SELECT COUNT(*) FROM proveedores WHERE tipos_afines IS NULL`.
 
 export const TIPOS_LOCAL_VALIDOS = new Set([
   'GASTRONOMIA', 'INDUMENTARIA', 'ARQUITECTURA', 'INMOBILIARIO', 'MULTIMEDIA'

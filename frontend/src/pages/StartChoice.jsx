@@ -1,5 +1,7 @@
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore.js'
+import { useAppStore } from '../store/appStore.js'
+import { MODOS } from '../lib/modoTrabajo.js'
 import AppLogo from '../components/AppLogo.jsx'
 import './auth.css'
 
@@ -8,6 +10,9 @@ const GLOBAL_ROLES = ['super_admin', 'dcsmart']
 export default function StartChoice() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  // Esta pantalla es la que elige el modo por primera vez: si no lo dejara puesto,
+  // el switch del sidebar podría quedar marcando lo contrario de lo que se eligió.
+  const setModo = useAppStore((s) => s.setModo)
 
   const roleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
   const hasGlobalRole = GLOBAL_ROLES.some(r => roleNames.includes(r))
@@ -31,7 +36,7 @@ export default function StartChoice() {
           <p>Elegí si querés administrar el sistema o entrar a operar un grupo</p>
         </div>
         <div className="app-grid" style={{ maxWidth: 640 }}>
-          <button className="app-card" onClick={() => navigate(adminLanding)}>
+          <button className="app-card" onClick={() => { setModo(MODOS.ADMIN); navigate(adminLanding) }}>
             <div className="app-card-body">
               <h2>Administrar</h2>
               <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 4 }}>
@@ -39,7 +44,7 @@ export default function StartChoice() {
               </p>
             </div>
           </button>
-          <button className="app-card" onClick={() => navigate('/select-app')}>
+          <button className="app-card" onClick={() => { setModo(MODOS.OPERAR); navigate('/select-app') }}>
             <div className="app-card-body">
               <h2>Entrar a un grupo</h2>
               <p style={{ fontSize: 12, color: 'var(--t3)', marginTop: 4 }}>
