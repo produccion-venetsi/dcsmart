@@ -1300,6 +1300,60 @@ select.campo-ia {
 
 .carga-ia { position: relative; }
 
+/* Fila de "Carga con IA": el boton a la izquierda con ancho propio y los avisos de
+   la lectura a la derecha, en el espacio que antes quedaba vacio.
+   El boton vive en un form-group con label, igual que Foto y PDF, para que los tres
+   alineen: sin el label arrancaba 26px mas arriba y se veia desalineado. */
+.carga-ia-fila {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  gap: 1.1rem;
+  /* stretch y no start: las dos columnas tienen que medir lo mismo. Con `start`
+     cada una crecia con su contenido y el panel de avisos --que tiene mas texto--
+     quedaba mas alto que el boton, con el escalon a la vista. */
+  align-items: stretch;
+  margin-bottom: 1.25rem;
+}
+/* La columna del boton se estira, y el boton con ella: sin esto el form-group crece
+   pero el boton queda de su alto natural y sobra un hueco abajo.
+   El `min-height` da un piso para que la fila no se achique cuando el panel tiene
+   una sola linea de texto. */
+.carga-ia-fila > .form-group {
+  display: flex;
+  flex-direction: column;
+  min-height: 128px;
+}
+.carga-ia-fila .carga-ia { flex: 1; display: flex; }
+.carga-ia-fila .btn-ia { height: 100%; }
+/* El panel tambien se estira dentro de su columna, debajo de su label. */
+.carga-ia-fila .carga-ia-panel { flex: 1; }
+
+/* Foto y PDF: dos columnas parejas que ocupan el ancho del panel. */
+.adjuntos-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+@media (max-width: 720px) {
+  .adjuntos-grid { grid-template-columns: 1fr; }
+}
+
+.carga-ia-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Centrado vertical: con una sola linea de texto, pegada arriba, la fila se veia
+     desbalanceada contra el boton, que centra su contenido. */
+  justify-content: center;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+/* Los avisos adentro del panel no llevan el margen de abajo que traen sueltos: acá
+   el espaciado lo da el `gap` del panel. */
+.carga-ia-panel .aviso-lectura { margin-bottom: 0; }
+@media (max-width: 720px) {
+  /* En una columna el panel va debajo del boton, no al costado en 80px de ancho. */
+  .carga-ia-fila { grid-template-columns: 1fr; }
+}
+
 .carga-ia-menu {
   position: absolute;
   top: calc(100% - 4px);
@@ -1409,6 +1463,67 @@ select.campo-ia {
   color: var(--t3);
 }
 .form-hint-alerta { color: var(--amber); }
+
+/* Aviso de bloque: un parrafo que explica algo (y a veces trae un boton), no una
+   etiqueta. NO usar `.badge` para esto: badge tiene height:18px, font-size:9px,
+   uppercase, letter-spacing y white-space:nowrap, asi que un texto largo sale en
+   mayusculas, espaciado, desbordado y encimado con lo de abajo. Ya paso. */
+.callout {
+  display: block;
+  padding: 10px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background: var(--bg-input);
+  color: var(--t2);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+}
+.callout strong { color: var(--t1); font-weight: 700; }
+.callout-amber { background: var(--amber-bg); border-color: var(--amber-border); border-left-color: var(--amber); }
+.callout-blue  { background: var(--blue-bg);  border-color: var(--blue-border);  border-left-color: var(--blue); }
+
+/* Caja Mayor partida en dos: enviado a la izquierda, recibido a la derecha.
+   Dos columnas iguales y no un auto-fill: las dos mitades tienen que medir lo mismo
+   para poder leer la fila de un local a la misma altura en los dos lados. */
+.cm-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+.cm-split-panel {
+  min-width: 0; /* sin esto la tabla ancha estira la columna y rompe el 50/50 */
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.cm-split-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 12.5px;
+}
+/* La tabla de adentro ya tiene su borde por el panel. */
+.cm-split-panel .table-wrap { border: none; border-radius: 0; }
+.cm-split-panel .data-table tfoot td {
+  border-top: 1px solid var(--border-hi);
+  background: var(--bg-th);
+}
+
+@media (max-width: 900px) {
+  /* Uno debajo del otro: dos tablas de montos en 300px no se leen. */
+  .cm-split { grid-template-columns: 1fr; }
+}
 
 /* glass input wrap */
 .form-input-wrap {

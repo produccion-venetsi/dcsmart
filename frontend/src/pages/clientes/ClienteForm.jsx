@@ -8,6 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { clientesApi } from '../../api/clientes.js'
 import { useUiStore } from '../../store/uiStore.js'
 import CampoTexto from '../../components/CampoTexto.jsx'
+import CampoCuit from '../../components/CampoCuit.jsx'
 
 // Largos de los campos de texto. Se muestran como contador y no hay que adivinarlos.
 const LARGOS = {
@@ -116,13 +117,11 @@ export default function ClienteForm() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <CampoTexto
+            <CampoCuit
               id="cli-cuit"
-              label="CUIT"
               value={form.cuit}
               onChange={(v) => set('cuit', v)}
               max={LARGOS.cuit}
-              placeholder="30-71234567-8"
               ayuda="Con o sin guiones: el buscador encuentra las dos formas."
             />
             <CampoTexto

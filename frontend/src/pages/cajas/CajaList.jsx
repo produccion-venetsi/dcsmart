@@ -26,6 +26,7 @@ import MultiSelect from '../../components/MultiSelect.jsx'
 import CajaCreatePanel from './CajaCreatePanel.jsx'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
 import { multiParam } from '../../lib/filtros.js'
+import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
 
 // EMPTY_CAJA se fue con CajaCreatePanel: era el estado inicial del alta y este
 // listado ya no lo usa.
@@ -1023,6 +1024,10 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={form.efectivo} onChange={e => setF('efectivo', e.target.value)} />
           </div>
+          {/* No es un dato informativo: el arqueo del local lo suma como el efectivo
+              del periodo. El texto vive en lib/camposCaja.js porque el mismo campo se
+              carga en el alta y en la edicion. */}
+          <p className="form-hint" style={{ margin: '4px 0 0' }}>{AYUDA_EFECTIVO}</p>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fiscal</label>

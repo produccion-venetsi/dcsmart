@@ -717,14 +717,22 @@ model Notificacion {
   id_registro String?
   id_local    String?
   leida       Boolean  @default(false)
+  // `hecha` es distinto de `leida`: leida se marca sola al abrir el aviso, asi que no
+  // dice si la tarea se resolvio. Un aviso de desauditoria es alguien pidiendo que
+  // revises algo, y eso se cierra cuando lo hiciste, no cuando lo miraste.
+  hecha       Boolean  @default(false)
+  hecha_at    DateTime?
   created_at  DateTime @default(now())
 
   user User @relation("NotificacionUser", fields: [id_user], references: [id])
 
-  // id_user va primero en los dos indices: todas las consultas son "las mias".
+  // id_user va primero en los tres indices: todas las consultas son "las mias".
   // El primero cubre ademas la FK, que Prisma no indexa sola -- ver el PR #114,
   // donde justamente cuatro FK sin indice escaneaban tablas enteras.
   @@index([id_user, leida])
+  // El contador del sidebar pregunta "cuantas me faltan": sin este indice escanea
+  // todas las notificaciones del usuario en cada refresco.
+  @@index([id_user, hecha])
   @@index([id_user, created_at])
   @@map("notificaciones")
 }
