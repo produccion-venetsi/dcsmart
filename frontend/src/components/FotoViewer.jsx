@@ -291,48 +291,12 @@ function ImageLightbox({ src, onClose }) {
   )
 }
 
-// ── Simple overlay for PDF ─────────────────────────────────────────────────
-
-function PdfLightbox({ children, onClose }) {
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(0,0,0,0.88)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onClick={onClose}
-    >
-      <button
-        onClick={onClose}
-        style={{
-          position: 'absolute', top: 16, right: 20,
-          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: 8, color: '#fff', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 38, height: 38, padding: 0,
-        }}
-      >
-        <IcoClose />
-      </button>
-      <div onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 // ── Main component ──────────────────────────────────────────────────────────
 
 // ── Panel lateral (portal a la izquierda del drawer) ──────────────────────
 
-function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWidth, onClose }) {
+function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWidth, onClose, onAmpliar }) {
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -368,11 +332,28 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)' }}>
             {type === 'pdf' ? 'PDF' : 'Foto'}
           </span>
-          <button className="drawer-close" onClick={onClose} type="button">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Ampliar: abre el visor a pantalla completa, con zoom y rotacion. Es
+                la unica puerta al lightbox -- hasta ahora ImageLightbox existia en
+                este archivo pero NADIE lo renderizaba, asi que el zoom y el giro
+                estaban escritos y no se podian usar. */}
+            {type === 'photo' && photoBlob && onAmpliar && (
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={onAmpliar}
+                style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+                title="Ampliar: zoom y girar"
+              >
+                <IcoExpand /> Ampliar
+              </button>
+            )}
+            <button className="drawer-close" onClick={onClose} type="button">
             <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Centrado con margin:auto en el hijo, NO con align/justify center en
@@ -383,7 +364,16 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
           {type === 'photo' && (
             <>
               {photoBlob
-                ? <img src={photoBlob} alt="Foto factura" style={{ maxWidth: '100%', margin: 'auto', display: 'block', borderRadius: 8 }} />
+                ? <img
+                    src={photoBlob}
+                    alt="Foto factura"
+                    onClick={onAmpliar}
+                    title={onAmpliar ? 'Click para ampliar, hacer zoom y girar' : undefined}
+                    style={{
+                      maxWidth: '100%', margin: 'auto', display: 'block', borderRadius: 8,
+                      cursor: onAmpliar ? 'zoom-in' : 'default',
+                    }}
+                  />
                 : errorPhoto
                   ? <span style={{ color: 'var(--t2)', fontSize: 13, margin: 'auto' }}>No disponible</span>
                   : <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3, margin: 'auto' }} />
@@ -416,6 +406,9 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
   const [loadingPdf,   setLoadingPdf]   = useState(false)
   const [errorPhoto,   setErrorPhoto]   = useState(false)
   const [panel,        setPanel]        = useState(null) // null | 'photo' | 'pdf'
+  // Visor a pantalla completa (zoom + giro). Se abre desde el panel de la foto: es
+  // la unica puerta al lightbox, que hasta ahora estaba escrito y sin usar.
+  const [ampliada,     setAmpliada]     = useState(false)
 
   useEffect(() => () => { photoBlob && URL.revokeObjectURL(photoBlob) }, [photoBlob])
   useEffect(() => () => { pdfBlob   && URL.revokeObjectURL(pdfBlob)   }, [pdfBlob])
@@ -492,7 +485,14 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
           errorPhoto={errorPhoto}
           drawerWidth={drawerWidth}
           onClose={() => setPanel(null)}
+          onAmpliar={photoBlob ? () => setAmpliada(true) : undefined}
         />
+      )}
+
+      {/* El visor grande queda POR ENCIMA del panel, y cerrarlo vuelve al panel en
+          vez de cerrar todo: se amplia para leer un dato y despues se sigue en la op. */}
+      {ampliada && photoBlob && (
+        <ImageLightbox src={photoBlob} onClose={() => setAmpliada(false)} />
       )}
     </>
   )
