@@ -1300,6 +1300,34 @@ select.campo-ia {
 
 .carga-ia { position: relative; }
 
+/* Fila de "Carga con IA": el boton a la izquierda con ancho propio y los avisos de
+   la lectura a la derecha, en el espacio que antes quedaba vacio.
+   El boton vive en un form-group con label, igual que Foto y PDF, para que los tres
+   alineen: sin el label arrancaba 26px mas arriba y se veia desalineado. */
+.carga-ia-fila {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  gap: 1.1rem;
+  align-items: start;
+  margin-bottom: 1.25rem;
+}
+/* El panel de avisos acompana la altura del boton para que la fila no se vea coja
+   cuando todavia no hay nada leido. */
+.carga-ia-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+@media (max-width: 720px) {
+  /* En una columna el panel va debajo del boton, no al costado en 80px de ancho. */
+  .carga-ia-fila { grid-template-columns: 1fr; }
+}
+
 .carga-ia-menu {
   position: absolute;
   top: calc(100% - 4px);
