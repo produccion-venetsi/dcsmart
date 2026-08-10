@@ -7,6 +7,7 @@ import { partirIdsPorEstado } from '../lib/estadoOp.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
+import { validarClienteYEstado } from '../lib/cuentaCorriente.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
 import { avisarDesauditado } from '../lib/avisos.js'
 import { datosCopiaDePago, datosSincroDePago, vaACajaMayor } from '../lib/cajaMayor.js'
@@ -127,6 +128,8 @@ async function borrarCopiaCajaMayor(fastify, idPago) {
     fastify.log.error({ err }, `No se pudo borrar la copia de caja mayor del pago ${idPago}`)
   }
 }
+
+
 
 // El estado de auditoría de un pago se guarda en la tabla `audits`
 // (modelo Audit) con tabla='pagos' e id_registro=pago.id, NO como columna del pago.
@@ -581,7 +584,10 @@ export default async function pagosRoutes(fastify) {
         metodo_pago: true,
         local:       true,
         creador:     { select: { id: true, nombre: true } },
-        impuestos:   true
+        impuestos:   true,
+        // Hace falta para el formulario de edición: sin el nombre, el combobox de
+        // cliente abriría vacío y parecería que la op perdió el cliente.
+        cliente:     { select: { id: true, nombre: true, razon_social: true } }
       }
     })
     if (!pago) return reply.code(404).send({ error: 'Pago no encontrado' })
@@ -610,7 +616,8 @@ export default async function pagosRoutes(fastify) {
       nro_ord, fecha, id_proveedor, id_rubcat, id_tipo, pv, nro,
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
-      periodo, ingresa_egreso, periodico, id_local, impuestos, cargado_con_ia
+      periodo, ingresa_egreso, periodico, id_local, impuestos, cargado_con_ia,
+      id_cliente
     } = request.body
 
     if (!fecha) return reply.code(400).send({ error: 'La fecha de la factura es obligatoria' })
@@ -633,6 +640,9 @@ export default async function pagosRoutes(fastify) {
     if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
+
+    const errorCliente = validarClienteYEstado(id_cliente, estado_op)
+    if (errorCliente) return reply.code(400).send({ error: errorCliente })
 
     let finalNroOrd = nro_ord ? (parseInt(nro_ord) || null) : null
     if (!finalNroOrd) {
@@ -664,6 +674,7 @@ export default async function pagosRoutes(fastify) {
           periodico:      periodico      ?? false,
           cargado_con_ia: cargado_con_ia ?? false,
           id_local,
+          id_cliente:     id_cliente     || null,
           created_by:     request.user.id,
           ...(impuestos && impuestos.length > 0 ? {
             impuestos: {
@@ -692,7 +703,11 @@ export default async function pagosRoutes(fastify) {
   fastify.put('/:id', { preHandler: editHandler }, async (request, reply) => {
     const existing = await fastify.db.pago.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true, id_tipo: true }
+      // estado_op e id_cliente hacen falta para validar la regla de cuenta corriente
+      // sobre el estado RESULTANTE: en un PUT los campos que no vienen no cambian, así
+      // que mirar solo el body dejaría pasar el caso de agregar un cliente sin tocar
+      // el estado, o de sacar el estado dejando el cliente puesto.
+      select: { id_local: true, id_tipo: true, estado_op: true, id_cliente: true }
     })
     if (!existing) return reply.code(404).send({ error: 'Pago no encontrado' })
 
@@ -704,8 +719,16 @@ export default async function pagosRoutes(fastify) {
       nro_ord, fecha, id_proveedor, id_rubcat, id_tipo, pv, nro,
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
-      periodo, ingresa_egreso, periodico, id_local
+      periodo, ingresa_egreso, periodico, id_local, id_cliente
     } = request.body
+
+    // La regla se evalúa sobre el estado RESULTANTE: en un PUT lo que no viene no
+    // cambia, así que mirar solo el body dejaría pasar agregar un cliente sin tocar el
+    // estado, o sacar el estado dejando el cliente puesto.
+    const clienteResultante = id_cliente !== undefined ? (id_cliente || null) : existing.id_cliente
+    const estadoResultante  = estado_op  !== undefined ? estado_op            : existing.estado_op
+    const errorClientePut = validarClienteYEstado(clienteResultante, estadoResultante)
+    if (errorClientePut) return reply.code(400).send({ error: errorClientePut })
 
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso al local destino' })
@@ -755,6 +778,7 @@ export default async function pagosRoutes(fastify) {
           ingresa_egreso,
           periodico:      periodico      !== undefined ? periodico                  : undefined,
           id_local:       id_local       !== undefined ? id_local                  : undefined,
+          id_cliente:     id_cliente     !== undefined ? (id_cliente || null)      : undefined,
         },
         include: { impuestos: true }
       })

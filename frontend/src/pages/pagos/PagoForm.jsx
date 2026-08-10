@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { impuestosApi } from '../../api/impuestos.js'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { pagosApi } from '../../api/pagos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
+import { clientesApi } from '../../api/clientes.js'
 import { rubcatApi, rubrosApi, categoriasApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
@@ -10,6 +11,8 @@ import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
+import { nombreCliente } from '../../lib/clientes.js'
+import { ESTADO_OP_OPTIONS, ESTADO_CTA_CTE_CLIENTE } from '../../lib/estadoOp.js'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
@@ -129,6 +132,7 @@ export default function PagoForm() {
 
   // proveedor y rubcat seleccionados (objeto completo, para mostrar su label en el Combobox)
   const [provSelected,   setProvSelected]   = useState(null)
+  const [cliSelected,    setCliSelected]    = useState(null)
   const [provPlazo,      setProvPlazo]      = useState(null)
   const [rubcatSelected, setRubcatSelected] = useState(null)
   // Modalcitos para crear proveedor / rubcat cuando no existen (se abren desde
@@ -163,13 +167,6 @@ export default function PagoForm() {
     }
   }
 
-  const ESTADO_OP_OPTIONS = [
-    { value: 'CAJA',       label: 'CAJA' },
-    { value: 'CUENTA_CTE', label: 'CUENTA CTE' },
-    { value: 'MP_PDP',     label: 'MP PDP' },
-    { value: 'PDP',        label: 'PDP' },
-  ]
-
   const [form, setForm] = useState(() => ({
     fecha: hoy,
     id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : '',
@@ -183,6 +180,7 @@ export default function PagoForm() {
     // Son plata que sale de la caja del local, no cuenta corriente con un
     // proveedor: por eso el estado arranca en CAJA en los modos rápidos.
     estado_op: modoRapido ? 'CAJA' : 'CUENTA_CTE', ingresa_egreso: false,
+    id_cliente: '',
     periodico: false,
     id_local: activeLocal?.id || '',
     foto_url: '', pdf_url: '',
@@ -213,6 +211,7 @@ export default function PagoForm() {
       if (draft.data.form?.nro) nroManualRef.current = true
       if (draft.data.form)           setForm((f) => ({ ...f, ...draft.data.form }))
       if (draft.data.provSelected)   setProvSelected(draft.data.provSelected)
+      if (draft.data.cliSelected)    setCliSelected(draft.data.cliSelected)
       if (draft.data.provPlazo != null) setProvPlazo(draft.data.provPlazo)
       if (draft.data.rubcatSelected) setRubcatSelected(draft.data.rubcatSelected)
       if (draft.data.pendingImp)     setPendingImp(draft.data.pendingImp)
@@ -292,6 +291,7 @@ export default function PagoForm() {
             fecha_pago:     toDateTimeLocalInput(d.fecha_pago),
             periodo:        d.periodo    ? d.periodo.slice(0, 10)    : '',
             estado_op:      d.estado_op      || 'CUENTA CTE',
+            id_cliente:     d.id_cliente     || '',
             ingresa_egreso: d.ingresa_egreso,
             periodico:      d.periodico      ?? false,
             id_local:       d.id_local       || '',
@@ -299,6 +299,9 @@ export default function PagoForm() {
             pdf_url:        d.pdf_url        || '',
             nro_ord:        d.nro_ord        ?? null,
           })
+          // El nombre del cliente viene en el include del pago: sin esto el
+          // combobox abriría vacío y parecería que la op perdió el cliente.
+          if (d.cliente) setCliSelected(d.cliente)
         } else if (contexto?.id_proveedor) {
           // Carga Avión y MovStock facturan contra el proveedor del propio
           // local (la sociedad que factura por él), así que viene precargado.
@@ -354,12 +357,12 @@ export default function PagoForm() {
     const t = setTimeout(() => {
       saveDraft(
         draftKey,
-        { form, provSelected, provPlazo, rubcatSelected, pendingImp, mmForm },
+        { form, provSelected, cliSelected, provPlazo, rubcatSelected, pendingImp, mmForm },
         { foto: fotoFile, pdf: pdfFile }
       )
     }, 400)
     return () => clearTimeout(t)
-  }, [draftKey, form, provSelected, provPlazo, rubcatSelected, pendingImp, mmForm, fotoFile, pdfFile])
+  }, [draftKey, form, provSelected, cliSelected, provPlazo, rubcatSelected, pendingImp, mmForm, fotoFile, pdfFile])
 
   // preview del próximo número de OP (solo al crear; en edición se muestra form.nro_ord real)
   useEffect(() => {
@@ -596,6 +599,33 @@ export default function PagoForm() {
   // tipo_local solo reordena el resultado (los proveedores del rubro del local
   // y los generales primero); nunca filtra. Si el local activo viene de una
   // sesion vieja y no lo trae, el backend responde alfabetico como siempre.
+  // Solo activos: un cliente dado de baja no tiene que poder recibir ops nuevas.
+  const fetchClientes = (search) =>
+    clientesApi.list({ search, activo: 'true', limit: 50 }).then(r => r.data.data)
+
+  const esCtaCteCliente = form.estado_op === ESTADO_CTA_CTE_CLIENTE
+
+  // Cambiar de estado saca el cliente: el backend rechaza un id_cliente sin
+  // CTA_CTE_CLI, así que dejarlo puesto haría fallar el guardado con un error que
+  // desde la pantalla no se entiende.
+  const cambiarEstadoOp = (valor) => {
+    set('estado_op', valor)
+    if (valor !== ESTADO_CTA_CTE_CLIENTE && form.id_cliente) {
+      set('id_cliente', '')
+      setCliSelected(null)
+    }
+  }
+
+  const selectCliente = (cli) => {
+    setCliSelected(cli)
+    set('id_cliente', cli.id)
+  }
+
+  const clearCliente = () => {
+    setCliSelected(null)
+    set('id_cliente', '')
+  }
+
   const fetchProveedores = (search) =>
     proveedoresApi
       .list({ search, activo: 'true', limit: 60, ...(activeLocal?.tipo_local ? { tipo_local: activeLocal.tipo_local } : {}) })
@@ -1092,11 +1122,42 @@ export default function PagoForm() {
             <div className="form-group">
               <label className="form-label">Estado</label>
               <div className="form-input-wrap">
-                <select value={form.estado_op} onChange={e => set('estado_op', e.target.value)}>
+                <select value={form.estado_op} onChange={e => cambiarEstadoOp(e.target.value)}>
                   {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
+              {esCtaCteCliente && !form.id_cliente && (
+                <p className="form-hint form-hint-alerta" style={{ marginTop: 4, marginBottom: 0 }}>
+                  Falta elegir el cliente de la cuenta corriente.
+                </p>
+              )}
             </div>
+
+            {/* Cliente: solo con estado CTA CTE CLI, y ahí es obligatorio. Aparece
+                recién al elegir el estado porque en el resto de las ops no significa
+                nada -- un cliente con otro estado el backend lo rechaza, y este
+                estado sin cliente sería una deuda a nombre de nadie que no entra en
+                ninguna cuenta corriente (ver lib/cuentaCorriente.js). */}
+            {esCtaCteCliente && (
+              <div className="form-group form-span-2">
+                <label className="form-label">Cliente *</label>
+                <Combobox
+                  value={form.id_cliente}
+                  displayValue={cliSelected ? nombreCliente(cliSelected) : ''}
+                  getKey={c => c.id}
+                  getLabel={nombreCliente}
+                  onSelect={selectCliente}
+                  onClear={clearCliente}
+                  fetchItems={fetchClientes}
+                  placeholder="Buscar cliente…"
+                />
+                <p className="form-hint" style={{ marginTop: 4, marginBottom: 0 }}>
+                  A nombre de quién se generó este gasto. Va a su cuenta corriente
+                  cuando la op quede pagada. Solo se listan los clientes activos; se
+                  dan de alta en <Link to="/clientes">Clientes</Link>.
+                </p>
+              </div>
+            )}
 
           </div>
 

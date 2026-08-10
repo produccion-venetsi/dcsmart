@@ -78,6 +78,18 @@ function IcoProveedor() {
     </svg>
   )
 }
+// Clientes: dos personas. Proveedor es una casa (a quién le pagamos), cliente es
+// alguien a nombre de quien se generó un gasto.
+function IcoClientes() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="3.5"/>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.5a4 4 0 0 1 0 7"/>
+    </svg>
+  )
+}
 function IcoReportes() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -230,6 +242,7 @@ const NAV_MAIN = [
   { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ROLES_OPERATIVOS },
   { to: '/arqueo',      label: 'Arqueo',      Icon: IcoArqueo,    roles: ALL },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ROLES_OPERATIVOS },
+  { to: '/clientes',    label: 'Clientes',    Icon: IcoClientes,  roles: ROLES_OPERATIVOS },
   // Reportes internos de la app de gestión (/reportes). El Analytics externo
   // se abre desde un botón dentro de esa pantalla, no desde el sidebar.
   { key: 'reportes', to: '/reportes', label: 'Reportes', Icon: IcoReportes },
