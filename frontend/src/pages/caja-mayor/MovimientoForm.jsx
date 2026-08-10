@@ -31,7 +31,9 @@ export default function MovimientoForm({
     extrae: movimiento?.extrae ?? '',
     fecha_extraccion: soloFecha(movimiento?.fecha_extraccion),
     observaciones: movimiento?.observaciones ?? '',
-    estado: movimiento?.estado ?? ESTADOS.ENVIADA,
+    // Un movimiento manual nace recibido (ver la nota del formulario). Al editar se
+    // respeta el estado que ya tenia.
+    estado: movimiento?.estado ?? ESTADOS.RECIBIDA,
   })
   const [guardando, setGuardando] = useState(false)
 
@@ -81,10 +83,12 @@ export default function MovimientoForm({
         {!editando && (
           <div className="form-group">
             <label className="form-label">Tipo de movimiento</label>
-            <select className="filter-select" value={form.origen} onChange={e => set('origen', e.target.value)}>
-              <option value="PROPIO">Movimiento manual</option>
-              <option value="APERTURA">Saldo de apertura del local</option>
-            </select>
+            <div className="form-input-wrap">
+              <select value={form.origen} onChange={e => set('origen', e.target.value)}>
+                <option value="PROPIO">Movimiento manual</option>
+                <option value="APERTURA">Saldo de apertura del local</option>
+              </select>
+            </div>
             {form.origen === 'APERTURA' && (
               <p className="form-hint">
                 Es el saldo con el que arranca el local en esta moneda. Solo se puede cargar uno por local.
@@ -95,27 +99,30 @@ export default function MovimientoForm({
 
         <div className="form-group">
           <label className="form-label">Local *</label>
-          <select
-            className="filter-select"
-            value={form.id_local}
-            onChange={e => set('id_local', e.target.value)}
-            disabled={editando}
-          >
-            <option value="">Elegí el local</option>
-            {localesPorGrupo.map(([grupo, items]) => (
-              <optgroup key={grupo} label={grupo}>
-                {items.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <div className="form-input-wrap">
+            <select
+              value={form.id_local}
+              onChange={e => set('id_local', e.target.value)}
+              disabled={editando}
+            >
+              <option value="">Elegí el local</option>
+              {localesPorGrupo.map(([grupo, items]) => (
+                <optgroup key={grupo} label={grupo}>
+                  {items.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
           <div className="form-group">
             <label className="form-label">Moneda *</label>
-            <select className="filter-select" value={form.moneda} onChange={e => set('moneda', e.target.value)}>
-              {monedas.map(m => <option key={m.valor} value={m.valor}>{m.label}</option>)}
-            </select>
+            <div className="form-input-wrap">
+              <select value={form.moneda} onChange={e => set('moneda', e.target.value)}>
+                {monedas.map(m => <option key={m.valor} value={m.valor}>{m.label}</option>)}
+              </select>
+            </div>
           </div>
           <div className="form-group">
             <label className="form-label">Fecha *</label>
@@ -138,11 +145,13 @@ export default function MovimientoForm({
           </div>
           <div className="form-group">
             <label className="form-label">Dirección *</label>
-            <select className="filter-select" value={form.ingreso} onChange={e => set('ingreso', e.target.value)}>
-              <option value="">Elegí…</option>
-              <option value="true">↑ Ingreso — entra plata a la caja mayor</option>
-              <option value="false">↓ Egreso — sale plata de la caja mayor</option>
-            </select>
+            <div className="form-input-wrap">
+              <select value={form.ingreso} onChange={e => set('ingreso', e.target.value)}>
+                <option value="">Elegí…</option>
+                <option value="true">↑ Ingreso — entra plata a la caja mayor</option>
+                <option value="false">↓ Egreso — sale plata de la caja mayor</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -196,14 +205,15 @@ export default function MovimientoForm({
           ayuda="Para qué fue el movimiento. Es lo que se lee después para entenderlo sin abrir la op."
         />
 
+        {/* Sin selector de estado al crear: lo que se carga a mano YA esta en la
+            caja mayor, asi que nace RECIBIDA. El ciclo enviada -> recibida es de los
+            movimientos que vienen de una op de gestion, donde el local manda la plata
+            y la caja mayor confirma que llego. Preguntarselo a quien la tiene en la
+            mano no significa nada. Ver naceEnCajaMayor en lib/cajaMayor.js. */}
         {!editando && (
-          <div className="form-group">
-            <label className="form-label">Estado</label>
-            <select className="filter-select" value={form.estado} onChange={e => set('estado', e.target.value)}>
-              <option value={ESTADOS.ENVIADA}>Enviada — todavía no se confirmó</option>
-              <option value={ESTADOS.RECIBIDA}>Recibida — la plata ya está</option>
-            </select>
-          </div>
+          <p className="form-hint" style={{ margin: 0 }}>
+            Se carga como <strong>recibida</strong>: el movimiento ya está en la caja mayor.
+          </p>
         )}
 
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>

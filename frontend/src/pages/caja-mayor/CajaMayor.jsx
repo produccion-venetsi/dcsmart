@@ -14,6 +14,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import { fmtDateUTC } from '../../lib/dates.js'
 import {
   ESTADOS, ESTADO_LABEL, MONEDAS, ORIGEN_LABEL, fmtMonto, filtroDeSeleccion,
+  tieneCicloDeRecepcion,
 } from '../../lib/cajaMayor.js'
 import MovimientoForm from './MovimientoForm.jsx'
 import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
@@ -513,14 +514,21 @@ export default function CajaMayor() {
                       <td><BadgeEstado estado={m.estado} /></td>
                       <td>
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          <button
-                            className={`btn btn-sm ${m.estado === ESTADOS.RECIBIDA ? 'btn-secondary' : 'btn-primary'}`}
-                            disabled={ocupado}
-                            onClick={() => cambiarEstado(m, m.estado === ESTADOS.RECIBIDA ? ESTADOS.ENVIADA : ESTADOS.RECIBIDA)}
-                            title={m.estado === ESTADOS.RECIBIDA ? 'Volver a enviada' : 'Confirmar que la plata llegó'}
-                          >
-                            {ocupado ? '…' : m.estado === ESTADOS.RECIBIDA ? 'A enviada' : 'Recibir'}
-                          </button>
+                          {/* Solo los movimientos que vienen de una op de gestion
+                              tienen ciclo enviada -> recibida: el local manda la plata
+                              y la caja mayor confirma que llego. Uno cargado a mano
+                              aca ya esta en la caja mayor, asi que "Recibir" no
+                              significa nada. Ver naceEnCajaMayor en lib/cajaMayor.js. */}
+                          {tieneCicloDeRecepcion(m.origen) && (
+                            <button
+                              className={`btn btn-sm ${m.estado === ESTADOS.RECIBIDA ? 'btn-secondary' : 'btn-primary'}`}
+                              disabled={ocupado}
+                              onClick={() => cambiarEstado(m, m.estado === ESTADOS.RECIBIDA ? ESTADOS.ENVIADA : ESTADOS.RECIBIDA)}
+                              title={m.estado === ESTADOS.RECIBIDA ? 'Volver a enviada' : 'Confirmar que la plata llegó'}
+                            >
+                              {ocupado ? '…' : m.estado === ESTADOS.RECIBIDA ? 'A enviada' : 'Recibir'}
+                            </button>
+                          )}
                           <button
                             className="btn btn-sm btn-secondary"
                             disabled={ocupado}

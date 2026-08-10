@@ -39,6 +39,23 @@ export const ORIGEN_LABEL = {
   APERTURA: 'Apertura',
 }
 
+// Los que se cargan a mano DENTRO de la caja mayor. Son los mismos que acepta el
+// POST del backend (ORIGENES_MANUALES en routes/caja_mayor.js).
+export const ORIGENES_MANUALES = ['PROPIO', 'APERTURA']
+
+// ¿El movimiento nace en la caja mayor?
+//
+// Un movimiento de origen PAGO sale de una op de gestión: el local lo mandó y la caja
+// mayor todavía tiene que confirmar que la plata llegó, así que pasa por ENVIADA y
+// después RECIBIDA.
+//
+// Uno cargado a mano en el módulo ya está en la caja mayor: nace RECIBIDA, y ofrecer
+// "recibir" no significa nada -- quien lo carga es el que la tiene en la mano.
+export const naceEnCajaMayor = (origen) => ORIGENES_MANUALES.includes(origen)
+
+// Al revés: si tiene el ciclo enviada/recibida, la acción de estado tiene sentido.
+export const tieneCicloDeRecepcion = (origen) => !naceEnCajaMayor(origen)
+
 // Los importes de la caja mayor llegan a los cientos de millones: sin separador de
 // miles la columna es ilegible. Los decimales van siempre, para que no parezca que
 // se redondeó.
