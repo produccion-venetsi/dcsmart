@@ -28,13 +28,36 @@ export function rutaDe(aviso) {
   return null
 }
 
+// La forma REAL de GET /auth/my-apps es un item por grupo con la app ANIDADA:
+//
+//   [{ app: { id, nombre, slug }, role: 'admin', locales: [{ id, nombre }] }]
+//
+// Y `activeApp` del store guarda ese item completo, no la app: por eso el resto de la
+// app lee `activeApp.app.id` (ver el interceptor de api/client.js, que arma el header
+// X-App-Id con eso).
+//
+// Este archivo lo tenia mal: leia `item.id`, que es undefined. El sintoma era que
+// `cambiaGrupo` daba false SIEMPRE, asi que un aviso de otro grupo cambiaba el local
+// pero no el grupo -- el backend recibia el X-App-Id viejo con un local ajeno y
+// cortaba con 403. Los tests no lo agarraron porque estaban escritos con una forma
+// inventada de la respuesta.
+//
+// `idDeGrupo` y `datosDeGrupo` centralizan la lectura y toleran las dos formas, para
+// que un cambio en la API no vuelva a romper esto en silencio.
+export const idDeGrupo = (item) => item?.app?.id ?? item?.id ?? null
+export const datosDeGrupo = (item) => ({
+  id: idDeGrupo(item),
+  nombre: item?.app?.nombre ?? item?.nombre ?? null,
+})
+
 // Busca el local del aviso entre los que el usuario realmente maneja.
-// `misApps` es lo que devuelve GET /auth/my-apps: [{ id, nombre, locales: [...] }].
+// Devuelve el ITEM de my-apps (no la app suelta), porque es lo que espera
+// setActiveApp del store.
 export function buscarLocal(misApps, idLocal) {
   if (!idLocal) return null
-  for (const app of misApps ?? []) {
-    const local = (app.locales ?? []).find(l => l.id === idLocal)
-    if (local) return { app, local }
+  for (const item of misApps ?? []) {
+    const local = (item?.locales ?? []).find(l => l.id === idLocal)
+    if (local) return { app: item, local }
   }
   return null
 }
@@ -79,7 +102,10 @@ export function resolverApertura(aviso, { misApps, appActiva, localActivo }) {
     local: encontrado.local,
     // Cambiar de grupo mueve al usuario más lejos que cambiar de local dentro del
     // mismo grupo: la pantalla lo dice distinto según el caso.
-    cambiaGrupo: appActiva?.id !== encontrado.app.id,
+    //
+    // Se comparan los ids REALES del grupo. Comparando `appActiva.id` los dos lados
+    // daban undefined, salía false y el grupo no se cambiaba nunca.
+    cambiaGrupo: idDeGrupo(appActiva) !== idDeGrupo(encontrado.app),
   }
 }
 
@@ -87,7 +113,9 @@ export function resolverApertura(aviso, { misApps, appActiva, localActivo }) {
 // un aviso, no pidió cambiar de local, y quedarse sin entender dónde está es peor
 // que un cartel de más.
 export function mensajeDeCambio({ app, local, cambiaGrupo }) {
+  // `app.nombre` daba undefined: el nombre vive en app.app.nombre.
+  const grupo = datosDeGrupo(app).nombre
   return cambiaGrupo
-    ? `Cambiado a ${app.nombre} / ${local.nombre} para abrir el aviso`
+    ? `Cambiado a ${grupo ?? 'otro grupo'} / ${local.nombre} para abrir el aviso`
     : `Cambiado al local ${local.nombre} para abrir el aviso`
 }
