@@ -1433,7 +1433,13 @@ export default function PagoForm() {
                 />
               </div>
 
-              <div className="carga-ia-panel">
+              {/* La columna derecha lleva su propio label, igual que la del boton.
+                  Sin el, el panel arrancaba 21px mas arriba --el alto del label de
+                  la izquierda-- y aunque los dos terminaban a la misma altura, el
+                  escalon de arriba se veia como que uno era mas grande. */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Resultado de la lectura</label>
+                <div className="carga-ia-panel">
                 {(leyendoFactura || lectura || fallaLectura) && (
                   <div style={{ gridColumn: '1 / -1' }}>
                     {/* El "Leyendo la factura…" NO se repite acá: ya lo dice el
@@ -1527,11 +1533,16 @@ export default function PagoForm() {
                     El archivo queda adjunto igual.
                   </p>
                 )}
+                </div>
               </div>
             </div>
           )}
 
-          <div className="form-grid">
+          {/* Dos columnas parejas y no el auto-fill del form-grid: con el boton de
+              IA fuera de esta grilla quedaban solo dos celdas de 220px pegadas a la
+              izquierda y media seccion vacia, contra la fila de arriba que ocupa
+              todo el ancho. */}
+          <div className="form-grid adjuntos-grid">
             <AdjuntoUpload
               label="Foto"
               accept="image/*"

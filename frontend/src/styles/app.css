@@ -1325,6 +1325,14 @@ select.campo-ia {
 }
 .carga-ia-fila .carga-ia { flex: 1; display: flex; }
 .carga-ia-fila .btn-ia { height: 100%; }
+/* El panel tambien se estira dentro de su columna, debajo de su label. */
+.carga-ia-fila .carga-ia-panel { flex: 1; }
+
+/* Foto y PDF: dos columnas parejas que ocupan el ancho del panel. */
+.adjuntos-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+@media (max-width: 720px) {
+  .adjuntos-grid { grid-template-columns: 1fr; }
+}
 
 .carga-ia-panel {
   display: flex;
