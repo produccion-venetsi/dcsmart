@@ -1400,6 +1400,16 @@ select.campo-ia {
   margin-bottom: 8px;
 }
 
+/* Texto de ayuda debajo de un campo: qué escribir, o qué hace el campo. Se usaba
+   en CampoTexto sin estar definido acá, así que salía con el tamaño del body y
+   competía con el valor del campo en vez de acompañarlo. */
+.form-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--t3);
+}
+.form-hint-alerta { color: var(--amber); }
+
 /* glass input wrap */
 .form-input-wrap {
   display: flex;
