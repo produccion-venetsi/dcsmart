@@ -191,7 +191,15 @@ function ImageLightbox({ src, onClose }) {
     transition: 'background 0.15s',
   }
 
-  return (
+  // createPortal a document.body, igual que MediaPanel.
+  //
+  // Sin esto el visor se renderiza donde vive el FotoViewer, que en la tabla es
+  // DENTRO de una celda: un `position: fixed` queda recortado por cualquier ancestro
+  // con transform, filter o contain, asi que el visor aparecia como un recuadro
+  // pegado arriba en vez de ocupar la pantalla. Desde el drawer se veia bien porque
+  // ahi ningun ancestro crea contexto de contencion -- el mismo codigo se comportaba
+  // distinto segun de donde se abriera.
+  return createPortal(
     <div
       ref={containerRef}
       style={{
@@ -287,7 +295,8 @@ function ImageLightbox({ src, onClose }) {
           Rueda para hacer zoom · Doble clic para ampliar · Arrastrá para mover · R para girar
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -297,6 +306,10 @@ function ImageLightbox({ src, onClose }) {
 // ── Panel lateral (portal a la izquierda del drawer) ──────────────────────
 
 function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWidth, onClose, onAmpliar }) {
+  // Se calcula acá y no se recibe como prop: sale del mismo `drawerWidth` que ya
+  // llega, y dos fuentes para lo mismo se desincronizan.
+  const sinDrawer = !drawerWidth
+
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -306,13 +319,22 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
   // Contenedor invisible que ocupa el espacio a la izquierda del drawer,
   // sin backdrop — el drawer sigue visible e interactuable detrás.
   return createPortal(
-    <div className="media-panel-frame" style={{
-      position: 'fixed', top: 0, left: 0, bottom: 0,
-      right: drawerWidth,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      pointerEvents: 'none',
-      zIndex: 1012,
-    }}>
+    <div
+      className="media-panel-frame"
+      // Con drawer: sin fondo y sin capturar clicks, para que el drawer siga usable
+      // detras. Sin drawer (un PDF abierto desde la tabla): fondo oscuro y click
+      // afuera para cerrar, si no la caja queda flotando sobre las filas sin que se
+      // entienda que es una capa aparte.
+      onClick={sinDrawer ? onClose : undefined}
+      style={{
+        position: 'fixed', top: 0, left: 0, bottom: 0,
+        right: drawerWidth,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        pointerEvents: sinDrawer ? 'auto' : 'none',
+        background: sinDrawer ? 'rgba(0,0,0,0.72)' : 'transparent',
+        zIndex: 1012,
+      }}
+    >
       <div style={{
         pointerEvents: 'auto',
         width: type === 'pdf' ? 'min(680px, 90%)' : 'min(520px, 90%)',
@@ -410,6 +432,12 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
   // la unica puerta al lightbox, que hasta ahora estaba escrito y sin usar.
   const [ampliada,     setAmpliada]     = useState(false)
 
+  // Sin drawer detras (la foto abierta desde una fila de la tabla) el panel al
+  // costado no tiene contra que apoyarse: queda una caja flotando sobre las filas,
+  // sin fondo que la separe --se diseño sin backdrop justamente para no tapar el
+  // drawer-- y con la factura chica en 520px. Ahi conviene el visor grande directo.
+  const sinDrawer = !drawerWidth
+
   useEffect(() => () => { photoBlob && URL.revokeObjectURL(photoBlob) }, [photoBlob])
   useEffect(() => () => { pdfBlob   && URL.revokeObjectURL(pdfBlob)   }, [pdfBlob])
 
@@ -450,7 +478,10 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
         {fotoUrl && (
           <button
             className={`btn btn-sm ${panel === 'photo' ? 'btn-primary' : 'btn-secondary'}${compact ? ' btn-icon' : ''}`}
-            onClick={() => panel === 'photo' ? setPanel(null) : openPhoto()}
+            onClick={() => {
+              if (sinDrawer) { openPhoto(); setAmpliada(true); return }
+              panel === 'photo' ? setPanel(null) : openPhoto()
+            }}
             disabled={!photoBlob && loadingPhoto}
             style={{ display: 'flex', alignItems: 'center', gap: 5 }}
             title="Foto"
@@ -491,8 +522,14 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
 
       {/* El visor grande queda POR ENCIMA del panel, y cerrarlo vuelve al panel en
           vez de cerrar todo: se amplia para leer un dato y despues se sigue en la op. */}
+      {/* Abierto desde la tabla se llega aca sin pasar por el panel, asi que al
+          cerrar hay que apagar los dos: si quedara `panel` prendido, cerrar el visor
+          dejaria el panel flotando, que es lo que se vino a evitar. */}
       {ampliada && photoBlob && (
-        <ImageLightbox src={photoBlob} onClose={() => setAmpliada(false)} />
+        <ImageLightbox
+          src={photoBlob}
+          onClose={() => { setAmpliada(false); if (sinDrawer) setPanel(null) }}
+        />
       )}
     </>
   )
