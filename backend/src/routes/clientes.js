@@ -8,7 +8,7 @@
 // Los movimientos de un cliente son `Pago` con `id_cliente`; no hay entidad propia.
 // Ver lib/cuentaCorriente.js para la dirección y el saldo.
 
-import { saldoCuentaCorriente, describirSaldo, whereMovimientosCliente } from '../lib/cuentaCorriente.js'
+import { totalesCuentaCorriente, totalesPorCliente, whereMovimientosCliente, cuadranteDe } from '../lib/cuentaCorriente.js'
 
 // Lo que la lista y el detalle necesitan de un cliente.
 const CLIENTE_SELECT = {
@@ -56,7 +56,27 @@ export default async function clientesRoutes(fastify) {
       fastify.db.cliente.findMany({ where, select: CLIENTE_SELECT, orderBy: { nombre: 'asc' }, skip, take }),
       fastify.db.cliente.count({ where }),
     ])
-    return { data, total, page: Math.max(1, Number(page)), limit: take ?? total }
+
+    // Los cuatro totales de cada cliente de la página, para verlos sin entrar a la
+    // ficha. Un groupBy y no traer los pagos: sumar en JS sería traerse la tabla.
+    // Acotado a los ids de ESTA página -- sin el `in` la consulta crece con el
+    // historial del grupo, no con lo que se está mostrando.
+    const totales = data.length
+      ? totalesPorCliente(await fastify.db.pago.groupBy({
+        by: ['id_cliente', 'ingresa_egreso', 'pagado'],
+        where: { id_cliente: { in: data.map((c) => c.id) }, estado_op: 'CTA_CTE_CLI' },
+        _sum: { importe: true },
+      }))
+      : {}
+
+    return {
+      // Un cliente sin movimientos no viene en el groupBy: se le pone la cuenta en
+      // cero para que la pantalla no tenga que distinguir "sin datos" de "en cero".
+      data: data.map((c) => ({ ...c, cuenta: totales[c.id] ?? totalesCuentaCorriente([]) })),
+      total,
+      page: Math.max(1, Number(page)),
+      limit: take ?? total,
+    }
   })
 
   // ── GET /:id ────────────────────────────────────────────────────────────
@@ -154,13 +174,14 @@ export default async function clientesRoutes(fastify) {
       orderBy: [{ fecha: 'desc' }, { created_at: 'desc' }],
     })
 
-    const totales = saldoCuentaCorriente(pagos)
+    const totales = totalesCuentaCorriente(pagos)
     return {
       cliente,
-      pagos,
+      // Cada movimiento viaja con su cuadrante ya resuelto: la pantalla no vuelve a
+      // decidir si algo es "a cobrar" o "gasto pendiente", lo dice el mismo lugar que
+      // arma los totales. Si no, los tags y las filas pueden discrepar.
+      pagos: pagos.map((p) => ({ ...p, cuadrante: cuadranteDe(p) })),
       ...totales,
-      // Se manda interpretado para que la pantalla no tenga que leer el signo.
-      resumen: describirSaldo(totales.saldo),
     }
   })
 }
