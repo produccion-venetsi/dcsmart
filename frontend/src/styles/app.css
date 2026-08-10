@@ -1308,21 +1308,39 @@ select.campo-ia {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;
   gap: 1.1rem;
-  align-items: start;
+  /* stretch y no start: las dos columnas tienen que medir lo mismo. Con `start`
+     cada una crecia con su contenido y el panel de avisos --que tiene mas texto--
+     quedaba mas alto que el boton, con el escalon a la vista. */
+  align-items: stretch;
   margin-bottom: 1.25rem;
 }
-/* El panel de avisos acompana la altura del boton para que la fila no se vea coja
-   cuando todavia no hay nada leido. */
+/* La columna del boton se estira, y el boton con ella: sin esto el form-group crece
+   pero el boton queda de su alto natural y sobra un hueco abajo.
+   El `min-height` da un piso para que la fila no se achique cuando el panel tiene
+   una sola linea de texto. */
+.carga-ia-fila > .form-group {
+  display: flex;
+  flex-direction: column;
+  min-height: 128px;
+}
+.carga-ia-fila .carga-ia { flex: 1; display: flex; }
+.carga-ia-fila .btn-ia { height: 100%; }
+
 .carga-ia-panel {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 100%;
+  /* Centrado vertical: con una sola linea de texto, pegada arriba, la fila se veia
+     desbalanceada contra el boton, que centra su contenido. */
+  justify-content: center;
   padding: 12px 14px;
   border: 1px solid var(--glass-border);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
 }
+/* Los avisos adentro del panel no llevan el margen de abajo que traen sueltos: acá
+   el espaciado lo da el `gap` del panel. */
+.carga-ia-panel .aviso-lectura { margin-bottom: 0; }
 @media (max-width: 720px) {
   /* En una columna el panel va debajo del boton, no al costado en 80px de ancho. */
   .carga-ia-fila { grid-template-columns: 1fr; }

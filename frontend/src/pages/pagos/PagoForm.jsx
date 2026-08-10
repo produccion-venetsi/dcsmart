@@ -1436,11 +1436,16 @@ export default function PagoForm() {
               <div className="carga-ia-panel">
                 {(leyendoFactura || lectura || fallaLectura) && (
                   <div style={{ gridColumn: '1 / -1' }}>
+                    {/* El "Leyendo la factura…" NO se repite acá: ya lo dice el
+                        boton de al lado, con su spinner, que es donde la persona
+                        acaba de apretar. Estaba en los dos lugares y se leia como
+                        si fueran dos procesos distintos. Acá se dice lo que el
+                        boton no puede: que va a pasar cuando termine. */}
                     {leyendoFactura && (
-                      <div className="aviso-lectura" style={{ marginBottom: 0 }}>
-                        <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                        <span>Leyendo la factura{leyendoTipo === 'pdf' ? ' (PDF)' : ''}…</span>
-                      </div>
+                      <p className="form-hint" style={{ margin: 0 }}>
+                        Cuando termine, acá van los campos que precargó y los avisos
+                        {leyendoTipo === 'pdf' ? ' (los PDF tardan un poco más)' : ''}.
+                      </p>
                     )}
 
                     {/* La lectura falló o el archivo no era legible. Antes salía como
