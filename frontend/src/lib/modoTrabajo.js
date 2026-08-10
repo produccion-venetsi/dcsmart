@@ -16,7 +16,7 @@ export const MODOS = { ADMIN: 'admin', OPERAR: 'operar' }
 // (avisos, el detalle de un pago) se ve en los dos: son cosas que uno abre desde
 // donde esté.
 const RUTAS_ADMIN = ['/admin', '/auditorias', '/actividad', '/caja-mayor']
-const RUTAS_OPERAR = ['/dashboard', '/cajas', '/pagos', '/pdp', '/proveedores', '/reportes', '/arqueo', '/cargar']
+const RUTAS_OPERAR = ['/dashboard', '/cajas', '/pagos', '/pdp', '/proveedores', '/clientes', '/reportes', '/arqueo', '/cargar']
 
 const empiezaCon = (ruta, prefijos) =>
   prefijos.some(p => ruta === p || ruta.startsWith(p + '/') || ruta.startsWith(p + '?'))

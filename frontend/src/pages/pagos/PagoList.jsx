@@ -20,19 +20,11 @@ import { sheetsDisponible, subirComoSheet, pedirAccessToken, precargarGoogle } f
 import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCredito } from '../../lib/exportPagos.js'
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
+import { ESTADO_OP_OPTIONS, ESTADO_OP_LABEL, ESTADO_OP_BADGE } from '../../lib/estadoOp.js'
 
-const ESTADO_BADGE = {
-  CAJA: 'badge-muted', CUENTA_CTE: 'badge-amber', MP_PDP: 'badge-blue', PDP: 'badge-green',
-}
-const ESTADO_OP_LABEL = {
-  CAJA: 'CAJA', CUENTA_CTE: 'CUENTA CTE', MP_PDP: 'MP PDP', PDP: 'PDP',
-}
-const ESTADO_OP_OPTIONS = [
-  { value: 'CAJA',       label: 'CAJA' },
-  { value: 'CUENTA_CTE', label: 'CUENTA CTE' },
-  { value: 'MP_PDP',     label: 'MP PDP' },
-  { value: 'PDP',        label: 'PDP' },
-]
+// Etiquetas, colores y opciones salen de lib/estadoOp.js: estaban duplicados acá y
+// en PagoForm, y un enum copiado es un enum que se desincroniza.
+const ESTADO_BADGE = ESTADO_OP_BADGE
 const TIPO_PAGO_OPTIONS = [
   'A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'
 ]

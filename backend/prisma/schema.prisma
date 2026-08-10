@@ -22,6 +22,7 @@ model App {
   detalle_tipos  DetalleTipo[]
   local_access   UserLocalAccess[]
   usage          UserAppUsage[]
+  clientes       Cliente[]
 
   @@map("apps")
 }
@@ -228,6 +229,34 @@ model RubCat {
   @@map("rubcat")
 }
 
+// A nombre de quién se generó un gasto. Es lo contrario de `Proveedor` -- a quién se
+// le paga -- y no se mezclan: un mismo Pago puede tener los dos, el proveedor al que
+// se le pagó y el cliente que lo debe.
+//
+// A diferencia de Proveedor, que es un catálogo global, un Cliente pertenece a un
+// grupo: mismo patrón que DetalleTipo (ver routes/detalle_tipos.js). Un cliente de un
+// grupo no tiene por qué existir en otro, y si el mismo cliente real le compra a dos
+// grupos se carga en los dos -- son cuentas corrientes separadas.
+model Cliente {
+  id            String   @id @default(uuid())
+  id_app        String
+  nombre        String?
+  razon_social  String?
+  cuit          String?
+  telefono      String?
+  mail          String?
+  observaciones String?
+  activo        Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  app   App    @relation(fields: [id_app], references: [id])
+  pagos Pago[]
+
+  @@index([id_app])
+  @@map("clientes")
+}
+
 model Proveedor {
   id            String   @id @default(uuid())
   nombre        String?
@@ -260,7 +289,12 @@ model Proveedor {
   // 4014 registros en "GASTRONOMICO" cargados en una migracion). Se dejan los
   // dos: el viejo sigue siendo el dato historico y este es el que ordena.
   // Vacio = sin clasificar, va al final.
-  tipos_afines  TipoLocal[]
+  // El default en la base es obligatorio, no cosmético: sin él las filas nuevas
+  // quedan en NULL y en Postgres `NOT (NULL OR false)` da NULL, así que el
+  // proveedor desaparece de las DOS mitades del buscador (ver lib/afinidadProveedor.js,
+  // que documenta el bug que eso causó). Se declara acá para que `migrate diff` no
+  // proponga quitarlo: Prisma no lo infiere de `TipoLocal[]`.
+  tipos_afines  TipoLocal[] @default([])
   es_general    Boolean  @default(false) // servicios transversales: Aysa, Metrogas, AFIP, bancos
 
   rubcat  RubCat? @relation(fields: [id_rubcat], references: [id])
@@ -482,7 +516,13 @@ model Pago {
   id_pdp     String?
   id_eventos String?
   id_cheque  String?
-  id_ctacte  String?
+
+  // A nombre de quién se generó el gasto. Solo se carga cuando estado_op es
+  // CTA_CTE_CLI: es la regla de negocio del módulo de clientes y la valida el
+  // backend, no solo el formulario. Reemplaza a `id_ctacte`, que quedó reservada y
+  // nunca se usó (cero referencias en código) -- y cuyo nombre además evocaba el
+  // CUENTA_CTE de proveedores, que significa lo contrario.
+  id_cliente String?
 
   proveedor   Proveedor?    @relation(fields: [id_proveedor], references: [id])
   rubcat      RubCat?       @relation(fields: [id_rubcat], references: [id])
@@ -490,6 +530,7 @@ model Pago {
   local       Local?        @relation(fields: [id_local], references: [id])
   creador     User?         @relation("PagoCreatedBy", fields: [created_by], references: [id])
   pdp         Pdp?          @relation(fields: [id_pdp], references: [id])
+  cliente     Cliente?      @relation(fields: [id_cliente], references: [id])
   impuestos   Impuesto[]
   multimoneda MultiMoneda[]
   // Solo existe si la op es de tipo CM y alguien la gestionó en Caja Mayor.
@@ -498,6 +539,9 @@ model Pago {
   @@index([id_local, fecha])
   @@index([pagado])
   @@index([estado_op])
+  // La cuenta corriente de un cliente pide sus pagos ordenados por fecha. Prisma no
+  // indexa las FK solo y ya hubo cinco casos de lentitud por eso (ver PR #114).
+  @@index([id_cliente, fecha])
   @@map("pagos")
 }
 
@@ -522,11 +566,18 @@ enum TipoPago {
   @@map("tipo_pago")
 }
 
+// CUENTA_CTE y CTA_CTE_CLI apuntan en direcciones opuestas y no hay que confundirlos:
+//   CUENTA_CTE  -> la empresa todavía no le pagó a ESE PROVEEDOR (es la "Deuda" del
+//                  dashboard de PDP)
+//   CTA_CTE_CLI -> el gasto se generó a nombre de un CLIENTE, que se lo debe a la
+//                  empresa
+// Por eso es un estado nuevo y no se reusa el existente.
 enum EstadoOp {
   CAJA
-  CUENTA_CTE @map("CUENTA CTE")
-  MP_PDP     @map("MP PDP")
+  CUENTA_CTE  @map("CUENTA CTE")
+  MP_PDP      @map("MP PDP")
   PDP
+  CTA_CTE_CLI @map("CTA CTE CLI")
 
   @@map("estado_op")
 }
