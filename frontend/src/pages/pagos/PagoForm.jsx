@@ -18,6 +18,7 @@ import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
+import CampoCuit from '../../components/CampoCuit.jsx'
 
 function IcoBack() {
   return (
@@ -1605,12 +1606,11 @@ export default function PagoForm() {
                   <input type="text" value={provModal.razon_social} onChange={e => setProvModal(m => ({ ...m, razon_social: e.target.value }))} />
                 </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">CUIT</label>
-                <div className="form-input-wrap">
-                  <input type="text" placeholder="Opcional" value={provModal.cuit} onChange={e => setProvModal(m => ({ ...m, cuit: e.target.value }))} />
-                </div>
-              </div>
+              <CampoCuit
+                value={provModal.cuit}
+                onChange={(v) => setProvModal(m => ({ ...m, cuit: v }))}
+                ayuda="Opcional. Se verifica el dígito verificador."
+              />
             </div>
             <div className="confirm-foot" style={{ marginTop: 20 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setProvModal(null)} disabled={savingModal}>Cancelar</button>

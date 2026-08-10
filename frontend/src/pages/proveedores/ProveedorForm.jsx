@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { TIPOS_LOCAL } from '../../lib/tiposLocal.js'
+import CampoCuit from '../../components/CampoCuit.jsx'
 
 function IcoBack() {
   return (
@@ -89,12 +90,10 @@ export default function ProveedorForm() {
                 <input type="text" placeholder="Razón social" value={form.razon_social} onChange={e => set('razon_social', e.target.value)} />
               </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">CUIT</label>
-              <div className="form-input-wrap">
-                <input type="text" placeholder="XX-XXXXXXXX-X" value={form.cuit} onChange={e => set('cuit', e.target.value)} />
-              </div>
-            </div>
+            {/* Verifica el digito verificador y ofrece el generico si no pasa:
+                muchas facturas llegan sin CUIT legible y la salida real es cargar el
+                generico, no quedarse trabado. */}
+            <CampoCuit value={form.cuit} onChange={(v) => set('cuit', v)} id="prov-cuit" />
             <div className="form-group">
               <label className="form-label">Tag</label>
               <div className="form-input-wrap">
