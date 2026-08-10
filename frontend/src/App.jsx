@@ -39,6 +39,9 @@ const PagoForm      = lazyWithReload(() => import('./pages/pagos/PagoForm.jsx'))
 const PdpDashboard  = lazyWithReload(() => import('./pages/pdp/PdpDashboard.jsx'))
 const ProveedorList = lazyWithReload(() => import('./pages/proveedores/ProveedorList.jsx'))
 const ProveedorForm = lazyWithReload(() => import('./pages/proveedores/ProveedorForm.jsx'))
+const ClienteList   = lazyWithReload(() => import('./pages/clientes/ClienteList.jsx'))
+const ClienteForm   = lazyWithReload(() => import('./pages/clientes/ClienteForm.jsx'))
+const ClienteCuenta = lazyWithReload(() => import('./pages/clientes/ClienteCuentaCorriente.jsx'))
 const Reportes      = lazyWithReload(() => import('./pages/reportes/Reportes.jsx'))
 const Auditorias    = lazyWithReload(() => import('./pages/auditorias/Auditorias.jsx'))
 const ActivityLog   = lazyWithReload(() => import('./pages/activity-log/ActivityLog.jsx'))
@@ -157,6 +160,15 @@ export default function App() {
           <Route path="proveedores"                element={<Guard roles={OPERATIVE}><ProveedorList /></Guard>} />
           <Route path="proveedores/nuevo"          element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
           <Route path="proveedores/:id/editar"     element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
+          {/* Clientes: a nombre de quién se generó un gasto, y su cuenta corriente.
+              Mismo guard que Proveedores -- ROLES_OPERATIVOS son justo los que
+              alcanzan todos los locales del grupo, y el saldo de un cliente los
+              cruza. El cajero no entra acá pero sí puede elegir cliente al cargar
+              un pago (tiene clientes:view). */}
+          <Route path="clientes"                   element={<Guard roles={OPERATIVE}><ClienteList /></Guard>} />
+          <Route path="clientes/nuevo"             element={<Guard roles={OPERATIVE}><ClienteForm /></Guard>} />
+          <Route path="clientes/:id/editar"        element={<Guard roles={OPERATIVE}><ClienteForm /></Guard>} />
+          <Route path="clientes/:id/cuenta-corriente" element={<Guard roles={OPERATIVE}><ClienteCuenta /></Guard>} />
           <Route path="reportes"                    element={<ReportesGuard><Reportes /></ReportesGuard>} />
           <Route path="arqueo"                      element={<OperativeGuard><ArqueoList /></OperativeGuard>} />
           <Route path="auditorias"                  element={<GlobalGuard roles={SUPER}><Auditorias /></GlobalGuard>} />
