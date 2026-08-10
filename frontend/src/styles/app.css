@@ -1487,6 +1487,44 @@ select.campo-ia {
 .callout-amber { background: var(--amber-bg); border-color: var(--amber-border); border-left-color: var(--amber); }
 .callout-blue  { background: var(--blue-bg);  border-color: var(--blue-border);  border-left-color: var(--blue); }
 
+/* Caja Mayor partida en dos: enviado a la izquierda, recibido a la derecha.
+   Dos columnas iguales y no un auto-fill: las dos mitades tienen que medir lo mismo
+   para poder leer la fila de un local a la misma altura en los dos lados. */
+.cm-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+.cm-split-panel {
+  min-width: 0; /* sin esto la tabla ancha estira la columna y rompe el 50/50 */
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.cm-split-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 12.5px;
+}
+/* La tabla de adentro ya tiene su borde por el panel. */
+.cm-split-panel .table-wrap { border: none; border-radius: 0; }
+.cm-split-panel .data-table tfoot td {
+  border-top: 1px solid var(--border-hi);
+  background: var(--bg-th);
+}
+
+@media (max-width: 900px) {
+  /* Uno debajo del otro: dos tablas de montos en 300px no se leen. */
+  .cm-split { grid-template-columns: 1fr; }
+}
+
 /* glass input wrap */
 .form-input-wrap {
   display: flex;

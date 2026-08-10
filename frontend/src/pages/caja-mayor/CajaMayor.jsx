@@ -17,6 +17,7 @@ import {
 } from '../../lib/cajaMayor.js'
 import MovimientoForm from './MovimientoForm.jsx'
 import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
+import { dividirPorDireccion, proporcion } from '../../lib/cajaMayorVista.js'
 
 const LIMIT = 100
 
@@ -175,10 +176,13 @@ export default function CajaMayor() {
     return [...grupos.entries()]
   }, [locales])
 
-  const totalConsolidado = useMemo(
-    () => saldos.reduce((acc, s) => acc + Number(s.saldo ?? 0), 0),
-    [saldos]
-  )
+  // Las dos mitades de la vista. La direccion del dato viene cruzada desde el
+  // backend (un egreso del local es un ingreso a la caja mayor): la traduccion vive
+  // en lib/cajaMayorVista.js, con tests.
+  // `vista.neto` reemplaza al viejo `totalConsolidado`: la suma de los saldos por
+  // local es, por definición, enviado menos recibido. Era el mismo número calculado
+  // dos veces.
+  const vista = useMemo(() => dividirPorDireccion(saldos), [saldos])
 
   // Título del resumen: el local si hay uno elegido, si no el grupo, si no nada.
   const nombreSeleccion = idLocal
@@ -267,80 +271,127 @@ export default function CajaMayor() {
       {/* ── SALDOS ──────────────────────────────────────────────────────── */}
       {tab === 'saldos' && (
         <>
-          {!loading && saldos.length > 0 && (
+          {/* Los dos totales de la division, y el neto entre ellos. */}
+          {!loading && vista.locales > 0 && (
             <div style={{
               display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1rem',
               background: 'var(--bg-input)', borderRadius: 8, padding: '0.9rem 1.1rem',
             }}>
               <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Consolidado</div>
-                <div style={{ fontSize: 18 }}><Saldo valor={totalConsolidado} moneda={moneda} /></div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Enviado a caja mayor</div>
+                <div style={{ fontSize: 18, color: 'var(--green)' }}>{fmtMonto(vista.totalEnviado, moneda)}</div>
               </div>
               <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Locales con movimiento</div>
-                <div style={{ fontSize: 18, color: 'var(--t1)' }}>{saldos.length}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Recibido de caja mayor</div>
+                <div style={{ fontSize: 18, color: 'var(--red)' }}>{fmtMonto(vista.totalRecibido, moneda)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Neto</div>
+                <div style={{ fontSize: 18 }}><Saldo valor={vista.neto} moneda={moneda} /></div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Locales</div>
+                <div style={{ fontSize: 18, color: 'var(--t1)' }}>{vista.locales}</div>
               </div>
               <div>
                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Sin recibir</div>
-                <div style={{ fontSize: 18, color: 'var(--amber)' }}>
-                  {saldos.reduce((a, s) => a + Number(s.en_estudio ?? 0), 0)}
-                </div>
+                <div style={{ fontSize: 18, color: vista.sinRecibir ? 'var(--amber)' : 'var(--t2)' }}>{vista.sinRecibir}</div>
               </div>
             </div>
           )}
 
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Grupo</th>
-                  <th>Local</th>
-                  <th style={{ textAlign: 'right' }}>Ingresos</th>
-                  <th style={{ textAlign: 'right' }}>Egresos</th>
-                  <th style={{ textAlign: 'right' }}>Saldo</th>
-                  <th style={{ textAlign: 'right' }}>Ops</th>
-                  <th style={{ textAlign: 'right' }}>Sin recibir</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 8 }, (_, i) => (
-                    <tr key={i} className="skel-row">
-                      {Array.from({ length: 7 }, (_, j) => <td key={j}><span className="skel" style={{ width: `${50 + (j * 11 + i * 7) % 40}%` }} /></td>)}
-                    </tr>
-                  ))
-                ) : saldos.length === 0 ? (
-                  <tr><td colSpan={7}><div className="table-empty">
-                    <p>Sin movimientos de caja mayor en {MONEDAS.find(m => m.valor === moneda)?.label.toLowerCase()} para los filtros aplicados.</p>
-                  </div></td></tr>
-                ) : saldos.map(s => (
-                  <tr
-                    key={`${s.id_local}-${s.moneda}`}
-                    className="row-clickable"
-                    onClick={() => {
-                      // Se baja al local y se posiciona su grupo, así el selector
-                      // queda mostrando de dónde salió lo que se está viendo.
-                      const l = locales.find(x => x.id === s.id_local)
-                      setIdApp(l?.id_app ?? '')
-                      setIdLocal(s.id_local)
-                      setTab('movimientos')
-                    }}
-                  >
-                    <td className="td-muted">{s.grupo ?? '—'}</td>
-                    <td>{s.local ?? '—'}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmtMonto(s.ingresos, s.moneda)}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--red)' }}>{fmtMonto(s.egresos, s.moneda)}</td>
-                    <td style={{ textAlign: 'right' }}><Saldo valor={s.saldo} moneda={s.moneda} /></td>
-                    <td style={{ textAlign: 'right' }} className="td-muted">{s.ops}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {s.en_estudio > 0
-                        ? <span className="badge badge-amber">{s.en_estudio}</span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* ── La vista partida en dos ──────────────────────────────────────
+              Un lado por direccion de la plata. Los DOS lados listan los mismos
+              locales en el mismo orden, incluso con cero de un lado: leer las dos
+              columnas a la misma altura es lo que permite comparar, y filtrar los
+              ceros desalinearia las filas.
+
+              Ojo con el dato: `ingresos` y `egresos` vienen desde la CAJA MAYOR, y un
+              egreso del local es un ingreso a la caja mayor. Leerlo al derecho
+              invierte los dos totales y los numeros igual parecen correctos. */}
+          <div className="cm-split">
+            {[
+              { clave: 'enviado',  titulo: 'Enviado a caja mayor',   ayuda: 'Plata que el local mando',  color: 'var(--green)', total: vista.totalEnviado },
+              { clave: 'recibido', titulo: 'Recibido de caja mayor', ayuda: 'Plata que volvio al local', color: 'var(--red)',   total: vista.totalRecibido },
+            ].map((lado) => (
+              <div key={lado.clave} className="cm-split-panel">
+                <div className="cm-split-head">
+                  <span style={{ color: lado.color, fontWeight: 700 }}>{lado.titulo}</span>
+                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>{lado.ayuda}</span>
+                </div>
+
+                <div className="table-wrap" style={{ marginBottom: 0 }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Local</th>
+                        <th style={{ textAlign: 'right' }}>Monto</th>
+                        <th style={{ textAlign: 'right', width: 74 }}>Ops</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        Array.from({ length: 6 }, (_, i) => (
+                          <tr key={i} className="skel-row">
+                            {Array.from({ length: 3 }, (_, j) => <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 9) % 40}%` }} /></td>)}
+                          </tr>
+                        ))
+                      ) : vista.filas.length === 0 ? (
+                        <tr><td colSpan={3}><div className="table-empty">
+                          <p>Sin movimientos en {MONEDAS.find(m => m.valor === moneda)?.label.toLowerCase()} para los filtros aplicados.</p>
+                        </div></td></tr>
+                      ) : vista.filas.map(f => (
+                        <tr
+                          key={`${f.id_local}-${f.moneda}-${lado.clave}`}
+                          className="row-clickable"
+                          onClick={() => {
+                            const l = locales.find(x => x.id === f.id_local)
+                            setIdApp(l?.id_app ?? '')
+                            setIdLocal(f.id_local)
+                            setTab('movimientos')
+                          }}
+                          title={`Ver los movimientos de ${f.local}`}
+                        >
+                          <td>
+                            {f.local}
+                            {f.grupo && <div style={{ fontSize: 10.5, color: 'var(--t4)' }}>{f.grupo}</div>}
+                          </td>
+                          {/* La barra dice quien mueve la caja: una lista de numeros
+                              obliga a compararlos de memoria. */}
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <div style={{ color: f[lado.clave] ? lado.color : 'var(--t4)' }}>
+                              {fmtMonto(f[lado.clave], f.moneda)}
+                            </div>
+                            <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(255,255,255,0.07)' }}>
+                              <div style={{
+                                height: '100%', borderRadius: 2, background: lado.color,
+                                width: `${proporcion(f[lado.clave], lado.total)}%`,
+                              }} />
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="td-muted">
+                            {f.sin_recibir > 0
+                              ? <span className="badge badge-amber" title={`${f.sin_recibir} sin confirmar`}>{f.ops}</span>
+                              : f.ops}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {!loading && vista.filas.length > 0 && (
+                      <tfoot>
+                        <tr>
+                          <td style={{ fontWeight: 700 }}>Total</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: lado.color, whiteSpace: 'nowrap' }}>
+                            {fmtMonto(lado.total, moneda)}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}
