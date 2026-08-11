@@ -29,9 +29,27 @@ export default function CampoTexto({
   disabled = false,
   autoFocus = false,
   id,
+  // Tipo del input nativo ('text', 'date', 'email'...). El contador solo tiene
+  // sentido en texto, así que con otro tipo se ignora.
+  type = 'text',
+  // Atributos nativos de rango, para 'date' y 'number'. No se llaman `max` porque
+  // ese ya es el límite de caracteres.
+  minAttr,
+  maxAttr,
+  // Valores que ya existen, para ofrecerlos sin obligar a elegir de la lista. Es lo
+  // que evita que un campo libre junte "Turno noche", "turno noche" y "T. Noche".
+  sugerencias,
+  // Qué está mal. Pinta el campo y reemplaza la ayuda: dos textos debajo compiten y
+  // el que importa es el error.
+  error,
+  // Un dato calculado a partir de lo que se escribió (la edad, un total). Va al lado
+  // de la ayuda, en tono neutro: no es un error.
+  nota,
 }) {
   const ref = useRef(null)
   const texto = value ?? ''
+  const esTexto = type === 'text'
+  const idLista = sugerencias?.length && id ? `${id}-sug` : undefined
 
   // Autosize: el alto sigue al contenido. Se recalcula en cada cambio porque
   // borrar tiene que encoger igual que escribir agranda.
@@ -51,8 +69,10 @@ export default function CampoTexto({
   }, [texto, multilinea, minRows, maxRows])
 
   const usados = texto.length
-  const cerca = max ? usados >= max * 0.9 : false
-  const lleno = max ? usados >= max : false
+  // El contador cuenta caracteres: en un campo de fecha no significa nada.
+  const conContador = Boolean(max) && (multilinea || esTexto)
+  const cerca = conContador ? usados >= max * 0.9 : false
+  const lleno = conContador ? usados >= max : false
 
   const Control = multilinea ? 'textarea' : 'input'
 
@@ -68,38 +88,71 @@ export default function CampoTexto({
           Un textarea adentro de eso queda con SU propio marco encima del marco del
           wrapper -- el cuadro gris doble -- y desbordando los 44px. `form-textarea-wrap`
           es la que el proyecto tiene para esto: altura auto y el textarea sin marco. */}
-      <div className={`form-input-wrap${multilinea ? ' form-textarea-wrap' : ''}`}>
+      <div
+        className={`form-input-wrap${multilinea ? ' form-textarea-wrap' : ''}`}
+        // El borde rojo va en el wrapper, que es el que dibuja el marco: ponerlo en el
+        // input no se ve, porque su propio borde está anulado por `form-input-wrap`.
+        style={error ? { borderColor: 'var(--red)' } : undefined}
+      >
         <Control
           id={id}
           ref={ref}
+          type={multilinea ? undefined : type}
           value={texto}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
           autoFocus={autoFocus}
-          maxLength={max}
+          maxLength={conContador ? max : undefined}
+          min={minAttr}
+          max={maxAttr}
+          list={idLista}
+          aria-invalid={error ? true : undefined}
           rows={multilinea ? minRows : undefined}
           // El autosize maneja el alto, así que se anula el min-height de 80px y el
           // resize manual de la hoja de estilos: dos cosas peleando por el alto dan
           // saltos al escribir.
           style={multilinea ? { resize: 'none', minHeight: 0 } : undefined}
-          aria-describedby={ayuda && id ? `${id}-ayuda` : undefined}
+          aria-describedby={(ayuda || error) && id ? `${id}-ayuda` : undefined}
         />
       </div>
 
-      {/* Ayuda y contador comparten la línea: la ayuda dice qué escribir, el
-          contador cuánto queda. Si no hay límite, no hay contador que mostrar. */}
-      {(ayuda || max) && (
+      {/* Las sugerencias no obligan: el navegador las ofrece y se puede escribir otra
+          cosa. Un select cerrado acá sería peor -- no siempre está el valor que hace
+          falta. */}
+      {idLista && (
+        <datalist id={idLista}>
+          {sugerencias.map(s => <option key={s} value={s} />)}
+        </datalist>
+      )}
+
+      {/* Ayuda, error, nota y contador comparten la línea de abajo: la ayuda dice qué
+          escribir, el contador cuánto queda. El error reemplaza a la ayuda en vez de
+          sumarse -- dos textos ahí abajo compiten y gana el que no importa. */}
+      {(ayuda || error || nota || conContador) && (
         <div
           style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             gap: '0.75rem', marginTop: 4,
           }}
         >
-          {ayuda
-            ? <p className="form-hint" id={id ? `${id}-ayuda` : undefined} style={{ margin: 0 }}>{ayuda}</p>
-            : <span />}
-          {max && (
+          {error ? (
+            <p
+              className="form-hint"
+              id={id ? `${id}-ayuda` : undefined}
+              style={{ margin: 0, color: 'var(--red)' }}
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : (ayuda || nota) ? (
+            <p className="form-hint" id={id ? `${id}-ayuda` : undefined} style={{ margin: 0 }}>
+              {ayuda}
+              {ayuda && nota ? ' · ' : ''}
+              {nota && <strong style={{ color: 'var(--t2)', fontWeight: 600 }}>{nota}</strong>}
+            </p>
+          ) : <span />}
+          {conContador && (
             <span
               style={{
                 fontSize: 11, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',

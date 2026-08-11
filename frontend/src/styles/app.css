@@ -1514,6 +1514,23 @@ select.campo-ia {
 }
 .form-hint-alerta { color: var(--amber); }
 
+/* Los cuatro datos de la persona (DatosPersona.jsx). Dos columnas cuando hay lugar:
+   son campos cortos y en una sola columna el panel queda con cuatro filas casi
+   vacias y obliga a scrollear para ver la ficha completa.
+
+   El minimo de 160px es lo que necesita un <input type="date"> para mostrar
+   dd/mm/aaaa sin recortar el texto ni el iconito del calendario. Abajo de eso se
+   pasa solo a una columna: es mas legible angosto y en una fila que apretado en
+   dos. */
+.datos-persona-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem 0.9rem;
+}
+/* Los form-group traen margen propio para cuando van apilados; adentro de la grilla
+   el gap ya separa, y el margen encima descuadra las filas entre si. */
+.datos-persona-grid > .form-group { margin: 0; }
+
 /* Aviso de bloque: un parrafo que explica algo (y a veces trae un boton), no una
    etiqueta. NO usar `.badge` para esto: badge tiene height:18px, font-size:9px,
    uppercase, letter-spacing y white-space:nowrap, asi que un texto largo sale en
