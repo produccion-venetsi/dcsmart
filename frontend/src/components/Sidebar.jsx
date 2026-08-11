@@ -294,7 +294,11 @@ export default function Sidebar() {
     const traer = () => {
       if (document.hidden) return
       avisosApi.list({ limit: 1 })
-        .then((r) => { if (!cancelado) setAvisosSinLeer(r.data?.no_leidas ?? 0) })
+        // Se cuenta lo que falta HACER, no lo que falta leer: el aviso se marca leido
+        // solo al abrirlo, asi que el contador viejo bajaba con solo mirar y dejaba de
+        // avisar que la tarea seguia pendiente. `?? no_leidas` es el fallback si el
+        // backend todavia no manda `pendientes`.
+        .then((r) => { if (!cancelado) setAvisosSinLeer(r.data?.pendientes ?? r.data?.no_leidas ?? 0) })
         .catch(() => { /* sin contador no se rompe nada */ })
     }
     traer()

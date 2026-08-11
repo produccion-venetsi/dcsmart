@@ -82,6 +82,22 @@ export default function Avisos() {
     navigate(plan.ruta)
   }
 
+  // Marcar hecho / deshacer.
+  //
+  // Se actualiza la lista en el momento y se revierte si el pedido falla: un checkbox
+  // que no responde hasta que vuelve el servidor se siente roto y se clickea dos veces.
+  const marcarHecha = async (aviso, hecha) => {
+    setAvisos((prev) => prev.map((a) => (a.id === aviso.id
+      ? { ...a, hecha, hecha_at: hecha ? new Date().toISOString() : null, leida: hecha ? true : a.leida }
+      : a)))
+    try {
+      await avisosApi.marcarHecha(aviso.id, hecha)
+    } catch {
+      setAvisos((prev) => prev.map((a) => (a.id === aviso.id ? { ...a, hecha: !hecha } : a)))
+      notify('No se pudo marcar el aviso', 'error')
+    }
+  }
+
   const leerTodas = async () => {
     try {
       await avisosApi.leerTodas()
@@ -90,13 +106,19 @@ export default function Avisos() {
   }
 
   const noLeidas = avisos.filter((a) => !a.leida).length
+  // Lo que falta HACER. Es el numero que importa: leida se marca sola al abrir el
+  // aviso, asi que "sin leer" baja con solo mirarlo.
+  const pendientes = avisos.filter((a) => !a.hecha).length
 
   return (
     <div className="page">
       <div className="page-head">
         <div className="page-head-left">
           <h1 className="page-title">Avisos</h1>
-          {noLeidas > 0 && <span className="local-badge">{noLeidas} sin leer</span>}
+          {pendientes > 0 && <span className="local-badge">{pendientes} sin hacer</span>}
+          {noLeidas > 0 && (
+            <span className="local-badge" style={{ opacity: 0.7 }}>{noLeidas} sin leer</span>
+          )}
         </div>
         {noLeidas > 0 && (
           <button className="btn btn-secondary btn-sm" onClick={leerTodas}>
@@ -110,33 +132,50 @@ export default function Avisos() {
       ) : avisos.length === 0 ? (
         <div className="card">
           <div className="card-body">
-            No tenés avisos. Acá te van a llegar cuando alguien revierta una auditoría tuya.
+            No tenés avisos. Acá te van a llegar cuando alguien revierta una auditoría tuya,
+            y los vas marcando como hechos a medida que los resolvés.
           </div>
         </div>
       ) : (
         <div className="card">
           <div className="card-body aviso-lista">
             {avisos.map((a) => (
-              <button
+              // Fila con tres partes en vez de un solo <button>: un boton no puede
+              // contener un checkbox --HTML invalido, y el click del check dispararia
+              // tambien el del boton, abriendo el aviso cada vez que se marca.
+              <div
                 key={a.id}
-                type="button"
-                className={'aviso-item' + (a.leida ? '' : ' sin-leer')}
-                onClick={() => abrir(a)}
+                className={'aviso-item' + (a.leida ? '' : ' sin-leer') + (a.hecha ? ' hecha' : '')}
               >
-                <span className="aviso-punto" aria-hidden={a.leida ? 'true' : undefined} />
-                <span className="aviso-texto">
-                  <span className="aviso-titulo">{a.titulo}</span>
-                  {a.cuerpo && <span className="aviso-cuerpo">{a.cuerpo}</span>}
-                  {/* De qué local es, cuando no es el que se está mirando: se ve
-                      antes de clickear y no después de que cambió el contexto. */}
-                  {a.local && a.local.id !== localActivo?.id && (
-                    <span className="aviso-cuerpo" style={{ color: 'var(--t3)' }}>
-                      {[a.grupo?.nombre, a.local.nombre].filter(Boolean).join(' / ')}
-                    </span>
-                  )}
-                </span>
+                <label
+                  className="aviso-check"
+                  title={a.hecha ? 'Marcado como hecho — click para desmarcar' : 'Marcar como hecho'}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(a.hecha)}
+                    onChange={(e) => marcarHecha(a, e.target.checked)}
+                  />
+                  <span className="sr-only">Hecho</span>
+                </label>
+
+                <button type="button" className="aviso-abrir" onClick={() => abrir(a)}>
+                  <span className="aviso-punto" aria-hidden={a.leida ? 'true' : undefined} />
+                  <span className="aviso-texto">
+                    <span className="aviso-titulo">{a.titulo}</span>
+                    {a.cuerpo && <span className="aviso-cuerpo">{a.cuerpo}</span>}
+                    {/* De qué local es, cuando no es el que se está mirando: se ve
+                        antes de clickear y no después de que cambió el contexto. */}
+                    {a.local && a.local.id !== localActivo?.id && (
+                      <span className="aviso-cuerpo" style={{ color: 'var(--t3)' }}>
+                        {[a.grupo?.nombre, a.local.nombre].filter(Boolean).join(' / ')}
+                      </span>
+                    )}
+                  </span>
+                </button>
+
                 <span className="aviso-fecha">{fechaCorta(a.created_at)}</span>
-              </button>
+              </div>
             ))}
           </div>
         </div>

@@ -388,6 +388,56 @@ select option:disabled { color: var(--t4); }
   text-align: left;
   cursor: pointer;
 }
+/* El item pasó de ser un <button> único a una fila: checkbox de "hecho", el cuerpo
+   clickeable que abre el aviso, y la fecha. Un botón no puede contener un checkbox
+   --HTML inválido, y el click del check abriría el aviso cada vez que se marca. */
+.aviso-abrir {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.aviso-check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  /* Área de click cómoda: un checkbox de 14px es difícil de acertar, sobre todo en
+     una tablet, y errarle abre el aviso en vez de marcarlo. */
+  width: 30px;
+  height: 30px;
+  margin: -6px 0 -6px -4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.aviso-check:hover { background: rgba(255, 255, 255, 0.06); }
+.aviso-check input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--green); }
+
+/* Hecho: se atenúa pero NO se esconde. El aviso sigue siendo el registro de que
+   alguien pidió revisar algo; ocultarlo dejaría la lista sin historia. */
+.aviso-item.hecha { opacity: 0.55; }
+.aviso-item.hecha .aviso-titulo { text-decoration: line-through; }
+.aviso-item.hecha.sin-leer { font-weight: 400; }
+
+/* Texto solo para lectores de pantalla: el checkbox necesita nombre y la etiqueta
+   visible sería ruido al lado del título del aviso. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .aviso-item:hover { background: var(--bg-card); color: var(--t1); }
 .aviso-item.sin-leer { color: var(--t1); font-weight: 600; }
 .aviso-punto {
