@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   filtrarUsuarios, alcanzaGrupo, alcanzaLocal, tieneRol, rolesDe,
-  conteoPorRol, agruparUsuarios, AGRUPACIONES,
+  conteoPorRol, conteoPorDepartamento, agruparUsuarios, AGRUPACIONES,
   bloqueAbierto, subAbierto, alternar, todoAbierto, todasLasClaves, claveSub,
 } from './filtroUsuarios.js'
 
@@ -298,4 +298,92 @@ test('todasLasClaves junta los dos niveles y saltea lo que no tiene titulo', () 
   assert.deepEqual(todasLasClaves(bloques), ['admin', claveSub('admin', 'G1')])
   assert.deepEqual(todasLasClaves([]), [])
   assert.deepEqual(todasLasClaves(null), [])
+})
+
+// ── departamento ───────────────────────────────────────────────────
+
+const conDatos = (u, departamento, puesto) => ({ ...u, departamento, puesto })
+
+const PERSONAS = [
+  conDatos(superAdmin, 'DIRECCION', 'Director'),
+  conDatos(adminPerros, 'ADMINISTRACION', 'Encargada'),
+  conDatos(adminPerrosConLocal, 'ADMINISTRACION', 'Cajera'),
+  conDatos(adminTita, 'SISTEMAS', 'Dev'),
+  sinRoles, // sin ninguno de los datos cargados
+]
+
+test('filtra por departamento', () => {
+  const r = filtrarUsuarios(PERSONAS, { departamento: 'ADMINISTRACION', estado: '' }, LOCALES)
+  assert.deepEqual(ids(r), ['u2', 'u3'])
+})
+
+test('sin filtro de departamento pasan todos', () => {
+  assert.equal(filtrarUsuarios(PERSONAS, { estado: '' }, LOCALES).length, 5)
+})
+
+test('SIN encuentra a los que faltan cargar', () => {
+  // Es lo que hace usable la carga: los 60 usuarios que ya existen arrancan sin dato,
+  // y sin este filtro no hay forma de listar los que quedan.
+  const r = filtrarUsuarios(PERSONAS, { departamento: 'SIN', estado: '' }, LOCALES)
+  assert.deepEqual(ids(r), ['u6'])
+})
+
+test('el departamento se cruza con los otros filtros, no los reemplaza', () => {
+  // u2 y u3 son ADMINISTRACION y las dos alcanzan evelia (u3 lo tiene asignado, u2 es
+  // admin sin locales cargados y ve todos los del grupo).
+  const r = filtrarUsuarios(PERSONAS, { departamento: 'ADMINISTRACION', idLocal: 'evelia', estado: '' }, LOCALES)
+  assert.deepEqual(ids(r), ['u2', 'u3'])
+})
+
+test('el departamento SI deja afuera al super_admin, al contrario que grupo y local', () => {
+  // Los filtros de grupo/local nunca esconden a un rol global, porque entra a todos.
+  // El departamento es otra cosa: es dónde trabaja la persona, y un director de
+  // Dirección no aparece al buscar Administración aunque tenga acceso a todo.
+  const r = filtrarUsuarios(PERSONAS, { departamento: 'ADMINISTRACION', estado: '' }, LOCALES)
+  assert.ok(!ids(r).includes('u1'))
+})
+
+test('la busqueda por texto tambien encuentra por puesto', () => {
+  assert.deepEqual(ids(filtrarUsuarios(PERSONAS, { texto: 'encargada', estado: '' }, LOCALES)), ['u2'])
+  assert.deepEqual(ids(filtrarUsuarios(PERSONAS, { texto: 'cajera', estado: '' }, LOCALES)), ['u3'])
+})
+
+test('la busqueda sigue andando con usuarios sin esos datos', () => {
+  // Un null en puesto no tiene que romper el filtro.
+  assert.deepEqual(ids(filtrarUsuarios(PERSONAS, { texto: 'eze', estado: '' }, LOCALES)), ['u6'])
+})
+
+test('cuenta por departamento, una vez por usuario', () => {
+  const c = conteoPorDepartamento(PERSONAS)
+  assert.equal(c.get('ADMINISTRACION'), 2)
+  assert.equal(c.get('DIRECCION'), 1)
+  assert.equal(c.get('SIN'), 1)
+})
+
+test('agrupa por departamento con la etiqueta linda', () => {
+  const b = agruparUsuarios(PERSONAS, 'departamento')
+  const titulos = b.map(x => x.titulo)
+  // Con acento y ordenado alfabeticamente; "Sin departamento" al final.
+  assert.deepEqual(titulos, ['Administración', 'Dirección', 'Sistemas', 'Sin departamento'])
+})
+
+test('agrupando por departamento cada usuario aparece una sola vez', () => {
+  // A diferencia de agrupar por rol, donde alguien con dos roles sale dos veces.
+  const b = agruparUsuarios(PERSONAS, 'departamento')
+  const todos = b.flatMap(x => x.sub.flatMap(s => s.users.map(u => u.id)))
+  assert.equal(todos.length, new Set(todos).size)
+  assert.equal(todos.length, PERSONAS.length)
+})
+
+test('agrupar por departamento no depende de tener roles', () => {
+  // sinRoles no tiene user_app_roles: agrupando por rol cae en "Sin roles", pero por
+  // departamento tiene que caer en "Sin departamento" y no desaparecer.
+  const b = agruparUsuarios([sinRoles], 'departamento')
+  assert.equal(b.length, 1)
+  assert.equal(b[0].titulo, 'Sin departamento')
+  assert.equal(b[0].total, 1)
+})
+
+test('la agrupacion por departamento esta en la lista del selector', () => {
+  assert.ok(AGRUPACIONES.map(a => a.valor).includes('departamento'))
 })

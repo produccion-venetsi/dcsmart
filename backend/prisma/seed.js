@@ -10,7 +10,7 @@ const T = true, F = false
 const MODULES = [
   'caja', 'caja_movimientos', 'pagos', 'proveedores',
   'rubros', 'categorias', 'metodos_pago', 'usuarios', 'apps', 'locales', 'reportes', 'arqueo',
-  'clientes'
+  'clientes', 'documentos'
 ]
 
 const MATRIX = {
@@ -20,6 +20,7 @@ const MATRIX = {
     metodos_pago: [T,T,T,T], usuarios: [T,T,T,T], apps: [T,T,T,T], locales: [T,T,T,T],
     reportes: [T,T,T,T], arqueo: [T,T,T,T],
     clientes: [T,T,T,T],
+    documentos: [T,T,T,T],
   },
   dcsmart: {
     // Operación total — gestiona datos de todos los grupos pero NO administra la estructura
@@ -29,6 +30,7 @@ const MATRIX = {
     metodos_pago: [T,T,T,T], usuarios: [F,F,F,F], apps: [T,F,F,F], locales: [T,F,F,F],
     reportes: [T,F,F,F], arqueo: [T,T,T,T],
     clientes: [T,T,T,T],
+    documentos: [T,T,T,T],
   },
   admin: {
     caja: [T,T,T,F], caja_movimientos: [T,T,T,F], pagos: [T,T,T,F],
@@ -39,6 +41,8 @@ const MATRIX = {
     reportes: [F,F,F,F], arqueo: [T,T,F,F],
     // Igual que proveedores: administra clientes pero no los da de baja.
     clientes: [T,T,T,F],
+    // Carga y corrige documentos del grupo, pero no los borra.
+    documentos: [T,T,T,F],
   },
   externo: {
     // Igual que admin salvo que SÍ borra: pagos (y sus impuestos, que van por
@@ -53,6 +57,7 @@ const MATRIX = {
     metodos_pago: [T,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
     reportes: [F,F,F,F], arqueo: [T,T,F,F],
     clientes: [T,T,T,T],
+    documentos: [T,T,T,T],
   },
   cajero: {
     caja: [T,T,F,F], caja_movimientos: [T,T,F,F], pagos: [T,T,F,F],
@@ -60,6 +65,9 @@ const MATRIX = {
     metodos_pago: [T,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
     reportes: [F,F,F,F], arqueo: [T,T,F,F],
     clientes: [T,F,F,F],
+    // Solo ve, y solo los marcados como visibles para todos (ver
+    // filtroVisibilidad en lib/documentos.js): carga plata, no maneja contratos.
+    documentos: [T,F,F,F],
   },
   reportes: {
     // Rol restringido: solo ve Reportes, nada más.
@@ -68,6 +76,7 @@ const MATRIX = {
     metodos_pago: [F,F,F,F], usuarios: [F,F,F,F], apps: [F,F,F,F], locales: [F,F,F,F],
     reportes: [T,F,F,F], arqueo: [F,F,F,F],
     clientes: [F,F,F,F],
+    documentos: [F,F,F,F],
   },
 }
 

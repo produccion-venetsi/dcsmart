@@ -4,6 +4,8 @@ import { proveedoresApi } from '../../api/proveedores.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { TIPOS_LOCAL } from '../../lib/tiposLocal.js'
 import CampoCuit from '../../components/CampoCuit.jsx'
+import Combobox from '../../components/Combobox.jsx'
+import { rubcatApi } from '../../api/rubcat.js'
 
 function IcoBack() {
   return (
@@ -17,7 +19,7 @@ const EMPTY = {
   nombre: '', razon_social: '', cuit: '', banco: '', cbu: '', alias: '',
   direccion_url: '', detalle_direc: '', telefono: '', mail_contacto: '',
   mail_envio: '', tag: '', cuenta: '', observaciones: '', tipo_local: '', tipo: '',
-  plazo: '', activo: true, tipos_afines: [], es_general: false
+  plazo: '', activo: true, tipos_afines: [], es_general: false, id_rubcat: ''
 }
 
 export default function ProveedorForm() {
@@ -27,6 +29,9 @@ export default function ProveedorForm() {
   const isEditing   = Boolean(id)
 
   const [form,    setForm]    = useState(EMPTY)
+  // El rubcat elegido, para que el combobox pueda mostrar "Rubro / Categoria". Sin
+  // esto el campo abriria vacio al editar y pareceria que el proveedor no tiene rubro.
+  const [rubcatSel, setRubcatSel] = useState(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -34,11 +39,18 @@ export default function ProveedorForm() {
       proveedoresApi.get(id)
         // tipos_afines puede venir null en registros viejos; el render hace
         // .includes() sobre el array, asi que se normaliza al cargar.
-        .then(({ data }) => setForm({
-          ...EMPTY, ...data,
-          tipos_afines: data.tipos_afines ?? [],
-          es_general:   data.es_general   ?? false
-        }))
+        .then(({ data }) => {
+          setForm({
+            ...EMPTY, ...data,
+            tipos_afines: data.tipos_afines ?? [],
+            es_general:   data.es_general   ?? false,
+            id_rubcat:    data.id_rubcat    ?? '',
+          })
+          // El GET ya trae `rubcat` con su rubro y categoría: es lo que el combobox
+          // muestra. Sin esto el campo abre vacío al editar y parece que el proveedor
+          // no tuviera rubro cargado.
+          setRubcatSel(data.rubcat ?? null)
+        })
         .catch(() => notify('Error al cargar proveedor', 'error'))
     }
   }, [id])
@@ -94,6 +106,28 @@ export default function ProveedorForm() {
                 muchas facturas llegan sin CUIT legible y la salida real es cargar el
                 generico, no quedarse trabado. */}
             <CampoCuit value={form.cuit} onChange={(v) => set('cuit', v)} id="prov-cuit" />
+            {/* Rubro / categoria del proveedor. El backend ya lo aceptaba en el POST y
+                el PUT (id_rubcat) y el formulario no lo ofrecia, asi que solo se podia
+                cargar desde el alta rapida del formulario de pagos.
+
+                Es el que el formulario de pagos usa para sugerir el rubro al elegir el
+                proveedor, asi que tenerlo bien ahorra un paso en cada op. */}
+            <div className="form-group">
+              <label className="form-label">Rubro / Categoría</label>
+              <Combobox
+                value={form.id_rubcat}
+                displayValue={rubcatSel ? `${rubcatSel.rubro?.nombre} / ${rubcatSel.categoria?.nombre}` : ''}
+                getKey={rc => rc.id}
+                getLabel={rc => `${rc.rubro?.nombre} / ${rc.categoria?.nombre}`}
+                onSelect={rc => { setRubcatSel(rc); set('id_rubcat', rc.id) }}
+                onClear={() => { setRubcatSel(null); set('id_rubcat', '') }}
+                fetchItems={(search) => rubcatApi.list({ search }).then(r => r.data)}
+                placeholder="Buscar rubro / categoría…"
+              />
+              <p className="form-hint" style={{ margin: '4px 0 0' }}>
+                Con esto cargado, al elegir el proveedor en una op se sugiere el rubro solo.
+              </p>
+            </div>
             <div className="form-group">
               <label className="form-label">Tag</label>
               <div className="form-input-wrap">
