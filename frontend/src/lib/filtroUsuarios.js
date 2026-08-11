@@ -64,13 +64,13 @@ export function tieneRol(user, rol) {
   return rolesDe(user).includes(rol)
 }
 
-// La búsqueda mira nombre, email, puesto y equipo. Los dos últimos porque con el
-// puesto cargado uno busca "encargada" o "turno noche" y espera encontrarlos; el
-// departamento no está acá porque tiene su propio filtro.
+// La búsqueda mira nombre, email y puesto. El puesto porque con el dato cargado uno
+// escribe "encargada" y espera encontrarla; el departamento no está acá porque tiene su
+// propio filtro.
 export function coincideTexto(user, texto) {
   const q = texto?.trim().toLowerCase()
   if (!q) return true
-  return [user?.nombre, user?.email, user?.puesto, user?.equipo]
+  return [user?.nombre, user?.email, user?.puesto]
     .some(v => v?.toLowerCase().includes(q))
 }
 
@@ -121,8 +121,7 @@ export const AGRUPACIONES = [
   { valor: 'rol-grupo', label: 'Rol y grupo' },
   { valor: 'rol', label: 'Solo rol' },
   { valor: 'grupo', label: 'Solo grupo' },
-  { valor: 'departamento-equipo', label: 'Departamento y equipo' },
-  { valor: 'departamento', label: 'Solo departamento' },
+  { valor: 'departamento', label: 'Departamento' },
   { valor: '', label: 'Sin separar' },
 ]
 
@@ -142,8 +141,7 @@ export function conteoPorDepartamento(users) {
 const SIN_ROLES = 'Sin roles'
 const TODOS_LOS_GRUPOS = 'Todos los grupos'
 const SIN_DEPTO = 'Sin departamento'
-const SIN_EQUIPO = 'Sin equipo'
-const AL_FINAL = new Set([SIN_ROLES, TODOS_LOS_GRUPOS, 'Sin grupo', SIN_DEPTO, SIN_EQUIPO])
+const AL_FINAL = new Set([SIN_ROLES, TODOS_LOS_GRUPOS, 'Sin grupo', SIN_DEPTO])
 
 const ordenarClaves = (a, b) => {
   const pa = AL_FINAL.has(a) ? 1 : 0
@@ -181,13 +179,12 @@ export function agruparUsuarios(users, por = 'rol-grupo', { appsPorId } = {}) {
     sub.get(n2).push(u)
   }
 
-  // Departamento y equipo son datos del usuario, no de sus roles: se agrupa directo y
-  // cada uno cae en un solo bloque. Por eso no pasa por el recorrido de abajo, que
-  // repite al usuario una vez por rol.
-  if (por === 'departamento' || por === 'departamento-equipo') {
+  // El departamento es un dato del usuario, no de sus roles: se agrupa directo y cada
+  // uno cae en un solo bloque. Por eso no pasa por el recorrido de abajo, que repite al
+  // usuario una vez por rol.
+  if (por === 'departamento') {
     for (const u of lista) {
-      const depto = u.departamento ? (DEPARTAMENTO_LABEL[u.departamento] ?? u.departamento) : SIN_DEPTO
-      push(depto, por === 'departamento-equipo' ? (u.equipo || SIN_EQUIPO) : null, u)
+      push(u.departamento ? (DEPARTAMENTO_LABEL[u.departamento] ?? u.departamento) : SIN_DEPTO, null, u)
     }
     return armarBloques(arbol)
   }

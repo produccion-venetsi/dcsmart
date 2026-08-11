@@ -136,17 +136,24 @@ test('un año imposible avisa', () => {
 
 // ── que falta cargar ────────────────────────────────────────────────────────
 
-test('un usuario nuevo tiene los cuatro campos vacios', () => {
-  assert.deepEqual(faltantes({ nombre: 'Ana' }), ['Departamento', 'Equipo', 'Rol', 'Fecha de nac.'])
+test('un usuario nuevo tiene los tres campos vacios', () => {
+  assert.deepEqual(faltantes({ nombre: 'Ana' }), ['Departamento', 'Rol', 'Fecha de nac.'])
 })
 
 test('un usuario completo no le falta nada', () => {
-  const u = { departamento: 'SISTEMAS', equipo: 'Backend', puesto: 'Dev', fecha_nac: '1990-05-17T00:00:00.000Z' }
+  const u = { departamento: 'SISTEMAS', puesto: 'Dev', fecha_nac: '1990-05-17T00:00:00.000Z' }
   assert.deepEqual(faltantes(u), [])
 })
 
 test('un campo con solo espacios cuenta como vacio', () => {
-  assert.deepEqual(faltantes({ departamento: 'SISTEMAS', equipo: '  ', puesto: 'Dev', fecha_nac: '1990-05-17' }), ['Equipo'])
+  assert.deepEqual(faltantes({ departamento: 'SISTEMAS', puesto: '  ', fecha_nac: '1990-05-17' }), ['Rol'])
+})
+
+test('no hay campo de equipo', () => {
+  // Se saco a proposito: con el departamento y el rol ya se sabe a que equipo
+  // pertenece cada uno. Este test es para que no vuelva por inercia.
+  assert.ok(!CAMPOS_PERSONA.some((c) => c.clave === 'equipo'))
+  assert.equal(CAMPOS_PERSONA.length, 3)
 })
 
 test('el campo puesto se muestra como "Rol"', () => {
@@ -157,6 +164,6 @@ test('el campo puesto se muestra como "Rol"', () => {
 })
 
 test('faltantes aguanta un usuario sin datos', () => {
-  assert.equal(faltantes(null).length, 4)
-  assert.equal(faltantes(undefined).length, 4)
+  assert.equal(faltantes(null).length, 3)
+  assert.equal(faltantes(undefined).length, 3)
 })

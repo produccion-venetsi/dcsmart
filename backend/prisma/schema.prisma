@@ -82,13 +82,16 @@ model User {
   // tienen y no hay por que trabar el login hasta que alguien los complete.
   //
   // departamento se valida contra la lista de lib/datosUsuario.js, no es texto libre
-  // (ver ahi por que la lista esta en codigo y no como enum de Postgres). equipo y
-  // puesto si son texto: dependen de como esta organizada cada area.
+  // (ver ahi por que la lista esta en codigo y no como enum de Postgres). puesto si es
+  // texto: es como se describe el cargo de cada uno.
   //
   // "puesto" es lo que en pantalla se llama "Rol". No se llama rol en el codigo
   // porque rol ya es el rol de permisos (super_admin, admin, cajero...).
+  //
+  // No hay columna de equipo a proposito: con el departamento y el puesto ya se sabe
+  // a que equipo pertenece cada uno, y un tercer campo para deducir lo mismo es un
+  // campo mas que queda sin cargar.
   departamento  String?
-  equipo        String?
   puesto        String?
   // Fecha pura, sin hora: un cumpleanos no tiene hora, y guardarlo como timestamp
   // lo corre un dia segun la zona (ya paso con 2076 cajas migradas a medianoche UTC).

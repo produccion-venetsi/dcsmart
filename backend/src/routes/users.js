@@ -2,10 +2,10 @@ import bcrypt from 'bcryptjs'
 import { normalizarPassword } from '../lib/password.js'
 import { patchDatosPersona } from '../lib/datosUsuario.js'
 
-// Datos de la persona (departamento, equipo, puesto, fecha de nacimiento). Van en el
-// select de las dos lecturas para que la tabla y el formulario muestren lo mismo.
+// Datos de la persona (departamento, puesto, fecha de nacimiento). Van en el select de
+// las dos lecturas para que la tabla y el formulario muestren lo mismo.
 const CAMPOS_PERSONA = {
-  departamento: true, equipo: true, puesto: true, fecha_nac: true
+  departamento: true, puesto: true, fecha_nac: true
 }
 
 // dcsmart-analisis es OTRO backend con su propia base (dcsmart_analytics);
@@ -108,20 +108,19 @@ export default async function usersRoutes(fastify) {
     })
   })
 
-  // Equipos que ya se usaron, para sugerirlos en el formulario.
+  // Puestos que ya se usaron, para sugerirlos en el formulario.
   //
-  // El equipo es texto libre (los departamentos son diez y estables, los equipos
-  // dependen de cada área), y texto libre sin sugerencias termina en "Turno noche",
-  // "turno noche" y "T. Noche" como tres equipos distintos. Esto no obliga a elegir de
-  // la lista, solo muestra lo que ya existe.
-  fastify.get('/equipos', { preHandler: viewHandler }, async () => {
+  // El puesto es texto libre, y texto libre sin sugerencias termina en "Encargada",
+  // "encargada" y "Enc. de salón" como tres cargos distintos. Esto no obliga a elegir
+  // de la lista, solo muestra lo que ya existe.
+  fastify.get('/puestos', { preHandler: viewHandler }, async () => {
     const filas = await fastify.db.user.findMany({
-      where: { equipo: { not: null } },
-      distinct: ['equipo'],
-      select: { equipo: true },
-      orderBy: { equipo: 'asc' }
+      where: { puesto: { not: null } },
+      distinct: ['puesto'],
+      select: { puesto: true },
+      orderBy: { puesto: 'asc' }
     })
-    return filas.map(f => f.equipo)
+    return filas.map(f => f.puesto)
   })
 
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {

@@ -1,5 +1,5 @@
-// Los cuatro datos de la persona detrás de un usuario: departamento, equipo, rol y
-// fecha de nacimiento.
+// Los tres datos de la persona detrás de un usuario: departamento, rol y fecha de
+// nacimiento.
 //
 // Está en un componente porque se usa en dos lugares —el alta de usuario y el panel de
 // detalle— y son el mismo formulario. Duplicarlo termina en un lado que valida y otro
@@ -9,6 +9,9 @@
 // rol de permisos. En el código el campo se llama `puesto` justamente para no
 // confundirlo con los roles de super_admin/admin/cajero, que se manejan aparte y más
 // abajo en el mismo panel.
+//
+// No hay campo de equipo: con el departamento y el rol ya se sabe a qué equipo
+// pertenece cada uno.
 
 import CampoTexto from './CampoTexto.jsx'
 import CampoSelect from './CampoSelect.jsx'
@@ -18,8 +21,8 @@ import {
 
 export default function DatosPersona({
   valores = {},
-  onChange,          // (campo, valor) => void
-  equiposUsados = [], // los que ya se cargaron, para sugerirlos
+  onChange,           // (campo, valor) => void
+  puestosUsados = [], // los que ya se cargaron, para sugerirlos
   disabled = false,
   idPrefix = 'dp',
 }) {
@@ -41,25 +44,12 @@ export default function DatosPersona({
       />
 
       <CampoTexto
-        id={`${idPrefix}-equipo`}
-        label="Equipo"
-        value={valores.equipo ?? ''}
-        onChange={v => onChange('equipo', v)}
-        max={LARGOS.equipo}
-        sugerencias={equiposUsados}
-        placeholder="Turno noche"
-        ayuda={equiposUsados.length
-          ? 'Podés elegir uno de los que ya existen o escribir otro.'
-          : 'Todavía no hay equipos cargados: el primero que escribas queda como sugerencia.'}
-        disabled={disabled}
-      />
-
-      <CampoTexto
         id={`${idPrefix}-puesto`}
         label="Rol"
         value={valores.puesto ?? ''}
         onChange={v => onChange('puesto', v)}
         max={LARGOS.puesto}
+        sugerencias={puestosUsados}
         placeholder="Encargada de salón"
         // Se aclara acá porque en esta misma pantalla, más abajo, "Rol" es el permiso.
         ayuda="El puesto de la persona. No es el rol de permisos del sistema."

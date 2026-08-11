@@ -4,6 +4,10 @@
 // propósito: el frontend no importa del backend en este proyecto. Lo que evita que se
 // desincronicen es el test de contrato de `datosUsuario.test.js`, que lee el archivo
 // del backend y falla si las listas dejan de coincidir. Si tocás una, tocá la otra.
+//
+// No hay equipo: con el departamento y el puesto ya se sabe a qué equipo pertenece
+// cada uno, y un tercer campo para deducir lo mismo es un campo más que queda sin
+// cargar.
 
 export const DEPARTAMENTOS = [
   'ADMINISTRACION',
@@ -37,7 +41,7 @@ export const OPCIONES_DEPARTAMENTO = DEPARTAMENTOS.map((clave) => ({
   label: DEPARTAMENTO_LABEL[clave],
 }))
 
-export const LARGOS = { equipo: 60, puesto: 60 }
+export const LARGOS = { puesto: 60 }
 
 export const etiquetaDepartamento = (v) => (v ? DEPARTAMENTO_LABEL[v] ?? v : '')
 
@@ -91,11 +95,10 @@ export function errorFechaNac(v, hoy = new Date()) {
 
 // ── Qué falta cargar ─────────────────────────────────────────────────────────
 //
-// La tabla marca los usuarios incompletos. Los 60 usuarios que ya existen arrancan sin
+// La tabla marca los usuarios incompletos. Los 61 usuarios que ya existen arrancan sin
 // ninguno de estos datos, y sin una señal visible nadie sabe cuáles faltan.
 export const CAMPOS_PERSONA = [
   { clave: 'departamento', label: 'Departamento' },
-  { clave: 'equipo', label: 'Equipo' },
   { clave: 'puesto', label: 'Rol' },
   { clave: 'fecha_nac', label: 'Fecha de nac.' },
 ]

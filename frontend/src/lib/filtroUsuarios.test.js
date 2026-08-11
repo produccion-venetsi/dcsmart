@@ -300,15 +300,15 @@ test('todasLasClaves junta los dos niveles y saltea lo que no tiene titulo', () 
   assert.deepEqual(todasLasClaves(null), [])
 })
 
-// ── departamento y equipo ───────────────────────────────────────────────────
+// ── departamento ───────────────────────────────────────────────────
 
-const conDatos = (u, departamento, equipo, puesto) => ({ ...u, departamento, equipo, puesto })
+const conDatos = (u, departamento, puesto) => ({ ...u, departamento, puesto })
 
 const PERSONAS = [
-  conDatos(superAdmin, 'DIRECCION', 'Socios', 'Director'),
-  conDatos(adminPerros, 'ADMINISTRACION', 'Turno noche', 'Encargada'),
-  conDatos(adminPerrosConLocal, 'ADMINISTRACION', 'Turno noche', 'Cajera'),
-  conDatos(adminTita, 'SISTEMAS', null, 'Dev'),
+  conDatos(superAdmin, 'DIRECCION', 'Director'),
+  conDatos(adminPerros, 'ADMINISTRACION', 'Encargada'),
+  conDatos(adminPerrosConLocal, 'ADMINISTRACION', 'Cajera'),
+  conDatos(adminTita, 'SISTEMAS', 'Dev'),
   sinRoles, // sin ninguno de los datos cargados
 ]
 
@@ -343,13 +343,13 @@ test('el departamento SI deja afuera al super_admin, al contrario que grupo y lo
   assert.ok(!ids(r).includes('u1'))
 })
 
-test('la busqueda por texto tambien encuentra por puesto y equipo', () => {
+test('la busqueda por texto tambien encuentra por puesto', () => {
   assert.deepEqual(ids(filtrarUsuarios(PERSONAS, { texto: 'encargada', estado: '' }, LOCALES)), ['u2'])
-  assert.deepEqual(ids(filtrarUsuarios(PERSONAS, { texto: 'turno noche', estado: '' }, LOCALES)), ['u2', 'u3'])
+  assert.deepEqual(ids(filtrarUsuarios(PERSONAS, { texto: 'cajera', estado: '' }, LOCALES)), ['u3'])
 })
 
 test('la busqueda sigue andando con usuarios sin esos datos', () => {
-  // Un null en puesto o equipo no tiene que romper el filtro.
+  // Un null en puesto no tiene que romper el filtro.
   assert.deepEqual(ids(filtrarUsuarios(PERSONAS, { texto: 'eze', estado: '' }, LOCALES)), ['u6'])
 })
 
@@ -375,15 +375,6 @@ test('agrupando por departamento cada usuario aparece una sola vez', () => {
   assert.equal(todos.length, PERSONAS.length)
 })
 
-test('agrupa en dos niveles: departamento y equipo', () => {
-  const b = agruparUsuarios(PERSONAS, 'departamento-equipo')
-  const admin = b.find(x => x.titulo === 'Administración')
-  assert.deepEqual(admin.sub.map(s => s.titulo), ['Turno noche'])
-  assert.equal(admin.total, 2)
-  const sis = b.find(x => x.titulo === 'Sistemas')
-  assert.deepEqual(sis.sub.map(s => s.titulo), ['Sin equipo'])
-})
-
 test('agrupar por departamento no depende de tener roles', () => {
   // sinRoles no tiene user_app_roles: agrupando por rol cae en "Sin roles", pero por
   // departamento tiene que caer en "Sin departamento" y no desaparecer.
@@ -393,8 +384,6 @@ test('agrupar por departamento no depende de tener roles', () => {
   assert.equal(b[0].total, 1)
 })
 
-test('las agrupaciones nuevas estan en la lista del selector', () => {
-  const valores = AGRUPACIONES.map(a => a.valor)
-  assert.ok(valores.includes('departamento'))
-  assert.ok(valores.includes('departamento-equipo'))
+test('la agrupacion por departamento esta en la lista del selector', () => {
+  assert.ok(AGRUPACIONES.map(a => a.valor).includes('departamento'))
 })

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   DEPARTAMENTOS, DEPARTAMENTO_LABEL, LARGOS,
-  esDepartamentoValido, normalizarDepartamento, normalizarEquipo, normalizarPuesto,
+  esDepartamentoValido, normalizarDepartamento, normalizarPuesto,
   normalizarFechaNac, edad, patchDatosPersona,
 } from './datosUsuario.js'
 
@@ -55,28 +55,23 @@ test('vacio es null y no cadena vacia', () => {
   assert.equal(normalizarDepartamento(undefined), null)
 })
 
-// ── equipo y puesto ─────────────────────────────────────────────────────────
+// ── puesto ─────────────────────────────────────────────────────────
 
-test('equipo y puesto se recortan al largo de la columna', () => {
-  const largo = 'x'.repeat(200)
-  assert.equal(normalizarEquipo(largo).length, LARGOS.equipo)
-  assert.equal(normalizarPuesto(largo).length, LARGOS.puesto)
+test('el puesto se recorta al largo de la columna', () => {
+  assert.equal(normalizarPuesto('x'.repeat(200)).length, LARGOS.puesto)
 })
 
 test('se limpian los espacios de los costados', () => {
-  assert.equal(normalizarEquipo('  Turno noche  '), 'Turno noche')
   assert.equal(normalizarPuesto('  Encargada  '), 'Encargada')
 })
 
-test('vacio es null en los dos', () => {
-  for (const f of [normalizarEquipo, normalizarPuesto]) {
-    assert.equal(f(''), null)
-    assert.equal(f('   '), null)
-    assert.equal(f(null), null)
-  }
+test('vacio es null', () => {
+  assert.equal(normalizarPuesto(''), null)
+  assert.equal(normalizarPuesto('   '), null)
+  assert.equal(normalizarPuesto(null), null)
 })
 
-test('equipo y puesto NO se pasan a mayusculas', () => {
+test('el puesto NO se pasa a mayusculas', () => {
   // Son texto que se lee: "Encargada de salón", no "ENCARGADA DE SALÓN".
   assert.equal(normalizarPuesto('Encargada de salón'), 'Encargada de salón')
 })
@@ -154,8 +149,8 @@ test('acepta un Date o un timestamp de Prisma', () => {
 
 test('un body que no menciona los campos no los toca', () => {
   // El PUT de usuarios se usa tambien para cambiar el nombre o la clave. Si el patch
-  // devolviera los cuatro campos en null, ese PUT borraria departamento, equipo,
-  // puesto y fecha de nacimiento sin que nadie lo pidiera.
+  // devolviera los tres campos en null, ese PUT borraria departamento, puesto y
+  // fecha de nacimiento sin que nadie lo pidiera.
   const { data, error } = patchDatosPersona({ nombre: 'Ana' })
   assert.equal(error, null)
   assert.deepEqual(data, {})
@@ -163,12 +158,12 @@ test('un body que no menciona los campos no los toca', () => {
 
 test('mandar el campo vacio SI lo borra', () => {
   // Es como se saca un dato mal cargado desde el formulario.
-  const { data } = patchDatosPersona({ departamento: '', equipo: '', puesto: '', fecha_nac: '' })
-  assert.deepEqual(data, { departamento: null, equipo: null, puesto: null, fecha_nac: null })
+  const { data } = patchDatosPersona({ departamento: '', puesto: '', fecha_nac: '' })
+  assert.deepEqual(data, { departamento: null, puesto: null, fecha_nac: null })
 })
 
 test('distingue campo ausente de campo en null', () => {
-  assert.deepEqual(patchDatosPersona({ equipo: null }).data, { equipo: null })
+  assert.deepEqual(patchDatosPersona({ puesto: null }).data, { puesto: null })
   assert.deepEqual(patchDatosPersona({}).data, {})
 })
 

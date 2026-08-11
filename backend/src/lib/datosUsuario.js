@@ -1,5 +1,9 @@
-// Datos de la persona detrás de un usuario: departamento, equipo, puesto y fecha de
+// Datos de la persona detrás de un usuario: departamento, puesto y fecha de
 // nacimiento.
+//
+// No hay equipo: con el departamento y el puesto ya se sabe a qué equipo pertenece
+// cada uno, y un tercer campo para deducir lo mismo es un campo más que queda sin
+// cargar.
 //
 // ── Por qué la lista vive acá y no como enum de Postgres ──────────────────────
 //
@@ -48,7 +52,7 @@ export const DEPARTAMENTO_LABEL = {
 }
 
 // Largos máximos, iguales a lo que aceptan las columnas.
-export const LARGOS = { equipo: 60, puesto: 60 }
+export const LARGOS = { puesto: 60 }
 
 const texto = (v) => String(v ?? '').trim()
 
@@ -63,10 +67,8 @@ export function normalizarDepartamento(v) {
   return DEPARTAMENTOS.includes(t) ? t : null
 }
 
-// El equipo es texto libre a propósito: los departamentos son diez y estables, los
-// equipos dependen de cómo esté organizada cada área hoy. La pantalla sugiere los que
-// ya se usaron, que es lo que evita las variantes de tipeo sin cerrar la lista.
-export const normalizarEquipo = (v) => texto(v).slice(0, LARGOS.equipo) || null
+// El puesto es texto libre: es cómo se describe el cargo ("Encargada de salón"), y una
+// lista cerrada de cargos no la tiene nadie.
 export const normalizarPuesto = (v) => texto(v).slice(0, LARGOS.puesto) || null
 
 // ── Fecha de nacimiento ──────────────────────────────────────────────────────
@@ -102,7 +104,7 @@ export function normalizarFechaNac(v, hoy = new Date()) {
 //
 // Solo toca las claves que vinieron en el body. Es la diferencia entre "no me
 // mandaron departamento" (no tocarlo) y "me mandaron departamento vacío" (borrarlo):
-// si se normalizara todo siempre, un PUT que solo cambia el nombre borraría los cuatro
+// si se normalizara todo siempre, un PUT que solo cambia el nombre borraría los tres
 // campos.
 //
 // Devuelve { data, error }.
@@ -120,7 +122,6 @@ export function patchDatosPersona(body = {}) {
     }
     data.departamento = normalizarDepartamento(body.departamento)
   }
-  if (hay('equipo')) data.equipo = normalizarEquipo(body.equipo)
   if (hay('puesto')) data.puesto = normalizarPuesto(body.puesto)
   if (hay('fecha_nac')) {
     const { valor, error } = normalizarFechaNac(body.fecha_nac)
