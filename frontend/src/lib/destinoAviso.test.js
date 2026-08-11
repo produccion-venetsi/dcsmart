@@ -34,6 +34,8 @@ const aviso = (over = {}) => ({
 test('un pago va a su formulario y una caja al listado con el drawer', () => {
   assert.equal(rutaDe(aviso()), '/pagos/p1/editar')
   assert.equal(rutaDe(aviso({ tabla: 'cajas', id_registro: 'c9' })), '/cajas?caja=c9')
+  // Un documento que vence abre su panel en el listado: no hay ruta por documento.
+  assert.equal(rutaDe(aviso({ tabla: 'documentos', id_registro: 'd7' })), '/documentos?doc=d7')
 })
 
 test('sin registro o de una tabla desconocida no hay ruta', () => {

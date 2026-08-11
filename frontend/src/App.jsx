@@ -42,6 +42,7 @@ const ProveedorForm = lazyWithReload(() => import('./pages/proveedores/Proveedor
 const ClienteList   = lazyWithReload(() => import('./pages/clientes/ClienteList.jsx'))
 const ClienteForm   = lazyWithReload(() => import('./pages/clientes/ClienteForm.jsx'))
 const ClienteCuenta = lazyWithReload(() => import('./pages/clientes/ClienteCuentaCorriente.jsx'))
+const DocumentoList = lazyWithReload(() => import('./pages/documentos/DocumentoList.jsx'))
 const Reportes      = lazyWithReload(() => import('./pages/reportes/Reportes.jsx'))
 const Auditorias    = lazyWithReload(() => import('./pages/auditorias/Auditorias.jsx'))
 const ActivityLog   = lazyWithReload(() => import('./pages/activity-log/ActivityLog.jsx'))
@@ -169,6 +170,10 @@ export default function App() {
           <Route path="clientes/nuevo"             element={<Guard roles={OPERATIVE}><ClienteForm /></Guard>} />
           <Route path="clientes/:id/editar"        element={<Guard roles={OPERATIVE}><ClienteForm /></Guard>} />
           <Route path="clientes/:id/cuenta-corriente" element={<Guard roles={OPERATIVE}><ClienteCuenta /></Guard>} />
+          {/* Documentos: contratos, habilitaciones y demas, por grupo y local. Sin
+              guard de rol -- el permiso del modulo `documentos` ya decide quien entra,
+              y el cajero SI entra (ve los marcados como visibles para todos). */}
+          <Route path="documentos"                 element={<DocumentoList />} />
           <Route path="reportes"                    element={<ReportesGuard><Reportes /></ReportesGuard>} />
           <Route path="arqueo"                      element={<OperativeGuard><ArqueoList /></OperativeGuard>} />
           <Route path="auditorias"                  element={<GlobalGuard roles={SUPER}><Auditorias /></GlobalGuard>} />

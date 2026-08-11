@@ -78,6 +78,18 @@ function IcoProveedor() {
     </svg>
   )
 }
+// Documentos: una hoja con la esquina doblada. Es el mismo dibujo que el tipo
+// "documento" de IconoDocumento, para que el item del menu y las filas de la tabla se
+// lean como lo mismo.
+function IcoDocumentos() {
+  return (
+    <svg viewBox="0 0 24 24" width={17} height={17} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  )
+}
+
 // Clientes: dos personas. Proveedor es una casa (a quién le pagamos), cliente es
 // alguien a nombre de quien se generó un gasto.
 function IcoClientes() {
@@ -243,6 +255,9 @@ const NAV_MAIN = [
   { to: '/arqueo',      label: 'Arqueo',      Icon: IcoArqueo,    roles: ALL },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ROLES_OPERATIVOS },
   { to: '/clientes',    label: 'Clientes',    Icon: IcoClientes,  roles: ROLES_OPERATIVOS },
+  // Sin `roles`: lo ven todos. El permiso del modulo `documentos` decide quien entra, y
+  // el cajero SI entra -- ve los marcados como visibles para todos.
+  { to: '/documentos',  label: 'Documentos',  Icon: IcoDocumentos },
   // Reportes internos de la app de gestión (/reportes). El Analytics externo
   // se abre desde un botón dentro de esa pantalla, no desde el sidebar.
   { key: 'reportes', to: '/reportes', label: 'Reportes', Icon: IcoReportes },

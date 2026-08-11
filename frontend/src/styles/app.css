@@ -1553,6 +1553,9 @@ select.campo-ia {
 .callout strong { color: var(--t1); font-weight: 700; }
 .callout-amber { background: var(--amber-bg); border-color: var(--amber-border); border-left-color: var(--amber); }
 .callout-blue  { background: var(--blue-bg);  border-color: var(--blue-border);  border-left-color: var(--blue); }
+/* Para lo que ya salio mal, no para lo que esta por pasar (eso es el ambar): documentos
+   vencidos, saldos en rojo. Faltaba, y el aviso de vencidos de Documentos la usaba. */
+.callout-red   { background: var(--red-bg);   border-color: var(--red-border);   border-left-color: var(--red); }
 
 /* Caja Mayor partida en dos: enviado a la izquierda, recibido a la derecha.
    Dos columnas iguales y no un auto-fill: las dos mitades tienen que medir lo mismo

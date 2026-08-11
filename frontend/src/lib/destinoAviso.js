@@ -25,6 +25,9 @@ export function rutaDe(aviso) {
   if (!aviso?.id_registro) return null
   if (aviso.tabla === 'pagos') return `/pagos/${aviso.id_registro}/editar`
   if (aviso.tabla === 'cajas') return `/cajas?caja=${aviso.id_registro}`
+  // Un documento que vence abre su panel en el listado, igual que una caja: la pantalla
+  // de Documentos no tiene ruta propia por documento.
+  if (aviso.tabla === 'documentos') return `/documentos?doc=${aviso.id_registro}`
   return null
 }
 
