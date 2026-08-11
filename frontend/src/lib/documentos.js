@@ -175,6 +175,23 @@ export function resumen(docs) {
   return r
 }
 
+// ── Link para compartir ──────────────────────────────────────────────────────
+
+// El link que corresponde mostrar en el panel.
+//
+// El link generado se guarda junto al id del documento (`{ id, url }`) para que, al pasar
+// a otro documento, deje de mostrarse solo. Esta función es la comparación, y está acá
+// porque escrita al vuelo salió mal de la forma menos visible:
+//
+//   link?.id === sel?.id ? link.url : null
+//
+// Con los dos en null eso es `undefined === undefined`, o sea true, y lee `.url` de un
+// null: la pantalla explotaba al abrirse, que es el único momento en que los dos son null.
+export function linkParaMostrar(link, doc) {
+  if (!link || !doc) return null
+  return link.id === doc.id ? link.url : null
+}
+
 // ── Formulario ───────────────────────────────────────────────────────────────
 
 export const EMPTY_DOC = {

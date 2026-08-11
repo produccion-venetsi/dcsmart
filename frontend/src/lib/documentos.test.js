@@ -5,6 +5,7 @@ import {
   DIAS_AVISO, fechaISO, fechaTexto, diasParaVencer, estadoVencimiento, textoVencimiento,
   colorVencimiento, seVeEnPantalla, accionDeArchivo, nombreDeArchivo, ACEPTA,
   AGRUPACIONES, TODO_EL_GRUPO, agrupar, resumen, EMPTY_DOC, erroresDoc, avisosDoc,
+  linkParaMostrar,
 } from './documentos.js'
 
 const HOY = new Date(2026, 7, 11) // 11/08/2026 local, como lo ve el navegador
@@ -276,4 +277,31 @@ test('CONTRATO: el icono por default existe en el catalogo del frontend', () => 
   assert.ok(mb, 'no se encontro ICONO_DEFAULT en el backend')
   // Se busca como clave del catalogo, con la sangria de dos espacios.
   assert.match(front, new RegExp(`^ {2}${mb[1]}:`, 'm'))
+})
+
+// ── link para mostrar ───────────────────────────────────────────────────────
+
+test('el panel recien abierto NO tiene link y no explota', () => {
+  // Este es el bug real: escrito como `link?.id === sel?.id ? link.url : null`, con los
+  // dos en null la comparacion es `undefined === undefined` (true) y lee .url de un null.
+  // La pantalla se caia justo al abrirse, que es cuando los dos son null.
+  assert.equal(linkParaMostrar(null, null), null)
+})
+
+test('sin link no muestra nada aunque haya documento abierto', () => {
+  assert.equal(linkParaMostrar(null, { id: 'd1' }), null)
+})
+
+test('muestra el link del documento abierto', () => {
+  assert.equal(linkParaMostrar({ id: 'd1', url: 'https://x/publico/abc' }, { id: 'd1' }), 'https://x/publico/abc')
+})
+
+test('NO muestra el link de un documento sobre otro', () => {
+  // Es la razon de guardar el id junto a la url: mostrar el link de otro documento seria
+  // compartir el archivo equivocado.
+  assert.equal(linkParaMostrar({ id: 'd1', url: 'https://x/publico/abc' }, { id: 'd2' }), null)
+})
+
+test('un link sin documento abierto no se muestra', () => {
+  assert.equal(linkParaMostrar({ id: 'd1', url: 'https://x' }, null), null)
 })
