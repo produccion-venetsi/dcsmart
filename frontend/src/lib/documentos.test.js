@@ -5,7 +5,8 @@ import {
   DIAS_AVISO, fechaISO, fechaTexto, diasParaVencer, estadoVencimiento, textoVencimiento,
   colorVencimiento, seVeEnPantalla, accionDeArchivo, nombreDeArchivo, ACEPTA,
   AGRUPACIONES, TODO_EL_GRUPO, agrupar, resumen, EMPTY_DOC, erroresDoc, avisosDoc,
-  linkParaMostrar,
+  linkParaMostrar, MAX_BYTES, pesoLegible, revisarElegidos, motivoRechazo,
+  modoPreview, archivoInicial, MODOS, esEdicion, paraGuardar, nuevoPendiente, esPendiente,
 } from './documentos.js'
 
 const HOY = new Date(2026, 7, 11) // 11/08/2026 local, como lo ve el navegador
@@ -304,4 +305,124 @@ test('NO muestra el link de un documento sobre otro', () => {
 
 test('un link sin documento abierto no se muestra', () => {
   assert.equal(linkParaMostrar({ id: 'd1', url: 'https://x' }, null), null)
+})
+
+// ── elegir archivos ─────────────────────────────────────────────────────────
+
+const archivo = (name, size = 1000) => ({ name, size })
+
+test('separa los que se pueden subir de los que no', () => {
+  const r = revisarElegidos([
+    archivo('contrato.pdf'),
+    archivo('virus.exe'),
+    archivo('enorme.pdf', MAX_BYTES + 1),
+    archivo('foto.JPG'),
+  ])
+  assert.deepEqual(r.ok.map(f => f.name), ['contrato.pdf', 'foto.JPG'])
+  assert.deepEqual(r.rechazados.map(f => f.name), ['virus.exe'])
+  assert.deepEqual(r.grandes.map(f => f.name), ['enorme.pdf'])
+})
+
+test('la extension se mira sin importar mayusculas', () => {
+  assert.equal(revisarElegidos([archivo('ESCANEO.PDF')]).ok.length, 1)
+})
+
+test('un archivo sin extension se rechaza', () => {
+  assert.equal(revisarElegidos([archivo('sin-extension')]).rechazados.length, 1)
+})
+
+test('en el limite exacto de 20 MB todavia entra', () => {
+  assert.equal(revisarElegidos([archivo('justo.pdf', MAX_BYTES)]).ok.length, 1)
+  assert.equal(revisarElegidos([archivo('uno-mas.pdf', MAX_BYTES + 1)]).grandes.length, 1)
+})
+
+test('el aviso NOMBRA los archivos que quedaron afuera', () => {
+  // "2 archivos no se pudieron subir" obliga a adivinar cuales.
+  const r = revisarElegidos([archivo('virus.exe'), archivo('enorme.pdf', MAX_BYTES + 1)])
+  const msg = motivoRechazo(r)
+  assert.match(msg, /virus\.exe/)
+  assert.match(msg, /enorme\.pdf/)
+  assert.match(msg, /no es un tipo permitido/)
+  assert.match(msg, /20\.0 MB/)
+})
+
+test('sin rechazos no hay mensaje', () => {
+  assert.equal(motivoRechazo(revisarElegidos([archivo('ok.pdf')])), '')
+  assert.equal(motivoRechazo({}), '')
+})
+
+test('los pesos se leen en la unidad que corresponde', () => {
+  assert.equal(pesoLegible(500), '500 B')
+  assert.equal(pesoLegible(2048), '2 KB')
+  assert.equal(pesoLegible(5 * 1024 * 1024), '5.0 MB')
+  assert.equal(pesoLegible(null), '')
+})
+
+// ── vista previa ────────────────────────────────────────────────────────────
+
+test('cada tipo tiene su forma de mostrarse', () => {
+  assert.equal(modoPreview('foto'), 'imagen')
+  assert.equal(modoPreview('pdf'), 'pdf')
+  assert.equal(modoPreview('archivo'), 'ninguno')
+  assert.equal(modoPreview(undefined), 'ninguno')
+})
+
+test('abre el primer archivo que SE PUEDA previsualizar, no el primero de la lista', () => {
+  // Con un .docx adelante, abrir en "no se puede previsualizar" esconde las fotos que si
+  // se ven.
+  const archivos = [
+    { id: 'a1', tipo: 'archivo' },
+    { id: 'a2', tipo: 'foto' },
+    { id: 'a3', tipo: 'pdf' },
+  ]
+  assert.equal(archivoInicial(archivos).id, 'a2')
+})
+
+test('si ninguno se puede previsualizar, abre el primero igual', () => {
+  // Asi el detalle muestra al menos el nombre y el boton de descarga.
+  assert.equal(archivoInicial([{ id: 'a1', tipo: 'archivo' }]).id, 'a1')
+})
+
+test('sin archivos no hay ninguno abierto', () => {
+  assert.equal(archivoInicial([]), null)
+  assert.equal(archivoInicial(null), null)
+})
+
+// ── modo del panel ──────────────────────────────────────────────────────────
+
+test('ver no es edicion; nuevo y editar si', () => {
+  assert.equal(esEdicion(MODOS.VER), false)
+  assert.equal(esEdicion(MODOS.EDITAR), true)
+  assert.equal(esEdicion(MODOS.NUEVO), true)
+})
+
+// ── archivos antes de guardar ───────────────────────────────────────────────
+
+test('un pendiente se ve como un archivo guardado, con una marca', () => {
+  const p = nuevoPendiente({ gs_path: 'gs://b/x.pdf', tipo: 'pdf', nombre_original: 'x.pdf' }, 0)
+  assert.equal(p.nombre_original, 'x.pdf')
+  assert.equal(p.tipo, 'pdf')
+  assert.equal(esPendiente(p), true)
+  assert.equal(esPendiente({ id: 'a1', tipo: 'pdf' }), false)
+})
+
+test('los pendientes tienen ids distintos, asi se pueden sacar de la lista', () => {
+  const a = nuevoPendiente({ gs_path: 'gs://b/1.pdf' }, 0)
+  const b = nuevoPendiente({ gs_path: 'gs://b/2.pdf' }, 1)
+  assert.notEqual(a.id, b.id)
+})
+
+test('al guardar se manda solo lo que el backend espera', () => {
+  const pendientes = [
+    nuevoPendiente({ gs_path: 'gs://b/1.pdf', tipo: 'pdf', nombre_original: '1.pdf' }, 0),
+  ]
+  // Ni el id local ni la marca de pendiente: son de la pantalla, no del backend.
+  assert.deepEqual(paraGuardar(pendientes), [
+    { gs_path: 'gs://b/1.pdf', tipo: 'pdf', nombre_original: '1.pdf' },
+  ])
+})
+
+test('sin pendientes se manda lista vacia', () => {
+  assert.deepEqual(paraGuardar([]), [])
+  assert.deepEqual(paraGuardar(null), [])
 })

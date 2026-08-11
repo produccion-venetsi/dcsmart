@@ -1531,6 +1531,156 @@ select.campo-ia {
    el gap ya separa, y el margen encima descuadra las filas entre si. */
 .datos-persona-grid > .form-group { margin: 0; }
 
+/* ─── Documentos ──────────────────────────────────────────────────────────────
+
+   Zona para soltar archivos. Es la zona ENTERA la que recibe el clic y el arrastre:
+   antes era un boton chico con un input escondido detras, que es lo menos
+   descubrible que hay. Es un <label>, asi que el clic y el teclado funcionan solos. */
+.doc-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 1.1rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  border: 1.5px dashed var(--glass-border);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--t2);
+  font-size: 12.5px;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.doc-dropzone:hover { border-color: var(--t3); color: var(--t1); }
+/* Mientras se arrastra encima hay que ver que va a caer ACA y no en otra parte: el
+   cambio tiene que ser evidente, no un matiz. */
+.doc-dropzone.arrastrando {
+  border-color: var(--blue);
+  border-style: solid;
+  background: var(--blue-bg);
+  color: var(--t1);
+}
+.doc-dropzone.ocupada { cursor: progress; }
+.doc-dropzone strong { font-weight: 600; font-size: 13px; color: inherit; }
+.doc-dropzone-ico { color: var(--t3); margin-bottom: 2px; }
+.doc-dropzone-sub { font-size: 11px; color: var(--t3); line-height: 1.4; }
+/* El foco del teclado se ve, porque el input real esta escondido y sin esto no hay
+   ninguna senal de donde esta parado. */
+.doc-dropzone:focus-within { border-color: var(--blue); border-style: solid; }
+
+/* Una fila de archivo, en la lista del formulario. */
+.doc-archivo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+.doc-archivo-nombre {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--t1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Encabezado del detalle: el tipo y el vencimiento, que es lo que se viene a mirar. */
+.doc-detalle-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 1.1rem;
+}
+.doc-detalle-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  color: var(--t2);
+  flex-shrink: 0;
+}
+.doc-detalle-tipo {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--t2);
+}
+
+/* Vista previa del archivo dentro del panel. Alto fijo: sin el, un PDF de una pagina y
+   otro de treinta dan paneles de alturas distintas y la pantalla salta al cambiar. */
+.doc-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  /* Cuadros grises: una foto con fondo blanco o transparente sobre el fondo oscuro se
+     confunde con el panel y no se ve donde empieza. */
+  background:
+    repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+}
+.doc-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  /* `contain`: la foto entra completa. Con `cover` se recorta, y en un documento el
+     recorte puede tapar justo el sello o la firma. */
+  object-fit: contain;
+}
+.doc-preview iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+.doc-preview-vacio {
+  background: var(--bg-input);
+  height: auto;
+  min-height: 84px;
+  padding: 1rem;
+  text-align: center;
+}
+
+/* Pestanas de archivos, cuando el documento tiene mas de uno. */
+.doc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.doc-tab {
+  max-width: 190px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--t3);
+  font-size: 11.5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-tab:hover { color: var(--t1); border-color: var(--t3); }
+/* La activa se marca con fondo Y borde, no solo con color: entre cinco nombres de
+   archivo parecidos, un tono distinto no alcanza. */
+.doc-tab.activa {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: var(--t1);
+  color: var(--t1);
+  font-weight: 600;
+}
+
 /* Aviso de bloque: un parrafo que explica algo (y a veces trae un boton), no una
    etiqueta. NO usar `.badge` para esto: badge tiene height:18px, font-size:9px,
    uppercase, letter-spacing y white-space:nowrap, asi que un texto largo sale en

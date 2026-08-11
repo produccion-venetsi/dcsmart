@@ -9,7 +9,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { documentosApi, urlPublica } from '../../api/documentos.js'
+import { documentosApi } from '../../api/documentos.js'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAppStore } from '../../store/appStore.js'
@@ -20,9 +20,11 @@ import Combobox from '../../components/Combobox.jsx'
 import IconoDocumento from '../../components/IconoDocumento.jsx'
 import TiposDocumentoPanel from './TiposDocumentoPanel.jsx'
 import ArchivosDocumento from './ArchivosDocumento.jsx'
+import DocumentoDetalle from './DocumentoDetalle.jsx'
 import {
   AGRUPACIONES, agrupar, resumen, fechaTexto, textoVencimiento, colorVencimiento,
-  EMPTY_DOC, erroresDoc, avisosDoc, fechaISO, linkParaMostrar,
+  EMPTY_DOC, erroresDoc, avisosDoc, fechaISO,
+  MODOS, esEdicion, paraGuardar,
 } from '../../lib/documentos.js'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -89,9 +91,13 @@ export default function DocumentoList() {
   // Panel de detalle / edición
   const [panelOpen, setPanelOpen] = useState(false)
   const [sel, setSel] = useState(null)
+  const [modo, setModo] = useState(MODOS.VER)
   const [form, setForm] = useState(EMPTY_DOC)
   const [saving, setSaving] = useState(false)
   const [errores, setErrores] = useState({})
+  // Archivos ya subidos al bucket que esperan a que exista el documento para adjuntarse.
+  // Es lo que permite elegirlos durante el alta en vez de tener que guardar primero.
+  const [pendientes, setPendientes] = useState([])
 
   const [tiposOpen, setTiposOpen] = useState(false)
 
@@ -179,28 +185,42 @@ export default function DocumentoList() {
 
   // ── abrir / guardar ───────────────────────────────────────────────────────
 
+  // Lo que muestra el panel: los datos del documento (VER), el formulario (EDITAR) o el
+  // formulario en blanco (NUEVO). Antes hacer clic en una fila abría directamente el
+  // formulario, así que para LEER un documento había que entrar a editarlo.
+  const editando = esEdicion(modo)
+
+  const formDesde = (doc) => ({
+    id_tipo: doc.id_tipo ?? '',
+    id_local: doc.id_local ?? '',
+    id_proveedor: doc.id_proveedor ?? '',
+    nombre: doc.nombre ?? '',
+    detalle: doc.detalle ?? '',
+    url: doc.url ?? '',
+    vence: fechaISO(doc.vence) ?? '',
+    visible_todos: Boolean(doc.visible_todos),
+  })
+
   // `function` y no `const`: el effect de `?doc=` de arriba la usa, y una arrow en const
   // todavía no existe cuando ese effect se declara.
   function abrir(doc) {
     setSel(doc)
+    setModo(MODOS.VER)
     setErrores({})
+    setPendientes([])
     setProvSel(doc?.proveedor ?? null)
-    setForm(doc ? {
-      id_tipo: doc.id_tipo ?? '',
-      id_local: doc.id_local ?? '',
-      id_proveedor: doc.id_proveedor ?? '',
-      nombre: doc.nombre ?? '',
-      detalle: doc.detalle ?? '',
-      url: doc.url ?? '',
-      vence: fechaISO(doc.vence) ?? '',
-      visible_todos: Boolean(doc.visible_todos),
-    } : EMPTY_DOC)
+    setForm(formDesde(doc))
     setPanelOpen(true)
+    // El listado no trae todo (los archivos vienen, pero conviene el estado fresco por si
+    // otro lo tocó). Se abre ya con lo que hay y se reemplaza cuando llega.
+    documentosApi.get(doc.id).then(({ data }) => setSel(data)).catch(() => {})
   }
 
   const nuevo = () => {
     setSel(null)
+    setModo(MODOS.NUEVO)
     setErrores({})
+    setPendientes([])
     setProvSel(null)
     // Se precarga el local activo: casi siempre se carga un documento del local en el
     // que uno está parado.
@@ -208,7 +228,25 @@ export default function DocumentoList() {
     setPanelOpen(true)
   }
 
-  const cerrar = () => { setPanelOpen(false); setSel(null) }
+  const editar = () => {
+    setForm(formDesde(sel))
+    setProvSel(sel?.proveedor ?? null)
+    setErrores({})
+    setModo(MODOS.EDITAR)
+  }
+
+  const cerrar = () => {
+    setPanelOpen(false)
+    setSel(null)
+    setPendientes([])
+  }
+
+  // Volver del formulario sin guardar. En una edición se vuelve al detalle; en un alta no
+  // hay nada atrás, así que se cierra.
+  const cancelar = () => {
+    if (modo === MODOS.EDITAR && sel) { setModo(MODOS.VER); setErrores({}) }
+    else cerrar()
+  }
 
   const guardar = async (e) => {
     e.preventDefault()
@@ -232,12 +270,16 @@ export default function DocumentoList() {
         setSel(data)
         notify('Documento actualizado', 'success')
       } else {
-        const { data } = await documentosApi.create(body)
-        // Se queda abierto en el nuevo para poder cargarle los archivos ahí mismo: son
-        // dos pasos (guardar y adjuntar) y cerrar el panel obliga a volver a buscarlo.
+        // Los archivos que se eligieron antes de guardar se adjuntan en la misma
+        // operación: no hay que guardar y volver a entrar.
+        const { data } = await documentosApi.create({ ...body, archivos: paraGuardar(pendientes) })
         setSel(data)
-        notify('Documento creado. Ya podés adjuntar los archivos.', 'success')
+        setPendientes([])
+        notify('Documento creado', 'success')
       }
+      // Se pasa al detalle en vez de dejar el formulario abierto. El formulario abierto
+      // después de guardar se lee como "no se guardó" y hace apretar Guardar de nuevo.
+      setModo(MODOS.VER)
       cargar()
     } catch (err) {
       notify(err.response?.data?.error || 'Error al guardar', 'error')
@@ -260,47 +302,6 @@ export default function DocumentoList() {
       cargar()
     } catch (err) {
       notify(err.response?.data?.error || 'Error al borrar', 'error')
-    }
-  }
-
-  // ── link para compartir ───────────────────────────────────────────────────
-
-  // Se guarda { id, url } y no la url sola: así, al pasar a otro documento, el link deja
-  // de mostrarse sin necesidad de un effect que lo limpie (y sin el riesgo de mostrar el
-  // link de un documento sobre otro si ese effect corre tarde). La comparación está en
-  // lib/documentos.js con tests: escrita al vuelo acá salió mal.
-  const [link, setLink] = useState(null)
-  const linkVisible = linkParaMostrar(link, sel)
-
-  const generarLink = async () => {
-    try {
-      const { data } = await documentosApi.generarLink(sel.id)
-      const url = urlPublica(data.token)
-      setLink({ id: sel.id, url })
-      // Se copia solo: el link no sirve de nada si hay que seleccionarlo a mano de un
-      // cuadro chico. Si el navegador no lo permite, queda a la vista para copiarlo.
-      try {
-        await navigator.clipboard.writeText(url)
-        notify('Link copiado. Abre el documento sin pedir usuario.', 'success')
-      } catch {
-        notify('Link generado. Copialo de abajo.', 'success')
-      }
-      cargar()
-    } catch (err) {
-      notify(err.response?.data?.error || 'Error al generar el link', 'error')
-    }
-  }
-
-  const revocarLink = async () => {
-    if (!(await showConfirm('¿Anular el link? Quien lo tenga deja de poder abrir el documento.'))) return
-    try {
-      await documentosApi.revocarLink(sel.id)
-      setLink(null)
-      setSel(s => ({ ...s, tiene_link: false, token_creado_at: null }))
-      notify('Link anulado', 'success')
-      cargar()
-    } catch (err) {
-      notify(err.response?.data?.error || 'Error al anular el link', 'error')
     }
   }
 
@@ -551,13 +552,31 @@ export default function DocumentoList() {
         </table>
       </div>
 
-      {/* ── Panel de alta / detalle ── */}
+      {/* ── Panel: detalle o formulario ── */}
       <DrawerPanel
         open={panelOpen}
         onClose={cerrar}
-        title={sel ? sel.nombre : 'Nuevo documento'}
-        width={520}
+        title={modo === MODOS.NUEVO ? 'Nuevo documento' : sel?.nombre ?? 'Documento'}
+        width={560}
       >
+        {/* Ver es lo que se abre al hacer clic en una fila; editar se pide con un botón. */}
+        {!editando && sel && (
+          <DocumentoDetalle
+            documento={sel}
+            onEditar={editar}
+            onBorrar={borrar}
+            // Generar o anular el link cambia `tiene_link`, que se muestra en la tabla.
+            onCambio={async () => {
+              try {
+                const { data } = await documentosApi.get(sel.id)
+                setSel(data)
+              } catch { /* el detalle ya se actualizó en pantalla */ }
+              cargar()
+            }}
+          />
+        )}
+
+        {editando && (
         <form onSubmit={guardar}>
           <CampoTexto
             id="doc-nombre"
@@ -690,12 +709,24 @@ export default function DocumentoList() {
             </div>
           )}
 
-          <div className="form-actions" style={{ marginTop: '1.25rem' }}>
+          {/* Los archivos van DENTRO del formulario, también al dar de alta: se suben al
+              bucket en el momento y se adjuntan cuando se guarda el documento. Antes había
+              que guardar primero y volver a entrar. */}
+          <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Archivos</div>
+          <ArchivosDocumento
+            documento={sel}
+            pendientes={pendientes}
+            onPendientes={setPendientes}
+            idLocal={form.id_local}
+            onCambio={(actualizado) => { setSel(actualizado); cargar() }}
+          />
+
+          <div className="form-actions" style={{ marginTop: '1.5rem' }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Guardando…' : sel ? 'Guardar cambios' : 'Crear documento'}
             </button>
-            <button type="button" className="btn btn-secondary" onClick={cerrar} disabled={saving}>
-              Cerrar
+            <button type="button" className="btn btn-secondary" onClick={cancelar} disabled={saving}>
+              {modo === MODOS.EDITAR ? 'Cancelar' : 'Cerrar'}
             </button>
             {sel && (
               <button type="button" className="btn btn-danger" onClick={borrar} disabled={saving} style={{ marginLeft: 'auto' }}>
@@ -704,43 +735,6 @@ export default function DocumentoList() {
             )}
           </div>
         </form>
-
-        {/* Los archivos y el link solo existen si el documento ya está guardado: hay que
-            tener un id para colgarlos. Se dice en vez de mostrar controles muertos. */}
-        {sel ? (
-          <>
-            <div className="drawer-section-title" style={{ marginTop: '1.75rem' }}>Archivos</div>
-            <ArchivosDocumento
-              documento={sel}
-              onCambio={(actualizado) => { setSel(actualizado); cargar() }}
-            />
-
-            <div className="drawer-section-title" style={{ marginTop: '1.75rem' }}>Compartir sin login</div>
-            <p className="form-hint" style={{ marginBottom: 8 }}>
-              Genera un link que abre este documento sin pedir usuario, para mandárselo a
-              alguien de afuera (un inspector, un contador). Cualquiera con el link entra.
-            </p>
-            {linkVisible && (
-              <div className="form-input-wrap" style={{ marginBottom: 8 }}>
-                <input readOnly value={linkVisible} onFocus={e => e.target.select()} style={{ fontSize: 11.5 }} />
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className="btn btn-sm btn-secondary" onClick={generarLink}>
-                {sel.tiene_link ? 'Ver / copiar el link' : 'Generar link'}
-              </button>
-              {sel.tiene_link && (
-                <button type="button" className="btn btn-sm btn-danger" onClick={revocarLink}>
-                  Anular el link
-                </button>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="form-hint" style={{ marginTop: '1.5rem' }}>
-            Guardá el documento y después le adjuntás los archivos y, si hace falta, el link
-            para compartir.
-          </p>
         )}
       </DrawerPanel>
 

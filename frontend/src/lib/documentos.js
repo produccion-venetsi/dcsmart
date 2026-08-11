@@ -86,6 +86,67 @@ export function nombreDeArchivo(archivo, i = 0) {
 export const ACEPTA =
   '.pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx,.csv'
 
+// 20 MB, el límite del backend. Se chequea antes de subir para no hacer esperar una
+// subida que va a fallar.
+export const MAX_BYTES = 20 * 1024 * 1024
+
+export function pesoLegible(bytes) {
+  // `Number(null)` es 0, así que sin este chequeo un peso que falta se muestra como
+  // "0 B" — un archivo vacío, que es un dato distinto de "no sé cuánto pesa".
+  if (bytes === null || bytes === undefined || bytes === '') return ''
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n < 0) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+// Qué se puede elegir y qué no, antes de subir nada. Devuelve las tres listas, porque el
+// caso interesante es el mixto: se suben los que sirven y se dice qué quedó afuera.
+export function revisarElegidos(files, max = MAX_BYTES) {
+  const ok = [], grandes = [], rechazados = []
+  for (const f of files ?? []) {
+    const ext = String(f?.name ?? '').split('.').pop().toLowerCase()
+    if (!ACEPTA.includes(`.${ext}`)) rechazados.push(f)
+    else if (f.size > max) grandes.push(f)
+    else ok.push(f)
+  }
+  return { ok, grandes, rechazados }
+}
+
+// El aviso de lo que quedó afuera. Nombra los archivos: "2 archivos no se pudieron subir"
+// obliga a adivinar cuáles.
+export function motivoRechazo({ grandes = [], rechazados = [] }, max = MAX_BYTES) {
+  const partes = []
+  if (rechazados.length) {
+    partes.push(`${rechazados.map(f => f.name).join(', ')}: no es un tipo permitido`)
+  }
+  if (grandes.length) {
+    partes.push(`${grandes.map(f => f.name).join(', ')}: pasa${grandes.length > 1 ? 'n' : ''} los ${pesoLegible(max)}`)
+  }
+  return partes.join(' · ')
+}
+
+// ── Vista previa ─────────────────────────────────────────────────────────────
+
+// Cómo se muestra cada archivo en el detalle: una imagen se dibuja, un PDF va en un marco
+// embebido, y el resto no se puede previsualizar y solo se ofrece bajarlo.
+export function modoPreview(tipo) {
+  if (tipo === 'foto') return 'imagen'
+  if (tipo === 'pdf') return 'pdf'
+  return 'ninguno'
+}
+
+// Qué archivo se muestra abierto al entrar al detalle.
+//
+// El primero que se pueda previsualizar, no el primero de la lista: si el orden quedó con
+// un .docx adelante, abrir el detalle en "no se puede previsualizar" esconde las tres
+// fotos que sí se ven.
+export function archivoInicial(archivos) {
+  const lista = archivos ?? []
+  return lista.find(a => modoPreview(a.tipo) !== 'ninguno') ?? lista[0] ?? null
+}
+
 // ── Íconos ──────────────────────────────────────────────────────────────────
 //
 // Las claves. El dibujo de cada una está en components/IconoDocumento.jsx y la
@@ -191,6 +252,40 @@ export function linkParaMostrar(link, doc) {
   if (!link || !doc) return null
   return link.id === doc.id ? link.url : null
 }
+
+// ── Modo del panel ───────────────────────────────────────────────────────────
+//
+// El panel hace tres cosas y antes hacía una sola: al hacer clic en una fila se abría el
+// formulario de edición, así que para leer un documento había que entrar a editarlo. Ahora
+// se ve primero y se edita a pedido.
+export const MODOS = { VER: 'ver', EDITAR: 'editar', NUEVO: 'nuevo' }
+
+export const esEdicion = (modo) => modo === MODOS.EDITAR || modo === MODOS.NUEVO
+
+// ── Archivos antes de guardar ────────────────────────────────────────────────
+//
+// Los archivos se pueden elegir mientras se carga un documento nuevo, sin esperar a
+// guardarlo. Se suben al bucket en el momento (no hace falta el documento para eso) y
+// quedan acá hasta que el POST del documento los adjunta en la misma operación.
+//
+// Antes había que guardar primero y adjuntar después: dos pasos, y el panel quedaba
+// abierto en el medio como si no se hubiera guardado nada.
+
+// Lo que el backend espera en `archivos` del POST.
+export const paraGuardar = (pendientes) =>
+  (pendientes ?? []).map(({ gs_path, tipo, nombre_original }) => ({ gs_path, tipo, nombre_original }))
+
+// Un pendiente se muestra igual que un archivo ya guardado, así la lista es una sola. El
+// id local existe solo para poder sacarlo de la lista antes de guardar.
+export const nuevoPendiente = (subido, i = 0) => ({
+  id: `pendiente-${i}-${subido.gs_path}`,
+  gs_path: subido.gs_path,
+  tipo: subido.tipo,
+  nombre_original: subido.nombre_original,
+  pendiente: true,
+})
+
+export const esPendiente = (archivo) => Boolean(archivo?.pendiente)
 
 // ── Formulario ───────────────────────────────────────────────────────────────
 
