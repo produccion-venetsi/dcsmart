@@ -9,7 +9,10 @@
 // la misma tabla.
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { cajaMayorApi } from '../../api/cajaMayor.js'
+import { authApi } from '../../api/auth.js'
+import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { fmtDateUTC } from '../../lib/dates.js'
 import {
@@ -19,6 +22,8 @@ import {
 import MovimientoForm from './MovimientoForm.jsx'
 import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
 import { dividirPorDireccion, proporcion } from '../../lib/cajaMayorVista.js'
+import { MODOS_ALTA, tieneOp, etiquetaOp, rutaDeLaOp, resolverAlta } from '../../lib/altaCajaMayor.js'
+import { resolverApertura, mensajeDeCambio } from '../../lib/destinoAviso.js'
 
 const LIMIT = 100
 
@@ -53,6 +58,19 @@ function BadgeDireccion({ ingreso, corregida }) {
 
 export default function CajaMayor() {
   const notify = useUiStore((s) => s.notify)
+  const navigate = useNavigate()
+
+  // Caja Mayor es global: no pasa por appContext y se ven todos los grupos juntos. El
+  // formulario de un pago vive dentro de un grupo y un local, y el backend corta por
+  // allowedLocalIds. Asi que para abrir una op --o cargar una nueva-- hay que poner el
+  // contexto antes de navegar. Es el mismo problema de los avisos y se resuelve con el
+  // mismo lib (destinoAviso.js), en vez de escribir otro criterio que se desincronice.
+  const [misApps, setMisApps] = useState([])
+  const appActiva = useAppStore((s) => s.activeApp)
+  const localActivo = useAppStore((s) => s.activeLocal)
+  const setActiveApp = useAppStore((s) => s.setActiveApp)
+  const setActiveLocal = useAppStore((s) => s.setActiveLocal)
+  const [menuAlta, setMenuAlta] = useState(false)
 
   const [tab, setTab] = useState('saldos') // saldos | movimientos
   const [moneda, setMoneda] = useState('ARS')
@@ -76,6 +94,11 @@ export default function CajaMayor() {
 
   const [formMov, setFormMov] = useState(null)     // null | {} | movimiento a editar
   const [expandido, setExpandido] = useState(null)
+
+  // Si falla, abrir una op avisa que no hay acceso en vez de mandar a un 403.
+  useEffect(() => {
+    authApi.myApps().then(({ data }) => setMisApps(data ?? [])).catch(() => setMisApps([]))
+  }, [])
 
   useEffect(() => {
     cajaMayorApi.locales()
@@ -167,6 +190,37 @@ export default function CajaMayor() {
     }
   }
 
+  // Pone el contexto en un local y navega.
+  const irConContexto = (idLocal, ruta) => {
+    const plan = resolverApertura(
+      { tabla: 'pagos', id_registro: 'x', id_local: idLocal },
+      { misApps, appActiva, localActivo }
+    )
+    if (plan.accion === 'sin-acceso') { notify(plan.mensaje, 'error'); return }
+    if (plan.accion === 'cambiar-contexto') {
+      // setActiveApp limpia el local, asi que el orden importa: primero la app.
+      if (plan.cambiaGrupo) setActiveApp(plan.app)
+      setActiveLocal(plan.local)
+      notify(mensajeDeCambio(plan), 'info')
+    }
+    navigate(ruta)
+  }
+
+  // Ir a la op de gestion de la que salio el movimiento.
+  const abrirOp = (mov) => {
+    const ruta = rutaDeLaOp(mov)
+    if (ruta) irConContexto(mov.id_local, ruta)
+  }
+
+  // Los dos modos de alta: el formulario rapido de siempre, o una op con factura.
+  const elegirAlta = (modo) => {
+    setMenuAlta(false)
+    const plan = resolverAlta(modo, { idLocal })
+    if (plan.accion === 'drawer') { setFormMov({}); return }
+    if (plan.accion === 'falta-local') { notify(plan.mensaje, 'error'); return }
+    irConContexto(plan.id_local, plan.ruta)
+  }
+
   const localesPorGrupo = useMemo(() => {
     const grupos = new Map()
     for (const l of locales) {
@@ -200,10 +254,42 @@ export default function CajaMayor() {
             los ajustes y aperturas se cargan acá.
           </p>
         </div>
-        <div className="page-head-right">
-          <button className="btn btn-primary" onClick={() => setFormMov({})}>
-            Nuevo movimiento
+        <div className="page-head-right" style={{ position: 'relative' }}>
+          <button className="btn btn-primary" onClick={() => setMenuAlta(v => !v)}>
+            Nuevo movimiento ▾
           </button>
+
+          {/* Dos caminos, porque son dos cosas distintas: plata que se movio sin
+              comprobante, o una operacion con factura --que se carga como op de
+              gestion y llega a caja mayor por la copia que ya existe. */}
+          {menuAlta && (
+            <>
+              {/* Capa para cerrar tocando afuera: un menu que solo cierra con el
+                  boton se queda abierto y tapa la tabla. */}
+              <div
+                onClick={() => setMenuAlta(false)}
+                style={{ position: 'fixed', inset: 0, zIndex: 20 }}
+              />
+              <div className="carga-ia-menu" style={{ right: 0, left: 'auto', top: '100%', minWidth: 320, zIndex: 21 }}>
+                <button type="button" onClick={() => elegirAlta(MODOS_ALTA.RAPIDA)}>
+                  <span>
+                    <strong style={{ display: 'block' }}>Carga rápida</strong>
+                    <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                      Plata que se movió, sin comprobante
+                    </span>
+                  </span>
+                </button>
+                <button type="button" onClick={() => elegirAlta(MODOS_ALTA.OPERACION)}>
+                  <span>
+                    <strong style={{ display: 'block' }}>Operación con factura</strong>
+                    <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                      Se carga como op tipo CM{idLocal ? '' : ' — elegí el local primero'}
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -478,8 +564,22 @@ export default function CajaMayor() {
                         >
                           {m.categoria ?? m.observaciones ?? '—'}
                         </div>
-                        {m.nro_ord != null && (
-                          <div style={{ fontSize: 10.5, color: 'var(--t3)' }}>OP-{m.nro_ord}</div>
+                        {/* Link a la op: el dato ya venia del backend y solo se
+                            mostraba como texto. Los movimientos cargados a mano no
+                            tienen op, asi que no llevan link. */}
+                        {tieneOp(m) && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); abrirOp(m) }}
+                            title="Abrir la op en gestión"
+                            style={{
+                              background: 'none', border: 'none', padding: 0, marginTop: 2,
+                              color: 'var(--gold-bright)', cursor: 'pointer',
+                              fontSize: 10.5, textDecoration: 'underline',
+                            }}
+                          >
+                            {etiquetaOp(m)}
+                          </button>
                         )}
                         {abierto && (
                           <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 6, lineHeight: 1.6 }}>

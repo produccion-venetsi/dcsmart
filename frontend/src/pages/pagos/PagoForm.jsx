@@ -96,7 +96,12 @@ export default function PagoForm() {
   const navigate        = useNavigate()
   const [searchParams]  = useSearchParams()
   const modoRapido      = searchParams.get('modo') === 'rapido'
-  const tipoParam       = searchParams.get('tipo') // 'B' (Carga Avión) o 'STK' (MovStock)
+  const tipoParam       = searchParams.get('tipo') // 'B' (Carga Avión), 'STK' (MovStock) o 'CM'
+  // De dónde se entró, para saber a dónde volver. Se entra desde Caja Mayor a cargar
+  // una op de tipo CM: devolver al listado de pagos dejaría al usuario lejos de donde
+  // estaba trabajando.
+  const volverParam     = searchParams.get('volver')
+  const rutaVolver      = volverParam === 'caja-mayor' ? '/caja-mayor' : '/pagos'
   const activeLocal     = useAppStore((s) => s.activeLocal)
   const activeApp       = useAppStore((s) => s.activeApp)
   const notify          = useUiStore((s) => s.notify)
@@ -171,7 +176,11 @@ export default function PagoForm() {
 
   const [form, setForm] = useState(() => ({
     fecha: hoy,
-    id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : '',
+    // El tipo tambien se precarga fuera del modo rapido: es lo que permite entrar
+    // desde Caja Mayor con ?tipo=CM. El modo rapido arrastra un paquete entero
+    // (pagado, numero desde la fecha, estado CAJA) que para una op con factura esta
+    // mal, asi que el tipo va aparte del modo.
+    id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : (tipoParam || ''),
     // Carga Avión y MovStock no tienen comprobante fiscal: el número es la
     // fecha en DDMMYYYY (ver nroDesdeFecha) y se sigue actualizando con ella
     // mientras nadie lo escriba a mano.
@@ -844,7 +853,7 @@ export default function PagoForm() {
         notify('Pago creado', 'success')
       }
       clearDraft(draftKey)
-      navigate('/pagos')
+      navigate(rutaVolver)
     } catch (err) {
       notify(err.response?.data?.error || 'Error al guardar', 'error')
       setUploadingFoto(false)
@@ -854,7 +863,7 @@ export default function PagoForm() {
 
   return (
     <div className="page">
-      <button className="back-link" onClick={() => navigate('/pagos')}>
+      <button className="back-link" onClick={() => navigate(rutaVolver)}>
         <IcoBack /> Volver a Pagos
       </button>
 
@@ -1582,7 +1591,7 @@ export default function PagoForm() {
               ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</>
               : isEditing ? 'Actualizar Pago' : 'Crear Pago'}
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => navigate('/pagos')}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(rutaVolver)}>
             Cancelar
           </button>
         </div>
