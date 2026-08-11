@@ -22,7 +22,7 @@ import TiposDocumentoPanel from './TiposDocumentoPanel.jsx'
 import ArchivosDocumento from './ArchivosDocumento.jsx'
 import {
   AGRUPACIONES, agrupar, resumen, fechaTexto, textoVencimiento, colorVencimiento,
-  EMPTY_DOC, erroresDoc, avisosDoc, fechaISO,
+  EMPTY_DOC, erroresDoc, avisosDoc, fechaISO, linkParaMostrar,
 } from '../../lib/documentos.js'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -267,9 +267,10 @@ export default function DocumentoList() {
 
   // Se guarda { id, url } y no la url sola: así, al pasar a otro documento, el link deja
   // de mostrarse sin necesidad de un effect que lo limpie (y sin el riesgo de mostrar el
-  // link de un documento sobre otro si ese effect corre tarde).
+  // link de un documento sobre otro si ese effect corre tarde). La comparación está en
+  // lib/documentos.js con tests: escrita al vuelo acá salió mal.
   const [link, setLink] = useState(null)
-  const linkVisible = link?.id === sel?.id ? link.url : null
+  const linkVisible = linkParaMostrar(link, sel)
 
   const generarLink = async () => {
     try {
