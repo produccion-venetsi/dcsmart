@@ -9,10 +9,16 @@ import { fmtDateArg } from '../../lib/dates.js'
 import { esAlcanceGlobal, sinLocalesVeTodos } from '../../lib/roles.js'
 import DrawerPanel   from '../../components/DrawerPanel.jsx'
 import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
+import DatosPersona from '../../components/DatosPersona.jsx'
 import {
-  filtrarUsuarios, conteoPorRol, agruparUsuarios, AGRUPACIONES,
+  filtrarUsuarios, conteoPorRol, conteoPorDepartamento, agruparUsuarios, AGRUPACIONES,
   bloqueAbierto, subAbierto, alternar, todoAbierto, todasLasClaves, claveSub,
+  SIN_DEPARTAMENTO,
 } from '../../lib/filtroUsuarios.js'
+import {
+  OPCIONES_DEPARTAMENTO, etiquetaDepartamento, fechaNacTexto, fechaNacInput,
+  edad, errorFechaNac, faltantes,
+} from '../../lib/datosUsuario.js'
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -78,8 +84,37 @@ function isGlobalRole(roles, id_role) {
   return r ? GLOBAL_ROLES.has(r.nombre) : false
 }
 
-const EMPTY_USER = { nombre: '', email: '', password: '', password2: '', activo: true }
+// Los cuatro datos de la persona arrancan vacíos: son opcionales y se completan
+// después, cuando RRHH pasa la planilla.
+const EMPTY_PERSONA = { departamento: '', equipo: '', puesto: '', fecha_nac: '' }
+const EMPTY_USER = { nombre: '', email: '', password: '', password2: '', activo: true, ...EMPTY_PERSONA }
 const EMPTY_ROLE = { id_app: '', id_role: '', id_local: '', all_locals: true }
+
+// Cuántas columnas tiene la tabla, para los colSpan de los encabezados de bloque y de
+// la fila de vacío. Se calcula de un solo lugar: con el número escrito a mano en cinco
+// lugares, agregar una columna descuadra la tabla en los cuatro que uno se olvida.
+const COLUMNAS = 7
+
+// Lo que se muestra en la tabla para un dato de la persona que no se cargó. Un guion
+// gris dice "no hay dato"; una celda en blanco parece un error de la pantalla.
+const Falta = () => <span style={{ color: 'var(--t4)' }}>—</span>
+
+// Los cuatro datos, tal como se ven en el panel de detalle.
+function valoresPersona(u) {
+  return {
+    departamento: u?.departamento ?? '',
+    equipo: u?.equipo ?? '',
+    puesto: u?.puesto ?? '',
+    fecha_nac: fechaNacInput(u?.fecha_nac),
+  }
+}
+
+// ¿Cambió algo respecto del usuario guardado? Decide si el botón Guardar aparece: sin
+// esto habría que apretarlo siempre, sin saber si hacía falta.
+function personaCambio(form, u) {
+  const orig = valoresPersona(u)
+  return Object.keys(orig).some(k => (form?.[k] ?? '') !== orig[k])
+}
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -115,6 +150,7 @@ export default function Users() {
   const [fApp,     setFApp]     = useState('')
   const [fLocal,   setFLocal]   = useState('')
   const [fRol,     setFRol]     = useState('')
+  const [fDepto,   setFDepto]   = useState('')
   const [fEstado,  setFEstado]  = useState('activos')
   const [agrupar,  setAgrupar]  = useState('rol-grupo')
   // Bloques abiertos, por título. Arranca vacío: todo colapsado.
@@ -129,6 +165,15 @@ export default function Users() {
   const [editingNombre, setEditingNombre] = useState(false)
   const [editNombre,    setEditNombre]    = useState('')
   const [editSaving,    setEditSaving]    = useState(false)
+
+  // ── datos de la persona (departamento / equipo / rol / fecha de nac.) ──
+  // Se editan en el panel con un Guardar propio, no campo por campo: son cuatro y
+  // guardar de a uno serían cuatro PUT y cuatro avisos para completar una ficha.
+  const [personaForm,   setPersonaForm]   = useState(EMPTY_PERSONA)
+  const [personaSaving, setPersonaSaving] = useState(false)
+  // Equipos que ya existen, para sugerirlos. El campo es texto libre; las sugerencias
+  // son lo que evita tres formas de escribir el mismo equipo.
+  const [equiposUsados, setEquiposUsados] = useState([])
 
   // New-user drawer
   const [newOpen,    setNewOpen]    = useState(false)
@@ -165,6 +210,13 @@ export default function Users() {
   }
 
   useEffect(load, [])
+
+  // Los equipos que ya se usaron. Si falla, el campo sigue andando sin sugerencias:
+  // no vale la pena un cartel de error por una comodidad.
+  const cargarEquipos = () =>
+    usersApi.equipos().then(({ data }) => setEquiposUsados(data ?? [])).catch(() => {})
+
+  useEffect(() => { cargarEquipos() }, [])
 
   // ── load apps + roles when detail drawer opens ────────────────────────────
 
@@ -232,8 +284,14 @@ export default function Users() {
     setShowRoleForm(false)
     setRoleForm(EMPTY_ROLE)
     setEditingNombre(false)
+    setPersonaForm(valoresPersona(u))
     setPanelOpen(true)
-    usersApi.get(u.id).then(({ data }) => setSelected(data)).catch(() => {})
+    usersApi.get(u.id).then(({ data }) => {
+      setSelected(data)
+      // El detalle se pisa con lo que llega del server, así que el formulario también:
+      // si no, quedaría mostrando lo que traía la lista y "Guardar" mandaría eso.
+      setPersonaForm(valoresPersona(data))
+    }).catch(() => {})
   }
 
   const closeDetail = () => {
@@ -248,6 +306,7 @@ export default function Users() {
     try {
       const { data } = await usersApi.get(id)
       setSelected(data)
+      setPersonaForm(valoresPersona(data))
       // also refresh list
       usersApi.list().then(({ data: all }) => setUsers(all)).catch(() => {})
     } catch {
@@ -318,6 +377,36 @@ export default function Users() {
       notify('Error al actualizar', 'error')
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  // ── datos de la persona ───────────────────────────────────────────────────
+
+  const handleSavePersona = async (e) => {
+    e.preventDefault()
+    // El backend valida igual; esto es para no mandar un PUT que ya sabemos que va a
+    // volver con 400.
+    const err = errorFechaNac(personaForm.fecha_nac)
+    if (err) { notify(err, 'error'); return }
+
+    setPersonaSaving(true)
+    try {
+      // Se manda todo, incluidos los vacíos: mandar '' es como se borra un dato mal
+      // cargado (el backend lo pasa a null). Ver lib/datosUsuario.js del backend.
+      await usersApi.update(selected.id, {
+        departamento: personaForm.departamento,
+        equipo: personaForm.equipo,
+        puesto: personaForm.puesto,
+        fecha_nac: personaForm.fecha_nac,
+      })
+      notify('Datos actualizados', 'success')
+      await reloadSelected(selected.id)
+      // Un equipo nuevo pasa a ser sugerencia para el próximo.
+      cargarEquipos()
+    } catch (err2) {
+      notify(err2.response?.data?.error || 'Error al actualizar los datos', 'error')
+    } finally {
+      setPersonaSaving(false)
     }
   }
 
@@ -413,6 +502,10 @@ export default function Users() {
     if (!newForm.email.trim())   errs.email    = 'Requerido'
     if (!newForm.password)       errs.password = 'Requerido'
     if (newForm.password !== newForm.password2) errs.password2 = 'Las contraseñas no coinciden'
+    // Los datos de la persona son opcionales, pero si se cargó una fecha tiene que ser
+    // una fecha: mejor acá que un 400 después de completar todo el formulario.
+    const errFecha = errorFechaNac(newForm.fecha_nac)
+    if (errFecha) errs.fecha_nac = errFecha
     return errs
   }
 
@@ -427,10 +520,15 @@ export default function Users() {
         email:    newForm.email.trim(),
         password: newForm.password,
         activo:   newForm.activo,
+        departamento: newForm.departamento,
+        equipo:       newForm.equipo,
+        puesto:       newForm.puesto,
+        fecha_nac:    newForm.fecha_nac,
       })
       notify('Usuario creado', 'success')
       setNewOpen(false)
       load()
+      cargarEquipos()
     } catch (err) {
       notify(err.response?.data?.error || 'Error al crear usuario', 'error')
     } finally {
@@ -463,13 +561,15 @@ export default function Users() {
   const filteredUsers = useMemo(
     () => filtrarUsuarios(users, {
       texto: search, idApp: fApp, idLocal: fLocal, rol: fRol, estado: fEstado,
+      departamento: fDepto,
     }, localesPorId),
-    [users, search, fApp, fLocal, fRol, fEstado, localesPorId]
+    [users, search, fApp, fLocal, fRol, fEstado, fDepto, localesPorId]
   )
 
   // Los conteos salen de la lista COMPLETA, no de la filtrada: sirven para saber
   // cuántos hay de cada rol antes de elegirlo, no para describir lo que ya se ve.
   const conteoRoles = useMemo(() => conteoPorRol(users), [users])
+  const conteoDeptos = useMemo(() => conteoPorDepartamento(users), [users])
 
   // Los grupos que existen, para el selector. Salen de la lista de locales porque
   // es la que ya trae el id y el nombre del grupo de cada uno.
@@ -486,9 +586,9 @@ export default function Users() {
     [filteredUsers, agrupar, appsPorId]
   )
 
-  const hayFiltro = Boolean(search || fApp || fLocal || fRol || fEstado !== 'activos')
+  const hayFiltro = Boolean(search || fApp || fLocal || fRol || fDepto || fEstado !== 'activos')
   const limpiarFiltros = () => {
-    setSearch(''); setFApp(''); setFLocal(''); setFRol(''); setFEstado('activos')
+    setSearch(''); setFApp(''); setFLocal(''); setFRol(''); setFDepto(''); setFEstado('activos')
   }
 
   // Con un filtro puesto se muestran todos abiertos, así que el botón de expandir
@@ -518,7 +618,7 @@ export default function Users() {
           <div className="form-input-wrap" style={{ width: 260 }}>
             <input
               type="text"
-              placeholder="Nombre o email"
+              placeholder="Nombre, email, rol o equipo"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -542,6 +642,27 @@ export default function Users() {
                 {r.nombre}{conteoRoles.get(r.nombre) ? ` (${conteoRoles.get(r.nombre)})` : ''}
               </option>
             ))}
+          </select>
+        </div>
+
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Departamento</label>
+          <select className="filter-select" value={fDepto} onChange={e => setFDepto(e.target.value)} style={{ minWidth: 165 }}>
+            <option value="">Todos</option>
+            {/* Solo los que tienen gente: ofrecer diez departamentos cuando ocho están
+                vacíos hace elegir a ciegas y devolver la lista en blanco. */}
+            {OPCIONES_DEPARTAMENTO.filter(o => conteoDeptos.get(o.value)).map(o => (
+              <option key={o.value} value={o.value}>
+                {o.label} ({conteoDeptos.get(o.value)})
+              </option>
+            ))}
+            {/* Los que faltan cargar. Es el filtro que se usa para completarlos, así
+                que va aunque no haya ninguno pendiente (ahí ni aparece). */}
+            {conteoDeptos.get(SIN_DEPARTAMENTO) > 0 && (
+              <option value={SIN_DEPARTAMENTO}>
+                Sin asignar ({conteoDeptos.get(SIN_DEPARTAMENTO)})
+              </option>
+            )}
           </select>
         </div>
 
@@ -583,6 +704,10 @@ export default function Users() {
             <tr>
               <th>Usuario</th>
               <th>Email</th>
+              {/* Departamento y equipo van juntos: son la misma pregunta ("dónde
+                  trabaja") y separados dan dos columnas medio vacías. */}
+              <th>Departamento / Equipo</th>
+              <th>Nacimiento</th>
               <th>Apps / Roles</th>
               <th>Estado</th>
               <th></th>
@@ -592,7 +717,7 @@ export default function Users() {
             {loading ? (
               Array.from({ length: 6 }, (_, i) => (
                 <tr key={i} className="skel-row">
-                  {Array.from({ length: 5 }, (_, j) => (
+                  {Array.from({ length: COLUMNAS }, (_, j) => (
                     <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 11) % 40}%` }} /></td>
                   ))}
                 </tr>
@@ -613,7 +738,7 @@ export default function Users() {
                         className="row-clickable"
                         onClick={() => setAbiertos(a => alternar(a, bloque.titulo))}
                       >
-                        <td colSpan={5} style={{
+                        <td colSpan={COLUMNAS} style={{
                           background: 'var(--bg-input)',
                           borderTop: '1px solid var(--glass-border)',
                           padding: '0.5rem 0.9rem',
@@ -644,7 +769,7 @@ export default function Users() {
                             className="row-clickable"
                             onClick={() => setAbiertos(a => alternar(a, claveSub(bloque.titulo, sub.titulo)))}
                           >
-                            <td colSpan={5} style={{
+                            <td colSpan={COLUMNAS} style={{
                               padding: '0.35rem 0.9rem 0.35rem 1.6rem',
                               fontSize: 11, color: 'var(--t2)', fontWeight: 600,
                               userSelect: 'none',
@@ -664,10 +789,41 @@ export default function Users() {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Avatar u={u} />
-                        <span style={{ fontWeight: 600, color: 'var(--t1)' }}>{u.nombre}</span>
+                        {/* El puesto va debajo del nombre, no en su propia columna: es
+                            lo que uno lee junto con el nombre ("Ana, encargada"). */}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, color: 'var(--t1)' }}>{u.nombre}</div>
+                          {u.puesto && (
+                            <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 1 }}>{u.puesto}</div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="td-muted">{u.email}</td>
+                    <td>
+                      {u.departamento || u.equipo ? (
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, color: 'var(--t2)' }}>
+                            {u.departamento ? etiquetaDepartamento(u.departamento) : <Falta />}
+                          </div>
+                          {u.equipo && (
+                            <div style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 1 }}>{u.equipo}</div>
+                          )}
+                        </div>
+                      ) : <Falta />}
+                    </td>
+                    <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>
+                      {u.fecha_nac ? (
+                        <>
+                          {fechaNacTexto(u.fecha_nac)}
+                          {/* La edad al lado, que es el dato que uno busca cuando mira
+                              una fecha de nacimiento. */}
+                          <span style={{ color: 'var(--t4)', fontSize: 11.5 }}>
+                            {' · '}{edad(u.fecha_nac)}a
+                          </span>
+                        </>
+                      ) : <Falta />}
+                    </td>
                     <td>
                       {u.user_app_roles?.length > 0 ? (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -710,7 +866,7 @@ export default function Users() {
                 })}
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={COLUMNAS}>
                       <div className="table-empty">
                         <IcoUsers />
                         <p>
@@ -788,6 +944,45 @@ export default function Users() {
                   )}
                 </div>
               </div>
+
+              {/* Datos de la persona. Van arriba de todo lo de permisos porque son de
+                  la persona, no de lo que puede hacer en el sistema. */}
+              <div className="drawer-section-title">Datos personales</div>
+              <form onSubmit={handleSavePersona} style={{ marginBottom: '1.25rem' }}>
+                <DatosPersona
+                  idPrefix={`u-${selected.id}`}
+                  valores={personaForm}
+                  onChange={(campo, valor) => setPersonaForm(f => ({ ...f, [campo]: valor }))}
+                  equiposUsados={equiposUsados}
+                  disabled={personaSaving}
+                />
+                {/* El botón aparece solo si hay algo para guardar: un Guardar siempre
+                    visible no dice si quedó algo sin guardar, que es justo lo que uno
+                    quiere saber al cerrar el panel. */}
+                {personaCambio(personaForm, selected) && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button type="submit" className="btn btn-sm btn-primary" disabled={personaSaving}>
+                      {personaSaving ? 'Guardando…' : 'Guardar datos'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      disabled={personaSaving}
+                      onClick={() => setPersonaForm(valoresPersona(selected))}
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                )}
+                {/* Qué falta cargar. Con 60 usuarios que arrancan sin ninguno de estos
+                    datos, sin este aviso no hay forma de saber si la ficha está
+                    completa. */}
+                {!personaCambio(personaForm, selected) && faltantes(selected).length > 0 && (
+                  <p className="form-hint" style={{ marginTop: 8 }}>
+                    Falta cargar: {faltantes(selected).join(', ')}.
+                  </p>
+                )}
+              </form>
 
               {/* Estado */}
               <div className="drawer-section-title">Estado</div>
@@ -1380,6 +1575,19 @@ export default function Users() {
               <span className="checkbox-label">Activo</span>
             </label>
           </div>
+
+          {/* Datos de la persona. Opcionales: si no están a mano al dar el alta se
+              cargan después desde el panel del usuario, y la tabla marca lo que falta. */}
+          <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>
+            Datos personales <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--t3)' }}>(opcional)</span>
+          </div>
+          <DatosPersona
+            idPrefix="nuevo"
+            valores={newForm}
+            onChange={(campo, valor) => setNewForm(f => ({ ...f, [campo]: valor }))}
+            equiposUsados={equiposUsados}
+            disabled={newSaving}
+          />
 
           <div className="form-actions" style={{ marginTop: '1.5rem' }}>
             <button type="submit" className="btn btn-primary" disabled={newSaving}>

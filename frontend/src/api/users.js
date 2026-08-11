@@ -3,6 +3,8 @@ import client from './client.js'
 export const usersApi = {
   list: () => client.get('/users'),
   get: (id) => client.get(`/users/${id}`),
+  // Equipos ya cargados, para sugerirlos en el formulario (el campo es texto libre).
+  equipos: () => client.get('/users/equipos'),
   create: (data) => client.post('/users', data),
   update: (id, data) => client.put(`/users/${id}`, data),
   remove: (id) => client.delete(`/users/${id}`),

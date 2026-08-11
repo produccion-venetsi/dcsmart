@@ -77,6 +77,23 @@ model User {
   // significa "todavia no lo sabemos" y el primer login lo completa. Resetear
   // la contrasena tambien lo vuelve a NULL, que es como se destraba una cuenta.
   last_login    DateTime?
+
+  // Datos de la persona. Todos opcionales: los 60 usuarios que ya existen no los
+  // tienen y no hay por que trabar el login hasta que alguien los complete.
+  //
+  // departamento se valida contra la lista de lib/datosUsuario.js, no es texto libre
+  // (ver ahi por que la lista esta en codigo y no como enum de Postgres). equipo y
+  // puesto si son texto: dependen de como esta organizada cada area.
+  //
+  // "puesto" es lo que en pantalla se llama "Rol". No se llama rol en el codigo
+  // porque rol ya es el rol de permisos (super_admin, admin, cajero...).
+  departamento  String?
+  equipo        String?
+  puesto        String?
+  // Fecha pura, sin hora: un cumpleanos no tiene hora, y guardarlo como timestamp
+  // lo corre un dia segun la zona (ya paso con 2076 cajas migradas a medianoche UTC).
+  fecha_nac     DateTime? @db.Date
+
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 

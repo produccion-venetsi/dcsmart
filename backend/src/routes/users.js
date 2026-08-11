@@ -1,5 +1,12 @@
 import bcrypt from 'bcryptjs'
 import { normalizarPassword } from '../lib/password.js'
+import { patchDatosPersona } from '../lib/datosUsuario.js'
+
+// Datos de la persona (departamento, equipo, puesto, fecha de nacimiento). Van en el
+// select de las dos lecturas para que la tabla y el formulario muestren lo mismo.
+const CAMPOS_PERSONA = {
+  departamento: true, equipo: true, puesto: true, fecha_nac: true
+}
 
 // dcsmart-analisis es OTRO backend con su propia base (dcsmart_analytics);
 // esto solo llama a su API interna server-to-server, nunca escribe ahí directo.
@@ -93,11 +100,28 @@ export default async function usersRoutes(fastify) {
       select: {
         id: true, email: true, nombre: true, avatar_url: true,
         activo: true, created_at: true,
+        ...CAMPOS_PERSONA,
         user_app_roles: { include: { app: true, role: true } },
         local_access: { include: { local: { select: { id: true, nombre: true } }, app: { select: { id: true } } } }
       },
       orderBy: { nombre: 'asc' }
     })
+  })
+
+  // Equipos que ya se usaron, para sugerirlos en el formulario.
+  //
+  // El equipo es texto libre (los departamentos son diez y estables, los equipos
+  // dependen de cada área), y texto libre sin sugerencias termina en "Turno noche",
+  // "turno noche" y "T. Noche" como tres equipos distintos. Esto no obliga a elegir de
+  // la lista, solo muestra lo que ya existe.
+  fastify.get('/equipos', { preHandler: viewHandler }, async () => {
+    const filas = await fastify.db.user.findMany({
+      where: { equipo: { not: null } },
+      distinct: ['equipo'],
+      select: { equipo: true },
+      orderBy: { equipo: 'asc' }
+    })
+    return filas.map(f => f.equipo)
   })
 
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
@@ -106,6 +130,7 @@ export default async function usersRoutes(fastify) {
       select: {
         id: true, email: true, nombre: true, avatar_url: true,
         activo: true, google_id: true, created_at: true, updated_at: true,
+        ...CAMPOS_PERSONA,
         user_app_roles: { include: { app: true, role: true } },
         local_access: { include: { local: { select: { id: true, nombre: true } }, app: { select: { id: true } } } },
         user_permissions: { include: { module: true } }
@@ -126,14 +151,18 @@ export default async function usersRoutes(fastify) {
     const existing = await fastify.db.user.findUnique({ where: { email } })
     if (existing) return reply.code(409).send({ error: 'El email ya existe' })
 
+    const persona = patchDatosPersona(request.body)
+    if (persona.error) return reply.code(400).send({ error: persona.error })
+
     const data = {
       email, nombre, activo: activo ?? true,
+      ...persona.data,
       ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {})
     }
 
     const user = await fastify.db.user.create({
       data,
-      select: { id: true, email: true, nombre: true, activo: true, created_at: true }
+      select: { id: true, email: true, nombre: true, activo: true, created_at: true, ...CAMPOS_PERSONA }
     })
     return reply.code(201).send(user)
   })
@@ -145,8 +174,15 @@ export default async function usersRoutes(fastify) {
     // Se guarda normalizada (sin espacios en los extremos) porque el login
     // tambien normaliza antes de comparar. Ver lib/password.js.
     const password = normalizarPassword(request.body.password)
+
+    // Solo pisa los campos de la persona que vinieron en el body: este PUT también se
+    // usa para cambiar el nombre o resetear la clave, y ahí no hay que tocarlos.
+    const persona = patchDatosPersona(request.body)
+    if (persona.error) return reply.code(400).send({ error: persona.error })
+
     const data = {
       nombre, avatar_url, activo,
+      ...persona.data,
       // Resetear la contraseña destraba una cuenta frenada por inactividad:
       // vuelve last_login a NULL, que es "todavía no lo sabemos" y no bloquea
       // (ver lib/inactividad.js). Sin esto, resetear la clave no alcanzaba y la
@@ -159,7 +195,7 @@ export default async function usersRoutes(fastify) {
       const user = await fastify.db.user.update({
         where: { id: request.params.id },
         data,
-        select: { id: true, email: true, nombre: true, avatar_url: true, activo: true, updated_at: true }
+        select: { id: true, email: true, nombre: true, avatar_url: true, activo: true, updated_at: true, ...CAMPOS_PERSONA }
       })
       return user
     } catch (err) {
