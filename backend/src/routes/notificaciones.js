@@ -13,7 +13,7 @@ export default async function notificacionesRoutes(fastify) {
     // Tope duro: el contador del sidebar pide limit=1 y la pantalla pide 100.
     const limit = Math.min(Number(request.query.limit) || 20, 100)
 
-    const [data, no_leidas] = await Promise.all([
+    const [data, no_leidas, pendientes] = await Promise.all([
       fastify.db.notificacion.findMany({
         where: { id_user: request.user.id },
         // No leidas primero, y dentro de cada grupo lo mas nuevo arriba. Se apoya
@@ -23,6 +23,12 @@ export default async function notificacionesRoutes(fastify) {
       }),
       fastify.db.notificacion.count({
         where: { id_user: request.user.id, leida: false }
+      }),
+      // Los que faltan HACER. Es distinto de no_leidas: leida se marca sola al abrir
+      // el aviso, asi que no dice si la tarea se resolvio. Se apoya en el indice
+      // (id_user, hecha).
+      fastify.db.notificacion.count({
+        where: { id_user: request.user.id, hecha: false }
       })
     ])
 
@@ -54,6 +60,7 @@ export default async function notificacionesRoutes(fastify) {
         }
       }),
       no_leidas,
+      pendientes,
     }
   })
 
@@ -66,6 +73,37 @@ export default async function notificacionesRoutes(fastify) {
       data: { leida: true }
     })
     return { ok: true, marcadas: count }
+  })
+
+  // ── PATCH /:id/hecha ──────────────────────────────────────────────────
+  //
+  // Marcar hecho o deshacerlo. `hecha` es distinto de `leida`: leida se marca sola al
+  // abrir el aviso, y un aviso de desauditoria es alguien pidiendo que revises algo --
+  // eso se cierra cuando lo hiciste, no cuando lo miraste.
+  //
+  // Se puede desmarcar: alguien que apreto de mas tiene que poder volver, y si no
+  // quedaria un aviso cerrado sin que nadie haya hecho nada.
+  fastify.patch('/:id/hecha', { preHandler: guard }, async (request, reply) => {
+    // `hecha` en el body, no dos endpoints: la pantalla manda el valor del checkbox y
+    // el servidor no tiene que adivinar el estado anterior.
+    const hecha = request.body?.hecha !== false
+
+    // updateMany con id_user en el where, igual que /leida: si el aviso es de otro
+    // usuario no actualiza nada y se responde 404, sin revelar que existe.
+    const { count } = await fastify.db.notificacion.updateMany({
+      where: { id: request.params.id, id_user: request.user.id },
+      data: {
+        hecha,
+        // Cuando se marca queda la fecha; al desmarcar se limpia, si no queda un
+        // "hecho el 5 de agosto" en un aviso que esta pendiente.
+        hecha_at: hecha ? new Date() : null,
+        // Marcar hecho implica haberlo visto: dejarlo sin leer haria que el otro
+        // contador siguiera contandolo.
+        ...(hecha ? { leida: true } : {}),
+      }
+    })
+    if (count === 0) return reply.code(404).send({ error: 'Aviso no encontrado' })
+    return { ok: true, hecha }
   })
 
   // ── PATCH /:id/leida ──────────────────────────────────────────────────

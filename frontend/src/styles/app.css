@@ -388,6 +388,56 @@ select option:disabled { color: var(--t4); }
   text-align: left;
   cursor: pointer;
 }
+/* El item pasó de ser un <button> único a una fila: checkbox de "hecho", el cuerpo
+   clickeable que abre el aviso, y la fecha. Un botón no puede contener un checkbox
+   --HTML inválido, y el click del check abriría el aviso cada vez que se marca. */
+.aviso-abrir {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.aviso-check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  /* Área de click cómoda: un checkbox de 14px es difícil de acertar, sobre todo en
+     una tablet, y errarle abre el aviso en vez de marcarlo. */
+  width: 30px;
+  height: 30px;
+  margin: -6px 0 -6px -4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.aviso-check:hover { background: rgba(255, 255, 255, 0.06); }
+.aviso-check input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--green); }
+
+/* Hecho: se atenúa pero NO se esconde. El aviso sigue siendo el registro de que
+   alguien pidió revisar algo; ocultarlo dejaría la lista sin historia. */
+.aviso-item.hecha { opacity: 0.55; }
+.aviso-item.hecha .aviso-titulo { text-decoration: line-through; }
+.aviso-item.hecha.sin-leer { font-weight: 400; }
+
+/* Texto solo para lectores de pantalla: el checkbox necesita nombre y la etiqueta
+   visible sería ruido al lado del título del aviso. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .aviso-item:hover { background: var(--bg-card); color: var(--t1); }
 .aviso-item.sin-leer { color: var(--t1); font-weight: 600; }
 .aviso-punto {
@@ -1300,6 +1350,60 @@ select.campo-ia {
 
 .carga-ia { position: relative; }
 
+/* Fila de "Carga con IA": el boton a la izquierda con ancho propio y los avisos de
+   la lectura a la derecha, en el espacio que antes quedaba vacio.
+   El boton vive en un form-group con label, igual que Foto y PDF, para que los tres
+   alineen: sin el label arrancaba 26px mas arriba y se veia desalineado. */
+.carga-ia-fila {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  gap: 1.1rem;
+  /* stretch y no start: las dos columnas tienen que medir lo mismo. Con `start`
+     cada una crecia con su contenido y el panel de avisos --que tiene mas texto--
+     quedaba mas alto que el boton, con el escalon a la vista. */
+  align-items: stretch;
+  margin-bottom: 1.25rem;
+}
+/* La columna del boton se estira, y el boton con ella: sin esto el form-group crece
+   pero el boton queda de su alto natural y sobra un hueco abajo.
+   El `min-height` da un piso para que la fila no se achique cuando el panel tiene
+   una sola linea de texto. */
+.carga-ia-fila > .form-group {
+  display: flex;
+  flex-direction: column;
+  min-height: 128px;
+}
+.carga-ia-fila .carga-ia { flex: 1; display: flex; }
+.carga-ia-fila .btn-ia { height: 100%; }
+/* El panel tambien se estira dentro de su columna, debajo de su label. */
+.carga-ia-fila .carga-ia-panel { flex: 1; }
+
+/* Foto y PDF: dos columnas parejas que ocupan el ancho del panel. */
+.adjuntos-grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+@media (max-width: 720px) {
+  .adjuntos-grid { grid-template-columns: 1fr; }
+}
+
+.carga-ia-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Centrado vertical: con una sola linea de texto, pegada arriba, la fila se veia
+     desbalanceada contra el boton, que centra su contenido. */
+  justify-content: center;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+/* Los avisos adentro del panel no llevan el margen de abajo que traen sueltos: acá
+   el espaciado lo da el `gap` del panel. */
+.carga-ia-panel .aviso-lectura { margin-bottom: 0; }
+@media (max-width: 720px) {
+  /* En una columna el panel va debajo del boton, no al costado en 80px de ancho. */
+  .carga-ia-fila { grid-template-columns: 1fr; }
+}
+
 .carga-ia-menu {
   position: absolute;
   top: calc(100% - 4px);
@@ -1409,6 +1513,237 @@ select.campo-ia {
   color: var(--t3);
 }
 .form-hint-alerta { color: var(--amber); }
+
+/* Los cuatro datos de la persona (DatosPersona.jsx). Dos columnas cuando hay lugar:
+   son campos cortos y en una sola columna el panel queda con cuatro filas casi
+   vacias y obliga a scrollear para ver la ficha completa.
+
+   El minimo de 160px es lo que necesita un <input type="date"> para mostrar
+   dd/mm/aaaa sin recortar el texto ni el iconito del calendario. Abajo de eso se
+   pasa solo a una columna: es mas legible angosto y en una fila que apretado en
+   dos. */
+.datos-persona-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem 0.9rem;
+}
+/* Los form-group traen margen propio para cuando van apilados; adentro de la grilla
+   el gap ya separa, y el margen encima descuadra las filas entre si. */
+.datos-persona-grid > .form-group { margin: 0; }
+
+/* ─── Documentos ──────────────────────────────────────────────────────────────
+
+   Zona para soltar archivos. Es la zona ENTERA la que recibe el clic y el arrastre:
+   antes era un boton chico con un input escondido detras, que es lo menos
+   descubrible que hay. Es un <label>, asi que el clic y el teclado funcionan solos. */
+.doc-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 1.1rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  border: 1.5px dashed var(--glass-border);
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--t2);
+  font-size: 12.5px;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.doc-dropzone:hover { border-color: var(--t3); color: var(--t1); }
+/* Mientras se arrastra encima hay que ver que va a caer ACA y no en otra parte: el
+   cambio tiene que ser evidente, no un matiz. */
+.doc-dropzone.arrastrando {
+  border-color: var(--blue);
+  border-style: solid;
+  background: var(--blue-bg);
+  color: var(--t1);
+}
+.doc-dropzone.ocupada { cursor: progress; }
+.doc-dropzone strong { font-weight: 600; font-size: 13px; color: inherit; }
+.doc-dropzone-ico { color: var(--t3); margin-bottom: 2px; }
+.doc-dropzone-sub { font-size: 11px; color: var(--t3); line-height: 1.4; }
+/* El foco del teclado se ve, porque el input real esta escondido y sin esto no hay
+   ninguna senal de donde esta parado. */
+.doc-dropzone:focus-within { border-color: var(--blue); border-style: solid; }
+
+/* Una fila de archivo, en la lista del formulario. */
+.doc-archivo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+.doc-archivo-nombre {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--t1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Encabezado del detalle: el tipo y el vencimiento, que es lo que se viene a mirar. */
+.doc-detalle-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 1.1rem;
+}
+.doc-detalle-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  color: var(--t2);
+  flex-shrink: 0;
+}
+.doc-detalle-tipo {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--t2);
+}
+
+/* Vista previa del archivo dentro del panel. Alto fijo: sin el, un PDF de una pagina y
+   otro de treinta dan paneles de alturas distintas y la pantalla salta al cambiar. */
+.doc-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  /* Cuadros grises: una foto con fondo blanco o transparente sobre el fondo oscuro se
+     confunde con el panel y no se ve donde empieza. */
+  background:
+    repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+}
+.doc-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  /* `contain`: la foto entra completa. Con `cover` se recorta, y en un documento el
+     recorte puede tapar justo el sello o la firma. */
+  object-fit: contain;
+}
+.doc-preview iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+.doc-preview-vacio {
+  background: var(--bg-input);
+  height: auto;
+  min-height: 84px;
+  padding: 1rem;
+  text-align: center;
+}
+
+/* Pestanas de archivos, cuando el documento tiene mas de uno. */
+.doc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.doc-tab {
+  max-width: 190px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--t3);
+  font-size: 11.5px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.doc-tab:hover { color: var(--t1); border-color: var(--t3); }
+/* La activa se marca con fondo Y borde, no solo con color: entre cinco nombres de
+   archivo parecidos, un tono distinto no alcanza. */
+.doc-tab.activa {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: var(--t1);
+  color: var(--t1);
+  font-weight: 600;
+}
+
+/* Aviso de bloque: un parrafo que explica algo (y a veces trae un boton), no una
+   etiqueta. NO usar `.badge` para esto: badge tiene height:18px, font-size:9px,
+   uppercase, letter-spacing y white-space:nowrap, asi que un texto largo sale en
+   mayusculas, espaciado, desbordado y encimado con lo de abajo. Ya paso. */
+.callout {
+  display: block;
+  padding: 10px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  background: var(--bg-input);
+  color: var(--t2);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+}
+.callout strong { color: var(--t1); font-weight: 700; }
+.callout-amber { background: var(--amber-bg); border-color: var(--amber-border); border-left-color: var(--amber); }
+.callout-blue  { background: var(--blue-bg);  border-color: var(--blue-border);  border-left-color: var(--blue); }
+/* Para lo que ya salio mal, no para lo que esta por pasar (eso es el ambar): documentos
+   vencidos, saldos en rojo. Faltaba, y el aviso de vencidos de Documentos la usaba. */
+.callout-red   { background: var(--red-bg);   border-color: var(--red-border);   border-left-color: var(--red); }
+
+/* Caja Mayor partida en dos: enviado a la izquierda, recibido a la derecha.
+   Dos columnas iguales y no un auto-fill: las dos mitades tienen que medir lo mismo
+   para poder leer la fila de un local a la misma altura en los dos lados. */
+.cm-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+.cm-split-panel {
+  min-width: 0; /* sin esto la tabla ancha estira la columna y rompe el 50/50 */
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.cm-split-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 12.5px;
+}
+/* La tabla de adentro ya tiene su borde por el panel. */
+.cm-split-panel .table-wrap { border: none; border-radius: 0; }
+.cm-split-panel .data-table tfoot td {
+  border-top: 1px solid var(--border-hi);
+  background: var(--bg-th);
+}
+
+@media (max-width: 900px) {
+  /* Uno debajo del otro: dos tablas de montos en 300px no se leen. */
+  .cm-split { grid-template-columns: 1fr; }
+}
 
 /* glass input wrap */
 .form-input-wrap {

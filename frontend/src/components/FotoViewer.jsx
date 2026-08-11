@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import client from '../api/client'
+import {
+  transformCss, resetearVista, etiquetaVista, rotarDerecha, rotarIzquierda,
+  estaDeCostado, VISTA_INICIAL,
+} from '../lib/visorImagen.js'
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +27,21 @@ function IcoPdf() {
   )
 }
 
+function IcoRotarDer() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 1 1-3.2-6.9" /><polyline points="21 4 21 10 15 10" />
+    </svg>
+  )
+}
+function IcoRotarIzq() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 3.2-6.9" /><polyline points="3 4 3 10 9 10" />
+    </svg>
+  )
+}
+
 function IcoClose() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -40,13 +59,15 @@ const ZOOM_STEP = 1.25
 function clampScale(s) { return Math.max(MIN_SCALE, Math.min(MAX_SCALE, s)) }
 
 function ImageLightbox({ src, onClose }) {
-  const [view, setView] = useState({ scale: 1, x: 0, y: 0 })
+  const [view, setView] = useState(VISTA_INICIAL)
   const [dragging, setDragging] = useState(false)
   const containerRef = useRef(null)
   const dragOrigin   = useRef(null)   // { startX, startY, originX, originY }
   const pinchRef     = useRef(null)   // last pinch distance + midpoint
 
-  const reset = useCallback(() => setView({ scale: 1, x: 0, y: 0 }), [])
+  // Endereza el zoom y el arrastre pero NO la rotacion: quien giro una factura para
+  // poder leerla no espera que un doble click la vuelva a poner de costado.
+  const reset = useCallback(() => setView(v => resetearVista(v)), [])
 
   // ── Non-passive wheel → zoom toward cursor ───────────────────────────────
   useEffect(() => {
@@ -75,6 +96,10 @@ function ImageLightbox({ src, onClose }) {
       if (e.key === '0')          reset()
       if (e.key === '+' || e.key === '=') setView(v => ({ ...v, scale: clampScale(v.scale * ZOOM_STEP) }))
       if (e.key === '-')          setView(v => ({ ...v, scale: clampScale(v.scale / ZOOM_STEP) }))
+      // R gira a la derecha, Shift+R a la izquierda.
+      if (e.key === 'r' || e.key === 'R') {
+        setView(v => ({ ...v, rot: e.shiftKey ? rotarIzquierda(v.rot) : rotarDerecha(v.rot) }))
+      }
       // Arrow keys pan when zoomed
       const PAN = 40 / (view.scale || 1)
       if (e.key === 'ArrowLeft')  setView(v => ({ ...v, x: v.x + PAN }))
@@ -152,6 +177,8 @@ function ImageLightbox({ src, onClose }) {
   const onTouchEnd = () => { dragOrigin.current = null; pinchRef.current = null; setDragging(false) }
 
   // ── Zoom button helpers ───────────────────────────────────────────────────
+  const rotarDer = (e) => { e.stopPropagation(); setView(v => ({ ...v, rot: rotarDerecha(v.rot) })) }
+  const rotarIzq = (e) => { e.stopPropagation(); setView(v => ({ ...v, rot: rotarIzquierda(v.rot) })) }
   const zoomIn  = (e) => { e.stopPropagation(); setView(v => ({ ...v, scale: clampScale(v.scale * ZOOM_STEP) })) }
   const zoomOut = (e) => { e.stopPropagation(); setView(v => ({ ...v, scale: clampScale(v.scale / ZOOM_STEP) })) }
   const doReset = (e) => { e.stopPropagation(); reset() }
@@ -164,7 +191,15 @@ function ImageLightbox({ src, onClose }) {
     transition: 'background 0.15s',
   }
 
-  return (
+  // createPortal a document.body, igual que MediaPanel.
+  //
+  // Sin esto el visor se renderiza donde vive el FotoViewer, que en la tabla es
+  // DENTRO de una celda: un `position: fixed` queda recortado por cualquier ancestro
+  // con transform, filter o contain, asi que el visor aparecia como un recuadro
+  // pegado arriba en vez de ocupar la pantalla. Desde el drawer se veia bien porque
+  // ahi ningun ancestro crea contexto de contencion -- el mismo codigo se comportaba
+  // distinto segun de donde se abriera.
+  return createPortal(
     <div
       ref={containerRef}
       style={{
@@ -202,9 +237,13 @@ function ImageLightbox({ src, onClose }) {
           draggable={false}
           onDoubleClick={onDblClick}
           style={{
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+            transform: transformCss(view),
             transformOrigin: 'center center',
-            maxWidth: '90vw', maxHeight: '90vh',
+            // Rotada 90 grados, el ALTO de la imagen ocupa el ancho de la pantalla:
+            // con los limites sin invertir, una foto vertical girada se salia de la
+            // ventana y no habia forma de verla entera.
+            maxWidth: estaDeCostado(view.rot) ? '90vh' : '90vw',
+            maxHeight: estaDeCostado(view.rot) ? '90vw' : '90vh',
             borderRadius: view.scale <= 1 ? 12 : 4,
             boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
             pointerEvents: 'auto',
@@ -224,14 +263,23 @@ function ImageLightbox({ src, onClose }) {
           border: '1px solid rgba(255,255,255,0.12)',
         }}
       >
+        <button style={btnStyle} onClick={rotarIzq} title="Girar a la izquierda (Shift+R)" aria-label="Girar a la izquierda">
+          <IcoRotarIzq />
+        </button>
+        <button style={btnStyle} onClick={rotarDer} title="Girar a la derecha (R)" aria-label="Girar a la derecha">
+          <IcoRotarDer />
+        </button>
+
+        <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.18)', margin: '0 2px' }} />
+
         <button style={btnStyle} onClick={zoomOut} title="Alejar (-)">−</button>
 
         <button
-          style={{ ...btnStyle, width: 56, fontSize: 12, fontWeight: 600, letterSpacing: '0.03em' }}
+          style={{ ...btnStyle, width: 76, fontSize: 12, fontWeight: 600, letterSpacing: '0.03em' }}
           onClick={doReset}
-          title="Restablecer (0)"
+          title="Restablecer zoom (0). La rotación se mantiene."
         >
-          {Math.round(view.scale * 100)}%
+          {etiquetaVista(view)}
         </button>
 
         <button style={btnStyle} onClick={zoomIn} title="Acercar (+)">+</button>
@@ -244,55 +292,24 @@ function ImageLightbox({ src, onClose }) {
           fontSize: 11, color: 'rgba(255,255,255,0.4)', pointerEvents: 'none',
           whiteSpace: 'nowrap',
         }}>
-          Rueda para hacer zoom · Doble clic para ampliar · Arrastrá para mover
+          Rueda para hacer zoom · Doble clic para ampliar · Arrastrá para mover · R para girar
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 
-// ── Simple overlay for PDF ─────────────────────────────────────────────────
-
-function PdfLightbox({ children, onClose }) {
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(0,0,0,0.88)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onClick={onClose}
-    >
-      <button
-        onClick={onClose}
-        style={{
-          position: 'absolute', top: 16, right: 20,
-          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-          borderRadius: 8, color: '#fff', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 38, height: 38, padding: 0,
-        }}
-      >
-        <IcoClose />
-      </button>
-      <div onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
-  )
-}
 
 // ── Main component ──────────────────────────────────────────────────────────
 
 // ── Panel lateral (portal a la izquierda del drawer) ──────────────────────
 
-function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWidth, onClose }) {
+function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWidth, onClose, onAmpliar }) {
+  // Se calcula acá y no se recibe como prop: sale del mismo `drawerWidth` que ya
+  // llega, y dos fuentes para lo mismo se desincronizan.
+  const sinDrawer = !drawerWidth
+
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -302,13 +319,22 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
   // Contenedor invisible que ocupa el espacio a la izquierda del drawer,
   // sin backdrop — el drawer sigue visible e interactuable detrás.
   return createPortal(
-    <div className="media-panel-frame" style={{
-      position: 'fixed', top: 0, left: 0, bottom: 0,
-      right: drawerWidth,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      pointerEvents: 'none',
-      zIndex: 1012,
-    }}>
+    <div
+      className="media-panel-frame"
+      // Con drawer: sin fondo y sin capturar clicks, para que el drawer siga usable
+      // detras. Sin drawer (un PDF abierto desde la tabla): fondo oscuro y click
+      // afuera para cerrar, si no la caja queda flotando sobre las filas sin que se
+      // entienda que es una capa aparte.
+      onClick={sinDrawer ? onClose : undefined}
+      style={{
+        position: 'fixed', top: 0, left: 0, bottom: 0,
+        right: drawerWidth,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        pointerEvents: sinDrawer ? 'auto' : 'none',
+        background: sinDrawer ? 'rgba(0,0,0,0.72)' : 'transparent',
+        zIndex: 1012,
+      }}
+    >
       <div style={{
         pointerEvents: 'auto',
         width: type === 'pdf' ? 'min(680px, 90%)' : 'min(520px, 90%)',
@@ -328,11 +354,28 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)' }}>
             {type === 'pdf' ? 'PDF' : 'Foto'}
           </span>
-          <button className="drawer-close" onClick={onClose} type="button">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Ampliar: abre el visor a pantalla completa, con zoom y rotacion. Es
+                la unica puerta al lightbox -- hasta ahora ImageLightbox existia en
+                este archivo pero NADIE lo renderizaba, asi que el zoom y el giro
+                estaban escritos y no se podian usar. */}
+            {type === 'photo' && photoBlob && onAmpliar && (
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={onAmpliar}
+                style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+                title="Ampliar: zoom y girar"
+              >
+                <IcoExpand /> Ampliar
+              </button>
+            )}
+            <button className="drawer-close" onClick={onClose} type="button">
             <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Centrado con margin:auto en el hijo, NO con align/justify center en
@@ -343,7 +386,16 @@ function MediaPanel({ type, photoBlob, pdfBlob, loadingPdf, errorPhoto, drawerWi
           {type === 'photo' && (
             <>
               {photoBlob
-                ? <img src={photoBlob} alt="Foto factura" style={{ maxWidth: '100%', margin: 'auto', display: 'block', borderRadius: 8 }} />
+                ? <img
+                    src={photoBlob}
+                    alt="Foto factura"
+                    onClick={onAmpliar}
+                    title={onAmpliar ? 'Click para ampliar, hacer zoom y girar' : undefined}
+                    style={{
+                      maxWidth: '100%', margin: 'auto', display: 'block', borderRadius: 8,
+                      cursor: onAmpliar ? 'zoom-in' : 'default',
+                    }}
+                  />
                 : errorPhoto
                   ? <span style={{ color: 'var(--t2)', fontSize: 13, margin: 'auto' }}>No disponible</span>
                   : <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3, margin: 'auto' }} />
@@ -376,6 +428,15 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
   const [loadingPdf,   setLoadingPdf]   = useState(false)
   const [errorPhoto,   setErrorPhoto]   = useState(false)
   const [panel,        setPanel]        = useState(null) // null | 'photo' | 'pdf'
+  // Visor a pantalla completa (zoom + giro). Se abre desde el panel de la foto: es
+  // la unica puerta al lightbox, que hasta ahora estaba escrito y sin usar.
+  const [ampliada,     setAmpliada]     = useState(false)
+
+  // Sin drawer detras (la foto abierta desde una fila de la tabla) el panel al
+  // costado no tiene contra que apoyarse: queda una caja flotando sobre las filas,
+  // sin fondo que la separe --se diseño sin backdrop justamente para no tapar el
+  // drawer-- y con la factura chica en 520px. Ahi conviene el visor grande directo.
+  const sinDrawer = !drawerWidth
 
   useEffect(() => () => { photoBlob && URL.revokeObjectURL(photoBlob) }, [photoBlob])
   useEffect(() => () => { pdfBlob   && URL.revokeObjectURL(pdfBlob)   }, [pdfBlob])
@@ -417,7 +478,10 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
         {fotoUrl && (
           <button
             className={`btn btn-sm ${panel === 'photo' ? 'btn-primary' : 'btn-secondary'}${compact ? ' btn-icon' : ''}`}
-            onClick={() => panel === 'photo' ? setPanel(null) : openPhoto()}
+            onClick={() => {
+              if (sinDrawer) { openPhoto(); setAmpliada(true); return }
+              panel === 'photo' ? setPanel(null) : openPhoto()
+            }}
             disabled={!photoBlob && loadingPhoto}
             style={{ display: 'flex', alignItems: 'center', gap: 5 }}
             title="Foto"
@@ -452,6 +516,19 @@ export default function FotoViewer({ pagoId, fotoUrl, pdfUrl, drawerWidth = 560,
           errorPhoto={errorPhoto}
           drawerWidth={drawerWidth}
           onClose={() => setPanel(null)}
+          onAmpliar={photoBlob ? () => setAmpliada(true) : undefined}
+        />
+      )}
+
+      {/* El visor grande queda POR ENCIMA del panel, y cerrarlo vuelve al panel en
+          vez de cerrar todo: se amplia para leer un dato y despues se sigue en la op. */}
+      {/* Abierto desde la tabla se llega aca sin pasar por el panel, asi que al
+          cerrar hay que apagar los dos: si quedara `panel` prendido, cerrar el visor
+          dejaria el panel flotando, que es lo que se vino a evitar. */}
+      {ampliada && photoBlob && (
+        <ImageLightbox
+          src={photoBlob}
+          onClose={() => { setAmpliada(false); if (sinDrawer) setPanel(null) }}
         />
       )}
     </>

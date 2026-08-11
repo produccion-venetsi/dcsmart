@@ -22,6 +22,7 @@
 // alcanza con tocarlos en un solo lugar.
 
 import { esAlcanceGlobal, sinLocalesVeTodos } from './roles.js'
+import { DEPARTAMENTO_LABEL } from './datosUsuario.js'
 
 export const esRolGlobal = esAlcanceGlobal
 
@@ -63,12 +64,21 @@ export function tieneRol(user, rol) {
   return rolesDe(user).includes(rol)
 }
 
+// La búsqueda mira nombre, email y puesto. El puesto porque con el dato cargado uno
+// escribe "encargada" y espera encontrarla; el departamento no está acá porque tiene su
+// propio filtro.
 export function coincideTexto(user, texto) {
   const q = texto?.trim().toLowerCase()
   if (!q) return true
-  return Boolean(
-    user?.nombre?.toLowerCase().includes(q) || user?.email?.toLowerCase().includes(q)
-  )
+  return [user?.nombre, user?.email, user?.puesto]
+    .some(v => v?.toLowerCase().includes(q))
+}
+
+export function coincideDepartamento(user, departamento) {
+  if (!departamento) return true
+  // 'SIN' filtra los que faltan cargar, que al principio son casi todos.
+  if (departamento === SIN_DEPARTAMENTO) return !user?.departamento
+  return user?.departamento === departamento
 }
 
 export function coincideEstado(user, estado) {
@@ -76,14 +86,19 @@ export function coincideEstado(user, estado) {
   return estado === 'activos' ? user?.activo === true : user?.activo === false
 }
 
+// Valor del filtro para "todavía no se cargó". No es un departamento: es el que hace
+// falta para encontrar a los que faltan completar.
+export const SIN_DEPARTAMENTO = 'SIN'
+
 // Aplica todos los filtros. `localesPorId` mapea id_local -> id_app, necesario para
 // el filtro por local (ver alcanzaLocal).
-export function filtrarUsuarios(users, { texto, idApp, idLocal, rol, estado }, localesPorId) {
+export function filtrarUsuarios(users, { texto, idApp, idLocal, rol, estado, departamento }, localesPorId) {
   const idAppDelLocal = idLocal ? localesPorId?.get(idLocal) : null
   return (users ?? []).filter(u =>
     coincideTexto(u, texto) &&
     coincideEstado(u, estado) &&
     tieneRol(u, rol) &&
+    coincideDepartamento(u, departamento) &&
     alcanzaGrupo(u, idApp) &&
     alcanzaLocal(u, idLocal, idAppDelLocal)
   )
@@ -106,14 +121,27 @@ export const AGRUPACIONES = [
   { valor: 'rol-grupo', label: 'Rol y grupo' },
   { valor: 'rol', label: 'Solo rol' },
   { valor: 'grupo', label: 'Solo grupo' },
+  { valor: 'departamento', label: 'Departamento' },
   { valor: '', label: 'Sin separar' },
 ]
+
+// Cuántos usuarios hay por departamento, para el selector. Acá un usuario cuenta una
+// sola vez (a diferencia del rol, que puede repetirse por grupo).
+export function conteoPorDepartamento(users) {
+  const m = new Map()
+  for (const u of users ?? []) {
+    const k = u?.departamento || SIN_DEPARTAMENTO
+    m.set(k, (m.get(k) ?? 0) + 1)
+  }
+  return m
+}
 
 // Etiquetas de los casos borde. Van al final de su nivel: no son lo que se viene
 // a buscar.
 const SIN_ROLES = 'Sin roles'
 const TODOS_LOS_GRUPOS = 'Todos los grupos'
-const AL_FINAL = new Set([SIN_ROLES, TODOS_LOS_GRUPOS, 'Sin grupo'])
+const SIN_DEPTO = 'Sin departamento'
+const AL_FINAL = new Set([SIN_ROLES, TODOS_LOS_GRUPOS, 'Sin grupo', SIN_DEPTO])
 
 const ordenarClaves = (a, b) => {
   const pa = AL_FINAL.has(a) ? 1 : 0
@@ -151,6 +179,16 @@ export function agruparUsuarios(users, por = 'rol-grupo', { appsPorId } = {}) {
     sub.get(n2).push(u)
   }
 
+  // El departamento es un dato del usuario, no de sus roles: se agrupa directo y cada
+  // uno cae en un solo bloque. Por eso no pasa por el recorrido de abajo, que repite al
+  // usuario una vez por rol.
+  if (por === 'departamento') {
+    for (const u of lista) {
+      push(u.departamento ? (DEPARTAMENTO_LABEL[u.departamento] ?? u.departamento) : SIN_DEPTO, null, u)
+    }
+    return armarBloques(arbol)
+  }
+
   for (const u of lista) {
     const filas = u.user_app_roles ?? []
     if (filas.length === 0) {
@@ -166,6 +204,11 @@ export function agruparUsuarios(users, por = 'rol-grupo', { appsPorId } = {}) {
     }
   }
 
+  return armarBloques(arbol)
+}
+
+// Pasa el árbol de dos niveles a la forma que consume la tabla, ordenado.
+function armarBloques(arbol) {
   return [...arbol.entries()]
     .sort(([a], [b]) => ordenarClaves(a, b))
     .map(([titulo, sub]) => ({

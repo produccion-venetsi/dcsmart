@@ -12,11 +12,13 @@ import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { nombreCliente } from '../../lib/clientes.js'
+import { patchDesdeLectura, faltaParaDuplicado } from '../../lib/precargaIA.js'
 import { ESTADO_OP_OPTIONS, ESTADO_CTA_CTE_CLIENTE } from '../../lib/estadoOp.js'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
+import CampoCuit from '../../components/CampoCuit.jsx'
 
 function IcoBack() {
   return (
@@ -94,7 +96,12 @@ export default function PagoForm() {
   const navigate        = useNavigate()
   const [searchParams]  = useSearchParams()
   const modoRapido      = searchParams.get('modo') === 'rapido'
-  const tipoParam       = searchParams.get('tipo') // 'B' (Carga Avión) o 'STK' (MovStock)
+  const tipoParam       = searchParams.get('tipo') // 'B' (Carga Avión), 'STK' (MovStock) o 'CM'
+  // De dónde se entró, para saber a dónde volver. Se entra desde Caja Mayor a cargar
+  // una op de tipo CM: devolver al listado de pagos dejaría al usuario lejos de donde
+  // estaba trabajando.
+  const volverParam     = searchParams.get('volver')
+  const rutaVolver      = volverParam === 'caja-mayor' ? '/caja-mayor' : '/pagos'
   const activeLocal     = useAppStore((s) => s.activeLocal)
   const activeApp       = useAppStore((s) => s.activeApp)
   const notify          = useUiStore((s) => s.notify)
@@ -169,7 +176,11 @@ export default function PagoForm() {
 
   const [form, setForm] = useState(() => ({
     fecha: hoy,
-    id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : '',
+    // El tipo tambien se precarga fuera del modo rapido: es lo que permite entrar
+    // desde Caja Mayor con ?tipo=CM. El modo rapido arrastra un paquete entero
+    // (pagado, numero desde la fecha, estado CAJA) que para una op con factura esta
+    // mal, asi que el tipo va aparte del modo.
+    id_proveedor: '', id_rubcat: '', id_tipo: modoRapido ? (tipoParam || 'STK') : (tipoParam || ''),
     // Carga Avión y MovStock no tienen comprobante fiscal: el número es la
     // fecha en DDMMYYYY (ver nroDesdeFecha) y se sigue actualizando con ella
     // mientras nadie lo escriba a mano.
@@ -463,15 +474,11 @@ export default function PagoForm() {
       // El importe total NO se precarga: se calcula solo desde neto + impuestos
       // − descuento (ver el useEffect de abajo). Lo que sí se guarda es el total
       // que decía la factura, para poder avisar si no coincide.
-      setForm((f) => ({
-        ...f,
-        ...(c.fecha        != null ? { fecha: c.fecha } : {}),
-        ...(c.id_tipo      != null ? { id_tipo: c.id_tipo } : {}),
-        ...(c.pv           != null ? { pv: String(c.pv) } : {}),
-        ...(c.nro          != null ? { nro: String(c.nro) } : {}),
-        ...(c.importe_neto != null ? { importe_neto: String(c.importe_neto) } : {}),
-        ...(c.descuento    != null ? { descuento: String(c.descuento) } : {}),
-      }))
+      // El patch sale de lib/precargaIA.js: ahi viven el relleno con ceros de pv y
+      // nro (antes se precargaba "3" en vez de "00003", porque el relleno estaba
+      // solo en el onBlur del campo y cargando con IA nadie pasa por ahi) y el
+      // periodo igual a la fecha de la factura.
+      setForm((f) => ({ ...f, ...patchDesdeLectura(c) }))
 
       if (c.impuestos?.length && !isEditing) {
         setPendingImp(c.impuestos.map((i) => ({ tipo: i.tipo, monto: String(i.monto) })))
@@ -846,7 +853,7 @@ export default function PagoForm() {
         notify('Pago creado', 'success')
       }
       clearDraft(draftKey)
-      navigate('/pagos')
+      navigate(rutaVolver)
     } catch (err) {
       notify(err.response?.data?.error || 'Error al guardar', 'error')
       setUploadingFoto(false)
@@ -856,7 +863,7 @@ export default function PagoForm() {
 
   return (
     <div className="page">
-      <button className="back-link" onClick={() => navigate('/pagos')}>
+      <button className="back-link" onClick={() => navigate(rutaVolver)}>
         <IcoBack /> Volver a Pagos
       </button>
 
@@ -1410,79 +1417,142 @@ export default function PagoForm() {
         {/* ── Adjuntos ── */}
         <div className="form-panel">
           <div className="form-panel-title">Adjuntos</div>
-          <div className="form-grid">
-            {/* Al editar no se ofrece: precargar campos encima de un pago ya
-                guardado pisaría datos que alguien revisó. Los dos adjuntos de
-                abajo siguen disponibles para agregar el comprobante. */}
-            {!isEditing && (
-              <CargaIA
-                onArchivo={cargarConIA}
-                leyendo={leyendoFactura}
-                disabled={loading}
-              />
-            )}
 
-            {/* ── Resultado de leer la factura ──────────────────────────────
-                Vive acá, pegado al botón que lo dispara, y no arriba del
-                formulario: el botón está al final (Adjuntos) y el aviso quedaba
-                fuera de la pantalla, así que se apretaba "Carga con IA", los
-                campos se llenaban solos y nadie se enteraba de que había un
-                resultado que revisar. Ocupa todo el ancho del panel para que se
-                lea completo. */}
-            {(leyendoFactura || lectura || fallaLectura) && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                {leyendoFactura && (
-                  <div className="aviso-lectura" style={{ marginBottom: 0 }}>
-                    <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                    <span>Leyendo la factura{leyendoTipo === 'pdf' ? ' (PDF)' : ''}…</span>
-                  </div>
-                )}
+          {/* ── Carga con IA ─────────────────────────────────────────────────
+              Fila propia arriba del panel, y no una celda del `form-grid` de
+              abajo: ahi el boton quedaba desalineado contra Foto y PDF, que van
+              envueltos en un form-group CON label, asi que arrancaban 26px mas
+              abajo. Ahora el boton tambien tiene su label y los tres alinean.
 
-                {/* La lectura falló o el archivo no era legible. Antes salía como
-                    toast arriba y se perdía; el archivo igual quedó adjunto. */}
-                {!leyendoFactura && fallaLectura && (
-                  <div className={`aviso-lectura ${fallaLectura.tono}`} style={{ marginBottom: 0 }}>
-                    <div>
-                      <strong>{fallaLectura.titulo}</strong> {fallaLectura.detalle}
-                    </div>
-                  </div>
-                )}
+              Dos columnas: el boton a la izquierda con su ancho, y los avisos de
+              la lectura a la derecha, ocupando el espacio que antes quedaba
+              vacio. Antes los avisos iban abajo a todo el ancho y empujaban los
+              adjuntos fuera de la pantalla.
 
-                {!leyendoFactura && lectura && (
-                  <div className="aviso-lectura" style={{ marginBottom: 0 }}>
-                    <div>
-                      <strong>Leí la factura: {(lectura.marcados ?? []).length} campos precargados.</strong>{' '}
-                      Revisá los que quedaron marcados antes de guardar.
-                      {lectura.proveedor?.estado === 'encontrado' && (
-                        <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
-                      )}
-                      {lectura.proveedor?.estado === 'no_encontrado' && (
-                        <> No hay proveedor con CUIT <strong>{lectura.proveedor.cuit}</strong>
-                          {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
-                          : elegilo o crealo a mano.</>
-                      )}
-                      {/* Si leyó la condición de venta pero no la pudo mapear, se dice
-                          qué decía la factura para que la persona elija con ese dato. */}
-                      {lectura.metodo && !lectura.metodo.id && (
-                        <div style={{ marginTop: 6 }}>
-                          La factura dice <strong>«{lectura.metodo.texto}»</strong> como condición de venta,
-                          pero no coincide con ningún método de pago del sistema: elegilo a mano.
-                        </div>
-                      )}
-                      {/* El total no se precarga (se calcula solo), asi que si la factura
-                          decia otro numero conviene avisarlo: o se leyo mal un importe, o
-                          falta un impuesto. */}
-                      {lectura.aritmetica?.verificable && lectura.aritmetica.cuadra === false && (
-                        <div style={{ marginTop: 6 }}>
-                          ⚠ La factura dice <strong>{fmtMoneda(lectura.totalFactura)}</strong> pero neto + impuestos − descuento
-                          da <strong>{fmtMoneda(lectura.aritmetica.esperado)}</strong>. Revisá los importes.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+              El de duplicado se repite aca a proposito: el original vive arriba,
+              en la seccion del comprobante, y cargando con IA se esta mirando
+              esta parte de la pantalla -- el aviso existia pero no se veia. */}
+          {!isEditing && (
+            <div className="carga-ia-fila">
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Carga con IA</label>
+                <CargaIA
+                  onArchivo={cargarConIA}
+                  leyendo={leyendoFactura}
+                  disabled={loading}
+                />
               </div>
-            )}
+
+              {/* La columna derecha lleva su propio label, igual que la del boton.
+                  Sin el, el panel arrancaba 21px mas arriba --el alto del label de
+                  la izquierda-- y aunque los dos terminaban a la misma altura, el
+                  escalon de arriba se veia como que uno era mas grande. */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Resultado de la lectura</label>
+                <div className="carga-ia-panel">
+                {(leyendoFactura || lectura || fallaLectura) && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    {/* El "Leyendo la factura…" NO se repite acá: ya lo dice el
+                        boton de al lado, con su spinner, que es donde la persona
+                        acaba de apretar. Estaba en los dos lugares y se leia como
+                        si fueran dos procesos distintos. Acá se dice lo que el
+                        boton no puede: que va a pasar cuando termine. */}
+                    {leyendoFactura && (
+                      <p className="form-hint" style={{ margin: 0 }}>
+                        Cuando termine, acá van los campos que precargó y los avisos
+                        {leyendoTipo === 'pdf' ? ' (los PDF tardan un poco más)' : ''}.
+                      </p>
+                    )}
+
+                    {/* La lectura falló o el archivo no era legible. Antes salía como
+                        toast arriba y se perdía; el archivo igual quedó adjunto. */}
+                    {!leyendoFactura && fallaLectura && (
+                      <div className={`aviso-lectura ${fallaLectura.tono}`} style={{ marginBottom: 0 }}>
+                        <div>
+                          <strong>{fallaLectura.titulo}</strong> {fallaLectura.detalle}
+                        </div>
+                      </div>
+                    )}
+
+                    {!leyendoFactura && lectura && (
+                      <div className="aviso-lectura" style={{ marginBottom: 0 }}>
+                        <div>
+                          <strong>Leí la factura: {(lectura.marcados ?? []).length} campos precargados.</strong>{' '}
+                          Revisá los que quedaron marcados antes de guardar.
+                          {lectura.proveedor?.estado === 'encontrado' && (
+                            <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
+                          )}
+                          {lectura.proveedor?.estado === 'no_encontrado' && (
+                            <> No hay proveedor con CUIT <strong>{lectura.proveedor.cuit}</strong>
+                              {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
+                              : elegilo o crealo a mano.</>
+                          )}
+                          {/* Si leyó la condición de venta pero no la pudo mapear, se dice
+                              qué decía la factura para que la persona elija con ese dato. */}
+                          {lectura.metodo && !lectura.metodo.id && (
+                            <div style={{ marginTop: 6 }}>
+                              La factura dice <strong>«{lectura.metodo.texto}»</strong> como condición de venta,
+                              pero no coincide con ningún método de pago del sistema: elegilo a mano.
+                            </div>
+                          )}
+                          {/* El total no se precarga (se calcula solo), asi que si la factura
+                              decia otro numero conviene avisarlo: o se leyo mal un importe, o
+                              falta un impuesto. */}
+                          {lectura.aritmetica?.verificable && lectura.aritmetica.cuadra === false && (
+                            <div style={{ marginTop: 6 }}>
+                              ⚠ La factura dice <strong>{fmtMoneda(lectura.totalFactura)}</strong> pero neto + impuestos − descuento
+                              da <strong>{fmtMoneda(lectura.aritmetica.esperado)}</strong>. Revisá los importes.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Duplicado: el mismo estado que el aviso de arriba. */}
+                {!leyendoFactura && duplicado && (
+                  <div className="aviso-lectura warn" style={{ marginBottom: 0 }}>
+                    <div>
+                      <strong>Ojo: ya existe la OP-{duplicado.nro_ord ?? '—'}</strong> con este proveedor,
+                      punto de venta y número de comprobante
+                      {duplicado.fecha ? ` (cargada el ${new Date(duplicado.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })})` : ''}.
+                      Se puede guardar igual si corresponde.
+                    </div>
+                  </div>
+                )}
+
+                {/* Si no se pudo mirar el duplicado, se dice: callarse se lee como
+                    "no hay duplicado", y no es lo mismo que "no pude verificar". */}
+                {!leyendoFactura && lectura && !duplicado && faltaParaDuplicado({
+                  id_proveedor: form.id_proveedor, pv: form.pv, nro: form.nro,
+                }).length > 0 && (
+                  <div className="aviso-lectura" style={{ marginBottom: 0 }}>
+                    <div>
+                      No pude verificar si está duplicada: falta{' '}
+                      {faltaParaDuplicado({ id_proveedor: form.id_proveedor, pv: form.pv, nro: form.nro }).join(' y ')}.
+                    </div>
+                  </div>
+                )}
+
+                {/* Estado inicial: el panel no queda como un hueco sin explicar. */}
+                {!leyendoFactura && !lectura && !fallaLectura && !duplicado && (
+                  <p className="form-hint" style={{ margin: 0 }}>
+                    Elegí una foto o un PDF de la factura y se precargan fecha, tipo,
+                    punto de venta, número, neto, descuento e impuestos. El período queda
+                    igual a la fecha de la factura, y se avisa si la factura ya está cargada.
+                    El archivo queda adjunto igual.
+                  </p>
+                )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Dos columnas parejas y no el auto-fill del form-grid: con el boton de
+              IA fuera de esta grilla quedaban solo dos celdas de 220px pegadas a la
+              izquierda y media seccion vacia, contra la fila de arriba que ocupa
+              todo el ancho. */}
+          <div className="form-grid adjuntos-grid">
             <AdjuntoUpload
               label="Foto"
               accept="image/*"
@@ -1521,7 +1591,7 @@ export default function PagoForm() {
               ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</>
               : isEditing ? 'Actualizar Pago' : 'Crear Pago'}
           </button>
-          <button type="button" className="btn btn-secondary" onClick={() => navigate('/pagos')}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(rutaVolver)}>
             Cancelar
           </button>
         </div>
@@ -1545,12 +1615,11 @@ export default function PagoForm() {
                   <input type="text" value={provModal.razon_social} onChange={e => setProvModal(m => ({ ...m, razon_social: e.target.value }))} />
                 </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">CUIT</label>
-                <div className="form-input-wrap">
-                  <input type="text" placeholder="Opcional" value={provModal.cuit} onChange={e => setProvModal(m => ({ ...m, cuit: e.target.value }))} />
-                </div>
-              </div>
+              <CampoCuit
+                value={provModal.cuit}
+                onChange={(v) => setProvModal(m => ({ ...m, cuit: v }))}
+                ayuda="Opcional. Se verifica el dígito verificador."
+              />
             </div>
             <div className="confirm-foot" style={{ marginTop: 20 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setProvModal(null)} disabled={savingModal}>Cancelar</button>

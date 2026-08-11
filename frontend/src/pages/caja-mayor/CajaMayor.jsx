@@ -9,14 +9,21 @@
 // la misma tabla.
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { cajaMayorApi } from '../../api/cajaMayor.js'
+import { authApi } from '../../api/auth.js'
+import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { fmtDateUTC } from '../../lib/dates.js'
 import {
   ESTADOS, ESTADO_LABEL, MONEDAS, ORIGEN_LABEL, fmtMonto, filtroDeSeleccion,
+  tieneCicloDeRecepcion,
 } from '../../lib/cajaMayor.js'
 import MovimientoForm from './MovimientoForm.jsx'
 import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
+import { dividirPorDireccion, proporcion } from '../../lib/cajaMayorVista.js'
+import { MODOS_ALTA, tieneOp, etiquetaOp, rutaDeLaOp, resolverAlta } from '../../lib/altaCajaMayor.js'
+import { resolverApertura, mensajeDeCambio } from '../../lib/destinoAviso.js'
 
 const LIMIT = 100
 
@@ -51,6 +58,19 @@ function BadgeDireccion({ ingreso, corregida }) {
 
 export default function CajaMayor() {
   const notify = useUiStore((s) => s.notify)
+  const navigate = useNavigate()
+
+  // Caja Mayor es global: no pasa por appContext y se ven todos los grupos juntos. El
+  // formulario de un pago vive dentro de un grupo y un local, y el backend corta por
+  // allowedLocalIds. Asi que para abrir una op --o cargar una nueva-- hay que poner el
+  // contexto antes de navegar. Es el mismo problema de los avisos y se resuelve con el
+  // mismo lib (destinoAviso.js), en vez de escribir otro criterio que se desincronice.
+  const [misApps, setMisApps] = useState([])
+  const appActiva = useAppStore((s) => s.activeApp)
+  const localActivo = useAppStore((s) => s.activeLocal)
+  const setActiveApp = useAppStore((s) => s.setActiveApp)
+  const setActiveLocal = useAppStore((s) => s.setActiveLocal)
+  const [menuAlta, setMenuAlta] = useState(false)
 
   const [tab, setTab] = useState('saldos') // saldos | movimientos
   const [moneda, setMoneda] = useState('ARS')
@@ -74,6 +94,11 @@ export default function CajaMayor() {
 
   const [formMov, setFormMov] = useState(null)     // null | {} | movimiento a editar
   const [expandido, setExpandido] = useState(null)
+
+  // Si falla, abrir una op avisa que no hay acceso en vez de mandar a un 403.
+  useEffect(() => {
+    authApi.myApps().then(({ data }) => setMisApps(data ?? [])).catch(() => setMisApps([]))
+  }, [])
 
   useEffect(() => {
     cajaMayorApi.locales()
@@ -165,6 +190,37 @@ export default function CajaMayor() {
     }
   }
 
+  // Pone el contexto en un local y navega.
+  const irConContexto = (idLocal, ruta) => {
+    const plan = resolverApertura(
+      { tabla: 'pagos', id_registro: 'x', id_local: idLocal },
+      { misApps, appActiva, localActivo }
+    )
+    if (plan.accion === 'sin-acceso') { notify(plan.mensaje, 'error'); return }
+    if (plan.accion === 'cambiar-contexto') {
+      // setActiveApp limpia el local, asi que el orden importa: primero la app.
+      if (plan.cambiaGrupo) setActiveApp(plan.app)
+      setActiveLocal(plan.local)
+      notify(mensajeDeCambio(plan), 'info')
+    }
+    navigate(ruta)
+  }
+
+  // Ir a la op de gestion de la que salio el movimiento.
+  const abrirOp = (mov) => {
+    const ruta = rutaDeLaOp(mov)
+    if (ruta) irConContexto(mov.id_local, ruta)
+  }
+
+  // Los dos modos de alta: el formulario rapido de siempre, o una op con factura.
+  const elegirAlta = (modo) => {
+    setMenuAlta(false)
+    const plan = resolverAlta(modo, { idLocal })
+    if (plan.accion === 'drawer') { setFormMov({}); return }
+    if (plan.accion === 'falta-local') { notify(plan.mensaje, 'error'); return }
+    irConContexto(plan.id_local, plan.ruta)
+  }
+
   const localesPorGrupo = useMemo(() => {
     const grupos = new Map()
     for (const l of locales) {
@@ -175,10 +231,13 @@ export default function CajaMayor() {
     return [...grupos.entries()]
   }, [locales])
 
-  const totalConsolidado = useMemo(
-    () => saldos.reduce((acc, s) => acc + Number(s.saldo ?? 0), 0),
-    [saldos]
-  )
+  // Las dos mitades de la vista. La direccion del dato viene cruzada desde el
+  // backend (un egreso del local es un ingreso a la caja mayor): la traduccion vive
+  // en lib/cajaMayorVista.js, con tests.
+  // `vista.neto` reemplaza al viejo `totalConsolidado`: la suma de los saldos por
+  // local es, por definición, enviado menos recibido. Era el mismo número calculado
+  // dos veces.
+  const vista = useMemo(() => dividirPorDireccion(saldos), [saldos])
 
   // Título del resumen: el local si hay uno elegido, si no el grupo, si no nada.
   const nombreSeleccion = idLocal
@@ -195,10 +254,42 @@ export default function CajaMayor() {
             los ajustes y aperturas se cargan acá.
           </p>
         </div>
-        <div className="page-head-right">
-          <button className="btn btn-primary" onClick={() => setFormMov({})}>
-            Nuevo movimiento
+        <div className="page-head-right" style={{ position: 'relative' }}>
+          <button className="btn btn-primary" onClick={() => setMenuAlta(v => !v)}>
+            Nuevo movimiento ▾
           </button>
+
+          {/* Dos caminos, porque son dos cosas distintas: plata que se movio sin
+              comprobante, o una operacion con factura --que se carga como op de
+              gestion y llega a caja mayor por la copia que ya existe. */}
+          {menuAlta && (
+            <>
+              {/* Capa para cerrar tocando afuera: un menu que solo cierra con el
+                  boton se queda abierto y tapa la tabla. */}
+              <div
+                onClick={() => setMenuAlta(false)}
+                style={{ position: 'fixed', inset: 0, zIndex: 20 }}
+              />
+              <div className="carga-ia-menu" style={{ right: 0, left: 'auto', top: '100%', minWidth: 320, zIndex: 21 }}>
+                <button type="button" onClick={() => elegirAlta(MODOS_ALTA.RAPIDA)}>
+                  <span>
+                    <strong style={{ display: 'block' }}>Carga rápida</strong>
+                    <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                      Plata que se movió, sin comprobante
+                    </span>
+                  </span>
+                </button>
+                <button type="button" onClick={() => elegirAlta(MODOS_ALTA.OPERACION)}>
+                  <span>
+                    <strong style={{ display: 'block' }}>Operación con factura</strong>
+                    <span style={{ fontSize: 11, color: 'var(--t3)' }}>
+                      Se carga como op tipo CM{idLocal ? '' : ' — elegí el local primero'}
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -267,80 +358,127 @@ export default function CajaMayor() {
       {/* ── SALDOS ──────────────────────────────────────────────────────── */}
       {tab === 'saldos' && (
         <>
-          {!loading && saldos.length > 0 && (
+          {/* Los dos totales de la division, y el neto entre ellos. */}
+          {!loading && vista.locales > 0 && (
             <div style={{
               display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1rem',
               background: 'var(--bg-input)', borderRadius: 8, padding: '0.9rem 1.1rem',
             }}>
               <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Consolidado</div>
-                <div style={{ fontSize: 18 }}><Saldo valor={totalConsolidado} moneda={moneda} /></div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Enviado a caja mayor</div>
+                <div style={{ fontSize: 18, color: 'var(--green)' }}>{fmtMonto(vista.totalEnviado, moneda)}</div>
               </div>
               <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Locales con movimiento</div>
-                <div style={{ fontSize: 18, color: 'var(--t1)' }}>{saldos.length}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Recibido de caja mayor</div>
+                <div style={{ fontSize: 18, color: 'var(--red)' }}>{fmtMonto(vista.totalRecibido, moneda)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Neto</div>
+                <div style={{ fontSize: 18 }}><Saldo valor={vista.neto} moneda={moneda} /></div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Locales</div>
+                <div style={{ fontSize: 18, color: 'var(--t1)' }}>{vista.locales}</div>
               </div>
               <div>
                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Sin recibir</div>
-                <div style={{ fontSize: 18, color: 'var(--amber)' }}>
-                  {saldos.reduce((a, s) => a + Number(s.en_estudio ?? 0), 0)}
-                </div>
+                <div style={{ fontSize: 18, color: vista.sinRecibir ? 'var(--amber)' : 'var(--t2)' }}>{vista.sinRecibir}</div>
               </div>
             </div>
           )}
 
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Grupo</th>
-                  <th>Local</th>
-                  <th style={{ textAlign: 'right' }}>Ingresos</th>
-                  <th style={{ textAlign: 'right' }}>Egresos</th>
-                  <th style={{ textAlign: 'right' }}>Saldo</th>
-                  <th style={{ textAlign: 'right' }}>Ops</th>
-                  <th style={{ textAlign: 'right' }}>Sin recibir</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 8 }, (_, i) => (
-                    <tr key={i} className="skel-row">
-                      {Array.from({ length: 7 }, (_, j) => <td key={j}><span className="skel" style={{ width: `${50 + (j * 11 + i * 7) % 40}%` }} /></td>)}
-                    </tr>
-                  ))
-                ) : saldos.length === 0 ? (
-                  <tr><td colSpan={7}><div className="table-empty">
-                    <p>Sin movimientos de caja mayor en {MONEDAS.find(m => m.valor === moneda)?.label.toLowerCase()} para los filtros aplicados.</p>
-                  </div></td></tr>
-                ) : saldos.map(s => (
-                  <tr
-                    key={`${s.id_local}-${s.moneda}`}
-                    className="row-clickable"
-                    onClick={() => {
-                      // Se baja al local y se posiciona su grupo, así el selector
-                      // queda mostrando de dónde salió lo que se está viendo.
-                      const l = locales.find(x => x.id === s.id_local)
-                      setIdApp(l?.id_app ?? '')
-                      setIdLocal(s.id_local)
-                      setTab('movimientos')
-                    }}
-                  >
-                    <td className="td-muted">{s.grupo ?? '—'}</td>
-                    <td>{s.local ?? '—'}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--green)' }}>{fmtMonto(s.ingresos, s.moneda)}</td>
-                    <td style={{ textAlign: 'right', color: 'var(--red)' }}>{fmtMonto(s.egresos, s.moneda)}</td>
-                    <td style={{ textAlign: 'right' }}><Saldo valor={s.saldo} moneda={s.moneda} /></td>
-                    <td style={{ textAlign: 'right' }} className="td-muted">{s.ops}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      {s.en_estudio > 0
-                        ? <span className="badge badge-amber">{s.en_estudio}</span>
-                        : <span className="td-muted">—</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* ── La vista partida en dos ──────────────────────────────────────
+              Un lado por direccion de la plata. Los DOS lados listan los mismos
+              locales en el mismo orden, incluso con cero de un lado: leer las dos
+              columnas a la misma altura es lo que permite comparar, y filtrar los
+              ceros desalinearia las filas.
+
+              Ojo con el dato: `ingresos` y `egresos` vienen desde la CAJA MAYOR, y un
+              egreso del local es un ingreso a la caja mayor. Leerlo al derecho
+              invierte los dos totales y los numeros igual parecen correctos. */}
+          <div className="cm-split">
+            {[
+              { clave: 'enviado',  titulo: 'Enviado a caja mayor',   ayuda: 'Plata que el local mando',  color: 'var(--green)', total: vista.totalEnviado },
+              { clave: 'recibido', titulo: 'Recibido de caja mayor', ayuda: 'Plata que volvio al local', color: 'var(--red)',   total: vista.totalRecibido },
+            ].map((lado) => (
+              <div key={lado.clave} className="cm-split-panel">
+                <div className="cm-split-head">
+                  <span style={{ color: lado.color, fontWeight: 700 }}>{lado.titulo}</span>
+                  <span style={{ fontSize: 11, color: 'var(--t3)' }}>{lado.ayuda}</span>
+                </div>
+
+                <div className="table-wrap" style={{ marginBottom: 0 }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Local</th>
+                        <th style={{ textAlign: 'right' }}>Monto</th>
+                        <th style={{ textAlign: 'right', width: 74 }}>Ops</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        Array.from({ length: 6 }, (_, i) => (
+                          <tr key={i} className="skel-row">
+                            {Array.from({ length: 3 }, (_, j) => <td key={j}><span className="skel" style={{ width: `${50 + (j * 13 + i * 9) % 40}%` }} /></td>)}
+                          </tr>
+                        ))
+                      ) : vista.filas.length === 0 ? (
+                        <tr><td colSpan={3}><div className="table-empty">
+                          <p>Sin movimientos en {MONEDAS.find(m => m.valor === moneda)?.label.toLowerCase()} para los filtros aplicados.</p>
+                        </div></td></tr>
+                      ) : vista.filas.map(f => (
+                        <tr
+                          key={`${f.id_local}-${f.moneda}-${lado.clave}`}
+                          className="row-clickable"
+                          onClick={() => {
+                            const l = locales.find(x => x.id === f.id_local)
+                            setIdApp(l?.id_app ?? '')
+                            setIdLocal(f.id_local)
+                            setTab('movimientos')
+                          }}
+                          title={`Ver los movimientos de ${f.local}`}
+                        >
+                          <td>
+                            {f.local}
+                            {f.grupo && <div style={{ fontSize: 10.5, color: 'var(--t4)' }}>{f.grupo}</div>}
+                          </td>
+                          {/* La barra dice quien mueve la caja: una lista de numeros
+                              obliga a compararlos de memoria. */}
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <div style={{ color: f[lado.clave] ? lado.color : 'var(--t4)' }}>
+                              {fmtMonto(f[lado.clave], f.moneda)}
+                            </div>
+                            <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(255,255,255,0.07)' }}>
+                              <div style={{
+                                height: '100%', borderRadius: 2, background: lado.color,
+                                width: `${proporcion(f[lado.clave], lado.total)}%`,
+                              }} />
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="td-muted">
+                            {f.sin_recibir > 0
+                              ? <span className="badge badge-amber" title={`${f.sin_recibir} sin confirmar`}>{f.ops}</span>
+                              : f.ops}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {!loading && vista.filas.length > 0 && (
+                      <tfoot>
+                        <tr>
+                          <td style={{ fontWeight: 700 }}>Total</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: lado.color, whiteSpace: 'nowrap' }}>
+                            {fmtMonto(lado.total, moneda)}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -426,8 +564,22 @@ export default function CajaMayor() {
                         >
                           {m.categoria ?? m.observaciones ?? '—'}
                         </div>
-                        {m.nro_ord != null && (
-                          <div style={{ fontSize: 10.5, color: 'var(--t3)' }}>OP-{m.nro_ord}</div>
+                        {/* Link a la op: el dato ya venia del backend y solo se
+                            mostraba como texto. Los movimientos cargados a mano no
+                            tienen op, asi que no llevan link. */}
+                        {tieneOp(m) && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); abrirOp(m) }}
+                            title="Abrir la op en gestión"
+                            style={{
+                              background: 'none', border: 'none', padding: 0, marginTop: 2,
+                              color: 'var(--gold-bright)', cursor: 'pointer',
+                              fontSize: 10.5, textDecoration: 'underline',
+                            }}
+                          >
+                            {etiquetaOp(m)}
+                          </button>
                         )}
                         {abierto && (
                           <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 6, lineHeight: 1.6 }}>
@@ -462,14 +614,21 @@ export default function CajaMayor() {
                       <td><BadgeEstado estado={m.estado} /></td>
                       <td>
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          <button
-                            className={`btn btn-sm ${m.estado === ESTADOS.RECIBIDA ? 'btn-secondary' : 'btn-primary'}`}
-                            disabled={ocupado}
-                            onClick={() => cambiarEstado(m, m.estado === ESTADOS.RECIBIDA ? ESTADOS.ENVIADA : ESTADOS.RECIBIDA)}
-                            title={m.estado === ESTADOS.RECIBIDA ? 'Volver a enviada' : 'Confirmar que la plata llegó'}
-                          >
-                            {ocupado ? '…' : m.estado === ESTADOS.RECIBIDA ? 'A enviada' : 'Recibir'}
-                          </button>
+                          {/* Solo los movimientos que vienen de una op de gestion
+                              tienen ciclo enviada -> recibida: el local manda la plata
+                              y la caja mayor confirma que llego. Uno cargado a mano
+                              aca ya esta en la caja mayor, asi que "Recibir" no
+                              significa nada. Ver naceEnCajaMayor en lib/cajaMayor.js. */}
+                          {tieneCicloDeRecepcion(m.origen) && (
+                            <button
+                              className={`btn btn-sm ${m.estado === ESTADOS.RECIBIDA ? 'btn-secondary' : 'btn-primary'}`}
+                              disabled={ocupado}
+                              onClick={() => cambiarEstado(m, m.estado === ESTADOS.RECIBIDA ? ESTADOS.ENVIADA : ESTADOS.RECIBIDA)}
+                              title={m.estado === ESTADOS.RECIBIDA ? 'Volver a enviada' : 'Confirmar que la plata llegó'}
+                            >
+                              {ocupado ? '…' : m.estado === ESTADOS.RECIBIDA ? 'A enviada' : 'Recibir'}
+                            </button>
+                          )}
                           <button
                             className="btn btn-sm btn-secondary"
                             disabled={ocupado}

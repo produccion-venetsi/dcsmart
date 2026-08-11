@@ -30,6 +30,7 @@ import filtroPresetsRoutes from './routes/filtro_presets.js'
 import notificacionesRoutes from './routes/notificaciones.js'
 import cajaMayorRoutes from './routes/caja_mayor.js'
 import clientesRoutes from './routes/clientes.js'
+import documentosRoutes from './routes/documentos.js'
 
 // Serializar BigInt como string en JSON (para columnas como pagos.nro con IDs de MP)
 BigInt.prototype.toJSON = function () { return this.toString() }
@@ -106,6 +107,7 @@ await app.register(filtroPresetsRoutes, { prefix: '/api/filtro-presets' })
 await app.register(notificacionesRoutes, { prefix: '/api/notificaciones' })
 await app.register(cajaMayorRoutes, { prefix: '/api/caja-mayor' })
 await app.register(clientesRoutes, { prefix: '/api/clientes' })
+await app.register(documentosRoutes, { prefix: '/api/documentos' })
 
 app.get('/health', async () => ({ status: 'ok' }))
 

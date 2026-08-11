@@ -23,6 +23,7 @@ model App {
   local_access   UserLocalAccess[]
   usage          UserAppUsage[]
   clientes       Cliente[]
+  documentos     Documento[]
 
   @@map("apps")
 }
@@ -58,6 +59,7 @@ model Local {
   local_access  UserLocalAccess[]
   detalle_tipos DetalleTipo[]
   movimientos_cm MovimientoCM[]
+  documentos    Documento[]
 
   @@map("locales")
 }
@@ -77,6 +79,26 @@ model User {
   // significa "todavia no lo sabemos" y el primer login lo completa. Resetear
   // la contrasena tambien lo vuelve a NULL, que es como se destraba una cuenta.
   last_login    DateTime?
+
+  // Datos de la persona. Todos opcionales: los 60 usuarios que ya existen no los
+  // tienen y no hay por que trabar el login hasta que alguien los complete.
+  //
+  // departamento se valida contra la lista de lib/datosUsuario.js, no es texto libre
+  // (ver ahi por que la lista esta en codigo y no como enum de Postgres). puesto si es
+  // texto: es como se describe el cargo de cada uno.
+  //
+  // "puesto" es lo que en pantalla se llama "Rol". No se llama rol en el codigo
+  // porque rol ya es el rol de permisos (super_admin, admin, cajero...).
+  //
+  // No hay columna de equipo a proposito: con el departamento y el puesto ya se sabe
+  // a que equipo pertenece cada uno, y un tercer campo para deducir lo mismo es un
+  // campo mas que queda sin cargar.
+  departamento  String?
+  puesto        String?
+  // Fecha pura, sin hora: un cumpleanos no tiene hora, y guardarlo como timestamp
+  // lo corre un dia segun la zona (ya paso con 2076 cajas migradas a medianoche UTC).
+  fecha_nac     DateTime? @db.Date
+
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -94,6 +116,7 @@ model User {
   notificaciones   Notificacion[]    @relation("NotificacionUser")
   mov_cm_creados   MovimientoCM[]    @relation("MovimientoCMCreatedBy")
   mov_cm_recibidos MovimientoCM[]    @relation("MovimientoCMRecibidaBy")
+  documentos_creados Documento[]  @relation("DocumentoCreatedBy")
 
   @@map("users")
 }
@@ -257,6 +280,112 @@ model Cliente {
   @@map("clientes")
 }
 
+// ─── DOCUMENTOS ──────────────────────────────────────────────────────────────
+//
+// Archivos y links ordenados por tipo (contratos, habilitaciones, reportes...),
+// agrupados por grupo y local.
+
+// Los tipos se administran desde la app, no son una lista en codigo: el "etc" de
+// contratos/habilitaciones/reportes va a crecer y agregar uno no puede ser un deploy.
+//
+// Son globales, sin id_app: un contrato es un contrato en todos los grupos, y con un
+// tipo por grupo la misma cosa aparecia con cinco nombres distintos.
+model TipoDocumento {
+  id     String  @id @default(uuid())
+  nombre String  @unique
+  // Clave del catalogo de iconos (lib/iconosDocumento.js), no un emoji ni una clase
+  // CSS: el formulario ofrece los que existen y el backend rechaza cualquier otra.
+  icono  String  @default("documento")
+  // Para ordenar la lista a mano: los que se usan todos los dias arriba.
+  orden  Int     @default(0)
+  activo Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  documentos Documento[]
+
+  @@index([activo, orden])
+  @@map("tipo_documento")
+}
+
+model Documento {
+  id      String @id @default(uuid())
+  id_tipo String
+  // El grupo es obligatorio y el local no: un contrato marco o una habilitacion de
+  // sociedad son del grupo entero, no de una sucursal. Sin local = lo ve todo el grupo.
+  id_app  String
+  id_local String?
+  // Opcional: sirve para encontrar "todo lo que tengo firmado con este proveedor".
+  id_proveedor String?
+
+  nombre  String
+  detalle String?
+  // Un documento puede ser un link en vez de archivos (una carpeta de Drive, un
+  // sistema externo). Puede tener las dos cosas: el link y el PDF firmado.
+  url     String?
+
+  // Quien lo ve DENTRO de la app. En false lo ven solo los roles internos; en true,
+  // cualquiera que entre a ese local (incluido cajero). Es distinto del link publico
+  // de abajo, que sale de la app.
+  visible_todos Boolean @default(false)
+
+  // Link para compartir SIN login (mandarle una habilitacion a un inspector). Nace en
+  // null: existe solo si alguien lo genero, y se revoca volviendolo a null. El token es
+  // el secreto, asi que es unico y largo (ver lib/tokenPublico.js).
+  token_publico String? @unique
+  token_creado_at DateTime?
+
+  // Vencimiento (habilitaciones, seguros). Fecha pura, sin hora, por lo mismo que
+  // fecha_nac en User: un vencimiento no tiene hora y con hora se corre un dia.
+  vence DateTime? @db.Date
+  // Hasta cuando ya se aviso. Evita repetir el mismo aviso en cada listado; se limpia
+  // si cambia la fecha de vencimiento, porque ahi el aviso viejo ya no aplica.
+  avisado_hasta DateTime?
+
+  id_created_by String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  tipo       TipoDocumento      @relation(fields: [id_tipo], references: [id])
+  app        App                @relation(fields: [id_app], references: [id])
+  local      Local?             @relation(fields: [id_local], references: [id])
+  proveedor  Proveedor?         @relation(fields: [id_proveedor], references: [id])
+  created_by User?              @relation("DocumentoCreatedBy", fields: [id_created_by], references: [id])
+  archivos   DocumentoArchivo[]
+
+  // El listado siempre filtra por grupo y casi siempre por local: es la consulta de la
+  // pantalla. Las otras tres cubren las FK, que Prisma no indexa solas (ver el PR #114,
+  // donde cuatro FK sin indice escaneaban tablas enteras).
+  @@index([id_app, id_local])
+  @@index([id_tipo])
+  @@index([id_proveedor])
+  @@index([id_created_by])
+  // Los que vencen pronto, para el barrido de avisos.
+  @@index([vence])
+  @@map("documentos")
+}
+
+model DocumentoArchivo {
+  id           String @id @default(uuid())
+  id_documento String
+  // gs://bucket/carpeta/archivo.pdf -- se sirve por el proxy de lectura, igual que los
+  // adjuntos de pagos. Nunca se expone la URL de GCS.
+  gs_path      String
+  // 'foto' o 'pdf': decide si se muestra en el visor de imagenes o se abre el PDF.
+  tipo         String
+  // Como se llamaba el archivo que subieron. En GCS el nombre es un timestamp, asi que
+  // sin esto la lista muestra "1786445361010-x7f2.pdf" y nadie sabe cual es cual.
+  nombre_original String?
+  orden        Int      @default(0)
+  created_at   DateTime @default(now())
+
+  documento Documento @relation(fields: [id_documento], references: [id], onDelete: Cascade)
+
+  @@index([id_documento, orden])
+  @@map("documento_archivos")
+}
+
 model Proveedor {
   id            String   @id @default(uuid())
   nombre        String?
@@ -297,9 +426,10 @@ model Proveedor {
   tipos_afines  TipoLocal[] @default([])
   es_general    Boolean  @default(false) // servicios transversales: Aysa, Metrogas, AFIP, bancos
 
-  rubcat  RubCat? @relation(fields: [id_rubcat], references: [id])
-  pagos   Pago[]
-  locales Local[]
+  rubcat     RubCat? @relation(fields: [id_rubcat], references: [id])
+  pagos      Pago[]
+  locales    Local[]
+  documentos Documento[]
 
   // Ver el comentario en Impuesto: las FK necesitan su índice a mano.
   @@index([id_rubcat])
@@ -717,14 +847,22 @@ model Notificacion {
   id_registro String?
   id_local    String?
   leida       Boolean  @default(false)
+  // `hecha` es distinto de `leida`: leida se marca sola al abrir el aviso, asi que no
+  // dice si la tarea se resolvio. Un aviso de desauditoria es alguien pidiendo que
+  // revises algo, y eso se cierra cuando lo hiciste, no cuando lo miraste.
+  hecha       Boolean  @default(false)
+  hecha_at    DateTime?
   created_at  DateTime @default(now())
 
   user User @relation("NotificacionUser", fields: [id_user], references: [id])
 
-  // id_user va primero en los dos indices: todas las consultas son "las mias".
+  // id_user va primero en los tres indices: todas las consultas son "las mias".
   // El primero cubre ademas la FK, que Prisma no indexa sola -- ver el PR #114,
   // donde justamente cuatro FK sin indice escaneaban tablas enteras.
   @@index([id_user, leida])
+  // El contador del sidebar pregunta "cuantas me faltan": sin este indice escanea
+  // todas las notificaciones del usuario en cada refresco.
+  @@index([id_user, hecha])
   @@index([id_user, created_at])
   @@map("notificaciones")
 }
