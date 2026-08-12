@@ -36,7 +36,7 @@ function SelectorIcono({ iconos, valor, onElegir }) {
             width: 32, height: 32, borderRadius: 8, cursor: 'pointer',
             // El elegido se marca con borde Y fondo, no solo con color: un cambio de
             // color solo no se distingue en una fila de doce íconos iguales.
-            background: valor === ic.clave ? 'rgba(255,255,255,0.10)' : 'transparent',
+            background: valor === ic.clave ? 'rgba(var(--velo-rgb), 0.10)' : 'transparent',
             border: `1px solid ${valor === ic.clave ? 'var(--t1)' : 'var(--glass-border)'}`,
             color: valor === ic.clave ? 'var(--t1)' : 'var(--t3)',
           }}

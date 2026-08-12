@@ -487,7 +487,7 @@ export default function CajaMayor() {
                                 {fmtMonto(f[lado.pend], f.moneda)} sin confirmar
                               </div>
                             )}
-                            <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(255,255,255,0.07)' }}>
+                            <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(var(--velo-rgb), 0.07)' }}>
                               <div style={{
                                 height: '100%', borderRadius: 2, background: lado.color,
                                 width: `${proporcion(f[lado.clave], lado.total)}%`,

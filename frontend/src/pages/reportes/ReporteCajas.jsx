@@ -73,7 +73,7 @@ function PayTooltip({ active, payload }) {
     }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>{d?.name}</div>
       <div style={{ fontWeight: 600 }}>{fmt(d?.val ?? 0)}</div>
-      <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>{d?.pct}%</div>
+      <div style={{ color: 'rgba(var(--velo-rgb), .5)', fontSize: 11 }}>{d?.pct}%</div>
     </div>
   )
 }
@@ -252,7 +252,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
               <div className="rep-chart-title">Evolución de ventas</div>
               <div className="rep-chart-sub">Facturación semanal en el período</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.5)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(var(--velo-rgb), .5)' }}>
               <span style={{ width: 18, height: 3, borderRadius: 2, background: '#3FB6BD', display: 'inline-block' }} />
               Total ventas
             </div>
@@ -260,7 +260,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
           {skel ? (
             <div className="rep-skel" style={{ width: '100%', height: 230 }} />
           ) : weekly.length === 0 ? (
-            <div style={{ height: 230, display: 'grid', placeItems: 'center', color: 'rgba(255,255,255,.35)', fontSize: 13 }}>
+            <div style={{ height: 230, display: 'grid', placeItems: 'center', color: 'rgba(var(--velo-rgb), .35)', fontSize: 13 }}>
               Sin datos para el período
             </div>
           ) : (
@@ -273,9 +273,9 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="label" tickLine={false} axisLine={false}
-                  tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 10, fontFamily: 'Montserrat' }} />
+                  tick={{ fill: 'rgba(var(--velo-rgb), .4)', fontSize: 10, fontFamily: 'Montserrat' }} />
                 <YAxis tickLine={false} axisLine={false} width={60}
-                  tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
+                  tick={{ fill: 'rgba(var(--velo-rgb), .3)', fontSize: 10, fontFamily: 'Montserrat' }}
                   tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
                 <Tooltip content={<SalesTooltip />} />
                 <Area type="monotone" dataKey="total" stroke="#3FB6BD" strokeWidth={2.5}
@@ -302,7 +302,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                     width: 104, height: 104, borderRadius: '50%', background: 'var(--bg-app)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                   }}>
-                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.06em', color: 'rgba(255,255,255,.4)', textTransform: 'uppercase' }}>Fiscal</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.06em', color: 'rgba(var(--velo-rgb), .4)', textTransform: 'uppercase' }}>Fiscal</span>
                     <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 22, fontWeight: 700, color: '#F4F2EE', lineHeight: 1.1 }}>{fiscalPct}%</span>
                   </div>
                 </div>
@@ -451,12 +451,12 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={payments} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
                       <XAxis dataKey="name" tickLine={false} axisLine={false}
-                        tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 9, fontFamily: 'Montserrat' }}
+                        tick={{ fill: 'rgba(var(--velo-rgb), .4)', fontSize: 9, fontFamily: 'Montserrat' }}
                         interval={0} angle={-20} textAnchor="end" height={50} />
                       <YAxis tickLine={false} axisLine={false} width={60}
-                        tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
+                        tick={{ fill: 'rgba(var(--velo-rgb), .3)', fontSize: 10, fontFamily: 'Montserrat' }}
                         tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
-                      <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(255,255,255,.04)', radius: 6 }} />
+                      <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(var(--velo-rgb), .04)', radius: 6 }} />
                       <Bar dataKey="val" radius={[5, 5, 0, 0]}>
                         {payments.map((p, i) => (
                           <Cell key={i} fill={p.color} />
@@ -470,7 +470,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
               <div className="rep-chart-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                   <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por movimiento</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--velo-rgb), .4)' }}>% del total</span>
                 </div>
                 {skel ? (
                   Array.from({ length: 5 }).map((_, i) => (
@@ -509,12 +509,12 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={detalles} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
                       <XAxis dataKey="name" tickLine={false} axisLine={false}
-                        tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 9, fontFamily: 'Montserrat' }}
+                        tick={{ fill: 'rgba(var(--velo-rgb), .4)', fontSize: 9, fontFamily: 'Montserrat' }}
                         interval={0} angle={-20} textAnchor="end" height={50} />
                       <YAxis tickLine={false} axisLine={false} width={60}
-                        tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
+                        tick={{ fill: 'rgba(var(--velo-rgb), .3)', fontSize: 10, fontFamily: 'Montserrat' }}
                         tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
-                      <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(255,255,255,.04)', radius: 6 }} />
+                      <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(var(--velo-rgb), .04)', radius: 6 }} />
                       <Bar dataKey="val" radius={[5, 5, 0, 0]}>
                         {detalles.map((d, i) => (
                           <Cell key={i} fill={d.color} />
@@ -528,7 +528,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
               <div className="rep-chart-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                   <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por tipo</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>% del total</span>
+                  <span style={{ fontSize: 11, color: 'rgba(var(--velo-rgb), .4)' }}>% del total</span>
                 </div>
                 {skel ? (
                   Array.from({ length: 5 }).map((_, i) => (

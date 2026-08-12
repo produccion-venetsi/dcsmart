@@ -15,18 +15,24 @@
      la app y no haya que parchear control por control. */
   color-scheme: dark;
 
+  /* Los componentes del "velo": los fondos y bordes sutiles se escriben como
+     rgba(var(--velo-rgb), X) para conservar su opacidad exacta y poder invertir el
+     color con el tema. En oscuro el velo es blanco sobre fondo oscuro; en claro es
+     negro sobre fondo claro, porque blanco sobre blanco no se ve. */
+  --velo-rgb: 255, 255, 255;
+
   /* backgrounds */
   --bg-app:         #19232f;
   --bg-sidebar:     #111820;
   --bg-elevated:    #1e2b3a;
-  --bg-card:        rgba(255, 255, 255, 0.042);
-  --bg-card-hi:     rgba(255, 255, 255, 0.07);
-  --bg-input:       rgba(255, 255, 255, 0.04);
-  --bg-th:          rgba(255, 255, 255, 0.038);
-  --bg-tr-hover:    rgba(255, 255, 255, 0.024);
+  --bg-card:        rgba(var(--velo-rgb), 0.042);
+  --bg-card-hi:     rgba(var(--velo-rgb), 0.07);
+  --bg-input:       rgba(var(--velo-rgb), 0.04);
+  --bg-th:          rgba(var(--velo-rgb), 0.038);
+  --bg-tr-hover:    rgba(var(--velo-rgb), 0.024);
 
   /* borders */
-  --border:         rgba(255, 255, 255, 0.08);
+  --border:         rgba(var(--velo-rgb), 0.08);
   --border-hi:      rgba(201, 176, 134, 0.30);
   --border-input:   rgba(201, 176, 134, 0.18);
 
@@ -65,7 +71,7 @@
   --ease:      cubic-bezier(0.2, 0.8, 0.2, 1);
 
   /* glass */
-  --glass:           rgba(255, 255, 255, 0.05);
+  --glass:           rgba(var(--velo-rgb), 0.05);
   --glass-border:    rgba(201, 176, 134, 0.18);
   --glass-border-hi: rgba(201, 176, 134, 0.34);
 }
@@ -126,8 +132,8 @@ select option:disabled { color: var(--t4); }
   pointer-events: none;
   z-index: 0;
   background-image:
-    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+    linear-gradient(rgba(var(--velo-rgb), 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--velo-rgb), 0.012) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(ellipse 80% 60% at 60% 50%, #000, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse 80% 60% at 60% 50%, #000, transparent 70%);
@@ -241,7 +247,7 @@ select option:disabled { color: var(--t4); }
   width: 100%;
   padding: 5px 26px 5px 10px;
   border-radius: 8px;
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--velo-rgb), 0.05);
   border: 1px solid var(--border);
   color: var(--t2);
   font-family: 'Montserrat', system-ui, sans-serif;
@@ -335,7 +341,7 @@ select option:disabled { color: var(--t4); }
 }
 .cargar-opcion:hover {
   border-color: var(--accent, #3fb6bd);
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--velo-rgb), 0.07);
 }
 .cargar-opcion-ico {
   display: grid;
@@ -417,7 +423,7 @@ select option:disabled { color: var(--t4); }
   border-radius: 8px;
   cursor: pointer;
 }
-.aviso-check:hover { background: rgba(255, 255, 255, 0.06); }
+.aviso-check:hover { background: rgba(var(--velo-rgb), 0.06); }
 .aviso-check input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--green); }
 
 /* Hecho: se atenúa pero NO se esconde. El aviso sigue siendo el registro de que
@@ -501,7 +507,7 @@ select option:disabled { color: var(--t4); }
 }
 
 .nav-item:hover {
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--velo-rgb), 0.05);
   color: var(--t2);
 }
 .nav-item:hover svg { color: var(--t3); }
@@ -684,7 +690,7 @@ select option:disabled { color: var(--t4); }
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(165deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 40%);
+  background: linear-gradient(165deg, rgba(var(--velo-rgb), 0.07), rgba(var(--velo-rgb), 0) 40%);
 }
 .stat-card:hover {
   border-color: var(--border-hi);
@@ -758,7 +764,7 @@ select option:disabled { color: var(--t4); }
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(165deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 38%);
+  background: linear-gradient(165deg, rgba(var(--velo-rgb), 0.06), rgba(var(--velo-rgb), 0) 38%);
 }
 .card > * { position: relative; }
 
@@ -796,7 +802,7 @@ select option:disabled { color: var(--t4); }
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(165deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 38%);
+  background: linear-gradient(165deg, rgba(var(--velo-rgb), 0.06), rgba(var(--velo-rgb), 0) 38%);
 }
 .form-panel > * { position: relative; }
 
@@ -858,7 +864,7 @@ select option:disabled { color: var(--t4); }
   height: 52px;
   border-radius: 16px 16px 0 0;
   pointer-events: none;
-  background: linear-gradient(165deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 60%);
+  background: linear-gradient(165deg, rgba(var(--velo-rgb), 0.06), rgba(var(--velo-rgb), 0) 60%);
 }
 
 .data-table {
@@ -887,7 +893,7 @@ select option:disabled { color: var(--t4); }
 .data-table td {
   padding: 5px 10px;
   color: var(--t2);
-  border-bottom: 1px solid rgba(255,255,255,0.038);
+  border-bottom: 1px solid rgba(var(--velo-rgb), 0.038);
   vertical-align: middle;
 }
 .data-table tr:last-child td { border-bottom: none; }
@@ -972,7 +978,7 @@ select option:disabled { color: var(--t4); }
   min-width: 18px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.07);
+  background: rgba(var(--velo-rgb), 0.07);
   font-size: 9.5px;
   font-weight: 800;
   color: var(--t3);
@@ -1000,10 +1006,10 @@ select option:disabled { color: var(--t4); }
 
 .tabla-desglose .desglose-subgrupo > td {
   padding: 6px 10px;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  background: rgba(var(--velo-rgb), 0.03);
+  border-bottom: 1px solid rgba(var(--velo-rgb), 0.04);
 }
-.tabla-desglose .desglose-subgrupo:hover > td { background: rgba(255,255,255,0.06); }
+.tabla-desglose .desglose-subgrupo:hover > td { background: rgba(var(--velo-rgb), 0.06); }
 
 /* Las filas hoja se sangran para que se lea de qué grupo cuelgan. */
 .tabla-desglose tbody tr:not(.desglose-grupo):not(.desglose-subgrupo) > td:first-child {
@@ -1038,22 +1044,22 @@ select option:disabled { color: var(--t4); }
 .btn-primary {
   color: #1e2b38;
   background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
-  box-shadow: 0 4px 16px rgba(201,176,134,0.26), inset 0 1px 1px rgba(255,255,255,0.38);
+  box-shadow: 0 4px 16px rgba(201,176,134,0.26), inset 0 1px 1px rgba(var(--velo-rgb), 0.38);
 }
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 6px 22px rgba(201,176,134,0.40), inset 0 1px 1px rgba(255,255,255,0.48);
+  box-shadow: 0 6px 22px rgba(201,176,134,0.40), inset 0 1px 1px rgba(var(--velo-rgb), 0.48);
 }
 
 .btn-secondary {
   color: var(--t2);
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--velo-rgb), 0.06);
   border: 1px solid var(--border);
   backdrop-filter: blur(var(--blur));
 }
 .btn-secondary:hover:not(:disabled) {
   border-color: var(--border-hi);
   color: var(--t1);
-  background: rgba(255,255,255,0.09);
+  background: rgba(var(--velo-rgb), 0.09);
 }
 .btn-secondary.active {
   border-color: var(--gold);
@@ -1286,6 +1292,95 @@ select.campo-ia {
   --ia-borde-hover: rgba(225, 203, 160, 0.85);
 }
 
+/* ─── TEMA CLARO ──────────────────────────────────────────────────────────────
+
+   Se redefinen las MISMAS variables, así que los 471 `var(--...)` del resto del
+   archivo no se tocan. `[data-tema="claro"]` lo pone el JS en el <html> (ver
+   lib/tema.js); sin el atributo la app queda oscura como siempre.
+
+   Tres cosas que hacen la diferencia entre "funciona" y "se lee":
+
+   1. `color-scheme: light` es obligatorio. Sin él, el navegador dibuja los widgets
+      nativos —el desplegable de los select, el calendario de los date, las
+      scrollbars— con el esquema del SISTEMA. Con Windows en oscuro, un desplegable
+      negro con letra negra. Es el mismo problema que el `color-scheme: dark` de
+      arriba, al revés.
+
+   2. Los fondos sutiles del tema oscuro son `rgba(var(--velo-rgb), 0.04)`: blanco
+      transparente sobre fondo oscuro. En claro hay que invertirlos a NEGRO
+      transparente, no bajarles la opacidad: blanco sobre blanco no se ve.
+
+   3. Los colores de estado (verde, rojo, ámbar) se oscurecen. Los del tema oscuro
+      están pensados para brillar sobre fondo oscuro y sobre blanco quedan lavados
+      —un ámbar #D4952A sobre blanco casi no se lee. */
+:root[data-tema="claro"] {
+  color-scheme: light;
+
+  /* El velo se invierte: negro transparente sobre fondo claro. */
+  --velo-rgb: 0, 0, 0;
+
+  /* backgrounds: el gris del fondo es apenas más oscuro que las tarjetas, para que
+     las tarjetas se lean como elevadas y no como agujeros. */
+  --bg-app:      #F4F2EE;
+  --bg-sidebar:  #EAE6DF;
+  --bg-elevated: #FFFFFF;
+  --bg-card:     rgba(0, 0, 0, 0.025);
+  --bg-card-hi:  rgba(0, 0, 0, 0.05);
+  --bg-input:    rgba(0, 0, 0, 0.03);
+  --bg-th:       rgba(0, 0, 0, 0.04);
+  --bg-tr-hover: rgba(0, 0, 0, 0.022);
+
+  /* borders: más marcados que en oscuro. Un borde de 0.08 de opacidad sobre fondo
+     claro desaparece, y las tablas quedan sin líneas. */
+  --border:       rgba(0, 0, 0, 0.11);
+  --border-hi:    rgba(140, 113, 66, 0.45);
+  --border-input: rgba(0, 0, 0, 0.16);
+
+  /* gold: el dorado del tema oscuro (#C9B086) sobre blanco se lee como beige. Se
+     baja a un bronce que mantiene la identidad y contrasta. */
+  /* Medido: #8C7142 daba 4.12x sobre el fondo y el minimo para texto es 4.5x. */
+  --gold:        #856A3C;
+  --gold-bright: #6E5730;
+  --gold-deep:   #B49A6E;
+
+  /* text: casi negro, no negro puro — el negro puro sobre fondo cálido vibra. */
+  --t1: #1E2630;
+  --t2: rgba(30, 38, 48, 0.72);
+  --t3: rgba(30, 38, 48, 0.52);
+  /* 0.34 daba 2.02x y hasta el texto auxiliar necesita 3.0x. Medido: 0.50 da 3.02x. */
+  --t4: rgba(30, 38, 48, 0.50);
+
+  /* status: oscurecidos para leerse sobre claro; los fondos, más tenues. */
+  --green:         #2E7D52;
+  --green-bg:      rgba(46, 125, 82, 0.10);
+  --green-border:  rgba(46, 125, 82, 0.28);
+  --red:           #C0392B;
+  --red-bg:        rgba(192, 57, 43, 0.09);
+  --red-border:    rgba(192, 57, 43, 0.26);
+  --blue:          #2C6FB0;
+  --blue-bg:       rgba(44, 111, 176, 0.09);
+  --blue-border:   rgba(44, 111, 176, 0.26);
+  --amber:         #9A6206;
+  --amber-bg:      rgba(154, 98, 6, 0.10);
+  --amber-border:  rgba(154, 98, 6, 0.28);
+  --purple:        #6A5AA8;
+  --purple-bg:     rgba(106, 90, 168, 0.10);
+  --purple-border: rgba(106, 90, 168, 0.26);
+
+  /* glass: en claro el "vidrio" es un velo blanco sobre el fondo gris, no una capa
+     blanca transparente sobre oscuro. */
+  --glass:           rgba(255, 255, 255, 0.72);
+  --glass-border:    rgba(0, 0, 0, 0.10);
+  --glass-border-hi: rgba(140, 113, 66, 0.40);
+
+  /* el degradé de IA, con el dorado y el azul del tema claro */
+  --ia-azul:        #2C6FB0;
+  --ia-grad:        linear-gradient(115deg, rgba(140, 113, 66, 0.16) 0%, rgba(110, 87, 48, 0.12) 38%, rgba(44, 111, 176, 0.16) 100%);
+  --ia-grad-hover:  linear-gradient(115deg, rgba(140, 113, 66, 0.26) 0%, rgba(110, 87, 48, 0.20) 38%, rgba(44, 111, 176, 0.28) 100%);
+  --ia-borde:       rgba(140, 113, 66, 0.55);
+  --ia-borde-hover: rgba(110, 87, 48, 0.85);
+}
+
 /* El barrido y el latido son la parte "IA" del efecto. Se definen una sola vez
    y los usan las dos superficies. */
 @keyframes ia-glow {
@@ -1341,7 +1436,7 @@ select.campo-ia {
   position: absolute;
   top: 0; left: -60%;
   width: 45%; height: 100%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.30), transparent);
+  background: linear-gradient(100deg, transparent, rgba(var(--velo-rgb), 0.30), transparent);
   transform: skewX(-18deg);
   animation: ia-sheen 3.4s ease-in-out infinite;
   pointer-events: none;
@@ -1394,7 +1489,7 @@ select.campo-ia {
   padding: 12px 14px;
   border: 1px solid var(--glass-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(var(--velo-rgb), 0.02);
 }
 /* Los avisos adentro del panel no llevan el margen de abajo que traen sueltos: acá
    el espaciado lo da el `gap` del panel. */
@@ -1431,14 +1526,14 @@ select.campo-ia {
   cursor: pointer;
 }
 .carga-ia-menu button:last-child { border-bottom: none; }
-.carga-ia-menu button:hover { background: rgba(255, 255, 255, 0.05); color: var(--gold-bright); }
+.carga-ia-menu button:hover { background: rgba(var(--velo-rgb), 0.05); color: var(--gold-bright); }
 
 @media (prefers-reduced-motion: reduce) {
   .btn-ia { animation: none; }
   .btn-ia::after { animation: none; display: none; }
 }
 .badge-purple { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
-.badge-muted  { background: rgba(255,255,255,0.06); color: var(--t3); border: 1px solid var(--border); }
+.badge-muted  { background: rgba(var(--velo-rgb), 0.06); color: var(--t3); border: 1px solid var(--border); }
 
 /* boolean pill (✓ / ✗) */
 .bool-yes { color: var(--green); font-weight: 700; font-size: 13px; }
@@ -1472,7 +1567,7 @@ select.campo-ia {
 }
 .periodico-card:hover {
   border-color: var(--gold);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--velo-rgb), 0.06);
 }
 .periodico-card input[type="checkbox"] {
   width: 16px;
@@ -1530,6 +1625,43 @@ select.campo-ia {
 /* Los form-group traen margen propio para cuando van apilados; adentro de la grilla
    el gap ya separa, y el margen encima descuadra las filas entre si. */
 .datos-persona-grid > .form-group { margin: 0; }
+
+/* ─── Boton de tema ───────────────────────────────────────────────────────────
+
+   Va en el sidebar, arriba del pie de usuario. Con el sidebar colapsado queda solo
+   el icono, centrado. */
+.sidebar-tema {
+  padding: 0 0.75rem 0.4rem;
+}
+.boton-tema {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--t3);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+.boton-tema:hover {
+  color: var(--t1);
+  background: var(--bg-card);
+  border-color: var(--glass-border);
+}
+.boton-tema:focus-visible {
+  outline: none;
+  border-color: var(--gold);
+  color: var(--t1);
+}
+/* Colapsado: solo el icono, y centrado. El texto ya no se renderiza (lo decide el
+   componente), asi que alcanza con centrar. */
+.sidebar.collapsed .boton-tema { justify-content: center; }
+.sidebar.collapsed .sidebar-tema { padding: 0 0.4rem 0.4rem; }
 
 /* ─── Cuadre en vivo (edicion de caja) ────────────────────────────────────────
 
@@ -1638,7 +1770,7 @@ select.campo-ia {
   width: 40px;
   height: 40px;
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--velo-rgb), 0.06);
   border: 1px solid var(--glass-border);
   color: var(--t2);
   flex-shrink: 0;
@@ -1664,7 +1796,7 @@ select.campo-ia {
   /* Cuadros grises: una foto con fondo blanco o transparente sobre el fondo oscuro se
      confunde con el panel y no se ve donde empieza. */
   background:
-    repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+    repeating-conic-gradient(rgba(var(--velo-rgb), 0.04) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
 }
 .doc-preview img {
   max-width: 100%;
@@ -1711,7 +1843,7 @@ select.campo-ia {
 /* La activa se marca con fondo Y borde, no solo con color: entre cinco nombres de
    archivo parecidos, un tono distinto no alcanza. */
 .doc-tab.activa {
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(var(--velo-rgb), 0.10);
   border-color: var(--t1);
   color: var(--t1);
   font-weight: 600;
@@ -1795,7 +1927,7 @@ select.campo-ia {
 }
 .form-input-wrap:focus-within {
   border-color: var(--gold);
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--velo-rgb), 0.06);
   box-shadow: 0 0 0 3px rgba(201,176,134,0.16);
 }
 
@@ -2018,9 +2150,9 @@ select.campo-ia {
   height: 10px;
   border-radius: 5px;
   background: linear-gradient(90deg,
-    rgba(255,255,255,0.07) 0%,
-    rgba(255,255,255,0.16) 40%,
-    rgba(255,255,255,0.07) 100%
+    rgba(var(--velo-rgb), 0.07) 0%,
+    rgba(var(--velo-rgb), 0.16) 40%,
+    rgba(var(--velo-rgb), 0.07) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s ease-in-out infinite;
@@ -2097,7 +2229,7 @@ tr.skel-row td {
   justify-content: space-between;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(var(--velo-rgb), 0.04);
 }
 .detail-row:last-child { border-bottom: none; }
 
@@ -2150,7 +2282,7 @@ tr.skel-row td {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(165deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 40%);
+  background: linear-gradient(165deg, rgba(var(--velo-rgb), 0.06), rgba(var(--velo-rgb), 0) 40%);
 }
 .quick-action-card:hover {
   border-color: var(--border-hi);
@@ -2187,7 +2319,7 @@ tr.skel-row td {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--velo-rgb), 0.05);
   border: 1px solid var(--border);
   display: grid;
   place-items: center;
@@ -2240,7 +2372,7 @@ tr.skel-row td {
 .selector-pill:hover {
   border-color: var(--border-hi);
   color: var(--t1);
-  background: rgba(255,255,255,0.07);
+  background: rgba(var(--velo-rgb), 0.07);
 }
 .selector-pill.active {
   border-color: var(--gold);
@@ -2269,7 +2401,7 @@ tr.skel-row td {
   font-family: ui-monospace, 'Cascadia Code', monospace;
   font-size: 11.5px;
   color: var(--t3);
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--velo-rgb), 0.05);
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 1px 6px;
@@ -2368,7 +2500,7 @@ tr.skel-row td {
     cursor: pointer;
     flex-shrink: 0;
   }
-  .mobile-topbar-menu:hover { background: rgba(255,255,255,0.06); }
+  .mobile-topbar-menu:hover { background: rgba(var(--velo-rgb), 0.06); }
   .mobile-topbar-title {
     font-size: 14px;
     font-weight: 700;
@@ -2573,7 +2705,7 @@ tr.skel-row td {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0) 38%);
+  background: linear-gradient(165deg, rgba(var(--velo-rgb), 0.05), rgba(var(--velo-rgb), 0) 38%);
 }
 .chart-card > * { position: relative; }
 
@@ -2660,7 +2792,7 @@ tr.skel-row td {
   right: 0;
   height: 100dvh;
   background: #141d28;
-  border-left: 1px solid rgba(255,255,255,0.10);
+  border-left: 1px solid rgba(var(--velo-rgb), 0.10);
   z-index: 1011;
   display: flex;
   flex-direction: column;
@@ -2678,7 +2810,7 @@ tr.skel-row td {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid rgba(var(--velo-rgb), 0.08);
   flex-shrink: 0;
   background: #111820;
 }
@@ -2692,7 +2824,7 @@ tr.skel-row td {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  border: 1px solid rgba(255,255,255,0.10);
+  border: 1px solid rgba(var(--velo-rgb), 0.10);
   background: transparent;
   color: var(--t3);
   cursor: pointer;
@@ -2703,7 +2835,7 @@ tr.skel-row td {
   flex-shrink: 0;
 }
 .drawer-close:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(var(--velo-rgb), 0.08);
   color: var(--t1);
 }
 .drawer-body {
@@ -2726,7 +2858,7 @@ tr.row-clickable:hover td {
   flex-direction: column;
   gap: 0;
   margin-bottom: 1.5rem;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid rgba(var(--velo-rgb), 0.07);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -2735,7 +2867,7 @@ tr.row-clickable:hover td {
   align-items: baseline;
   gap: 12px;
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(var(--velo-rgb), 0.05);
   font-size: 13px;
 }
 .drawer-detail-row:last-child { border-bottom: none; }
@@ -2816,7 +2948,7 @@ tr.row-clickable:hover td {
   gap: 8px;
   padding: 0.55rem 1rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,0.018);
+  background: rgba(var(--velo-rgb), 0.018);
 }
 .pdp-sel-info { font-size: 11px; color: var(--t2); }
 .pdp-sel-info strong { color: var(--t1); font-weight: 700; }
@@ -2866,7 +2998,7 @@ tr.row-clickable:hover td {
   font-size: 10px;
   font-weight: 700;
   color: var(--t3);
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--velo-rgb), 0.06);
   border-radius: 9px;
   padding: 1px 7px;
 }
@@ -3203,14 +3335,14 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   padding: 28px 16px;
   text-align: center;
   color: var(--t3);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--velo-rgb), 0.03);
   cursor: pointer;
   transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
 }
 .adjunto-dropzone:hover,
 .adjunto-dropzone.drag-over {
   border-color: var(--gold);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--velo-rgb), 0.05);
 }
 .adjunto-dropzone svg { color: var(--gold); margin-bottom: 8px; }
 .adjunto-dropzone-main { font-size: 13px; font-weight: 600; color: var(--t1); }
@@ -3223,7 +3355,7 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   border: 1px solid var(--border-hi);
   border-radius: 14px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--velo-rgb), 0.03);
 }
 .adjunto-thumb {
   width: 44px;
@@ -3277,7 +3409,7 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   height: 24px;
   border-radius: 50%;
   border: none;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--velo-rgb), 0.06);
   color: var(--t2);
   cursor: pointer;
   font-size: 15px;
@@ -3392,7 +3524,7 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
 }
 .filters-inline-close:hover {
   color: var(--t1);
-  background: rgba(255,255,255,0.06);
+  background: rgba(var(--velo-rgb), 0.06);
 }
 
 .filters-inline-body {

@@ -267,7 +267,7 @@ function PagoDetailPdp({ pago, navigate }) {
       </div>
 
       {pago.observaciones && (
-        <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
+        <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(var(--velo-rgb), 0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
           {pago.observaciones}
         </div>
       )}
