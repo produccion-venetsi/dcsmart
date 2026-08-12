@@ -32,6 +32,16 @@ export const TIPOS_LOCAL_VALIDOS = new Set([
   'GASTRONOMIA', 'INDUMENTARIA', 'ARQUITECTURA', 'INMOBILIARIO', 'MULTIMEDIA'
 ])
 
+// El array va derecho a una columna de enums: un valor invalido no da un 400 prolijo sino
+// un error de Postgres. Se sanea y se deduplica antes de escribir.
+//
+// Vive aca y no en routes/proveedores.js porque ahora lo usan las dos tablas que tienen
+// `tipos_afines`: proveedores y rubcat.
+export function sanearTiposAfines(valor) {
+  if (!Array.isArray(valor)) return undefined
+  return [...new Set(valor.filter((t) => TIPOS_LOCAL_VALIDOS.has(t)))]
+}
+
 // Devuelve { afin, resto }: dos where de Prisma que juntos cubren exactamente
 // lo mismo que el where original, partido en dos grupos. null si no hay un tipo
 // de local usable, y en ese caso el llamador sigue con una sola consulta.

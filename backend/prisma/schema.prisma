@@ -239,9 +239,25 @@ model RubCat {
   id_cat        String
   id_rub        String
   cuenta        String?
+  // `tipo` y `clasificacion` son CONTABLES (Pasivo Corriente, Costo de Ventas...), no
+  // tienen nada que ver con el tipo de local. Se aclara porque el nombre invita a
+  // confundirlos con `tipos_afines`.
   tipo          String?
   costo         String?
   clasificacion String?
+
+  // Afinidad con el tipo de local, igual que en Proveedor y por la misma razon: ordenar
+  // el buscador para que un local gastronomico vea primero los rubros que usa. NUNCA
+  // filtra -- cualquier local puede elegir cualquier rubro.
+  //
+  // El default en la base es obligatorio, no cosmetico: sin el las filas nuevas quedan en
+  // NULL y en Postgres `NOT (NULL OR false)` da NULL, asi que el rubro desapareceria de
+  // las dos mitades del buscador. Es el bug que ya paso con proveedores (ver
+  // lib/afinidadProveedor.js).
+  tipos_afines  TipoLocal[] @default([])
+  // Rubros transversales que sirven a cualquier tipo de local (impuestos, bancos,
+  // alquileres). Mismo criterio que `Proveedor.es_general`.
+  es_general    Boolean     @default(false)
 
   categoria   Categoria   @relation(fields: [id_cat], references: [id])
   rubro       Rubro       @relation(fields: [id_rub], references: [id])

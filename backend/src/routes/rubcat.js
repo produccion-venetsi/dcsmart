@@ -1,3 +1,5 @@
+import { partirPorAfinidad, sanearTiposAfines } from '../lib/afinidadProveedor.js'
+
 export default async function rubcatRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('rubros', 'view')]
 
@@ -95,17 +97,31 @@ export default async function rubcatRoutes(fastify) {
 
   // ─── RUBCAT ───────────────────────────────────────
   fastify.get('/', { preHandler: viewHandler }, async (request) => {
-    const { search } = request.query
-    return fastify.db.rubCat.findMany({
-      where: search ? {
-        OR: [
-          { rubro:     { nombre: { contains: search, mode: 'insensitive' } } },
-          { categoria: { nombre: { contains: search, mode: 'insensitive' } } }
-        ]
-      } : {},
-      include: { rubro: true, categoria: true },
-      orderBy: [{ rubro: { nombre: 'asc' } }, { categoria: { nombre: 'asc' } }]
-    })
+    const { search, tipo_local } = request.query
+    const where = search ? {
+      OR: [
+        { rubro:     { nombre: { contains: search, mode: 'insensitive' } } },
+        { categoria: { nombre: { contains: search, mode: 'insensitive' } } }
+      ]
+    } : {}
+    const incluir = { rubro: true, categoria: true }
+    const orden = [{ rubro: { nombre: 'asc' } }, { categoria: { nombre: 'asc' } }]
+
+    // Orden por afinidad con el tipo de local, igual que en proveedores: los rubros que
+    // aplican a ese tipo (y los generales) primero. Reusa partirPorAfinidad, que devuelve
+    // dos where que juntos cubren exactamente lo mismo que el original.
+    //
+    // NUNCA filtra: con el dato de hoy los 260 rubcat están marcados como gastronómicos,
+    // así que filtrar dejaría a un local de indumentaria sin ningún rubro para elegir.
+    const partido = partirPorAfinidad(where, tipo_local)
+    if (!partido) {
+      return fastify.db.rubCat.findMany({ where, include: incluir, orderBy: orden })
+    }
+    const [afines, resto] = await Promise.all([
+      fastify.db.rubCat.findMany({ where: partido.afin, include: incluir, orderBy: orden }),
+      fastify.db.rubCat.findMany({ where: partido.resto, include: incluir, orderBy: orden }),
+    ])
+    return [...afines, ...resto]
   })
 
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
@@ -120,11 +136,18 @@ export default async function rubcatRoutes(fastify) {
   fastify.post('/', {
     preHandler: [fastify.authenticate, fastify.can('rubros', 'create')]
   }, async (request, reply) => {
-    const { id_cat, id_rub, cuenta, tipo, costo, clasificacion } = request.body
+    const { id_cat, id_rub, cuenta, tipo, costo, clasificacion, tipos_afines, es_general } = request.body
     if (!id_cat || !id_rub) return reply.code(400).send({ error: 'id_cat e id_rub son requeridos' })
     try {
       const rubcat = await fastify.db.rubCat.create({
-        data: { id_cat, id_rub, cuenta, tipo, costo, clasificacion },
+        data: {
+          id_cat, id_rub, cuenta, tipo, costo, clasificacion,
+          // Un rubro nuevo nace SIN clasificar y no gastronómico por defecto: lo que ya
+          // estaba se marcó en una migración porque el catálogo se armó para gastronomía,
+          // pero suponerlo de lo que se cargue de ahora en más sería inventar el dato.
+          tipos_afines: sanearTiposAfines(tipos_afines) ?? [],
+          es_general: es_general === true,
+        },
         include: { rubro: true, categoria: true }
       })
       return reply.code(201).send(rubcat)
