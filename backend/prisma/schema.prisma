@@ -790,6 +790,10 @@ model ActivityLog {
   id_user     String?
   fecha       DateTime @default(now())
   snapshot    Json
+  // Por que se hizo. Hoy lo escribe quien elimina una caja o una op: el snapshot dice QUE
+  // habia, pero no por que se borro, y eso es lo que se pregunta despues. Nullable: los
+  // registros anteriores no lo tienen y el campo no es obligatorio.
+  motivo      String?
 
   user User? @relation("ActivityLogUser", fields: [id_user], references: [id])
 

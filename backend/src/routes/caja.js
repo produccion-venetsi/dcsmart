@@ -545,14 +545,48 @@ export default async function cajaRoutes(fastify) {
 
   // ── DELETE /:id ────────────────────────────────────────────────────────
   fastify.delete('/:id', { preHandler: deleteHandler }, async (request, reply) => {
+    // Se trae la caja ENTERA, con sus movimientos y detalles: es un hard delete en cascada
+    // y esto es lo único que va a quedar de todo eso.
+    //
+    // Antes este endpoint no registraba nada en activity_log: se borraba la caja con todos
+    // sus movimientos y no quedaba rastro de que hubieran existido. El de pagos sí lo hacía.
     const existing = await fastify.db.caja.findUnique({
       where: { id: request.params.id },
-      select: { id_local: true }
+      include: {
+        movimientos: true,
+        detalles: true,
+      },
     })
     if (!existing) return reply.code(404).send({ error: 'Caja no encontrada' })
 
     if (!request.allowedLocalIds.includes(existing.id_local)) {
       return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    // El motivo lo escribe quien elimina. Opcional (se pidió "permitir escribir una
+    // observación", no obligarla) y recortado: es una explicación, no un documento.
+    const motivo = String(request.body?.motivo ?? '').trim().slice(0, 500) || null
+
+    // Como logActivity en pagos: un fallo del registro no puede impedir el borrado, pero se
+    // hace ANTES para que el rastro exista incluso si el delete falla a mitad de camino.
+    try {
+      await fastify.db.activityLog.create({
+        data: {
+          tabla: 'cajas',
+          id_registro: existing.id,
+          id_local: existing.id_local,
+          accion: 'eliminado',
+          id_user: request.user.id,
+          motivo,
+          // Los Decimal de Prisma no son JSON: se serializan con el replacer de abajo.
+          snapshot: JSON.parse(JSON.stringify(existing, (_, v) =>
+            typeof v === 'bigint' ? v.toString()
+              : (v && typeof v === 'object' && typeof v.toFixed === 'function') ? v.toString()
+                : v)),
+        },
+      })
+    } catch (err) {
+      fastify.log.error({ err, id: existing.id }, 'No se pudo registrar la eliminación de la caja')
     }
 
     // Eliminar registros dependientes antes que la caja (FK constraints)

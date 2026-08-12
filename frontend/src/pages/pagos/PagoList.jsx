@@ -1186,9 +1186,16 @@ export default function PagoList() {
 
   // ── Acciones ──────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
-    if (!(await showConfirm('¿Eliminar este pago?'))) return
+    // Se pide el motivo en vez de un sí/no: el borrado es real (se van el pago, sus
+    // impuestos y su copia en caja mayor) y el motivo es lo único que después explica por
+    // qué no está. Queda en activity_log junto al snapshot.
+    const motivo = await showPrompt(
+      'Se va a eliminar este pago con sus impuestos. No se puede deshacer.',
+      { title: 'Eliminar pago', placeholder: 'Por qué se elimina (opcional)' }
+    )
+    if (motivo === null) return
     try {
-      await pagosApi.remove(id)
+      await pagosApi.remove(id, motivo)
       notify('Pago eliminado', 'success')
       setPanelOpen(false)
       setPagos(prev => prev.filter(p => p.id !== id))
@@ -1256,10 +1263,16 @@ export default function PagoList() {
   }
 
   const bulkEliminar = async () => {
-    if (!(await showConfirm(`¿Eliminar ${selectedPagos.length} pagos?`))) return
+    // Un motivo para toda la tanda: se eliminan juntos por la misma razón, y pedirlo de a
+    // uno haría abandonar a la tercera op.
+    const motivo = await showPrompt(
+      `Se van a eliminar ${selectedPagos.length} pagos con sus impuestos. No se puede deshacer.`,
+      { title: `Eliminar ${selectedPagos.length} pagos`, placeholder: 'Por qué se eliminan (opcional)' }
+    )
+    if (motivo === null) return
     let ok = 0, fail = 0
     for (const p of selectedPagos) {
-      try { await pagosApi.remove(p.id); ok++ }
+      try { await pagosApi.remove(p.id, motivo); ok++ }
       catch { fail++ }
     }
     notify(fail === 0 ? `${ok} pagos eliminados` : `${ok}/${selectedPagos.length} eliminados, ${fail} falló`, fail === 0 ? 'success' : 'error')

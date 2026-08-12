@@ -1299,7 +1299,9 @@ export default function CajaList() {
   const { activeApp, activeLocal } = useAppStore()
   const locales     = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
-  const showConfirm = useUiStore((s) => s.showConfirm)
+  // Los dos borrados de esta pantalla (una caja y la tanda) piden confirmación Y un motivo,
+  // que queda en activity_log. Por eso acá va showPrompt y no showConfirm.
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canCreate = puedeCrearCajas(role)
   const canEdit    = puedeEditar(role)
@@ -1456,9 +1458,15 @@ export default function CajaList() {
 
   const handleDelete = async (id, e) => {
     e?.stopPropagation()
-    if (!(await showConfirm('¿Eliminar esta caja?'))) return
+    // Se pide el motivo en vez de un sí/no: la caja se borra de verdad, con sus movimientos
+    // y detalles, y el motivo es lo unico que despues explica por que no esta.
+    const motivo = await showPrompt(
+      'Se va a eliminar esta caja con todos sus movimientos y detalles. No se puede deshacer.',
+      { title: 'Eliminar caja', placeholder: 'Por qué se elimina (opcional)' }
+    )
+    if (motivo === null) return
     try {
-      await cajasApi.remove(id)
+      await cajasApi.remove(id, motivo)
       notify('Caja eliminada', 'success')
       setCajas(prev => prev.filter(c => c.id !== id))
       setPanelOpen(false)
@@ -1515,10 +1523,16 @@ export default function CajaList() {
   }
 
   const bulkEliminar = async () => {
-    if (!(await showConfirm(`¿Eliminar ${selectedCajas.length} cajas?`))) return
+    // Un solo motivo para toda la tanda: se eliminan juntas por la misma razón, y pedirlo
+    // una vez por caja haría abandonar a la tercera.
+    const motivoMasivo = await showPrompt(
+      `Se van a eliminar ${selectedCajas.length} cajas con todos sus movimientos y detalles. No se puede deshacer.`,
+      { title: `Eliminar ${selectedCajas.length} cajas`, placeholder: 'Por qué se eliminan (opcional)' }
+    )
+    if (motivoMasivo === null) return
     let ok = 0, fail = 0
     for (const c of selectedCajas) {
-      try { await cajasApi.remove(c.id); ok++ }
+      try { await cajasApi.remove(c.id, motivoMasivo); ok++ }
       catch { fail++ }
     }
     notify(fail === 0 ? `${ok} cajas eliminadas` : `${ok}/${selectedCajas.length} eliminadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
