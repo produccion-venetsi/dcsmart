@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
@@ -19,7 +19,9 @@ import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparDetalles, agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
 import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
 import { fmtPorcentajeAvion, claseAvion, porcentajeAvion } from '../../lib/avion.js'
-import { conTipoElegido } from '../../lib/detalleForm.js'
+import { conTipoElegido, conClasificacionElegida } from '../../lib/detalleForm.js'
+import CampoClienteCuenta from '../../components/CampoClienteCuenta.jsx'
+import { nombreCliente } from '../../lib/clientes.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
@@ -27,6 +29,7 @@ import CajaCreatePanel from './CajaCreatePanel.jsx'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
 import { multiParam } from '../../lib/filtros.js'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
+import { calcularCuadre, describirCuadre, colorCuadre, faltaParaCuadrar } from '../../lib/cuadreCaja.js'
 
 // EMPTY_CAJA se fue con CajaCreatePanel: era el estado inicial del alta y este
 // listado ya no lo usa.
@@ -218,7 +221,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [saving,     setSaving]    = useState(false)
   const [addingMov,  setAddingMov] = useState(false)
-  const [newDet,     setNewDet]    = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [newDet,     setNewDet]    = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
   const [savingDet,  setSavingDet] = useState(false)
   const [addingDet,  setAddingDet] = useState(false)
   const [editingMovId, setEditingMovId] = useState(null)
@@ -302,10 +305,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         clasificacion: newDet.clasificacion || null,
         nombre:        newDet.id_tipo ? null : (newDet.nombre || null),
         monto:         parseFloat(newDet.monto),
-        observaciones: newDet.observaciones || null
+        observaciones: newDet.observaciones || null,
+        id_cliente:    newDet.id_cliente    || null
       })
       notify('Detalle agregado', 'success')
-      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
       setAddingDet(false)
       load()
     } catch { notify('Error al agregar detalle', 'error') }
@@ -347,7 +351,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       clasificacion: normalizarClasificacion(clasificacionDeDetalle(d)),
       nombre:        d.detalle_tipo?.nombre || d.nombre || '',
       monto:         String(d.monto),
-      observaciones: d.observaciones || ''
+      observaciones: d.observaciones || '',
+      // La cuenta a la que ya estaba cargado. El objeto entero y no solo el id: el
+      // combobox necesita el nombre para abrir con lo que habia.
+      id_cliente:    d.cliente?.id || '',
+      cliente:       d.cliente || null
     })
   }
 
@@ -360,7 +368,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         clasificacion: editDetForm.clasificacion || null,
         nombre:        editDetForm.id_tipo ? null : (editDetForm.nombre || null),
         monto:         parseFloat(editDetForm.monto),
-        observaciones: editDetForm.observaciones || null
+        observaciones: editDetForm.observaciones || null,
+        id_cliente:    editDetForm.id_cliente    || null
       })
       notify('Detalle actualizado', 'success')
       setEditingDetId(null)
@@ -523,7 +532,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       </div>
 
       {caja.observaciones && (
-        <div style={{ marginTop: '0.75rem', marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
+        <div style={{ marginTop: '0.75rem', marginBottom: '1rem', padding: '10px 14px', background: 'rgba(var(--velo-rgb), 0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
           {caja.observaciones}
         </div>
       )}
@@ -546,7 +555,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
           <TablaDesglose
             grupos={gruposDetalles}
-            columnas={[{ label: 'Clasificación' }, { label: 'Nombre' }, { label: 'Monto' }, { label: '' }]}
+            columnas={[{ label: 'Clasificación' }, { label: 'Nombre' }, { label: 'Cuenta' }, { label: 'Monto' }, { label: '' }]}
             fmtMonto={fmt$2}
             renderFila={(d) => (
                 <tr key={d.id}>
@@ -556,7 +565,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                         <ClasificacionSelect
                           compact
                           value={editDetForm.clasificacion}
-                          onChange={(clasificacion) => setEditDetForm(f => ({ ...f, clasificacion }))}
+                          onChange={(clasificacion) => setEditDetForm(f => conClasificacionElegida(f, clasificacion))}
                         />
                       </td>
                       <td>
@@ -565,6 +574,16 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                           idTipo={editDetForm.id_tipo}
                           nombre={editDetForm.nombre}
                           onChange={(id_tipo, nombre) => setEditDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
+                        />
+                      </td>
+                      <td>
+                        <CampoClienteCuenta
+                          compact
+                          clasificacion={editDetForm.clasificacion}
+                          idCliente={editDetForm.id_cliente}
+                          clienteSel={editDetForm.cliente}
+                          onSelect={(c) => setEditDetForm(f => ({ ...f, id_cliente: c.id, cliente: c }))}
+                          onClear={() => setEditDetForm(f => ({ ...f, id_cliente: '', cliente: null }))}
                         />
                       </td>
                       <td>
@@ -579,6 +598,16 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                     <>
                       <td className="td-muted">{clasificacionLabel(clasificacionDeDetalle(d))}</td>
                       <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                      {/* A qué cuenta corriente se cargó. Se ve sin entrar a editar: un
+                          detalle que le genera deuda a alguien no puede parecer igual a uno
+                          que no. */}
+                      <td className="td-muted">
+                        {d.cliente ? (
+                          <span title="Cargado a la cuenta corriente de este cliente">
+                            {nombreCliente(d.cliente)}
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td className="td-number">{fmt$2(d.monto)}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         {canEdit && (
@@ -610,7 +639,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
             <ClasificacionSelect
               ayuda
               value={newDet.clasificacion}
-              onChange={(clasificacion) => setNewDet(d => ({ ...d, clasificacion }))}
+              onChange={(clasificacion) => setNewDet(d => conClasificacionElegida(d, clasificacion))}
             />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -622,6 +651,13 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
               onChange={(id_tipo, nombre) => setNewDet(d => conTipoElegido(d, tipos, id_tipo, nombre))}
             />
           </div>
+          <CampoClienteCuenta
+            clasificacion={newDet.clasificacion}
+            idCliente={newDet.id_cliente}
+            clienteSel={newDet.cliente}
+            onSelect={(c) => setNewDet(d => ({ ...d, id_cliente: c.id, cliente: c }))}
+            onClear={() => setNewDet(d => ({ ...d, id_cliente: '', cliente: null }))}
+          />
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
@@ -804,7 +840,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const [metodos,     setMetodos]     = useState([])
 
   const [addingDet,  setAddingDet]  = useState(false)
-  const [newDet,     setNewDet]     = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [newDet,     setNewDet]     = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
   const [savingDet,  setSavingDet]  = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
   const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
@@ -816,6 +852,27 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const [editingMovId, setEditingMovId] = useState(null)
   const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [savingMovEdit, setSavingMovEdit] = useState(false)
+
+  // El origin decide si el cuadre sale de los detalles o de los movimientos, así que hay
+  // que conocerlo: asumir DCSMART haría que en una caja de TapTap se ignoren los
+  // movimientos y se cuenten detalles que no corresponden.
+  const [origin, setOrigin] = useState(null)
+
+  // El cuadre EN VIVO: se recalcula con lo que hay en el formulario y en las listas, sin
+  // esperar al servidor. Es la razón de que exista el espejo en lib/cuadreCaja.js —
+  // cargando cinco cobros seguidos, pedirlo al backend en cada alta mostraría siempre el
+  // cuadre de antes del último. Al guardar, el backend lo recalcula y es el que manda.
+  const cuadreVivo = useMemo(
+    () => calcularCuadre({
+      origin,
+      total: form.total,
+      efectivo: form.efectivo,
+      detalles,
+      movimientos,
+    }),
+    [origin, form.total, form.efectivo, detalles, movimientos]
+  )
+  const leyendaCuadre = describirCuadre(cuadreVivo)
 
   const loadRelacionales = (idLocal) => {
     cajasApi.get(cajaId).then(({ data }) => {
@@ -830,6 +887,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   useEffect(() => {
     if (!cajaId) return
     cajasApi.get(cajaId).then(({ data }) => {
+      setOrigin(data.origin ?? null)
       setForm({
         nro_turno:    data.nro_turno    ?? '',
         tipo_turno:   data.tipo_turno   ?? '',
@@ -859,9 +917,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     if (!newDet.monto) return
     setSavingDet(true)
     try {
-      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, clasificacion: newDet.clasificacion || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null })
+      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, clasificacion: newDet.clasificacion || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null, id_cliente: newDet.id_cliente || null })
       notify('Detalle agregado', 'success')
-      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
       setAddingDet(false)
       loadRelacionales(form?.id_local)
     } catch (err) { notify(err.response?.data?.error || 'Error al agregar detalle', 'error') }
@@ -881,7 +939,11 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       clasificacion: normalizarClasificacion(clasificacionDeDetalle(d)),
       nombre:        d.detalle_tipo?.nombre || d.nombre || '',
       monto:         String(d.monto),
-      observaciones: d.observaciones || ''
+      observaciones: d.observaciones || '',
+      // La cuenta a la que ya estaba cargado. El objeto entero y no solo el id: el
+      // combobox necesita el nombre para abrir con lo que habia.
+      id_cliente:    d.cliente?.id || '',
+      cliente:       d.cliente || null
     })
   }
 
@@ -889,7 +951,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     if (!editDetForm.monto) return
     setSavingDetEdit(true)
     try {
-      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, clasificacion: editDetForm.clasificacion || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null })
+      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, clasificacion: editDetForm.clasificacion || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null, id_cliente: editDetForm.id_cliente || null })
       notify('Detalle actualizado', 'success')
       setEditingDetId(null)
       loadRelacionales(form?.id_local)
@@ -1029,6 +1091,35 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
               carga en el alta y en la edicion. */}
           <p className="form-hint" style={{ margin: '4px 0 0' }}>{AYUDA_EFECTIVO}</p>
         </div>
+
+        {/* ── Cuadre en vivo ─────────────────────────────────────────────────
+            Se actualiza con cada tecla del total y del efectivo, y con cada
+            movimiento o detalle que se carga. Ocupa el ancho completo del grid
+            porque es el resumen de todo lo de arriba, no un campo mas. */}
+        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <div className="cuadre-vivo">
+            <div className="cuadre-vivo-cuentas">
+              <span>Efectivo <strong>{fmt$(cuadreVivo?.efectivo)}</strong></span>
+              <span>+ Cobros <strong>{fmt$(cuadreVivo?.cobros)}</strong></span>
+              {cuadreVivo?.gastos > 0 && <span>− Gastos <strong>{fmt$(cuadreVivo.gastos)}</strong></span>}
+              <span className="cuadre-vivo-igual">= <strong>{fmt$(cuadreVivo?.esperado)}</strong></span>
+            </div>
+            <div className="cuadre-vivo-estado" style={{ color: colorCuadre(leyendaCuadre.tono) }}>
+              <strong>{leyendaCuadre.texto}</strong>
+              {/* El monto que falta, en positivo: "faltan $1.000" dice que buscar, mientras
+                  que "diferencia -1000" hay que pensarlo. */}
+              {faltaParaCuadrar(cuadreVivo) > 0 && (
+                <span> · {fmt$(faltaParaCuadrar(cuadreVivo))}</span>
+              )}
+            </div>
+            <div className="cuadre-vivo-fuente">
+              {/* Que se vea de donde sale la cuenta: en una caja de TapTap los detalles no
+                  cuentan, y sin decirlo el numero parece estar mal. */}
+              segun {cuadreVivo?.fuente === 'movimientos' ? 'los movimientos' : 'los detalles'}
+              {origin && origin !== 'DCSMART' ? ` (${origin})` : ''}
+            </div>
+          </div>
+        </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fiscal</label>
           <div className="form-input-wrap">
@@ -1076,7 +1167,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       {detalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
           <table className="data-table">
-            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Cuenta</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {detalles.map((d) => (
                 <tr key={d.id}>
@@ -1086,7 +1177,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                         <ClasificacionSelect
                           compact
                           value={editDetForm.clasificacion}
-                          onChange={(clasificacion) => setEditDetForm(f => ({ ...f, clasificacion }))}
+                          onChange={(clasificacion) => setEditDetForm(f => conClasificacionElegida(f, clasificacion))}
                         />
                       </td>
                       <td>
@@ -1095,6 +1186,16 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                           idTipo={editDetForm.id_tipo}
                           nombre={editDetForm.nombre}
                           onChange={(id_tipo, nombre) => setEditDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
+                        />
+                      </td>
+                      <td>
+                        <CampoClienteCuenta
+                          compact
+                          clasificacion={editDetForm.clasificacion}
+                          idCliente={editDetForm.id_cliente}
+                          clienteSel={editDetForm.cliente}
+                          onSelect={(c) => setEditDetForm(f => ({ ...f, id_cliente: c.id, cliente: c }))}
+                          onClear={() => setEditDetForm(f => ({ ...f, id_cliente: '', cliente: null }))}
                         />
                       </td>
                       <td>
@@ -1109,6 +1210,16 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                     <>
                       <td className="td-muted">{clasificacionLabel(clasificacionDeDetalle(d))}</td>
                       <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                      {/* A qué cuenta corriente se cargó. Se ve sin entrar a editar: un
+                          detalle que le genera deuda a alguien no puede parecer igual a uno
+                          que no. */}
+                      <td className="td-muted">
+                        {d.cliente ? (
+                          <span title="Cargado a la cuenta corriente de este cliente">
+                            {nombreCliente(d.cliente)}
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td className="td-number">{fmt$2(d.monto)}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditDet(d)}>
@@ -1136,7 +1247,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
               <label className="form-label">Clasificación *</label>
               <ClasificacionSelect
                 value={newDet.clasificacion}
-                onChange={(clasificacion) => setNewDet(f => ({ ...f, clasificacion }))}
+                onChange={(clasificacion) => setNewDet(f => conClasificacionElegida(f, clasificacion))}
               />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1148,6 +1259,13 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                 onChange={(id_tipo, nombre) => setNewDet(f => conTipoElegido(f, tipos, id_tipo, nombre))}
               />
             </div>
+            <CampoClienteCuenta
+              clasificacion={newDet.clasificacion}
+              idCliente={newDet.id_cliente}
+              clienteSel={newDet.cliente}
+              onSelect={(c) => setNewDet(f => ({ ...f, id_cliente: c.id, cliente: c }))}
+              onClear={() => setNewDet(f => ({ ...f, id_cliente: '', cliente: null }))}
+            />
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
               <div className="form-input-wrap">
@@ -1299,7 +1417,9 @@ export default function CajaList() {
   const { activeApp, activeLocal } = useAppStore()
   const locales     = activeApp?.locales ?? []
   const notify      = useUiStore((s) => s.notify)
-  const showConfirm = useUiStore((s) => s.showConfirm)
+  // Los dos borrados de esta pantalla (una caja y la tanda) piden confirmación Y un motivo,
+  // que queda en activity_log. Por eso acá va showPrompt y no showConfirm.
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canCreate = puedeCrearCajas(role)
   const canEdit    = puedeEditar(role)
@@ -1456,9 +1576,15 @@ export default function CajaList() {
 
   const handleDelete = async (id, e) => {
     e?.stopPropagation()
-    if (!(await showConfirm('¿Eliminar esta caja?'))) return
+    // Se pide el motivo en vez de un sí/no: la caja se borra de verdad, con sus movimientos
+    // y detalles, y el motivo es lo unico que despues explica por que no esta.
+    const motivo = await showPrompt(
+      'Se va a eliminar esta caja con todos sus movimientos y detalles. No se puede deshacer.',
+      { title: 'Eliminar caja', placeholder: 'Por qué se elimina (opcional)' }
+    )
+    if (motivo === null) return
     try {
-      await cajasApi.remove(id)
+      await cajasApi.remove(id, motivo)
       notify('Caja eliminada', 'success')
       setCajas(prev => prev.filter(c => c.id !== id))
       setPanelOpen(false)
@@ -1515,10 +1641,16 @@ export default function CajaList() {
   }
 
   const bulkEliminar = async () => {
-    if (!(await showConfirm(`¿Eliminar ${selectedCajas.length} cajas?`))) return
+    // Un solo motivo para toda la tanda: se eliminan juntas por la misma razón, y pedirlo
+    // una vez por caja haría abandonar a la tercera.
+    const motivoMasivo = await showPrompt(
+      `Se van a eliminar ${selectedCajas.length} cajas con todos sus movimientos y detalles. No se puede deshacer.`,
+      { title: `Eliminar ${selectedCajas.length} cajas`, placeholder: 'Por qué se eliminan (opcional)' }
+    )
+    if (motivoMasivo === null) return
     let ok = 0, fail = 0
     for (const c of selectedCajas) {
-      try { await cajasApi.remove(c.id); ok++ }
+      try { await cajasApi.remove(c.id, motivoMasivo); ok++ }
       catch { fail++ }
     }
     notify(fail === 0 ? `${ok} cajas eliminadas` : `${ok}/${selectedCajas.length} eliminadas, ${fail} falló`, fail === 0 ? 'success' : 'error')

@@ -14,7 +14,9 @@ export const pagosApi = {
   summary:    (params, signal) => client.get('/pagos/summary',             { params, signal }),
   create:     (data)           => client.post('/pagos',                     data),
   update:     (id, data)       => client.put(`/pagos/${id}`,                data),
-  remove:     (id)             => client.delete(`/pagos/${id}`),
+  // El motivo viaja en el body del DELETE: queda en activity_log y es lo unico que
+  // despues explica por que el registro no esta (el borrado es real, no logico).
+  remove:     (id, motivo)       => client.delete(`/pagos/${id}`, { data: { motivo } }),
   audit:        (id, data)     => client.patch(`/pagos/${id}/audit`,        data),
   auditHistory: (id)           => client.get(`/pagos/${id}/audit-history`),
   // Quién creó / editó / eliminó el pago. Solo para roles internos: el backend

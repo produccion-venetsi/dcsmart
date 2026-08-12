@@ -222,6 +222,11 @@ export default function ActivityLog() {
                             {ACCION_LABEL[ev.accion] ?? ev.accion}
                           </span>
                           <DesfasajePeriodo snapshot={ev.snapshot} />
+                          {/* Que se vea desde la fila que hay un motivo escrito: si hubiera
+                              que abrir cada evento para saberlo, nadie lo leeria. */}
+                          {ev.motivo && (
+                            <span className="badge badge-muted" title={ev.motivo}>con motivo</span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -229,6 +234,17 @@ export default function ActivityLog() {
                       <tr>
                         <td></td>
                         <td colSpan={4}>
+                          {/* El motivo va ARRIBA del snapshot y no como un campo mas: el
+                              snapshot dice que habia, el motivo dice por que se hizo, y es
+                              lo que uno viene a leer cuando abre un evento de borrado. */}
+                          {ev.motivo && (
+                            <div className="callout" style={{ margin: '0.25rem 0 0.5rem' }}>
+                              <span style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.03em', display: 'block' }}>
+                                Motivo
+                              </span>
+                              <span style={{ whiteSpace: 'pre-wrap' }}>{ev.motivo}</span>
+                            </div>
+                          )}
                           <div style={{
                             display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem 1.5rem',
                             background: 'var(--bg-input)', borderRadius: 8,

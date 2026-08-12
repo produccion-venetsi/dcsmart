@@ -93,12 +93,12 @@ function CostChart({ title, items, barColor }) {
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={items} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
             <XAxis dataKey="name" tickLine={false} axisLine={false}
-              tick={{ fill: 'rgba(255,255,255,.4)', fontSize: 9, fontFamily: 'Montserrat' }}
+              tick={{ fill: 'rgba(var(--velo-rgb), .4)', fontSize: 9, fontFamily: 'Montserrat' }}
               interval={0} angle={-25} textAnchor="end" height={55} />
             <YAxis tickLine={false} axisLine={false} width={55}
-              tick={{ fill: 'rgba(255,255,255,.3)', fontSize: 10, fontFamily: 'Montserrat' }}
+              tick={{ fill: 'rgba(var(--velo-rgb), .3)', fontSize: 10, fontFamily: 'Montserrat' }}
               tickFormatter={(v) => v >= 1000 ? Math.round(v / 1000) + 'k' : v} />
-            <Tooltip content={<CmvTooltip />} cursor={{ fill: 'rgba(255,255,255,.04)' }} />
+            <Tooltip content={<CmvTooltip />} cursor={{ fill: 'rgba(var(--velo-rgb), .04)' }} />
             <Bar dataKey="val" radius={[4, 4, 0, 0]}>
               {items.map((_, i) => <Cell key={i} fill={barColor} />)}
             </Bar>

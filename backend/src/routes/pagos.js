@@ -30,10 +30,10 @@ function toSnapshotSafe(obj) {
 // Registra un evento en el log de actividad CRUD (solo visible para
 // super_admin, ver GET /activity-log en routes/activity-log.js). No debe
 // bloquear la operación principal si falla -- se loguea el error y sigue.
-async function logActivity(fastify, { id_registro, id_local, accion, id_user, snapshot }) {
+async function logActivity(fastify, { id_registro, id_local, accion, id_user, snapshot, motivo }) {
   try {
     await fastify.db.activityLog.create({
-      data: { tabla: 'pagos', id_registro, id_local, accion, id_user, snapshot }
+      data: { tabla: 'pagos', id_registro, id_local, accion, id_user, snapshot, motivo: motivo || null }
     })
   } catch (err) {
     fastify.log.error({ err }, `No se pudo registrar activity_log (${accion}) para pago ${id_registro}`)
@@ -1316,9 +1316,13 @@ export default async function pagosRoutes(fastify) {
 
     // Se registra el snapshot ANTES de borrar -- es el único rastro que va a
     // quedar de este pago una vez hecho el hard delete.
+    //
+    // El motivo lo escribe quien elimina. Es opcional (se pidió "permitir escribir una
+    // observación", no obligarla) y se recorta: es una explicación, no un documento.
     await logActivity(fastify, {
       id_registro: existing.id, id_local: existing.id_local, accion: 'eliminado',
-      id_user: request.user.id, snapshot: toSnapshotSafe(existing)
+      id_user: request.user.id, snapshot: toSnapshotSafe(existing),
+      motivo: String(request.body?.motivo ?? '').trim().slice(0, 500) || null,
     })
 
     // Su copia en la caja mayor. La FK es ON DELETE SET NULL, así que si no se

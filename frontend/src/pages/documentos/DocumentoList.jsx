@@ -21,6 +21,7 @@ import IconoDocumento from '../../components/IconoDocumento.jsx'
 import TiposDocumentoPanel from './TiposDocumentoPanel.jsx'
 import ArchivosDocumento from './ArchivosDocumento.jsx'
 import DocumentoDetalle from './DocumentoDetalle.jsx'
+import { esRolDc } from '../../lib/roles.js'
 import {
   AGRUPACIONES, agrupar, resumen, fechaTexto, textoVencimiento, colorVencimiento,
   EMPTY_DOC, erroresDoc, avisosDoc, fechaISO,
@@ -70,6 +71,9 @@ export default function DocumentoList() {
   const activeApp = useAppStore(s => s.activeApp)
   const activeLocal = useAppStore(s => s.activeLocal)
   const locales = activeApp?.locales ?? []
+  // Los tipos son globales (los comparten todos los grupos), asi que solo los toca DC. El
+  // backend lo rechaza igual con 403; esto es para no ofrecer un boton que va a fallar.
+  const puedeEditarTipos = esRolDc(activeApp?.role)
 
   const [params, setParams] = useSearchParams()
 
@@ -319,7 +323,9 @@ export default function DocumentoList() {
           <p className="page-sub">Contratos, habilitaciones, reportes y todo lo que haya que guardar</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary" onClick={() => setTiposOpen(true)}>Tipos</button>
+          {puedeEditarTipos && (
+            <button className="btn btn-secondary" onClick={() => setTiposOpen(true)}>Tipos</button>
+          )}
           <button className="btn btn-primary" onClick={nuevo}>
             <IcoPlus /> Nuevo documento
           </button>
@@ -601,7 +607,12 @@ export default function DocumentoList() {
               vacio="Elegir tipo"
               requerido
               error={errores.id_tipo}
-              ayuda={tipos.length ? undefined : 'No hay tipos: creá uno con el botón "Tipos".'}
+              ayuda={tipos.length
+                ? undefined
+                : puedeEditarTipos
+                  ? 'No hay tipos: creá uno con el botón "Tipos".'
+                  // Sin permiso, "creá uno" manda a un botón que no existe.
+                  : 'No hay tipos cargados. Los crea DCSmart.'}
               disabled={saving}
             />
 
@@ -741,6 +752,7 @@ export default function DocumentoList() {
       {/* ── Panel de tipos ── */}
       <DrawerPanel open={tiposOpen} onClose={() => setTiposOpen(false)} title="Tipos de documento" width={480}>
         <TiposDocumentoPanel
+          puedeEditar={puedeEditarTipos}
           onCambio={() => { cargarTipos(); cargar() }}
         />
       </DrawerPanel>

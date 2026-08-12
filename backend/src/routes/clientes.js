@@ -5,10 +5,20 @@
 // id_app en todo lo que toca un cliente puntual). Sin eso, un grupo vería y editaría
 // los clientes de otro.
 //
-// Los movimientos de un cliente son `Pago` con `id_cliente`; no hay entidad propia.
-// Ver lib/cuentaCorriente.js para la dirección y el saldo.
+// Los movimientos de un cliente vienen de DOS lados y no hay entidad propia para
+// ninguno de los dos:
+//
+//   Pagos  -> los `Pago` con `id_cliente` y estado CTA CTE CLI. Cuatro cuadrantes
+//             según dirección y pagado/sin pagar. Ver lib/cuentaCorriente.js.
+//   Cajas  -> los `CajaDetalle` con `id_cliente`: consumo que se anotó en su cuenta
+//             en vez de cobrarse. Solo cargos. Ver lib/cuentaCorrienteCaja.js.
+//
+// Son dos mitades de la misma cuenta y se devuelven por separado, cada una con sus
+// totales: sumarlas en un número único escondería de dónde viene la deuda, que es lo
+// primero que se pregunta cuando un saldo no cierra.
 
 import { totalesCuentaCorriente, totalesPorCliente, whereMovimientosCliente, cuadranteDe } from '../lib/cuentaCorriente.js'
+import { totalesCajaCliente, totalesCajaPorCliente, whereDetallesCliente, cargaCuenta } from '../lib/cuentaCorrienteCaja.js'
 
 // Lo que la lista y el detalle necesitan de un cliente.
 const CLIENTE_SELECT = {
@@ -61,18 +71,32 @@ export default async function clientesRoutes(fastify) {
     // ficha. Un groupBy y no traer los pagos: sumar en JS sería traerse la tabla.
     // Acotado a los ids de ESTA página -- sin el `in` la consulta crece con el
     // historial del grupo, no con lo que se está mostrando.
-    const totales = data.length
-      ? totalesPorCliente(await fastify.db.pago.groupBy({
-        by: ['id_cliente', 'ingresa_egreso', 'pagado'],
-        where: { id_cliente: { in: data.map((c) => c.id) }, estado_op: 'CTA_CTE_CLI' },
-        _sum: { importe: true },
-      }))
-      : {}
+    const ids = data.map((c) => c.id)
+    const [totales, totalesCaja] = data.length
+      ? await Promise.all([
+        fastify.db.pago.groupBy({
+          by: ['id_cliente', 'ingresa_egreso', 'pagado'],
+          where: { id_cliente: { in: ids }, estado_op: 'CTA_CTE_CLI' },
+          _sum: { importe: true },
+        }).then(totalesPorCliente),
+        // La otra mitad: lo cargado desde cajas. Mismo criterio de acotar a los ids de
+        // la página -- caja_detalles es la tabla más grande del sistema.
+        fastify.db.cajaDetalle.groupBy({
+          by: ['id_cliente', 'tipo'],
+          where: { id_cliente: { in: ids } },
+          _sum: { monto: true },
+        }).then(totalesCajaPorCliente),
+      ])
+      : [{}, {}]
 
     return {
       // Un cliente sin movimientos no viene en el groupBy: se le pone la cuenta en
       // cero para que la pantalla no tenga que distinguir "sin datos" de "en cero".
-      data: data.map((c) => ({ ...c, cuenta: totales[c.id] ?? totalesCuentaCorriente([]) })),
+      data: data.map((c) => ({
+        ...c,
+        cuenta: totales[c.id] ?? totalesCuentaCorriente([]),
+        cuenta_caja: totalesCaja[c.id] ?? totalesCajaCliente([]),
+      })),
       total,
       page: Math.max(1, Number(page)),
       limit: take ?? total,
@@ -161,20 +185,40 @@ export default async function clientesRoutes(fastify) {
     const cliente = await clienteDelGrupo(request.params.id, request)
     if (!cliente) return reply.code(404).send({ error: 'Cliente no encontrado' })
 
-    const pagos = await fastify.db.pago.findMany({
-      where: whereMovimientosCliente(cliente.id),
-      select: {
-        id: true, nro_ord: true, fecha: true, fecha_pago: true, importe: true,
-        ingresa_egreso: true, observaciones: true, pagado: true,
-        proveedor: { select: { id: true, nombre: true, razon_social: true } },
-        local: { select: { id: true, nombre: true } },
-        metodo_pago: { select: { id: true, nombre: true } },
-        rubcat: { select: { rubro: { select: { nombre: true } }, categoria: { select: { nombre: true } } } },
-      },
-      orderBy: [{ fecha: 'desc' }, { created_at: 'desc' }],
-    })
+    const [pagos, detalles] = await Promise.all([
+      fastify.db.pago.findMany({
+        where: whereMovimientosCliente(cliente.id),
+        select: {
+          id: true, nro_ord: true, fecha: true, fecha_pago: true, importe: true,
+          ingresa_egreso: true, observaciones: true, pagado: true,
+          proveedor: { select: { id: true, nombre: true, razon_social: true } },
+          local: { select: { id: true, nombre: true } },
+          metodo_pago: { select: { id: true, nombre: true } },
+          rubcat: { select: { rubro: { select: { nombre: true } }, categoria: { select: { nombre: true } } } },
+        },
+        orderBy: [{ fecha: 'desc' }, { created_at: 'desc' }],
+      }),
+      // La otra ventana: lo cargado a la cuenta desde cajas. Se trae la caja para poder
+      // mostrar de qué día y de qué local salió, y para poder abrirla desde la fila.
+      fastify.db.cajaDetalle.findMany({
+        where: whereDetallesCliente(cliente.id),
+        select: {
+          id: true, tipo: true, nombre: true, monto: true, observaciones: true, created_at: true,
+          detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } },
+          caja: {
+            select: {
+              id: true, fecha_inicio: true, fecha_cierre: true, nro_turno: true, tipo_turno: true,
+              local: { select: { id: true, nombre: true } },
+            },
+          },
+        },
+        orderBy: { created_at: 'desc' },
+      }),
+    ])
 
     const totales = totalesCuentaCorriente(pagos)
+    const totalesCaja = totalesCajaCliente(detalles.map((d) => ({ ...d, id_cliente: cliente.id })))
+
     return {
       cliente,
       // Cada movimiento viaja con su cuadrante ya resuelto: la pantalla no vuelve a
@@ -182,6 +226,21 @@ export default async function clientesRoutes(fastify) {
       // arma los totales. Si no, los tags y las filas pueden discrepar.
       pagos: pagos.map((p) => ({ ...p, cuadrante: cuadranteDe(p) })),
       ...totales,
+
+      // ── La ventana de cajas ────────────────────────────────────────────────
+      //
+      // Va anidada y no desparramada en la raíz para no chocar con las claves de los
+      // cuadrantes de pagos (`gastos`, `ingresos`), que significan otra cosa.
+      //
+      // `carga_cuenta` viaja resuelto por el mismo motivo que `cuadrante`: la pantalla no
+      // vuelve a decidir si un detalle suma o no.
+      caja: {
+        detalles: detalles.map((d) => ({
+          ...d,
+          carga_cuenta: cargaCuenta({ ...d, id_cliente: cliente.id }),
+        })),
+        ...totalesCaja,
+      },
     }
   })
 }

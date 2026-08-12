@@ -239,9 +239,25 @@ model RubCat {
   id_cat        String
   id_rub        String
   cuenta        String?
+  // `tipo` y `clasificacion` son CONTABLES (Pasivo Corriente, Costo de Ventas...), no
+  // tienen nada que ver con el tipo de local. Se aclara porque el nombre invita a
+  // confundirlos con `tipos_afines`.
   tipo          String?
   costo         String?
   clasificacion String?
+
+  // Afinidad con el tipo de local, igual que en Proveedor y por la misma razon: ordenar
+  // el buscador para que un local gastronomico vea primero los rubros que usa. NUNCA
+  // filtra -- cualquier local puede elegir cualquier rubro.
+  //
+  // El default en la base es obligatorio, no cosmetico: sin el las filas nuevas quedan en
+  // NULL y en Postgres `NOT (NULL OR false)` da NULL, asi que el rubro desapareceria de
+  // las dos mitades del buscador. Es el bug que ya paso con proveedores (ver
+  // lib/afinidadProveedor.js).
+  tipos_afines  TipoLocal[] @default([])
+  // Rubros transversales que sirven a cualquier tipo de local (impuestos, bancos,
+  // alquileres). Mismo criterio que `Proveedor.es_general`.
+  es_general    Boolean     @default(false)
 
   categoria   Categoria   @relation(fields: [id_cat], references: [id])
   rubro       Rubro       @relation(fields: [id_rub], references: [id])
@@ -275,6 +291,10 @@ model Cliente {
 
   app   App    @relation(fields: [id_app], references: [id])
   pagos Pago[]
+  // La otra mitad de la cuenta corriente: lo que se le cargó a la cuenta desde una
+  // caja (una venta que se anotó en su cuenta en vez de cobrarse). Ver
+  // lib/cuentaCorrienteCaja.js.
+  caja_detalles CajaDetalle[]
 
   @@index([id_app])
   @@map("clientes")
@@ -537,6 +557,11 @@ model CajaDetalle {
   id_caja       String
   tipo          String?
   id_tipo       String?
+  // A qué cuenta corriente se le cargó esta línea. Es el equivalente en caja del
+  // `id_cliente` de Pago: una venta que en vez de cobrarse quedó anotada en la cuenta
+  // de alguien. Opcional -- la enorme mayoría de los detalles no son de cuenta
+  // corriente. Ver lib/cuentaCorrienteCaja.js.
+  id_cliente    String?
   nombre        String?
   monto         Decimal  @db.Decimal(12, 2)
   observaciones String?
@@ -544,6 +569,7 @@ model CajaDetalle {
 
   caja         Caja         @relation(fields: [id_caja], references: [id])
   detalle_tipo DetalleTipo? @relation(fields: [id_tipo], references: [id])
+  cliente      Cliente?     @relation(fields: [id_cliente], references: [id])
 
   // Postgres NO indexa las FK solo, y Prisma tampoco: sin estos índices toda
   // consulta por id_caja escaneaba la tabla entera. El listado de cajas trae
@@ -551,6 +577,10 @@ model CajaDetalle {
   // asi que eran dos escaneos completos por pantalla. Medido: 3,2 ms -> 0,46 ms.
   @@index([id_caja])
   @@index([id_tipo])
+  // La ficha de un cliente pide sus detalles de caja: sin índice, escaneo completo de
+  // caja_detalles (la tabla más grande del sistema) por cada apertura de ficha. Mismo
+  // motivo que el índice [id_cliente, fecha] de Pago.
+  @@index([id_cliente])
   @@map("caja_detalles")
 }
 
@@ -690,6 +720,7 @@ enum TipoPago {
   NCB
   NDA
   ND
+  NDC
   STK
   X
 
@@ -789,6 +820,10 @@ model ActivityLog {
   id_user     String?
   fecha       DateTime @default(now())
   snapshot    Json
+  // Por que se hizo. Hoy lo escribe quien elimina una caja o una op: el snapshot dice QUE
+  // habia, pero no por que se borro, y eso es lo que se pregunta despues. Nullable: los
+  // registros anteriores no lo tienen y el campo no es obligatorio.
+  motivo      String?
 
   user User? @relation("ActivityLogUser", fields: [id_user], references: [id])
 

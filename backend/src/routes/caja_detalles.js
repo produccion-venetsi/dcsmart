@@ -1,10 +1,20 @@
 import { CLASIFICACIONES, normalizarClasificacion } from '../lib/clasificaciones.js'
+import { validarClienteDetalle } from '../lib/cuentaCorrienteCaja.js'
 
 export default async function cajaDetallesRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
   const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'edit')]
   const deleteHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'delete')]
+
+  // Un Cliente pertenece a un grupo (a diferencia de Proveedor, que es catálogo global):
+  // sin este chequeo se podría cargar un detalle a la cuenta de un cliente de otro grupo,
+  // y el monto aparecería en una ficha ajena. Solo activos: un cliente dado de baja no
+  // tiene que poder recibir cargos nuevos, igual que un proveedor de baja no recibe ops.
+  const clienteDelGrupo = (id, request) => fastify.db.cliente.findFirst({
+    where: { id, id_app: request.activeAppId, activo: true },
+    select: { id: true }
+  })
 
   // ── GET /tipos ─────────────────────────────────────────────────────────
   // Acepta id_local opcional y devuelve tipos app-wide + tipos del local específico
@@ -35,7 +45,8 @@ export default async function cajaDetallesRoutes(fastify) {
     return fastify.db.cajaDetalle.findMany({
       where,
       include: {
-        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
+        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } },
+        cliente:      { select: { id: true, nombre: true, razon_social: true } }
       },
       orderBy: { created_at: 'asc' }
     })
@@ -43,7 +54,7 @@ export default async function cajaDetallesRoutes(fastify) {
 
   // ── POST / ────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
-    const { id_caja, id_tipo, nombre, monto, observaciones, clasificacion } = request.body
+    const { id_caja, id_tipo, nombre, monto, observaciones, clasificacion, id_cliente } = request.body
 
     if (!id_caja || monto === undefined) {
       return reply.code(400).send({ error: 'id_caja y monto son requeridos' })
@@ -81,17 +92,29 @@ export default async function cajaDetallesRoutes(fastify) {
       tipo = elegida
     }
 
+    // Cuenta corriente: el detalle se le carga a la cuenta de un cliente. La regla de qué
+    // puede llevar cliente vive en lib/cuentaCorrienteCaja.js, junto con la que arma los
+    // totales -- si estuvieran en dos lugares se podrían guardar detalles que después
+    // ninguna cuenta cuenta.
+    const errorCliente = validarClienteDetalle(id_cliente, tipo)
+    if (errorCliente) return reply.code(400).send({ error: errorCliente })
+    if (id_cliente && !(await clienteDelGrupo(id_cliente, request))) {
+      return reply.code(400).send({ error: 'Cliente inexistente o de otro grupo' })
+    }
+
     const detalle = await fastify.db.cajaDetalle.create({
       data: {
         id_caja,
         tipo,
         id_tipo:       id_tipo       || null,
+        id_cliente:    id_cliente    || null,
         nombre:        nombreFinal,
         monto:         parseFloat(monto),
         observaciones: observaciones || null
       },
       include: {
-        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
+        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } },
+        cliente:      { select: { id: true, nombre: true, razon_social: true } }
       }
     })
     return reply.code(201).send(detalle)
@@ -109,7 +132,7 @@ export default async function cajaDetallesRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    const { id_tipo, nombre, monto, observaciones, clasificacion } = request.body
+    const { id_tipo, nombre, monto, observaciones, clasificacion, id_cliente } = request.body
     if (monto === undefined) return reply.code(400).send({ error: 'El monto es requerido' })
 
     // Cambiar el tipo re-propone su clasificación, igual que en la creación
@@ -138,17 +161,32 @@ export default async function cajaDetallesRoutes(fastify) {
       tipo = elegida
     }
 
+    // El cliente resultante se valida contra la clasificación resultante, no contra la que
+    // vino en el body: cambiar un detalle de cobro a informativo sin tocar el cliente
+    // dejaría un cargo que no figura en ninguna cuenta.
+    const clienteResultante = id_cliente !== undefined ? (id_cliente || null) : existing.id_cliente
+    const errorCliente = validarClienteDetalle(clienteResultante, tipo)
+    if (errorCliente) return reply.code(400).send({ error: errorCliente })
+    // Solo se verifica el grupo si el cliente CAMBIÓ: uno que ya estaba guardado y
+    // después se dio de baja no tiene que bloquear la edición del monto.
+    if (clienteResultante && clienteResultante !== existing.id_cliente
+        && !(await clienteDelGrupo(clienteResultante, request))) {
+      return reply.code(400).send({ error: 'Cliente inexistente o de otro grupo' })
+    }
+
     const detalle = await fastify.db.cajaDetalle.update({
       where: { id: request.params.id },
       data: {
         id_tipo:       id_tipo       !== undefined ? (id_tipo || null) : undefined,
+        id_cliente:    clienteResultante,
         tipo,
         nombre:        nombreFinal,
         monto:         parseFloat(monto),
         observaciones: observaciones !== undefined ? (observaciones || null) : undefined
       },
       include: {
-        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
+        detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } },
+        cliente:      { select: { id: true, nombre: true, razon_social: true } }
       }
     })
     return detalle

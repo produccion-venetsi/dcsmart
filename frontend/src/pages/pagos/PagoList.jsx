@@ -21,13 +21,15 @@ import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCred
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
 import { ESTADO_OP_OPTIONS, ESTADO_OP_LABEL, ESTADO_OP_BADGE } from '../../lib/estadoOp.js'
+import { TIPOS_PAGO } from '../../lib/tiposPago.js'
 
 // Etiquetas, colores y opciones salen de lib/estadoOp.js: estaban duplicados acá y
 // en PagoForm, y un enum copiado es un enum que se desincroniza.
 const ESTADO_BADGE = ESTADO_OP_BADGE
-const TIPO_PAGO_OPTIONS = [
-  'A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'
-]
+// Lo mismo pasaba con los tipos de comprobante: la lista estaba escrita a mano acá y en
+// PagoForm, así que al agregar NDC uno de los dos se quedaba sin él. Ahora sale de
+// lib/tiposPago.js, con un test que la compara contra el enum de Prisma.
+const TIPO_PAGO_OPTIONS = TIPOS_PAGO
 const TIPO_PAGO_MULTI = TIPO_PAGO_OPTIONS.map(t => ({ value: t, label: t }))
 const CAMPO_FECHA_OPTIONS = [
   { value: 'fecha',      label: 'Fecha' },
@@ -651,7 +653,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       </div>
 
       {pago.observaciones && (
-        <div style={{ marginTop: '0.75rem', marginBottom: '1rem', padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
+        <div style={{ marginTop: '0.75rem', marginBottom: '1rem', padding: '10px 14px', background: 'rgba(var(--velo-rgb), 0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
           {pago.observaciones}
         </div>
       )}
@@ -773,7 +775,7 @@ function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onPatch, metodos =
       {loadingMM ? (
         <div className="skel" style={{ height: 36, borderRadius: 8, marginBottom: '1rem' }} />
       ) : multimoneda[0] && savingMM !== 'editing' ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(var(--velo-rgb), 0.04)', borderRadius: 8, marginBottom: '1rem' }}>
           <span className="badge badge-amber">{multimoneda[0].tipo}</span>
           <span className="td-mono" style={{ fontSize: 12 }}>TDC {Number(multimoneda[0].tdc).toFixed(4)}</span>
           <span className="td-number" style={{ flex: 1, fontSize: 13 }}>{Number(multimoneda[0].monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
@@ -1184,9 +1186,16 @@ export default function PagoList() {
 
   // ── Acciones ──────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
-    if (!(await showConfirm('¿Eliminar este pago?'))) return
+    // Se pide el motivo en vez de un sí/no: el borrado es real (se van el pago, sus
+    // impuestos y su copia en caja mayor) y el motivo es lo único que después explica por
+    // qué no está. Queda en activity_log junto al snapshot.
+    const motivo = await showPrompt(
+      'Se va a eliminar este pago con sus impuestos. No se puede deshacer.',
+      { title: 'Eliminar pago', placeholder: 'Por qué se elimina (opcional)' }
+    )
+    if (motivo === null) return
     try {
-      await pagosApi.remove(id)
+      await pagosApi.remove(id, motivo)
       notify('Pago eliminado', 'success')
       setPanelOpen(false)
       setPagos(prev => prev.filter(p => p.id !== id))
@@ -1254,10 +1263,16 @@ export default function PagoList() {
   }
 
   const bulkEliminar = async () => {
-    if (!(await showConfirm(`¿Eliminar ${selectedPagos.length} pagos?`))) return
+    // Un motivo para toda la tanda: se eliminan juntos por la misma razón, y pedirlo de a
+    // uno haría abandonar a la tercera op.
+    const motivo = await showPrompt(
+      `Se van a eliminar ${selectedPagos.length} pagos con sus impuestos. No se puede deshacer.`,
+      { title: `Eliminar ${selectedPagos.length} pagos`, placeholder: 'Por qué se eliminan (opcional)' }
+    )
+    if (motivo === null) return
     let ok = 0, fail = 0
     for (const p of selectedPagos) {
-      try { await pagosApi.remove(p.id); ok++ }
+      try { await pagosApi.remove(p.id, motivo); ok++ }
       catch { fail++ }
     }
     notify(fail === 0 ? `${ok} pagos eliminados` : `${ok}/${selectedPagos.length} eliminados, ${fail} falló`, fail === 0 ? 'success' : 'error')

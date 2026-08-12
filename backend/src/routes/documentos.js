@@ -91,6 +91,10 @@ export default async function documentosRoutes(fastify) {
   const createHandler = [...ctx, fastify.can('documentos', 'create')]
   const editHandler   = [...ctx, fastify.can('documentos', 'edit')]
   const deleteHandler = [...ctx, fastify.can('documentos', 'delete')]
+  // Los TIPOS son globales: se comparten entre todos los grupos, asi que tocarlos afecta a
+  // gente que no es del grupo de quien los edita. Por eso van solo para DC (super_admin /
+  // dcsmart) y no para cualquiera con permiso de edicion del modulo.
+  const tiposHandler = [...ctx, fastify.requireDc]
 
   // ── Catálogo de íconos ─────────────────────────────────────────────────────
   // El frontend dibuja los íconos, pero la lista de claves sale de acá para que no se
@@ -115,9 +119,10 @@ export default async function documentosRoutes(fastify) {
     return tipos.map(t => ({ ...t, icono: normalizarIcono(t.icono) }))
   })
 
-  // Crear y editar tipos toca a todos los grupos, así que pide permiso de edición del
-  // módulo, no de creación de un documento suelto.
-  fastify.post('/tipos', { preHandler: editHandler }, async (request, reply) => {
+  // Crear, editar y desactivar tipos toca a TODOS los grupos, así que pide perfil DC. Con
+  // permiso de edición del módulo alcanzaba, y eso dejaba que un admin de un grupo
+  // renombrara un tipo que usan los demás.
+  fastify.post('/tipos', { preHandler: tiposHandler }, async (request, reply) => {
     const nombre = String(request.body?.nombre ?? '').trim()
     if (!nombre) return reply.code(400).send({ error: 'El nombre es requerido' })
     const icono = request.body?.icono ?? undefined
@@ -151,7 +156,7 @@ export default async function documentosRoutes(fastify) {
     return reply.code(201).send(tipo)
   })
 
-  fastify.put('/tipos/:id', { preHandler: editHandler }, async (request, reply) => {
+  fastify.put('/tipos/:id', { preHandler: tiposHandler }, async (request, reply) => {
     const { nombre, icono, orden, activo } = request.body ?? {}
     if (icono !== undefined && !esIconoValido(icono)) {
       return reply.code(400).send({ error: `Ícono inválido: ${icono}` })
@@ -181,7 +186,7 @@ export default async function documentosRoutes(fastify) {
 
   // Los tipos no se borran, se desactivan: borrarlos dejaría documentos sin tipo y el
   // tipo es cómo se encuentra un documento. Con documentos cargados ni se intenta.
-  fastify.delete('/tipos/:id', { preHandler: deleteHandler }, async (request, reply) => {
+  fastify.delete('/tipos/:id', { preHandler: tiposHandler }, async (request, reply) => {
     const tipo = await fastify.db.tipoDocumento.findUnique({
       where: { id: request.params.id },
       select: { id: true, nombre: true, _count: { select: { documentos: true } } },

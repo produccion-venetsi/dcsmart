@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore.js'
 import { useAppStore } from '../store/appStore.js'
 import { useUiStore } from '../store/uiStore.js'
 import { ROLES_TODOS, ROLES_OPERATIVOS, ROLES } from '../lib/roles.js'
+import BotonTema from './BotonTema.jsx'
 import { authApi } from '../api/auth.js'
 import { avisosApi } from '../api/notificaciones.js'
 import AppLogo from './AppLogo.jsx'
@@ -551,6 +552,12 @@ export default function Sidebar() {
           </>
         )}
       </nav>
+
+      {/* El tema va con lo personal (avatar, cerrar sesion) y no entre los modulos: es una
+          preferencia de quien mira, no una seccion de la app. */}
+      <div className="sidebar-tema">
+        <BotonTema colapsado={collapsed} />
+      </div>
 
       {/* User footer */}
       <div className="sidebar-user">

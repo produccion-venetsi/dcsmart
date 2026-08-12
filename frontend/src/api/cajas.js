@@ -6,7 +6,9 @@ export const cajasApi = {
   stats:        (params, signal) => client.get('/cajas/stats',  { params, signal }),
   create:       (data)           => client.post('/cajas',        data),
   update:       (id, data)       => client.put(`/cajas/${id}`,   data),
-  remove:       (id)             => client.delete(`/cajas/${id}`),
+  // El motivo viaja en el body del DELETE: queda en activity_log y es lo unico que
+  // despues explica por que el registro no esta (el borrado es real, no logico).
+  remove:       (id, motivo)     => client.delete(`/cajas/${id}`, { data: { motivo } }),
   audit:        (id, data)       => client.patch(`/cajas/${id}/audit`, data),
   auditHistory: (id)             => client.get(`/cajas/${id}/audit-history`),
   auditDc:      (id, data)       => client.patch(`/cajas/${id}/audit-dc`, data),

@@ -1,11 +1,6 @@
-import { partirPorAfinidad, TIPOS_LOCAL_VALIDOS } from '../lib/afinidadProveedor.js'
-
-// El array va derecho a una columna de enums: un valor invalido no da un 400
-// prolijo sino un error de Postgres. Se sanea y se deduplica antes de escribir.
-function saneartiposAfines(valor) {
-  if (!Array.isArray(valor)) return undefined
-  return [...new Set(valor.filter((t) => TIPOS_LOCAL_VALIDOS.has(t)))]
-}
+// `sanearTiposAfines` estaba aca; se movio al lib cuando rubcat empezo a necesitar lo
+// mismo (las dos tablas tienen `tipos_afines`).
+import { partirPorAfinidad, sanearTiposAfines } from '../lib/afinidadProveedor.js'
 
 export default async function proveedoresRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('proveedores', 'view')]
@@ -106,7 +101,7 @@ export default async function proveedoresRoutes(fastify) {
         id_rubcat: id_rubcat || null,
         plazo: plazo != null ? parseInt(plazo) : null,
         activo: activo ?? true,
-        tipos_afines: saneartiposAfines(tipos_afines) ?? [],
+        tipos_afines: sanearTiposAfines(tipos_afines) ?? [],
         es_general: es_general ?? false
       }
     })
@@ -133,7 +128,7 @@ export default async function proveedoresRoutes(fastify) {
           id_rubcat,
           plazo: plazo != null ? parseInt(plazo) : null,
           activo,
-          tipos_afines: saneartiposAfines(tipos_afines),
+          tipos_afines: sanearTiposAfines(tipos_afines),
           es_general
         }
       })
