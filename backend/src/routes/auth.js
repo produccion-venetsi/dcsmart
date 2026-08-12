@@ -360,6 +360,34 @@ export default async function authRoutes(fastify) {
     return { ticket }
   })
 
+  // POST /api/auth/tareas-ticket
+  // Igual que /analytics-ticket, pero ademas lleva el departamento (texto
+  // validado contra lib/datosUsuario.js) y si el usuario es super_admin --
+  // DC-PLATAFORMA no tiene tabla de departamentos propia del lado de
+  // dcsmart, interpreta ese string contra su propio catalogo.
+  fastify.post('/tareas-ticket', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    if (!process.env.INTERNAL_SHARED_SECRET) {
+      return reply.code(500).send({ error: 'Integración con Tareas no configurada' })
+    }
+
+    const user = await fastify.db.user.findUnique({
+      where: { id: request.user.id },
+      select: { email: true, nombre: true, departamento: true }
+    })
+    if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
+
+    const esSuperAdmin = await fastify.db.userAppRole.findFirst({
+      where: { id_user: request.user.id, role: { nombre: 'super_admin' } }
+    })
+
+    const ticket = jwt.sign(
+      { email: user.email, nombre: user.nombre, departamento: user.departamento, es_super_admin: !!esSuperAdmin },
+      process.env.INTERNAL_SHARED_SECRET,
+      { expiresIn: '60s', issuer: 'dcsmart-gestion', audience: 'dc-plataforma' }
+    )
+    return { ticket }
+  })
+
   // POST /api/auth/costos-ticket
   // Igual que /analytics-ticket pero ademas lleva los locales permitidos y el
   // rol: Costos no lee las tablas de permisos de gestion, confia en el ticket.

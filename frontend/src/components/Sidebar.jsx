@@ -11,6 +11,9 @@ import { MODOS, modoACorregir, destinoDeModo, modoInicial } from '../lib/modoTra
 
 // URL de dcsmart-costos (plataforma de costos, backend/base separados).
 const COSTOS_URL = import.meta.env.VITE_COSTOS_URL || 'https://costos.dcsmart.app'
+// URL de DC-PLATAFORMA (seguimiento de tareas por departamento, backend/base
+// separados). Default a localhost: todavia no tiene deploy propio.
+const TAREAS_URL = import.meta.env.VITE_TAREAS_URL || 'http://localhost:5173'
 
 // Versión visible de la app. En producción se muestra solo la version de
 // package.json (__APP_VERSION__); el commit corto (VITE_GIT_SHA) se agrega
@@ -126,6 +129,17 @@ function IcoCalculator() {
       <line x1="8" y1="19" x2="8" y2="19.01"/>
       <line x1="12" y1="19" x2="12" y2="19.01"/>
       <line x1="16" y1="19" x2="16" y2="19.01"/>
+    </svg>
+  )
+}
+function IcoTareas() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <path d="M3 9h18"/>
+      <path d="M8 2v4"/>
+      <path d="M16 2v4"/>
+      <path d="m8 15 2 2 4-4"/>
     </svg>
   )
 }
@@ -265,6 +279,10 @@ const NAV_MAIN = [
   // en pestaña nueva vía SSO (ver openCostos). Visible para todos — Costos
   // rechaza con 403 a quien no tenga grant habilitado del lado de Costos.
   { key: 'costos', label: 'Costos', Icon: IcoCalculator, external: true },
+  // Tareas (DC-PLATAFORMA) es OTRA app tambien (backend/base separados),
+  // mismo patron SSO que Costos. Visible para todos: el departamento
+  // (o su ausencia) se resuelve del lado de Tareas, no aca.
+  { key: 'tareas', label: 'Tareas', Icon: IcoTareas, external: true },
 ]
 
 const NAV_ADMIN = [
@@ -364,6 +382,21 @@ export default function Sidebar() {
       window.open(COSTOS_URL, '_blank', 'noopener')
     }
   }
+
+  // Abre DC-PLATAFORMA (seguimiento de tareas por departamento) con un ticket
+  // SSO de un solo uso -- mismo patron que openCostos.
+  const openTareas = async () => {
+    try {
+      const { data } = await authApi.tareasTicket()
+      const dest = new URL('/sso', TAREAS_URL)
+      dest.searchParams.set('ticket', data.ticket)
+      window.open(dest.toString(), '_blank', 'noopener')
+    } catch {
+      window.open(TAREAS_URL, '_blank', 'noopener')
+    }
+  }
+
+  const ABRIR_EXTERNO = { costos: openCostos, tareas: openTareas }
 
   // Colapsado: rail angosto solo con íconos. En mobile el off-canvas
   // siempre se muestra expandido, independiente de sidebarOpen.
@@ -515,7 +548,7 @@ export default function Sidebar() {
             key={key}
             type="button"
             className="nav-item nav-item-btn"
-            onClick={() => { closeMobileNav(); openCostos() }}
+            onClick={() => { closeMobileNav(); ABRIR_EXTERNO[key]?.() }}
             title={collapsed ? label : undefined}
           >
             <Icon />
