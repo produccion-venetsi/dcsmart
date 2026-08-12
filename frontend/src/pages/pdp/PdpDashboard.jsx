@@ -7,6 +7,9 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
+import {
+  idsDeGrupos, estadoSeleccion, textoSeleccionarTodo, ayudaSeleccionarTodo,
+} from '../../lib/seleccionPdp.js'
 import { pdpApi } from '../../api/pdp.js'
 import { fmtDateUTC, fmtMonthUTC, fmtDateArg, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
@@ -323,6 +326,11 @@ function PdpColumn({
   const allCollapsed = allKeys.length > 0 && allKeys.every(k => collapsed.has(k))
   const toggleAll = () => setCollapsed(allCollapsed ? new Set() : new Set(allKeys))
 
+  // El "seleccionar todo" de la columna. Reusa `onToggleGroup`, que ya hace lo correcto:
+  // si estan todos los ids que se le pasan, los saca; si no, los agrega.
+  const idsColumna = selectable ? idsDeGrupos(groups) : []
+  const estadoSel = selectable ? estadoSeleccion(groups, selected) : 'vacia'
+
   const selCount = selectable ? selected.size : 0
   const selTotal = selectable
     ? groups.flatMap(g => g.items).filter(p => selected.has(p.id)).reduce((a, p) => a + Number(p.importe ?? 0), 0)
@@ -366,6 +374,18 @@ function PdpColumn({
               : 'Sin selección'}
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
+            {/* Del lado derecho, junto a las acciones: es lo primero que se busca antes de
+                mandar o pagar todo. Con todo seleccionado el mismo boton deselecciona. */}
+            {idsColumna.length > 0 && onToggleGroup && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={() => onToggleGroup(idsColumna)}
+                disabled={working}
+                title={ayudaSeleccionarTodo(groups, estadoSel)}
+              >
+                {textoSeleccionarTodo(estadoSel)}
+              </button>
+            )}
             {onSecondaryAction && (
               <button
                 className="btn btn-sm btn-secondary"
