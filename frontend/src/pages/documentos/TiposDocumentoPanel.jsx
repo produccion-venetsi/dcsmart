@@ -4,8 +4,10 @@
 // el momento en que uno descubre que falta un tipo es cuando está cargando un documento.
 // Mandarlo a otra sección y hacerlo volver es perder lo que estaba escribiendo.
 //
-// Los tipos son globales (los comparten todos los grupos), así que el panel lo dice: acá
-// se toca algo que ve todo el mundo.
+// Los tipos son globales (los comparten todos los grupos), así que **solo los edita DC**
+// (super_admin / dcsmart): un admin de un grupo renombrando un tipo se lo cambia a los
+// demás. El backend rechaza con 403 igual; acá se esconden los controles para no ofrecer
+// botones que van a fallar, y el panel queda de solo lectura para el resto.
 
 import { useEffect, useState } from 'react'
 import { documentosApi } from '../../api/documentos.js'
@@ -46,7 +48,7 @@ function SelectorIcono({ iconos, valor, onElegir }) {
   )
 }
 
-export default function TiposDocumentoPanel({ onCambio }) {
+export default function TiposDocumentoPanel({ onCambio, puedeEditar = false }) {
   const notify = useUiStore(s => s.notify)
   const showConfirm = useUiStore(s => s.showConfirm)
 
@@ -161,11 +163,13 @@ export default function TiposDocumentoPanel({ onCambio }) {
   return (
     <div>
       <p className="form-hint" style={{ marginBottom: '1rem' }}>
-        Los tipos son los mismos para todos los grupos: lo que cambiés acá lo ve todo el
-        mundo.
+        {puedeEditar
+          ? 'Los tipos son los mismos para todos los grupos: lo que cambiés acá lo ve todo el mundo.'
+          : 'Los tipos son los mismos para todos los grupos, así que los administra DCSmart. Acá se ven, no se editan.'}
       </p>
 
-      {/* ── Alta ── */}
+      {/* ── Alta: solo DC ── */}
+      {puedeEditar && (
       <form onSubmit={crear} style={{ marginBottom: '1.5rem' }}>
         <CampoTexto
           id="tipo-nombre"
@@ -185,6 +189,7 @@ export default function TiposDocumentoPanel({ onCambio }) {
           {guardando ? 'Guardando…' : 'Agregar tipo'}
         </button>
       </form>
+      )}
 
       {/* ── Lista ── */}
       <div className="drawer-section-title">Tipos existentes</div>
@@ -207,7 +212,7 @@ export default function TiposDocumentoPanel({ onCambio }) {
                 opacity: t.activo ? 1 : 0.6,
               }}
             >
-              {editando === t.id ? (
+              {puedeEditar && editando === t.id ? (
                 <div>
                   <CampoTexto
                     id={`tipo-edit-${t.id}`}
@@ -247,15 +252,19 @@ export default function TiposDocumentoPanel({ onCambio }) {
                         : 'sin documentos'}
                     </div>
                   </div>
-                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => empezarEdicion(t)}>
-                    Editar
-                  </button>
-                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => alternarActivo(t)}>
-                    {t.activo ? 'Desactivar' : 'Activar'}
-                  </button>
+                  {puedeEditar && (
+                    <>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => empezarEdicion(t)}>
+                        Editar
+                      </button>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => alternarActivo(t)}>
+                        {t.activo ? 'Desactivar' : 'Activar'}
+                      </button>
+                    </>
+                  )}
                   {/* Borrar solo se ofrece si no tiene documentos: el backend lo rechaza
                       igual, pero un botón que siempre falla es un botón mentiroso. */}
-                  {!t._count?.documentos && (
+                  {puedeEditar && !t._count?.documentos && (
                     <button
                       type="button"
                       className="btn btn-sm btn-danger"
