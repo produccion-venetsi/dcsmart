@@ -1531,6 +1531,42 @@ select.campo-ia {
    el gap ya separa, y el margen encima descuadra las filas entre si. */
 .datos-persona-grid > .form-group { margin: 0; }
 
+/* ─── Cuadre en vivo (edicion de caja) ────────────────────────────────────────
+
+   Se actualiza con cada tecla y con cada movimiento cargado, asi que tiene que
+   poder mirarse de reojo sin buscarlo: va pegado a los campos de Total y
+   Efectivo, ocupando el ancho completo. */
+.cuadre-vivo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--glass-border);
+  font-size: 12px;
+  color: var(--t3);
+}
+.cuadre-vivo-cuentas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+}
+.cuadre-vivo strong { color: var(--t1); font-weight: 600; }
+/* El resultado de la suma, separado de los sumandos por una linea: sin el corte, la
+   fila se lee como cuatro numeros sueltos. */
+.cuadre-vivo-igual {
+  padding-left: 10px;
+  border-left: 1px solid var(--glass-border);
+}
+/* El estado empuja a la derecha: es la conclusion, y en una fila de numeros lo que
+   importa es donde termina de leerse. */
+.cuadre-vivo-estado { margin-left: auto; font-size: 12.5px; }
+.cuadre-vivo-estado strong { color: inherit; font-weight: 700; }
+.cuadre-vivo-fuente { width: 100%; font-size: 10.5px; color: var(--t4); }
+
 /* ─── Documentos ──────────────────────────────────────────────────────────────
 
    Zona para soltar archivos. Es la zona ENTERA la que recibe el clic y el arrastre:

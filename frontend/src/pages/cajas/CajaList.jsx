@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
@@ -27,6 +27,7 @@ import CajaCreatePanel from './CajaCreatePanel.jsx'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
 import { multiParam } from '../../lib/filtros.js'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
+import { calcularCuadre, describirCuadre, colorCuadre, faltaParaCuadrar } from '../../lib/cuadreCaja.js'
 
 // EMPTY_CAJA se fue con CajaCreatePanel: era el estado inicial del alta y este
 // listado ya no lo usa.
@@ -817,6 +818,27 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [savingMovEdit, setSavingMovEdit] = useState(false)
 
+  // El origin decide si el cuadre sale de los detalles o de los movimientos, así que hay
+  // que conocerlo: asumir DCSMART haría que en una caja de TapTap se ignoren los
+  // movimientos y se cuenten detalles que no corresponden.
+  const [origin, setOrigin] = useState(null)
+
+  // El cuadre EN VIVO: se recalcula con lo que hay en el formulario y en las listas, sin
+  // esperar al servidor. Es la razón de que exista el espejo en lib/cuadreCaja.js —
+  // cargando cinco cobros seguidos, pedirlo al backend en cada alta mostraría siempre el
+  // cuadre de antes del último. Al guardar, el backend lo recalcula y es el que manda.
+  const cuadreVivo = useMemo(
+    () => calcularCuadre({
+      origin,
+      total: form.total,
+      efectivo: form.efectivo,
+      detalles,
+      movimientos,
+    }),
+    [origin, form.total, form.efectivo, detalles, movimientos]
+  )
+  const leyendaCuadre = describirCuadre(cuadreVivo)
+
   const loadRelacionales = (idLocal) => {
     cajasApi.get(cajaId).then(({ data }) => {
       setDetalles(data.detalles || [])
@@ -830,6 +852,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   useEffect(() => {
     if (!cajaId) return
     cajasApi.get(cajaId).then(({ data }) => {
+      setOrigin(data.origin ?? null)
       setForm({
         nro_turno:    data.nro_turno    ?? '',
         tipo_turno:   data.tipo_turno   ?? '',
@@ -1028,6 +1051,35 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
               del periodo. El texto vive en lib/camposCaja.js porque el mismo campo se
               carga en el alta y en la edicion. */}
           <p className="form-hint" style={{ margin: '4px 0 0' }}>{AYUDA_EFECTIVO}</p>
+        </div>
+
+        {/* ── Cuadre en vivo ─────────────────────────────────────────────────
+            Se actualiza con cada tecla del total y del efectivo, y con cada
+            movimiento o detalle que se carga. Ocupa el ancho completo del grid
+            porque es el resumen de todo lo de arriba, no un campo mas. */}
+        <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <div className="cuadre-vivo">
+            <div className="cuadre-vivo-cuentas">
+              <span>Efectivo <strong>{fmt$(cuadreVivo?.efectivo)}</strong></span>
+              <span>+ Cobros <strong>{fmt$(cuadreVivo?.cobros)}</strong></span>
+              {cuadreVivo?.gastos > 0 && <span>− Gastos <strong>{fmt$(cuadreVivo.gastos)}</strong></span>}
+              <span className="cuadre-vivo-igual">= <strong>{fmt$(cuadreVivo?.esperado)}</strong></span>
+            </div>
+            <div className="cuadre-vivo-estado" style={{ color: colorCuadre(leyendaCuadre.tono) }}>
+              <strong>{leyendaCuadre.texto}</strong>
+              {/* El monto que falta, en positivo: "faltan $1.000" dice que buscar, mientras
+                  que "diferencia -1000" hay que pensarlo. */}
+              {faltaParaCuadrar(cuadreVivo) > 0 && (
+                <span> · {fmt$(faltaParaCuadrar(cuadreVivo))}</span>
+              )}
+            </div>
+            <div className="cuadre-vivo-fuente">
+              {/* Que se vea de donde sale la cuenta: en una caja de TapTap los detalles no
+                  cuentan, y sin decirlo el numero parece estar mal. */}
+              segun {cuadreVivo?.fuente === 'movimientos' ? 'los movimientos' : 'los detalles'}
+              {origin && origin !== 'DCSMART' ? ` (${origin})` : ''}
+            </div>
+          </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fiscal</label>
