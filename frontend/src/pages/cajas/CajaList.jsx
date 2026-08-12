@@ -19,7 +19,9 @@ import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparDetalles, agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
 import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
 import { fmtPorcentajeAvion, claseAvion, porcentajeAvion } from '../../lib/avion.js'
-import { conTipoElegido } from '../../lib/detalleForm.js'
+import { conTipoElegido, conClasificacionElegida } from '../../lib/detalleForm.js'
+import CampoClienteCuenta from '../../components/CampoClienteCuenta.jsx'
+import { nombreCliente } from '../../lib/clientes.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
@@ -219,7 +221,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [saving,     setSaving]    = useState(false)
   const [addingMov,  setAddingMov] = useState(false)
-  const [newDet,     setNewDet]    = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [newDet,     setNewDet]    = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
   const [savingDet,  setSavingDet] = useState(false)
   const [addingDet,  setAddingDet] = useState(false)
   const [editingMovId, setEditingMovId] = useState(null)
@@ -303,10 +305,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         clasificacion: newDet.clasificacion || null,
         nombre:        newDet.id_tipo ? null : (newDet.nombre || null),
         monto:         parseFloat(newDet.monto),
-        observaciones: newDet.observaciones || null
+        observaciones: newDet.observaciones || null,
+        id_cliente:    newDet.id_cliente    || null
       })
       notify('Detalle agregado', 'success')
-      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
       setAddingDet(false)
       load()
     } catch { notify('Error al agregar detalle', 'error') }
@@ -348,7 +351,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       clasificacion: normalizarClasificacion(clasificacionDeDetalle(d)),
       nombre:        d.detalle_tipo?.nombre || d.nombre || '',
       monto:         String(d.monto),
-      observaciones: d.observaciones || ''
+      observaciones: d.observaciones || '',
+      // La cuenta a la que ya estaba cargado. El objeto entero y no solo el id: el
+      // combobox necesita el nombre para abrir con lo que habia.
+      id_cliente:    d.cliente?.id || '',
+      cliente:       d.cliente || null
     })
   }
 
@@ -361,7 +368,8 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         clasificacion: editDetForm.clasificacion || null,
         nombre:        editDetForm.id_tipo ? null : (editDetForm.nombre || null),
         monto:         parseFloat(editDetForm.monto),
-        observaciones: editDetForm.observaciones || null
+        observaciones: editDetForm.observaciones || null,
+        id_cliente:    editDetForm.id_cliente    || null
       })
       notify('Detalle actualizado', 'success')
       setEditingDetId(null)
@@ -547,7 +555,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
           <TablaDesglose
             grupos={gruposDetalles}
-            columnas={[{ label: 'Clasificación' }, { label: 'Nombre' }, { label: 'Monto' }, { label: '' }]}
+            columnas={[{ label: 'Clasificación' }, { label: 'Nombre' }, { label: 'Cuenta' }, { label: 'Monto' }, { label: '' }]}
             fmtMonto={fmt$2}
             renderFila={(d) => (
                 <tr key={d.id}>
@@ -557,7 +565,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                         <ClasificacionSelect
                           compact
                           value={editDetForm.clasificacion}
-                          onChange={(clasificacion) => setEditDetForm(f => ({ ...f, clasificacion }))}
+                          onChange={(clasificacion) => setEditDetForm(f => conClasificacionElegida(f, clasificacion))}
                         />
                       </td>
                       <td>
@@ -566,6 +574,16 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                           idTipo={editDetForm.id_tipo}
                           nombre={editDetForm.nombre}
                           onChange={(id_tipo, nombre) => setEditDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
+                        />
+                      </td>
+                      <td>
+                        <CampoClienteCuenta
+                          compact
+                          clasificacion={editDetForm.clasificacion}
+                          idCliente={editDetForm.id_cliente}
+                          clienteSel={editDetForm.cliente}
+                          onSelect={(c) => setEditDetForm(f => ({ ...f, id_cliente: c.id, cliente: c }))}
+                          onClear={() => setEditDetForm(f => ({ ...f, id_cliente: '', cliente: null }))}
                         />
                       </td>
                       <td>
@@ -580,6 +598,16 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                     <>
                       <td className="td-muted">{clasificacionLabel(clasificacionDeDetalle(d))}</td>
                       <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                      {/* A qué cuenta corriente se cargó. Se ve sin entrar a editar: un
+                          detalle que le genera deuda a alguien no puede parecer igual a uno
+                          que no. */}
+                      <td className="td-muted">
+                        {d.cliente ? (
+                          <span title="Cargado a la cuenta corriente de este cliente">
+                            {nombreCliente(d.cliente)}
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td className="td-number">{fmt$2(d.monto)}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         {canEdit && (
@@ -611,7 +639,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
             <ClasificacionSelect
               ayuda
               value={newDet.clasificacion}
-              onChange={(clasificacion) => setNewDet(d => ({ ...d, clasificacion }))}
+              onChange={(clasificacion) => setNewDet(d => conClasificacionElegida(d, clasificacion))}
             />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -623,6 +651,13 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
               onChange={(id_tipo, nombre) => setNewDet(d => conTipoElegido(d, tipos, id_tipo, nombre))}
             />
           </div>
+          <CampoClienteCuenta
+            clasificacion={newDet.clasificacion}
+            idCliente={newDet.id_cliente}
+            clienteSel={newDet.cliente}
+            onSelect={(c) => setNewDet(d => ({ ...d, id_cliente: c.id, cliente: c }))}
+            onClear={() => setNewDet(d => ({ ...d, id_cliente: '', cliente: null }))}
+          />
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
@@ -805,7 +840,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const [metodos,     setMetodos]     = useState([])
 
   const [addingDet,  setAddingDet]  = useState(false)
-  const [newDet,     setNewDet]     = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [newDet,     setNewDet]     = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
   const [savingDet,  setSavingDet]  = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
   const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
@@ -882,9 +917,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     if (!newDet.monto) return
     setSavingDet(true)
     try {
-      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, clasificacion: newDet.clasificacion || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null })
+      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, clasificacion: newDet.clasificacion || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null, id_cliente: newDet.id_cliente || null })
       notify('Detalle agregado', 'success')
-      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
       setAddingDet(false)
       loadRelacionales(form?.id_local)
     } catch (err) { notify(err.response?.data?.error || 'Error al agregar detalle', 'error') }
@@ -904,7 +939,11 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       clasificacion: normalizarClasificacion(clasificacionDeDetalle(d)),
       nombre:        d.detalle_tipo?.nombre || d.nombre || '',
       monto:         String(d.monto),
-      observaciones: d.observaciones || ''
+      observaciones: d.observaciones || '',
+      // La cuenta a la que ya estaba cargado. El objeto entero y no solo el id: el
+      // combobox necesita el nombre para abrir con lo que habia.
+      id_cliente:    d.cliente?.id || '',
+      cliente:       d.cliente || null
     })
   }
 
@@ -912,7 +951,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
     if (!editDetForm.monto) return
     setSavingDetEdit(true)
     try {
-      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, clasificacion: editDetForm.clasificacion || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null })
+      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, clasificacion: editDetForm.clasificacion || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null, id_cliente: editDetForm.id_cliente || null })
       notify('Detalle actualizado', 'success')
       setEditingDetId(null)
       loadRelacionales(form?.id_local)
@@ -1128,7 +1167,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       {detalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
           <table className="data-table">
-            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Cuenta</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {detalles.map((d) => (
                 <tr key={d.id}>
@@ -1138,7 +1177,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                         <ClasificacionSelect
                           compact
                           value={editDetForm.clasificacion}
-                          onChange={(clasificacion) => setEditDetForm(f => ({ ...f, clasificacion }))}
+                          onChange={(clasificacion) => setEditDetForm(f => conClasificacionElegida(f, clasificacion))}
                         />
                       </td>
                       <td>
@@ -1147,6 +1186,16 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                           idTipo={editDetForm.id_tipo}
                           nombre={editDetForm.nombre}
                           onChange={(id_tipo, nombre) => setEditDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
+                        />
+                      </td>
+                      <td>
+                        <CampoClienteCuenta
+                          compact
+                          clasificacion={editDetForm.clasificacion}
+                          idCliente={editDetForm.id_cliente}
+                          clienteSel={editDetForm.cliente}
+                          onSelect={(c) => setEditDetForm(f => ({ ...f, id_cliente: c.id, cliente: c }))}
+                          onClear={() => setEditDetForm(f => ({ ...f, id_cliente: '', cliente: null }))}
                         />
                       </td>
                       <td>
@@ -1161,6 +1210,16 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                     <>
                       <td className="td-muted">{clasificacionLabel(clasificacionDeDetalle(d))}</td>
                       <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
+                      {/* A qué cuenta corriente se cargó. Se ve sin entrar a editar: un
+                          detalle que le genera deuda a alguien no puede parecer igual a uno
+                          que no. */}
+                      <td className="td-muted">
+                        {d.cliente ? (
+                          <span title="Cargado a la cuenta corriente de este cliente">
+                            {nombreCliente(d.cliente)}
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td className="td-number">{fmt$2(d.monto)}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditDet(d)}>
@@ -1188,7 +1247,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
               <label className="form-label">Clasificación *</label>
               <ClasificacionSelect
                 value={newDet.clasificacion}
-                onChange={(clasificacion) => setNewDet(f => ({ ...f, clasificacion }))}
+                onChange={(clasificacion) => setNewDet(f => conClasificacionElegida(f, clasificacion))}
               />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1200,6 +1259,13 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                 onChange={(id_tipo, nombre) => setNewDet(f => conTipoElegido(f, tipos, id_tipo, nombre))}
               />
             </div>
+            <CampoClienteCuenta
+              clasificacion={newDet.clasificacion}
+              idCliente={newDet.id_cliente}
+              clienteSel={newDet.cliente}
+              onSelect={(c) => setNewDet(f => ({ ...f, id_cliente: c.id, cliente: c }))}
+              onClear={() => setNewDet(f => ({ ...f, id_cliente: '', cliente: null }))}
+            />
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
               <div className="form-input-wrap">

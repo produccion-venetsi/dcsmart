@@ -1,7 +1,11 @@
 // Reglas del formulario de detalle de caja.
 //
-// Vive acá y no dentro de CajaList.jsx para poder testear la regla que sigue,
-// que es una decisión de negocio y no un detalle de la pantalla.
+// Viven acá y no dentro de CajaList.jsx para poder testearlas: son decisiones de
+// negocio y no detalles de la pantalla. Además el formulario de detalle aparece
+// cuatro veces (alta y edición, en dos paneles distintos) y una copia por lugar se
+// desincroniza sola.
+
+import { cargaLaCuenta } from './cuentaCorrienteCaja.js'
 
 // Elegir un nombre NO toca la clasificación: la decide la persona que carga.
 //
@@ -17,4 +21,20 @@
 // lo que se saca es que el formulario la imponga.
 export function conTipoElegido(form, _tipos, id_tipo, nombre) {
   return { ...form, id_tipo, nombre }
+}
+
+// Cambiar la clasificación puede dejar el detalle sin poder llevar cuenta corriente (un
+// informativo no mueve ninguna cuenta, ver lib/cuentaCorrienteCaja.js). En ese caso el
+// cliente se suelta acá y no al guardar: si no, el campo queda con un nombre puesto, el
+// backend rechaza el POST y el error aparece recién al apretar Guardar.
+//
+// Es lo contrario de la regla de arriba y no la contradice: ahí lo que NO se toca es un dato
+// que la persona eligió y sigue siendo válido. Acá el dato dejó de ser guardable.
+export function conClasificacionElegida(form, clasificacion) {
+  const next = { ...form, clasificacion }
+  if (!cargaLaCuenta(clasificacion)) {
+    next.id_cliente = ''
+    next.cliente = null
+  }
+  return next
 }

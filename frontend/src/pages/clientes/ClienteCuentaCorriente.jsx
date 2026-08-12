@@ -1,7 +1,18 @@
 // Estado de cuenta de un cliente.
 //
-// Los movimientos son los `Pago` con ese cliente -- pagados Y sin pagar, los cuatro
-// cuadrantes (ver lib/cuentaCorriente.js):
+// Tiene DOS ventanas, porque la deuda se genera en dos lugares distintos del sistema y
+// mirar solo uno da un saldo incompleto:
+//
+//   Pagos  -> las ops a su nombre con estado CTA CTE CLI (lo de siempre, abajo).
+//   Cajas  -> el consumo que se anotó en su cuenta desde una caja, en vez de cobrarse.
+//             Ver lib/cuentaCorrienteCaja.js.
+//
+// Son ventanas y no una sola tabla mezclada: las columnas no se parecen (una op tiene
+// número, proveedor y rubro; un detalle de caja tiene turno y tipo de detalle) y el
+// origen del cargo es lo primero que se pregunta cuando un saldo no cierra.
+//
+// Los movimientos del lado pagos son los `Pago` con ese cliente -- pagados Y sin pagar,
+// los cuatro cuadrantes (ver lib/cuentaCorriente.js):
 //
 //                       sin pagar              pagado
 //   egreso        Gastos pendientes    ->    Gastos
@@ -23,6 +34,8 @@ import {
   ORDEN_CUADRANTES, CUADRANTE_INFO, cuadranteDe, sumaALaDeuda,
   filtrarPorCuadrante, FILTRO_TODOS, FILTRO_ABIERTOS,
 } from '../../lib/cuentaCorriente.js'
+import { VENTANAS, VENTANA_INFO, ventanaInicial } from '../../lib/cuentaCorrienteCaja.js'
+import { clasificacionLabel } from '../../lib/clasificaciones.js'
 
 function fmt$(n) {
   if (n == null) return '—'
@@ -38,6 +51,108 @@ function IcoVolver() {
   )
 }
 
+// ── La ventana de cajas ─────────────────────────────────────────────────────
+//
+// Cargos que salieron de una caja. No tiene los cuatro cuadrantes de la ventana de pagos
+// porque de este lado no hay eje "pagado": lo que cierra un cargo de caja es una cobranza,
+// y esa se carga como op y aparece en la otra ventana.
+// Exportada para poder renderizarla sola en las pruebas (la pagina entera necesita la
+// llamada a la API; esta es pura y es donde esta la logica de presentacion nueva).
+export function VentanaCajas({ caja, detalles, navigate }) {
+  if (detalles.length === 0) {
+    return (
+      <div className="table-wrap">
+        <div className="table-empty">
+          <p>Este cliente no tiene consumo cargado desde cajas.</p>
+          <p style={{ fontSize: 12, color: 'var(--t3)' }}>
+            Entra acá lo que se carga a su cuenta desde el detalle de una caja: una venta que
+            no se cobró y quedó anotada a su nombre. Se elige al cargar el detalle, en el
+            campo <strong>Cuenta corriente</strong>.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
+        <span style={{ color: 'var(--t3)' }}>
+          {caja.cantidad} {caja.cantidad === 1 ? 'cargo' : 'cargos'} por {fmt$(caja.cargado)}
+        </span>
+        {/* Los que quedaron con cliente pero con una clasificación que no mueve la cuenta.
+            Se avisa en vez de esconderlos: si no, un monto cargado a nombre de alguien
+            desaparece sin explicación y nadie sabe por qué el saldo no cierra. */}
+        {caja.cantidad_informativos > 0 && (
+          <span style={{ color: 'var(--amber)' }}>
+            · {caja.cantidad_informativos} sin sumar ({fmt$(caja.informativos)}): están
+            clasificados como informativos
+          </span>
+        )}
+      </div>
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Local</th>
+              <th>Turno</th>
+              <th>Detalle</th>
+              <th>Clasificación</th>
+              <th style={{ textAlign: 'right' }}>Monto</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {detalles.map((d) => {
+              const suma = d.carga_cuenta !== false
+              return (
+                <tr
+                  key={d.id}
+                  className="row-clickable"
+                  onClick={() => navigate(`/cajas?id=${d.caja?.id ?? ''}`)}
+                  title="Abrir la caja"
+                >
+                  <td className="td-muted">{fmtDateUTC(d.caja?.fecha_inicio)}</td>
+                  <td className="td-muted">{d.caja?.local?.nombre ?? '—'}</td>
+                  <td className="td-muted">
+                    {d.caja?.nro_turno || d.caja?.tipo_turno || '—'}
+                  </td>
+                  <td>{d.nombre || d.detalle_tipo?.nombre || '—'}</td>
+                  <td className="td-muted">{clasificacionLabel(d.tipo ?? d.detalle_tipo?.clasificacion)}</td>
+                  {/* Un cargo suma a lo que el cliente debe, igual que un gasto del lado de
+                      pagos: mismo signo y mismo color para que las dos ventanas se lean con
+                      el mismo criterio. Los que no suman van apagados y sin signo. */}
+                  <td style={{
+                    textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600,
+                    color: suma ? 'var(--red)' : 'var(--t3)',
+                  }}>
+                    {suma ? '+' : ''}{fmt$(d.monto)}
+                  </td>
+                  <td className="td-muted" style={{ maxWidth: 240 }}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={d.observaciones || undefined}>
+                      {d.observaciones || (suma ? 'Consumo a su cuenta' : 'No suma a la cuenta')}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 10, maxWidth: '80ch' }}>
+        Estos cargos <strong>suman</strong> a lo que el cliente debe. No tienen estado
+        pagado/sin pagar: lo que los cierra es una cobranza, y esa se carga como op con estado
+        CTA CTE CLI y aparece en la ventana de <em>Pagos</em>. Atribuir un detalle a una cuenta
+        no cambia el cuadre de la caja. Entran los detalles de todos los locales del grupo.
+      </p>
+    </>
+  )
+}
+
 export default function ClienteCuentaCorriente() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -48,6 +163,10 @@ export default function ClienteCuentaCorriente() {
   // Arranca en lo abierto: lo que trae al usuario aca es qué falta cobrar y qué falta
   // pagar, no el historial cerrado.
   const [filtro, setFiltro] = useState(FILTRO_ABIERTOS)
+  // Cuál de las dos ventanas se está mirando. `null` hasta que llegan los datos: la
+  // ventana inicial depende de dónde estén los movimientos (ver ventanaInicial), y elegirla
+  // antes obligaría a saltar de pestaña sola después de cargar.
+  const [ventana, setVentana] = useState(null)
 
   const cargar = useCallback((signal) => {
     setLoading(true)
@@ -73,8 +192,16 @@ export default function ClienteCuentaCorriente() {
   if (!datos) return null
 
   const { cliente, pagos } = datos
+  // `caja` puede no venir si la respuesta quedó cacheada de antes del cambio: la pantalla
+  // tiene que abrir igual, con la ventana de cajas vacía.
+  const caja = datos.caja ?? { detalles: [], cargado: 0, cantidad: 0, informativos: 0, cantidad_informativos: 0 }
+  const detallesCaja = caja.detalles ?? []
   const visibles = filtrarPorCuadrante(pagos, filtro)
   const nombre = nombreClienteODefault(cliente, 'Cliente')
+  const activa = ventana ?? ventanaInicial({ pagos: pagos.length, cajas: detallesCaja.length })
+  // Lo que el cliente debe contando las dos mitades. El número de pagos se sigue mostrando
+  // por separado abajo: este es el total, no un reemplazo.
+  const debeTotal = Number(datos.debe_cliente || 0) + Number(caja.cargado || 0)
 
   return (
     <div className="page">
@@ -113,11 +240,20 @@ export default function ClienteCuentaCorriente() {
           <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             El cliente debe
           </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: datos.debe_cliente > 0 ? 'var(--amber)' : 'var(--t2)' }}>
-            {datos.debe_cliente > 0 ? fmt$(datos.debe_cliente) : 'nada'}
+          <div style={{ fontSize: 22, fontWeight: 700, color: debeTotal > 0 ? 'var(--amber)' : 'var(--t2)' }}>
+            {debeTotal > 0 ? fmt$(debeTotal) : 'nada'}
           </div>
+          {/* De dónde viene la deuda, siempre que venga de los dos lados. Sin esto el número
+              grande cambió de significado (antes era solo ops) y nadie podría reconciliarlo
+              con lo que ve en las dos ventanas. */}
           <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 2 }}>
-            ingresos que todavía no pagó
+            {caja.cargado > 0 && datos.debe_cliente > 0 ? (
+              <>{fmt$(datos.debe_cliente)} en ops · {fmt$(caja.cargado)} en cajas</>
+            ) : caja.cargado > 0 ? (
+              'cargado desde cajas y sin cobrar'
+            ) : (
+              'ingresos que todavía no pagó'
+            )}
           </div>
         </div>
         <div>
@@ -133,10 +269,49 @@ export default function ClienteCuentaCorriente() {
         </div>
         <div>
           <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Movimientos</div>
-          <div style={{ fontSize: 15, color: 'var(--t1)' }}>{pagos.length}</div>
+          <div style={{ fontSize: 15, color: 'var(--t1)' }}>{pagos.length + detallesCaja.length}</div>
+          <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 2 }}>
+            {pagos.length} en ops · {detallesCaja.length} en cajas
+          </div>
         </div>
       </div>
 
+      {/* ── Las dos ventanas ─────────────────────────────────────────────────
+          Con la cantidad en cada una: una pestaña sin número obliga a entrar para
+          descubrir que está vacía. */}
+      <div
+        role="tablist"
+        aria-label="Origen de los movimientos"
+        style={{ display: 'flex', gap: 4, marginBottom: '1rem', borderBottom: '1px solid var(--glass-border)' }}
+      >
+        {VENTANAS.map((v) => {
+          const info = VENTANA_INFO[v]
+          const esActiva = activa === v
+          const cantidad = v === 'pagos' ? pagos.length : detallesCaja.length
+          return (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={esActiva}
+              onClick={() => setVentana(v)}
+              title={info.ayuda}
+              style={{
+                font: 'inherit', cursor: 'pointer', background: 'none',
+                border: 'none', borderBottom: `2px solid ${esActiva ? 'var(--gold)' : 'transparent'}`,
+                color: esActiva ? 'var(--t1)' : 'var(--t3)',
+                fontWeight: esActiva ? 600 : 400,
+                padding: '8px 14px', marginBottom: -1,
+              }}
+            >
+              {info.label}
+              <span style={{ fontSize: 11, color: 'var(--t3)', marginLeft: 6 }}>{cantidad}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {activa === 'pagos' && <>
       {/* ── Los cuatro tags ──────────────────────────────────────────────────
           Son botones: el numero y el filtro son la misma cosa. Ver "$120.000 a
           cobrar" y no poder llegar a esas tres ops es la mitad de la respuesta. */}
@@ -304,6 +479,9 @@ export default function ClienteCuentaCorriente() {
           Entran las ops de todos los locales del grupo.
         </p>
       )}
+      </>}
+
+      {activa === 'cajas' && <VentanaCajas caja={caja} detalles={detallesCaja} navigate={navigate} />}
     </div>
   )
 }

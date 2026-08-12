@@ -181,7 +181,11 @@ export default async function cajaRoutes(fastify) {
         movimientos: { include: { metodo_pago: true } },
         detalles: {
           include: {
-            detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } }
+            detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } },
+            // A qué cuenta corriente se le cargó el detalle. Hace falta el nombre y no solo
+            // el id: el formulario de edición abre el combobox con lo que ya estaba, y con
+            // solo el id abriría vacío y parecería que el detalle perdió la cuenta.
+            cliente:      { select: { id: true, nombre: true, razon_social: true } }
           },
           orderBy: { created_at: 'asc' }
         }
