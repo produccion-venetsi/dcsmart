@@ -19,6 +19,7 @@ import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
+import { cashflowAutomatico, siguienteCashflow, soloFecha, ayudaCashflow } from '../../lib/cashflowPago.js'
 import CampoCuit from '../../components/CampoCuit.jsx'
 
 function IcoBack() {
@@ -47,14 +48,12 @@ function padLeft(val, len) {
   return str ? str.padStart(len, '0') : ''
 }
 
-// cashflow = fecha + plazo (días). Aritmética de día calendario en UTC para
-// no depender del huso del navegador: `new Date(fecha + 'T00:00:00')` se
-// interpretaba en hora local y, fuera de Argentina, corría el día resultante.
-function calcCashflow(fecha, plazo) {
-  if (!fecha || !plazo) return ''
-  const [y, m, d] = fecha.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d + Number(plazo))).toISOString().slice(0, 10)
-}
+// El cálculo del cashflow (fecha + plazo en las ops con factura, fecha de pago
+// en los modos rápidos) vive en lib/cashflowPago.js, con tests.
+//
+// Campos que lo arrastran al cambiar. `pagado` está porque destildarlo vacía la
+// fecha de pago, y entonces el cashflow vuelve a ser la fecha de la op.
+const CAMPOS_QUE_MUEVEN_CASHFLOW = ['fecha', 'fecha_pago', 'pagado']
 
 function IcoPlus() {
   return (
@@ -187,7 +186,12 @@ export default function PagoForm() {
     // mientras nadie lo escriba a mano.
     pv: '', nro: modoRapido ? nroDesdeFecha(hoy) : '',
     importe_neto: '', descuento: '', importe: '',
-    id_metodo: '', cashflow: '', observaciones: '',
+    id_metodo: '',
+    // En los modos rápidos el pago nace pagado y con fecha: el cashflow es ese mismo día
+    // y no hay que tipearlo (ver lib/cashflowPago.js). En una op con factura arranca
+    // vacío: lo pone el plazo del proveedor cuando se lo elige.
+    cashflow: cashflowAutomatico({ modoRapido, fecha: hoy, fechaPago: modoRapido ? ahoraDateTime : '' }),
+    observaciones: '',
     pagado: modoRapido, fecha_pago: modoRapido ? ahoraDateTime : '', periodo: modoRapido ? hoy : '',
     // Son plata que sale de la caja del local, no cuenta corriente con un
     // proveedor: por eso el estado arranca en CAJA en los modos rápidos.
@@ -325,7 +329,14 @@ export default function PagoForm() {
           setForm(f => ({
             ...f,
             id_proveedor: prov.id,
-            cashflow:     calcCashflow(f.fecha, prov.plazo) || f.cashflow,
+            // En modo rápido `cashflowAutomatico` ignora el plazo y deja la fecha de pago:
+            // sin esto, un local cuyo proveedor tiene plazo cargado volvía a pisar el
+            // cashflow con fecha + plazo justo después de precargarlo.
+            cashflow: siguienteCashflow({
+              actual:       f.cashflow,
+              autoAnterior: cashflowAutomatico({ modoRapido, fecha: f.fecha, fechaPago: f.fecha_pago }),
+              autoNuevo:    cashflowAutomatico({ modoRapido, fecha: f.fecha, fechaPago: f.fecha_pago, plazo: prov.plazo }),
+            }),
           }))
         } else if (contexto) {
           // El local existe pero no tiene proveedor configurado: false (y no
@@ -520,6 +531,11 @@ export default function PagoForm() {
   // Antigüedad del período, para el aviso de más abajo. Se recalcula en cada
   // render y no en un useMemo porque son dos restas.
   const diasPeriodo  = diasDesdeFinDePeriodo(form.periodo)
+  // De dónde salió el cashflow que se está viendo, para el texto de abajo del campo. Se
+  // recalcula en cada render (son comparaciones de strings) y no en un useMemo.
+  const cashflowAyuda = ayudaCashflow({
+    modoRapido, fecha: form.fecha, fechaPago: form.fecha_pago, plazo: provPlazo, actual: form.cashflow,
+  })
   const periodoViejo = periodoDemasiadoViejo(form.periodo)
 
   // set con efectos encadenados.
@@ -547,17 +563,20 @@ export default function PagoForm() {
         if (modoRapido && !isEditing && !nroManualRef.current) {
           next.nro = nroDesdeFecha(value) || next.nro
         }
-        // Solo recalcular el cashflow si estaba vacío o si todavía era el
-        // auto-calculado (fecha anterior + plazo). Un valor puesto a mano
-        // NUNCA se pisa en silencio: el cliente carga vencimientos pactados
-        // que no coinciden con el plazo genérico del proveedor.
-        const autoAnterior = calcCashflow(f.fecha, provPlazo)
-        if (!f.cashflow || f.cashflow === autoAnterior) {
-          next.cashflow = calcCashflow(value, provPlazo) || f.cashflow
-        }
       }
       if (field === 'fecha_pago') next.pagado = Boolean(value)
       if (field === 'pagado' && !value) next.fecha_pago = ''
+      // El cashflow acompaña a los campos de los que depende: la fecha (op con factura,
+      // vía el plazo del proveedor) y la fecha de pago (modo rápido). Un valor puesto a
+      // mano NUNCA se pisa en silencio -- el cliente carga vencimientos pactados que no
+      // coinciden con ningún cálculo. La regla está en lib/cashflowPago.js.
+      if (CAMPOS_QUE_MUEVEN_CASHFLOW.includes(field)) {
+        next.cashflow = siguienteCashflow({
+          actual:       f.cashflow,
+          autoAnterior: cashflowAutomatico({ modoRapido, fecha: f.fecha,    fechaPago: f.fecha_pago,    plazo: provPlazo }),
+          autoNuevo:    cashflowAutomatico({ modoRapido, fecha: next.fecha, fechaPago: next.fecha_pago, plazo: provPlazo }),
+        })
+      }
       return next
     })
   }
@@ -584,24 +603,35 @@ export default function PagoForm() {
     const plazo = prov.plazo || null
     setProvPlazo(plazo)
     setProvSelected(prov)
-    setForm(f => {
-      // Igual que en set('fecha'): solo pisar el cashflow si estaba vacío o
-      // si era el auto-calculado con el plazo del proveedor anterior. Si el
-      // usuario lo puso a mano, se respeta.
-      const autoAnterior = calcCashflow(f.fecha, provPlazo)
-      const esManual = f.cashflow && f.cashflow !== autoAnterior
-      return {
-        ...f,
-        id_proveedor: prov.id,
-        cashflow:     esManual ? f.cashflow : (calcCashflow(f.fecha, plazo) || f.cashflow),
-      }
-    })
+    setForm(f => ({
+      ...f,
+      id_proveedor: prov.id,
+      // Igual que al mover la fecha: el plazo del proveedor nuevo recalcula el cashflow
+      // salvo que lo hayan escrito a mano. En modo rápido el plazo no aplica (la plata ya
+      // salió de la caja) y `cashflowAutomatico` lo ignora.
+      cashflow: siguienteCashflow({
+        actual:       f.cashflow,
+        autoAnterior: cashflowAutomatico({ modoRapido, fecha: f.fecha, fechaPago: f.fecha_pago, plazo: provPlazo }),
+        autoNuevo:    cashflowAutomatico({ modoRapido, fecha: f.fecha, fechaPago: f.fecha_pago, plazo }),
+      }),
+    }))
   }
 
   const clearProveedor = () => {
     setProvPlazo(null)
     setProvSelected(null)
-    setForm(f => ({ ...f, id_proveedor: '', cashflow: '' }))
+    setForm(f => {
+      const auto = cashflowAutomatico({ modoRapido, fecha: f.fecha, fechaPago: f.fecha_pago, plazo: provPlazo })
+      // Sin proveedor no hay plazo, así que en una op con factura el cashflow se vacía
+      // (era eso lo que lo calculaba). En modo rápido no depende del proveedor y queda la
+      // fecha de pago. Un valor escrito a mano se conserva en los dos casos.
+      const manual = f.cashflow && soloFecha(f.cashflow) !== soloFecha(auto)
+      return {
+        ...f,
+        id_proveedor: '',
+        cashflow: manual ? f.cashflow : cashflowAutomatico({ modoRapido, fecha: f.fecha, fechaPago: f.fecha_pago }),
+      }
+    })
   }
 
   // tipo_local solo reordena el resultado (los proveedores del rubro del local
@@ -979,35 +1009,41 @@ export default function PagoForm() {
               )}
             </div>
             <div className="form-group">
-              <label className="form-label">Cashflow *</label>
+              <label className="form-label" htmlFor="pago-cashflow">Cashflow *</label>
               <div className="form-input-wrap">
                 <input
+                  id="pago-cashflow"
                   type="date"
                   required
                   value={form.cashflow}
                   onChange={e => set('cashflow', e.target.value)}
-                  title={provPlazo ? `Calculado: fecha + ${provPlazo} días` : 'Fecha estimada de pago'}
+                  aria-describedby="pago-cashflow-ayuda"
+                  title={cashflowAyuda.titulo}
                 />
               </div>
-              {provPlazo && (
-                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
-                  Plazo: {provPlazo} días
-                  {form.fecha && form.cashflow && form.cashflow !== calcCashflow(form.fecha, provPlazo) && (
-                    <button
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, cashflow: calcCashflow(f.fecha, provPlazo) }))}
-                      style={{
-                        background: 'none', border: 'none', padding: 0, marginLeft: 6,
-                        color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
-                        textDecoration: 'underline',
-                      }}
-                      title={`Volver a fecha + ${provPlazo} días`}
-                    >
-                      recalcular por plazo
-                    </button>
-                  )}
-                </span>
-              )}
+              {/* De dónde salió el valor y cómo volver a lo automático. Sin esto el campo es
+                  una fecha obligatoria sin explicación: quien carga no sabe si el número que
+                  ve lo puso el sistema o lo dejó otra persona. */}
+              <span
+                id="pago-cashflow-ayuda"
+                style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}
+              >
+                {cashflowAyuda.texto}
+                {cashflowAyuda.puedeVolver && (
+                  <button
+                    type="button"
+                    onClick={() => set('cashflow', cashflowAyuda.automatico)}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, marginLeft: 6,
+                      color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
+                      textDecoration: 'underline',
+                    }}
+                    title={`Volver a ${cashflowAyuda.automatico}`}
+                  >
+                    {cashflowAyuda.accion}
+                  </button>
+                )}
+              </span>
             </div>
             <div className="form-group">
               <label className="form-label">Fecha de Pago</label>
