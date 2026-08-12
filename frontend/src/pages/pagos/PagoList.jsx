@@ -21,13 +21,15 @@ import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCred
 import { todayInputDate, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateArg, fmtDateTimeArg, fmtDateUTC, fmtMonthUTC, periodoDistintoDeFecha } from '../../lib/dates.js'
 import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
 import { ESTADO_OP_OPTIONS, ESTADO_OP_LABEL, ESTADO_OP_BADGE } from '../../lib/estadoOp.js'
+import { TIPOS_PAGO } from '../../lib/tiposPago.js'
 
 // Etiquetas, colores y opciones salen de lib/estadoOp.js: estaban duplicados acá y
 // en PagoForm, y un enum copiado es un enum que se desincroniza.
 const ESTADO_BADGE = ESTADO_OP_BADGE
-const TIPO_PAGO_OPTIONS = [
-  'A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'
-]
+// Lo mismo pasaba con los tipos de comprobante: la lista estaba escrita a mano acá y en
+// PagoForm, así que al agregar NDC uno de los dos se quedaba sin él. Ahora sale de
+// lib/tiposPago.js, con un test que la compara contra el enum de Prisma.
+const TIPO_PAGO_OPTIONS = TIPOS_PAGO
 const TIPO_PAGO_MULTI = TIPO_PAGO_OPTIONS.map(t => ({ value: t, label: t }))
 const CAMPO_FECHA_OPTIONS = [
   { value: 'fecha',      label: 'Fecha' },

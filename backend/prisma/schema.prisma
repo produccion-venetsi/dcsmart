@@ -690,6 +690,7 @@ enum TipoPago {
   NCB
   NDA
   ND
+  NDC
   STK
   X
 

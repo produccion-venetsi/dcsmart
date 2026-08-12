@@ -12,6 +12,7 @@ import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { nombreCliente } from '../../lib/clientes.js'
+import { TIPOS_PAGO } from '../../lib/tiposPago.js'
 import { patchDesdeLectura, faltaParaDuplicado } from '../../lib/precargaIA.js'
 import { ESTADO_OP_OPTIONS, ESTADO_CTA_CTE_CLIENTE } from '../../lib/estadoOp.js'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
@@ -1122,7 +1123,9 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
                   <option value="">—</option>
-                  {['A','B','C','CM','DC_1','DC_2','DDJJ','FF','LF','M','NCA','NCB','NDA','ND','STK','X'].map(t => <option key={t} value={t}>{t}</option>)}
+                  {/* La lista sale de lib/tiposPago.js: estaba escrita a mano acá y en
+                      PagoList, así que al agregar un tipo uno de los dos quedaba sin él. */}
+                  {TIPOS_PAGO.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
             </div>
