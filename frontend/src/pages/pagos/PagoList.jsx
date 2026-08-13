@@ -207,6 +207,22 @@ const PAGO_CSV_COLUMNS = [
   { label: 'Local',       get: (p) => p.local?.nombre || '' },
 ]
 
+// ── Columnas fijas al deslizar ────────────────────────────────────────────────
+//
+// La tabla tiene 18 columnas: deslizando a la derecha se pierde de vista de que pago es
+// cada fila. Quedan fijas las primeras, hasta Proveedor inclusive (pedido del usuario).
+//
+// El ancho es FIJO y no minimo porque el desplazamiento de cada columna se calcula sumando
+// los anchos de las anteriores: con anchos flexibles el cuerpo se desalinea del encabezado.
+// Una sola lista para las dos filas, asi que agregar una columna fija es una linea.
+const COLS_FIJAS = [
+  { key: 'sel',   ancho: 34, soloEnSeleccion: true },
+  { key: 'aud',   ancho: 44 },
+  { key: 'op',    ancho: 78 },
+  { key: 'fecha', ancho: 92 },
+  { key: 'prov',  ancho: 190 },
+]
+
 // Mismas etiquetas y colores que la pantalla Actividad, para que el badge se
 // lea igual en los dos lados.
 const ACTIVIDAD_LABEL = { creado: 'Creado', editado: 'Editado', eliminado: 'Eliminado' }
@@ -1496,11 +1512,44 @@ export default function PagoList() {
     : categorias
 
   // ── Estilos ───────────────────────────────────────────────────────────────
-  const SortTh = ({ field, children, minWidth }) => (
-    <th className={`sortable${sortField === field ? ' active' : ''}`} style={minWidth ? { minWidth } : undefined} onClick={() => toggleSort(field)}>
-      {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
-    </th>
-  )
+  //
+  // Desplazamiento lateral de cada columna fija: la suma de los anchos de las anteriores.
+  // La del checkbox solo cuenta cuando el modo seleccion esta activo, si no las demas
+  // quedarian corridas 34px.
+  const fijas = useMemo(() => {
+    let acc = 0
+    const m = new Map()
+    for (const c of COLS_FIJAS) {
+      if (c.soloEnSeleccion && !selectionMode) continue
+      m.set(c.key, { left: acc, ancho: c.ancho })
+      acc += c.ancho
+    }
+    return m
+  }, [selectionMode])
+
+  // Lo que hay que ponerle a la celda (th o td) de una columna fija. `ultima` dibuja la
+  // linea que separa lo fijo de lo que se desliza.
+  const fija = (key, { ultima = false } = {}) => {
+    const c = fijas.get(key)
+    if (!c) return {}
+    return {
+      className: `col-fija${ultima ? ' col-fija-ultima' : ''}`,
+      style: { left: c.left, width: c.ancho, minWidth: c.ancho, maxWidth: c.ancho },
+    }
+  }
+
+  const SortTh = ({ field, children, minWidth, fijaKey, ultima }) => {
+    const f = fijaKey ? fija(fijaKey, { ultima }) : {}
+    return (
+      <th
+        className={`sortable${sortField === field ? ' active' : ''}${f.className ? ` ${f.className}` : ''}`}
+        style={{ ...(minWidth ? { minWidth } : {}), ...f.style }}
+        onClick={() => toggleSort(field)}
+      >
+        {children} <span className="sort-ico">{sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+      </th>
+    )
+  }
 
   const chipSt = (active) => ({
     padding: '3px 11px', borderRadius: 20, cursor: 'pointer', fontSize: 11,
@@ -1691,14 +1740,14 @@ export default function PagoList() {
           <thead>
             <tr>
               {selectionMode && (
-                <th style={{ width: 32 }}>
+                <th {...fija('sel')}>
                   <input type="checkbox" className="select-checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
                 </th>
               )}
-              <th style={{ width: 44, textAlign: 'center' }} title="Auditado">Aud</th>
-              <SortTh field="nro_ord" minWidth={70}>OP</SortTh>
-              <SortTh field="fecha" minWidth={90}>Fecha</SortTh>
-              <SortTh field="proveedor" minWidth={140}>Proveedor</SortTh>
+              <th {...fija('aud')} style={{ ...fija('aud').style, textAlign: 'center' }} title="Auditado">Aud</th>
+              <SortTh field="nro_ord" fijaKey="op">OP</SortTh>
+              <SortTh field="fecha" fijaKey="fecha">Fecha</SortTh>
+              <SortTh field="proveedor" fijaKey="prov" ultima>Proveedor</SortTh>
               <th style={{ minWidth: 160 }}>Rubro / Cat</th>
               <th style={{ minWidth: 80 }}>Tipo</th>
               <th style={{ minWidth: 90 }}>PV / Nro</th>
@@ -1740,16 +1789,16 @@ export default function PagoList() {
               pagos.map((p) => (
                 <tr key={p.id} className="row-clickable" onClick={() => openDetail(p)}>
                   {selectionMode && (
-                    <td onClick={e => e.stopPropagation()}>
+                    <td {...fija('sel')} onClick={e => e.stopPropagation()}>
                       <input type="checkbox" className="select-checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelected(p.id)} />
                     </td>
                   )}
-                  <td style={{ width: 44, textAlign: 'center' }}>
+                  <td {...fija('aud')} style={{ ...fija('aud').style, textAlign: 'center' }}>
                     <span style={{ color: p.audit ? 'var(--green)' : 'var(--amber)' }} title={p.audit ? 'Auditado' : 'No auditado'}>
                       {p.audit ? <IcoThumbUp /> : <IcoEye />}
                     </span>
                   </td>
-                  <td className="td-primary" style={{ minWidth: 70, whiteSpace: 'nowrap' }}>
+                  <td className={`td-primary ${fija('op').className}`} style={{ ...fija('op').style, whiteSpace: 'nowrap' }}>
                     {p.nro_ord != null ? `OP-${p.nro_ord}` : <span className="td-muted">—</span>}
                     {p.cargado_con_ia && (
                       <span style={{ color: 'var(--gold-bright)', marginLeft: 5 }} title="Cargado con IA">
@@ -1757,8 +1806,13 @@ export default function PagoList() {
                       </span>
                     )}
                   </td>
-                  <td style={{ minWidth: 90 }}>{fmtDate(p.fecha)}</td>
-                  <td style={{ minWidth: 140 }}>{p.proveedor?.nombre || <span className="td-muted">—</span>}</td>
+                  <td {...fija('fecha')} style={{ ...fija('fecha').style, whiteSpace: 'nowrap' }}>{fmtDate(p.fecha)}</td>
+                  {/* El nombre largo se recorta con puntos suspensivos: el ancho es fijo
+                      porque de el depende el desplazamiento de las columnas que siguen. */}
+                  <td {...fija('prov', { ultima: true })} style={{ ...fija('prov', { ultima: true }).style, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    title={p.proveedor?.nombre || undefined}>
+                    {p.proveedor?.nombre || <span className="td-muted">—</span>}
+                  </td>
                   <td style={{ minWidth: 160, fontSize: 12 }}>
                     {p.rubcat
                       ? <span>{p.rubcat.rubro?.nombre}<span className="td-muted"> / {p.rubcat.categoria?.nombre}</span></span>
