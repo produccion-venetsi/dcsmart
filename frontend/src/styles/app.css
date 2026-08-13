@@ -1652,6 +1652,104 @@ select.campo-ia {
    dd/mm/aaaa sin recortar el texto ni el iconito del calendario. Abajo de eso se
    pasa solo a una columna: es mas legible angosto y en una fila que apretado en
    dos. */
+
+/* ── Tarjetas de totales de una cuenta corriente ─────────────────────────────
+   Cuatro números grandes arriba y la tabla abajo. Es el patrón que pidió el
+   cliente a partir de un sistema de facturación que usan.
+
+   El fondo tintado sale de los tokens `--*-bg`, que ya existen en los dos temas y
+   tienen el contraste medido: la referencia usaba bloques de color pleno con letra
+   blanca, que en tema claro sería un ladrillo y obligaría a un juego de colores
+   propio para el texto.
+
+   Son de SOLO LECTURA a propósito. Antes estos cuatro números eran botones que
+   además filtraban la tabla, y eso era la mitad de la confusión: parecían
+   indicadores y respondían como controles. El filtro ahora vive en su propia fila
+   (.cta-filtros), que se lee como filtro. */
+.cta-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+.cta-kpi {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+/* --t2 y no --t3: es la etiqueta que dice QUÉ es el número, en 10px y en mayúsculas.
+   Con --t3 daba 3,07x sobre el fondo tintado -- pasa el mínimo que el proyecto se fijó
+   para texto auxiliar, pero esta pantalla se rehizo justamente porque costaba leerla. */
+.cta-kpi-rotulo {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+.cta-kpi-valor {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--t1);
+  /* Un importe largo no puede empujar la grilla ni cortarse a la mitad. */
+  overflow-wrap: anywhere;
+}
+.cta-kpi-nota { font-size: 10.5px; color: var(--t3); }
+
+.cta-kpi.tono-rojo   { background: var(--red-bg);   border-left-color: var(--red); }
+.cta-kpi.tono-rojo   .cta-kpi-valor { color: var(--red); }
+.cta-kpi.tono-azul   { background: var(--blue-bg);  border-left-color: var(--blue); }
+.cta-kpi.tono-azul   .cta-kpi-valor { color: var(--blue); }
+.cta-kpi.tono-verde  { background: var(--green-bg); border-left-color: var(--green); }
+.cta-kpi.tono-verde  .cta-kpi-valor { color: var(--green); }
+/* En cero el color de alarma no corresponde: una cuenta sin deuda no es un problema. */
+.cta-kpi.en-cero { background: var(--bg-card); border-left-color: var(--glass-border); }
+.cta-kpi.en-cero .cta-kpi-valor { color: var(--t2); font-weight: 600; }
+
+/* ── Fila de filtros ─────────────────────────────────────────────────────── */
+.cta-filtros {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+.cta-filtro {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--t2);
+  white-space: nowrap;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.cta-filtro:hover { border-color: var(--glass-border-hi); color: var(--t1); }
+.cta-filtro[aria-pressed="true"] {
+  border-color: var(--gold);
+  color: var(--t1);
+  background: rgba(var(--velo-rgb), 0.05);
+}
+.cta-filtro .cta-filtro-n {
+  font-size: 10.5px;
+  color: var(--t3);
+  margin-left: 5px;
+  font-variant-numeric: tabular-nums;
+}
+/* Un filtro sin resultados se ve apagado: clickearlo no lleva a ninguna parte. */
+.cta-filtro.vacio { opacity: 0.5; }
+
 .datos-persona-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

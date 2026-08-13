@@ -202,6 +202,9 @@ export default function ClienteCuentaCorriente() {
   // Lo que el cliente debe contando las dos mitades. El número de pagos se sigue mostrando
   // por separado abajo: este es el total, no un reemplazo.
   const debeTotal = Number(datos.debe_cliente || 0) + Number(caja.cargado || 0)
+  // Todo lo que pasó por la cuenta, pagado y sin pagar, de los dos lados. Es un número de
+  // volumen, no un saldo: no lleva dirección ni se resta con nada.
+  const totalCuenta = Number(datos.total_ingresos || 0) + Number(datos.total_egresos || 0) + Number(caja.cargado || 0)
 
   return (
     <div className="page">
@@ -226,52 +229,43 @@ export default function ClienteCuentaCorriente() {
         </div>
       </div>
 
-      {/* El saldo primero y con su etiqueta: es la pregunta que trae al usuario acá. */}
-      <div style={{
-        display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'baseline',
-        background: 'var(--bg-input)', border: '1px solid var(--glass-border)',
-        borderRadius: 12, padding: '1rem 1.2rem', marginBottom: '0.75rem',
-      }}>
-{/* Los dos numeros que se preguntan al abrir la ficha, por separado. No hay un
-            "saldo" unico con signo: lo que el cliente debe y lo que el local le falta
-            pagar son dos cosas distintas, y meterlas en una resta da el signo al
-            reves (un ingreso sin cobrar de 1.000.000 se leia como "a favor"). */}
-        <div>
-          <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            El cliente debe
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: debeTotal > 0 ? 'var(--amber)' : 'var(--t2)' }}>
-            {debeTotal > 0 ? fmt$(debeTotal) : 'nada'}
-          </div>
-          {/* De dónde viene la deuda, siempre que venga de los dos lados. Sin esto el número
-              grande cambió de significado (antes era solo ops) y nadie podría reconciliarlo
-              con lo que ve en las dos ventanas. */}
-          <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 2 }}>
-            {caja.cargado > 0 && datos.debe_cliente > 0 ? (
-              <>{fmt$(datos.debe_cliente)} en ops · {fmt$(caja.cargado)} en cajas</>
-            ) : caja.cargado > 0 ? (
-              'cargado desde cajas y sin cobrar'
-            ) : (
-              'ingresos que todavía no pagó'
-            )}
-          </div>
+      {/* ── Los cuatro números ────────────────────────────────────────────────
+          Solo lectura. Antes esto eran dos números grandes, un contador y cuatro
+          botones-tarjeta que además filtraban la tabla: números en cuatro lugares y
+          controles disfrazados de indicadores. El filtro bajó a su propia fila.
+
+          "El cliente debe" y "Falta pagar" siguen SEPARADOS y no se restan entre sí:
+          son dos cosas distintas y la resta da el signo al revés (un ingreso sin
+          cobrar de 1.000.000 se leía como "a favor"). */}
+      <div className="cta-kpis">
+        <div className="cta-kpi">
+          <div className="cta-kpi-rotulo">Movimientos</div>
+          <div className="cta-kpi-valor">{pagos.length + detallesCaja.length}</div>
+          <div className="cta-kpi-nota">{pagos.length} en ops · {detallesCaja.length} en cajas</div>
         </div>
-        <div>
-          <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Falta pagar
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: datos.falta_pagar > 0 ? 'var(--blue)' : 'var(--t2)' }}>
-            {datos.falta_pagar > 0 ? fmt$(datos.falta_pagar) : 'nada'}
-          </div>
-          <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 2 }}>
-            gastos a su nombre sin pagar
-          </div>
+
+        <div className="cta-kpi">
+          <div className="cta-kpi-rotulo">Total de la cuenta</div>
+          <div className="cta-kpi-valor">{fmt$(totalCuenta)}</div>
+          <div className="cta-kpi-nota">todo lo que pasó por la cuenta</div>
         </div>
-        <div>
-          <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Movimientos</div>
-          <div style={{ fontSize: 15, color: 'var(--t1)' }}>{pagos.length + detallesCaja.length}</div>
-          <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 2 }}>
-            {pagos.length} en ops · {detallesCaja.length} en cajas
+
+        <div className={`cta-kpi tono-azul${datos.falta_pagar > 0 ? '' : ' en-cero'}`}>
+          <div className="cta-kpi-rotulo">Falta pagar</div>
+          <div className="cta-kpi-valor">{datos.falta_pagar > 0 ? fmt$(datos.falta_pagar) : 'nada'}</div>
+          <div className="cta-kpi-nota">gastos a su nombre sin pagar</div>
+        </div>
+
+        <div className={`cta-kpi tono-rojo${debeTotal > 0 ? '' : ' en-cero'}`}>
+          <div className="cta-kpi-rotulo">El cliente debe</div>
+          <div className="cta-kpi-valor">{debeTotal > 0 ? fmt$(debeTotal) : 'nada'}</div>
+          {/* De dónde viene la deuda cuando viene de los dos lados: sin esto el número
+              no se puede reconciliar con lo que muestran las dos pestañas. */}
+          <div className="cta-kpi-nota">
+            {caja.cargado > 0 && datos.debe_cliente > 0
+              ? <>{fmt$(datos.debe_cliente)} en ops · {fmt$(caja.cargado)} en cajas</>
+              : caja.cargado > 0 ? 'cargado desde cajas y sin cobrar'
+              : 'ingresos que todavía no pagó'}
           </div>
         </div>
       </div>
@@ -312,78 +306,53 @@ export default function ClienteCuentaCorriente() {
       </div>
 
       {activa === 'pagos' && <>
-      {/* ── Los cuatro tags ──────────────────────────────────────────────────
-          Son botones: el numero y el filtro son la misma cosa. Ver "$120.000 a
-          cobrar" y no poder llegar a esas tres ops es la mitad de la respuesta. */}
-      <div
-        role="group"
-        aria-label="Filtrar movimientos por estado"
-        style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: '1rem' }}
-      >
+      {/* ── Filtros ───────────────────────────────────────────────────────────
+          Una sola fila, y se lee como filtro. Antes esto eran cuatro tarjetas grandes
+          con el monto adentro MÁS dos links de texto ("ver todos" / "ver solo lo que
+          falta cerrar"): tres formas de filtrar lo mismo, y las tarjetas se confundían
+          con los indicadores de arriba.
+
+          El monto sigue disponible en el title de cada uno: lo que se perdió al
+          achicarlos es el ruido, no el dato. */}
+      <div className="cta-filtros" role="group" aria-label="Filtrar los movimientos">
+        <button
+          type="button"
+          className="cta-filtro"
+          aria-pressed={filtro === FILTRO_ABIERTOS}
+          onClick={() => setFiltro(FILTRO_ABIERTOS)}
+          title="Lo que todavía hay que cobrar o pagar"
+        >
+          Sin cerrar
+          <span className="cta-filtro-n">{datos.cantidad?.a_cobrar + datos.cantidad?.gastos_pendientes || 0}</span>
+        </button>
+        <button
+          type="button"
+          className="cta-filtro"
+          aria-pressed={filtro === FILTRO_TODOS}
+          onClick={() => setFiltro(FILTRO_TODOS)}
+          title="Todos los movimientos, cerrados y sin cerrar"
+        >
+          Todos
+          <span className="cta-filtro-n">{pagos.length}</span>
+        </button>
+        <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--glass-border)', margin: '0 2px' }} />
         {ORDEN_CUADRANTES.map((c) => {
           const info = CUADRANTE_INFO[c]
-          const activo = filtro === c
           const cantidad = datos.cantidad?.[c] ?? 0
           return (
             <button
               key={c}
               type="button"
-              onClick={() => setFiltro(activo ? FILTRO_ABIERTOS : c)}
-              aria-pressed={activo}
-              title={`${info.ayuda}${cantidad ? ` (${cantidad} ${cantidad === 1 ? 'movimiento' : 'movimientos'})` : ' Sin movimientos.'}`}
-              style={{
-                textAlign: 'left', cursor: 'pointer', font: 'inherit',
-                background: activo ? 'var(--bg-hover)' : 'var(--bg-input)',
-                border: `1px solid ${activo ? info.color : 'var(--glass-border)'}`,
-                borderLeft: `3px solid ${info.color}`,
-                borderRadius: 10, padding: '8px 14px', minWidth: 150,
-                // Sin esto un tag en cero se ve igual que uno con plata y se clickea
-                // para nada.
-                opacity: cantidad ? 1 : 0.55,
-              }}
+              className={`cta-filtro${cantidad ? '' : ' vacio'}`}
+              aria-pressed={filtro === c}
+              onClick={() => setFiltro(filtro === c ? FILTRO_ABIERTOS : c)}
+              title={`${info.ayuda} ${cantidad ? `Suman ${fmt$(datos[c])}.` : 'Sin movimientos.'}`}
             >
-              <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                {info.label}
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: cantidad ? info.color : 'var(--t3)' }}>
-                {fmt$(datos[c])}
-              </div>
-              <div style={{ fontSize: 10.5, color: 'var(--t4)' }}>
-                {cantidad === 0 ? 'sin movimientos' : `${cantidad} ${cantidad === 1 ? 'movimiento' : 'movimientos'}`}
-              </div>
+              {info.label}
+              <span className="cta-filtro-n">{cantidad}</span>
             </button>
           )
         })}
-      </div>
-
-      {/* Qué se está viendo, y cómo volver. Un filtro activo sin cartel hace que la
-          tabla parezca incompleta. */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8, fontSize: 12 }}>
-        <span style={{ color: 'var(--t3)' }}>
-          {filtro === FILTRO_TODOS
-            ? `Todos los movimientos (${visibles.length})`
-            : filtro === FILTRO_ABIERTOS
-              ? `Sin cerrar: a cobrar y gastos pendientes (${visibles.length})`
-              : `${CUADRANTE_INFO[filtro]?.label} (${visibles.length})`}
-        </span>
-        {filtro !== FILTRO_TODOS && (
-          <button
-            type="button"
-            onClick={() => setFiltro(FILTRO_TODOS)}
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}
-          >
-            ver todos
-          </button>
-        )}
-        {filtro !== FILTRO_ABIERTOS && (
-          <button
-            type="button"
-            onClick={() => setFiltro(FILTRO_ABIERTOS)}
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 12, textDecoration: 'underline' }}
-          >
-            ver solo lo que falta cerrar
-          </button>
-        )}
       </div>
 
       <div className="table-wrap">
@@ -472,11 +441,9 @@ export default function ClienteCuentaCorriente() {
 
       {pagos.length > 0 && (
         <p style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 10, maxWidth: '80ch' }}>
-          El <strong>+</strong> aumenta lo que el cliente debe; el <strong>−</strong> lo baja.
-          Los importes <span style={{ borderBottom: '1px dashed var(--glass-border)' }}>subrayados</span> son
-          los que todavía no se pagaron. Marcar una op como pagada no cambia el saldo:
-          mueve el importe de <em>a cobrar</em> a <em>ingresos</em>, o de <em>gastos pendientes</em> a <em>gastos</em>.
-          Entran las ops de todos los locales del grupo.
+          El <strong>+</strong> aumenta lo que el cliente debe y el <strong>−</strong> lo baja; los
+          importes <span style={{ borderBottom: '1px dashed var(--glass-border)' }}>subrayados</span> todavía
+          no se pagaron. Entran las ops de todos los locales del grupo.
         </p>
       )}
       </>}
