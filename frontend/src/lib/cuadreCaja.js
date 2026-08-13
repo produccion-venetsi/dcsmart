@@ -64,9 +64,20 @@ const num = (v) => {
 
 export const esEfectivo = (nombreMetodo) => /efectivo/i.test(String(nombreMetodo ?? ''))
 
+// COPIA EXACTA del backend. Lo era en intencion y no en los hechos: leia
+// `detalle.tipo.clasificacion` (como si `tipo` fuera un objeto) y caia en 'informativo',
+// cuando en la base `tipo` es un String con la clasificacion y el objeto se llama
+// `detalle_tipo`. Resultado: TODOS los detalles contaban como informativos y el cuadre en
+// vivo ignoraba los cobros. Los tests de este lib usaban `{ tipo: { clasificacion } }`, una
+// forma que la API nunca manda, asi que pasaban.
+//
+// La clasificacion del propio detalle gana sobre la de su tipo del catalogo: la elige quien
+// carga y puede diferir a proposito. Sin clasificacion se asume cobro -- es lo que carga la
+// mayoria, y tratarlo como informativo lo saca del calculo sin aviso.
 export function rolDeDetalle(detalle) {
-  const clas = detalle?.tipo?.clasificacion ?? detalle?.clasificacion
-  return ROL_POR_CLASIFICACION[clas] ?? 'informativo'
+  const clasif = detalle?.tipo ?? detalle?.detalle_tipo?.clasificacion ?? null
+  if (!clasif) return 'cobro'
+  return ROL_POR_CLASIFICACION[clasif] ?? 'cobro'
 }
 
 export function rolDeMovimiento(movimiento) {
@@ -137,8 +148,11 @@ export function describirCuadre(cuadre) {
     : { texto: 'Cargado de más', tono: 'alerta' }
 }
 
+// Verde cuando cuadra, ROJO cuando no. Antes el descuadre era ambar, que se lee como
+// "ojo" y no como "esto esta mal": pedido del usuario, "a prueba de boludos". El ambar
+// queda para nada: o cierra o no cierra.
 export const colorCuadre = (tono) =>
-  tono === 'ok' ? 'var(--green)' : tono === 'alerta' ? 'var(--amber)' : 'var(--t3)'
+  tono === 'ok' ? 'var(--green)' : tono === 'alerta' ? 'var(--red)' : 'var(--t3)'
 
 // Lo que hay que sumar (o sacar) para que cierre. Es la acción, no el diagnóstico: con
 // "faltan $1.000" uno sabe qué buscar; con "diferencia -1000" hay que pensarlo.

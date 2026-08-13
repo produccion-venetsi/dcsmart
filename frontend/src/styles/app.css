@@ -1884,6 +1884,27 @@ select.campo-ia {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
+/* El semaforo del cuadre. Verde cuadra, ROJO no cuadra, gris mientras no hay total: son
+   tres estados y no dos, porque pintar rojo antes de que se cargue el total seria marcar un
+   error que todavia no existe.
+
+   El color no va solo: el borde izquierdo grueso, el signo (✓ / !) y el fondo tintado dicen
+   lo mismo tres veces. Es a proposito -- 1 de cada 12 varones no distingue rojo de verde, y
+   este cartel es el que decide si la caja se guarda bien. */
+.cuadre-vivo.cuadre-cuadra    { border-left: 4px solid var(--green); background: var(--green-bg); }
+.cuadre-vivo.cuadre-no-cuadra { border-left: 4px solid var(--red);   background: var(--red-bg); }
+.cuadre-vivo.cuadre-sin-datos { border-left: 4px solid var(--glass-border); }
+
+.cuadre-vivo-estado { display: flex; align-items: baseline; gap: 5px; font-size: 13.5px; }
+.cuadre-vivo-marca {
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+}
+/* El monto que falta, del mismo tamano que el texto y no como una nota al pie: es la
+   accion. */
+.cuadre-vivo-falta { font-variant-numeric: tabular-nums; }
+
 .cuadre-vivo-cuentas {
   display: flex;
   flex-wrap: wrap;

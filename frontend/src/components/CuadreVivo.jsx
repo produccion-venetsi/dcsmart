@@ -14,28 +14,31 @@
 // El formateador vive en lib/cajaMayor.js: mismo criterio (separador de miles y los
 // decimales siempre, para que no parezca redondeado).
 import { fmtMonto } from '../lib/cajaMayor.js'
-import { describirCuadre, faltaParaCuadrar } from '../lib/cuadreCaja.js'
-
-const COLOR = { ok: 'var(--green)', falta: 'var(--amber)', sobra: 'var(--red)', neutro: 'var(--t3)' }
+import { describirCuadre, faltaParaCuadrar, colorCuadre } from '../lib/cuadreCaja.js'
 
 export default function CuadreVivo({ cuadre, origin }) {
   if (!cuadre) return null
   const leyenda = describirCuadre(cuadre)
   const falta = faltaParaCuadrar(cuadre)
+  // Tres estados y no dos: mientras no hay total cargado no se sabe si cuadra, y pintarlo
+  // rojo seria marcar un error que todavia no existe.
+  const estado = leyenda.tono === 'ok' ? 'cuadra' : leyenda.tono === 'alerta' ? 'no-cuadra' : 'sin-datos'
 
   return (
-    <div className="cuadre-vivo cuadre-vivo-sticky">
+    <div className={`cuadre-vivo cuadre-vivo-sticky cuadre-${estado}`}>
       <div className="cuadre-vivo-cuentas">
         <span>Efectivo <strong>{fmtMonto(cuadre.efectivo)}</strong></span>
         <span>+ Cobros <strong>{fmtMonto(cuadre.cobros)}</strong></span>
         {cuadre.gastos > 0 && <span>− Gastos <strong>{fmtMonto(cuadre.gastos)}</strong></span>}
         <span className="cuadre-vivo-igual">= <strong>{fmtMonto(cuadre.esperado)}</strong></span>
       </div>
-      <div className="cuadre-vivo-estado" style={{ color: COLOR[leyenda.tono] ?? COLOR.neutro }}>
+      {/* El estado, en grande y con el color del semaforo: verde cuadra, ROJO no cuadra.
+          El monto que falta va PEGADO al texto y en el mismo tamano -- "faltan $1.000" dice
+          que buscar, mientras que "diferencia -1000" hay que pensarlo. */}
+      <div className="cuadre-vivo-estado" style={{ color: colorCuadre(leyenda.tono) }}>
+        <span className="cuadre-vivo-marca" aria-hidden="true">{estado === 'cuadra' ? '✓' : estado === 'no-cuadra' ? '!' : '·'}</span>
         <strong>{leyenda.texto}</strong>
-        {/* El monto que falta, en positivo: "faltan $1.000" dice qué buscar, mientras que
-            "diferencia -1000" hay que pensarlo. */}
-        {falta > 0 && <span> · {fmtMonto(falta)}</span>}
+        {falta > 0 && <strong className="cuadre-vivo-falta"> {fmtMonto(falta)}</strong>}
       </div>
       <div className="cuadre-vivo-fuente">
         {/* De dónde sale la cuenta: en una caja de TapTap los detalles no cuentan, y sin
