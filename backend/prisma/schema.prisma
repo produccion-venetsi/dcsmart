@@ -120,6 +120,7 @@ model User {
   mov_cm_recibidos MovimientoCM[]    @relation("MovimientoCMRecibidaBy")
   documentos_creados Documento[]  @relation("DocumentoCreatedBy")
   folios_creados     InspeccionFolio[] @relation("FolioCreatedBy")
+  folios_editados    InspeccionFolio[] @relation("FolioUpdatedBy")
 
   @@map("users")
 }
@@ -434,19 +435,31 @@ model InspeccionFolio {
   concepto String
   estado   EstadoFolio @default(FALTA)
 
-  // Informativo: se muestra en la columna Vence. NO define el estado -- el estado lo
-  // elige una persona (decisión del usuario, 13/08). Un folio puede estar OK sin
-  // fecha, o tener fecha y estar EN_ESPERA porque falta el certificado.
+  // Las tres fechas del folio, todas DATE y no timestamp: son días de calendario, y como
+  // timestamp se corren un día en GMT-3 (ya pasó con 2076 cajas migradas a medianoche UTC).
+  //
+  //   fecha_emision -> cuándo se emitió el certificado / la habilitación
+  //   periodo       -> a qué mes corresponde. Se guarda el día 1 del mes, igual que
+  //                    Pago.periodo, y en pantalla se muestra MM/AAAA.
+  //   vence         -> cuándo se vence. Informativo: NO define el estado, que lo elige
+  //                    una persona (decisión del usuario, 13/08). Un folio puede estar OK
+  //                    sin fecha, o tener fecha y estar EN_ESPERA porque falta el papel.
+  fecha_emision DateTime? @db.Date
+  periodo       DateTime? @db.Date
   vence         DateTime? @db.Date
   observaciones String?
 
   id_created_by String?
+  // Quién tocó el folio por última vez. `updated_at` ya decía CUÁNDO; sin el quién, la
+  // columna de última actualización no sirve para preguntarle a nadie.
+  id_updated_by String?
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
   app        App   @relation(fields: [id_app], references: [id])
   local      Local @relation(fields: [id_local], references: [id])
   created_by User? @relation("FolioCreatedBy", fields: [id_created_by], references: [id])
+  updated_by User? @relation("FolioUpdatedBy", fields: [id_updated_by], references: [id])
   archivos   FolioArchivo[]
 
   // La planilla se pide siempre por local y ordenada por folio.
