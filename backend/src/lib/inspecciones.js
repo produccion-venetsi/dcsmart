@@ -154,6 +154,28 @@ export const fechaISO = (d) => {
   return d.toISOString().slice(0, 10)
 }
 
+// ── Período ──────────────────────────────────────────────────────────────────
+//
+// El período es un mes, no un día. Se guarda el día 1 (igual que Pago.periodo) y en la API
+// viaja como 'YYYY-MM', que es lo que entiende un <input type="month">.
+export const periodoISO = (d) => {
+  if (!d) return null
+  if (typeof d === 'string') return d.slice(0, 7)
+  return d.toISOString().slice(0, 7)
+}
+
+// Acepta 'YYYY-MM' (lo que manda el input month) y 'YYYY-MM-DD' (por si llega una fecha
+// completa desde una carga por API). Devuelve el día 1 del mes.
+export function periodoParaGuardar(valor) {
+  if (valor === null || valor === '' || valor === undefined) return null
+  const s = String(valor).trim()
+  const m = s.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (!m) return undefined // undefined = invalido, lo rechaza la ruta
+  const mes = Number(m[2])
+  if (mes < 1 || mes > 12) return undefined
+  return new Date(Date.UTC(Number(m[1]), mes - 1, 1))
+}
+
 export function fechaParaGuardar(valor) {
   if (valor === null || valor === '' || valor === undefined) return null
   const s = String(valor).slice(0, 10)

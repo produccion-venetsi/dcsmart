@@ -70,6 +70,35 @@ export function subirBajarFolio(folios, id, direccion) {
   return ids.map((x, i) => ({ ...porId.get(x), folio: i + 1 }))
 }
 
+// ── Fechas y período ─────────────────────────────────────────────────────────
+//
+// Las tres fechas llegan como texto ('YYYY-MM-DD') y el período como 'YYYY-MM'. NUNCA se
+// construye un Date desde esos strings para mostrarlos: `new Date('2026-09-15')` se
+// interpreta en UTC y al imprimirlo en hora local (GMT-3) muestra el día anterior. Se
+// parte el texto y listo.
+export function fmtFecha(iso) {
+  if (!iso) return '—'
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '—'
+}
+
+// El período es un mes: MM/AAAA.
+export function fmtPeriodo(iso) {
+  if (!iso) return '—'
+  const m = String(iso).match(/^(\d{4})-(\d{2})/)
+  return m ? `${m[2]}/${m[1]}` : '—'
+}
+
+// La última actualización: cuándo y quién, en una línea corta. Sin el quién la columna no
+// sirve para preguntarle a nadie.
+export function fmtActualizacion(folio) {
+  if (!folio?.updated_at) return '—'
+  const d = new Date(folio.updated_at)
+  const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  const quien = folio.updated_by?.nombre || folio.created_by?.nombre
+  return quien ? `${fecha} · ${quien}` : fecha
+}
+
 // ── Textos ───────────────────────────────────────────────────────────────────
 
 // Qué decir arriba de la planilla. Un "12 folios" pelado no dice si hay algo para hacer.

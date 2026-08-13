@@ -6,6 +6,7 @@ import {
   etiquetaEstado, badgeEstado, ayudaEstado, esEstadoAbierto,
   moverEnLista, moverUno, reordenarFolios, subirBajarFolio,
   resumenCarpeta, textoEvento,
+  fmtFecha, fmtPeriodo, fmtActualizacion,
 } from './inspecciones.js'
 
 const folios = [
@@ -128,4 +129,41 @@ test('CONTRATO: el backend NO deduce el estado de la fecha', () => {
   const src = backend()
   assert.ok(!/estadoVencimiento|diasParaVencer/.test(src),
     'el lib del backend empezo a deducir el estado de la fecha')
+})
+
+// ── fechas y periodo ────────────────────────────────────────────────────────
+
+test('la fecha se muestra DD/MM/AAAA sin construir un Date', () => {
+  // `new Date('2026-09-15')` se interpreta en UTC y al imprimirlo en GMT-3 da el 14.
+  assert.equal(fmtFecha('2026-09-15'), '15/09/2026')
+  assert.equal(fmtFecha('2026-01-01'), '01/01/2026')
+  assert.equal(fmtFecha('2026-09-15T00:00:00.000Z'), '15/09/2026')
+})
+
+test('el periodo se muestra MM/AAAA', () => {
+  assert.equal(fmtPeriodo('2026-09'), '09/2026')
+  assert.equal(fmtPeriodo('2026-09-01'), '09/2026')
+})
+
+test('sin fecha o con basura muestra un guion, no "Invalid Date"', () => {
+  for (const v of [null, '', undefined, 'ayer', '15/09/2026']) {
+    assert.equal(fmtFecha(v), '—', `fmtFecha(${v})`)
+    assert.equal(fmtPeriodo(v), '—', `fmtPeriodo(${v})`)
+  }
+})
+
+test('la ultima actualizacion dice cuando y quien', () => {
+  const t = fmtActualizacion({ updated_at: '2026-08-13T15:30:00.000Z', updated_by: { nombre: 'Jimena' } })
+  assert.match(t, /Jimena/)
+  assert.match(t, /\d{2}\/\d{2}\/\d{2}/)
+})
+
+test('si no se sabe quien edito, cae en quien lo creo', () => {
+  const t = fmtActualizacion({ updated_at: '2026-08-13T15:30:00.000Z', created_by: { nombre: 'Ana' } })
+  assert.match(t, /Ana/)
+})
+
+test('sin updated_at no muestra "Invalid Date"', () => {
+  assert.equal(fmtActualizacion({}), '—')
+  assert.equal(fmtActualizacion(null), '—')
 })

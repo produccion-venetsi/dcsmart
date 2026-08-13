@@ -27,11 +27,11 @@ import { documentosApi } from '../../api/documentos.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { esRolDc } from '../../lib/roles.js'
-import { fmtDateUTC } from '../../lib/dates.js'
 import {
   ORDEN_TABLERO, ESTADO_INFO, ESTADOS,
   etiquetaEstado, badgeEstado, ayudaEstado,
   reordenarFolios, subirBajarFolio, resumenCarpeta, textoEvento,
+  fmtFecha, fmtPeriodo, fmtActualizacion,
 } from '../../lib/inspecciones.js'
 
 function IcoAsa() {
@@ -53,7 +53,7 @@ function IcoAdjunto() {
   return <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
 }
 
-const FOLIO_VACIO = { concepto: '', estado: 'FALTA', vence: '', observaciones: '' }
+const FOLIO_VACIO = { concepto: '', estado: 'FALTA', fecha_emision: '', periodo: '', vence: '', observaciones: '' }
 
 export default function CarpetaInspecciones() {
   const activeApp = useAppStore((s) => s.activeApp)
@@ -144,6 +144,8 @@ export default function CarpetaInspecciones() {
       await inspeccionesApi.actualizar(editando.id, {
         concepto: editando.concepto,
         estado: editando.estado,
+        fecha_emision: editando.fecha_emision || null,
+        periodo: editando.periodo || null,
         vence: editando.vence || null,
         observaciones: editando.observaciones,
       })
@@ -300,7 +302,28 @@ export default function CarpetaInspecciones() {
                   <p className="form-hint" style={{ marginTop: 4, marginBottom: 0 }}>{ayudaEstado(nuevo.estado)}</p>
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" htmlFor="nf-vence">Vence</label>
+                  <label className="form-label" htmlFor="nf-emision">Fecha de emisión</label>
+                  <div className="form-input-wrap">
+                    <input id="nf-emision" type="date" value={nuevo.fecha_emision}
+                      onChange={(e) => setNuevo({ ...nuevo, fecha_emision: e.target.value })} />
+                  </div>
+                  <p className="form-hint" style={{ marginTop: 4, marginBottom: 0 }}>
+                    Cuándo se emitió el papel.
+                  </p>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="nf-periodo">Período</label>
+                  <div className="form-input-wrap">
+                    {/* type=month: el período es un mes, no un día. Se guarda el día 1. */}
+                    <input id="nf-periodo" type="month" value={nuevo.periodo}
+                      onChange={(e) => setNuevo({ ...nuevo, periodo: e.target.value })} />
+                  </div>
+                  <p className="form-hint" style={{ marginTop: 4, marginBottom: 0 }}>
+                    A qué mes corresponde.
+                  </p>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" htmlFor="nf-vence">Fecha de vencimiento</label>
                   <div className="form-input-wrap">
                     <input id="nf-vence" type="date" value={nuevo.vence}
                       onChange={(e) => setNuevo({ ...nuevo, vence: e.target.value })} />
@@ -344,12 +367,19 @@ export default function CarpetaInspecciones() {
                 <thead>
                   <tr>
                     {puedeEditar && <th style={{ width: 34 }} title="Arrastrar para reordenar"><span className="sr-only">Orden</span></th>}
-                    <th style={{ width: 48 }}>Folio</th>
-                    <th>Concepto</th>
+                    {/* Orden pedido por el usuario: folio, concepto, estado, emisión,
+                        período, vencimiento, observaciones, última actualización. Los
+                        archivos van al final, junto a las acciones: son un control, no un
+                        dato de la planilla. */}
+                    <th style={{ width: 48 }} title="Número de folio">Folio</th>
+                    <th style={{ minWidth: 160 }}>Concepto</th>
                     <th style={{ width: 150 }}>Estado</th>
-                    <th style={{ width: 100 }}>Vence</th>
+                    <th style={{ width: 100 }} title="Fecha de emisión">Emisión</th>
+                    <th style={{ width: 86 }}>Período</th>
+                    <th style={{ width: 100 }} title="Fecha de vencimiento">Vence</th>
+                    <th style={{ minWidth: 140 }}>Observaciones</th>
+                    <th style={{ width: 150 }} title="Cuándo y quién lo tocó por última vez">Últ. actualización</th>
                     <th>Archivos</th>
-                    <th>Observaciones</th>
                     <th style={{ width: 120 }}></th>
                   </tr>
                 </thead>
@@ -409,17 +439,31 @@ export default function CarpetaInspecciones() {
                             </td>
                             <td>
                               <div className="form-input-wrap">
+                                <input type="date" value={editando.fecha_emision ?? ''}
+                                  onChange={(e) => setEditando({ ...editando, fecha_emision: e.target.value })} />
+                              </div>
+                            </td>
+                            <td>
+                              <div className="form-input-wrap">
+                                <input type="month" value={editando.periodo ?? ''}
+                                  onChange={(e) => setEditando({ ...editando, periodo: e.target.value })} />
+                              </div>
+                            </td>
+                            <td>
+                              <div className="form-input-wrap">
                                 <input type="date" value={editando.vence ?? ''}
                                   onChange={(e) => setEditando({ ...editando, vence: e.target.value })} />
                               </div>
                             </td>
-                            <td className="td-muted">{f.archivos?.length || 0}</td>
                             <td>
                               <div className="form-input-wrap">
                                 <input type="text" value={editando.observaciones ?? ''} maxLength={300}
                                   onChange={(e) => setEditando({ ...editando, observaciones: e.target.value })} />
                               </div>
                             </td>
+                            {/* La ultima actualizacion no se edita: la escribe el servidor. */}
+                            <td className="td-muted" style={{ fontSize: 11.5 }}>{fmtActualizacion(f)}</td>
+                            <td className="td-muted">{f.archivos?.length || 0}</td>
                             <td style={{ display: 'flex', gap: 4 }}>
                               <button className="btn btn-sm btn-primary" disabled={guardando} onClick={guardarEdicion}>Guardar</button>
                               <button className="btn btn-sm btn-secondary" onClick={() => setEditando(null)}>✕</button>
@@ -444,7 +488,21 @@ export default function CarpetaInspecciones() {
                                 </span>
                               )}
                             </td>
-                            <td className="td-muted">{f.vence ? fmtDateUTC(f.vence) : '—'}</td>
+                            <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>{fmtFecha(f.fecha_emision)}</td>
+                            <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>{fmtPeriodo(f.periodo)}</td>
+                            <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>{fmtFecha(f.vence)}</td>
+                            <td className="td-muted" style={{ maxWidth: 200 }}>
+                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                title={f.observaciones || undefined}>
+                                {f.observaciones || '—'}
+                              </div>
+                            </td>
+                            {/* Cuando y quien: `updated_at` solo dice cuando, y sin el quien
+                                la columna no sirve para preguntarle a nadie. */}
+                            <td className="td-muted" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}
+                              title={f.updated_at ? new Date(f.updated_at).toLocaleString('es-AR') : undefined}>
+                              {fmtActualizacion(f)}
+                            </td>
                             <td>
                               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
                                 {(f.archivos ?? []).map((a) => (
@@ -465,12 +523,6 @@ export default function CarpetaInspecciones() {
                                 {!f.archivos?.length && !puedeEditar && <span className="td-muted">—</span>}
                               </div>
                             </td>
-                            <td className="td-muted" style={{ maxWidth: 200 }}>
-                              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                title={f.observaciones || undefined}>
-                                {f.observaciones || '—'}
-                              </div>
-                            </td>
                             <td>
                               <div style={{ display: 'flex', gap: 4 }}>
                                 <button type="button" className="btn btn-sm btn-secondary" onClick={() => verHistorial(f)}
@@ -478,7 +530,11 @@ export default function CarpetaInspecciones() {
                                 {puedeEditar && (
                                   <>
                                     <button type="button" className="btn btn-sm btn-secondary"
-                                      onClick={() => setEditando({ id: f.id, concepto: f.concepto, estado: f.estado, vence: f.vence ?? '', observaciones: f.observaciones ?? '' })}>
+                                      onClick={() => setEditando({
+                                        id: f.id, concepto: f.concepto, estado: f.estado,
+                                        fecha_emision: f.fecha_emision ?? '', periodo: f.periodo ?? '',
+                                        vence: f.vence ?? '', observaciones: f.observaciones ?? '',
+                                      })}>
                                       Editar
                                     </button>
                                     <button type="button" className="btn btn-sm btn-danger" onClick={() => borrar(f)}>✕</button>

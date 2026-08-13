@@ -20,7 +20,7 @@ import {
   ESTADOS, ETIQUETA_ESTADO, AYUDA_ESTADO,
   normalizarEstado, contarPorEstado, contarAbiertos,
   numerarDesdeOrden, validarOrden, siguienteFolio, validarFolio,
-  fechaISO, fechaParaGuardar,
+  fechaISO, fechaParaGuardar, periodoISO, periodoParaGuardar,
 } from '../lib/inspecciones.js'
 import { Storage } from '@google-cloud/storage'
 import { parseGsPath, contentTypePorExt } from '../lib/gcsPaths.js'
@@ -41,6 +41,10 @@ export default async function inspeccionesRoutes(fastify) {
 
   const salida = (f) => f && ({
     ...f,
+    // Las fechas viajan como texto y no como Date: son columnas DATE, y `new Date(iso)` en
+    // el navegador las corre un día en GMT-3.
+    fecha_emision: fechaISO(f.fecha_emision),
+    periodo: periodoISO(f.periodo),
     vence: fechaISO(f.vence),
     estado_label: ETIQUETA_ESTADO[f.estado] ?? f.estado,
   })
@@ -56,6 +60,7 @@ export default async function inspeccionesRoutes(fastify) {
           id_user: request.user?.id ?? null,
           snapshot: JSON.parse(JSON.stringify({
             folio: folio.folio, concepto: folio.concepto, estado: folio.estado,
+            fecha_emision: fechaISO(folio.fecha_emision), periodo: periodoISO(folio.periodo),
             vence: fechaISO(folio.vence), observaciones: folio.observaciones,
           })),
           motivo: motivo || null,
@@ -86,6 +91,8 @@ export default async function inspeccionesRoutes(fastify) {
       include: {
         archivos: { select: { id: true, tipo: true, nombre_original: true, orden: true }, orderBy: { orden: 'asc' } },
         created_by: { select: { id: true, nombre: true } },
+        // Para la columna de ultima actualizacion: `updated_at` dice cuando, esto dice quien.
+        updated_by: { select: { id: true, nombre: true } },
       },
     })
 
@@ -102,7 +109,7 @@ export default async function inspeccionesRoutes(fastify) {
 
   // ── Alta ───────────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: dcHandler }, async (request, reply) => {
-    const { id_local, concepto, estado, vence, observaciones } = request.body ?? {}
+    const { id_local, concepto, estado, fecha_emision, periodo, vence, observaciones } = request.body ?? {}
     if (!id_local) return reply.code(400).send({ error: 'Falta id_local' })
     if (!request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a ese local' })
@@ -112,6 +119,10 @@ export default async function inspeccionesRoutes(fastify) {
 
     const fecha = fechaParaGuardar(vence)
     if (fecha === undefined) return reply.code(400).send({ error: 'La fecha de vencimiento tiene que ser YYYY-MM-DD' })
+    const emision = fechaParaGuardar(fecha_emision)
+    if (emision === undefined) return reply.code(400).send({ error: 'La fecha de emisión tiene que ser YYYY-MM-DD' })
+    const per = periodoParaGuardar(periodo)
+    if (per === undefined) return reply.code(400).send({ error: 'El período tiene que ser YYYY-MM' })
 
     // El folio nuevo va al final de la planilla del local.
     const max = (await fastify.db.inspeccionFolio.aggregate({
@@ -125,9 +136,14 @@ export default async function inspeccionesRoutes(fastify) {
         folio: siguienteFolio(max),
         concepto: String(concepto).trim(),
         estado: normalizarEstado(estado) ?? 'FALTA',
+        fecha_emision: emision,
+        periodo: per,
         vence: fecha,
         observaciones: observaciones?.trim() || null,
         id_created_by: request.user?.id ?? null,
+        // Quien crea es tambien el ultimo que lo toco: si no, la columna de ultima
+        // actualizacion sale vacia hasta la primera edicion.
+        id_updated_by: request.user?.id ?? null,
       },
       include: { archivos: true },
     })
@@ -171,7 +187,7 @@ export default async function inspeccionesRoutes(fastify) {
     const actual = await folioAlcanzable(request.params.id, request)
     if (!actual) return reply.code(404).send({ error: 'Folio no encontrado' })
 
-    const { concepto, estado, vence, observaciones } = request.body ?? {}
+    const { concepto, estado, fecha_emision, periodo, vence, observaciones } = request.body ?? {}
     const conceptoFinal = concepto !== undefined ? concepto : actual.concepto
     const err = validarFolio({ concepto: conceptoFinal, estado })
     if (err) return reply.code(400).send({ error: err })
@@ -181,14 +197,27 @@ export default async function inspeccionesRoutes(fastify) {
       fecha = fechaParaGuardar(vence)
       if (fecha === undefined) return reply.code(400).send({ error: 'La fecha de vencimiento tiene que ser YYYY-MM-DD' })
     }
+    let emision
+    if (fecha_emision !== undefined) {
+      emision = fechaParaGuardar(fecha_emision)
+      if (emision === undefined) return reply.code(400).send({ error: 'La fecha de emisión tiene que ser YYYY-MM-DD' })
+    }
+    let per
+    if (periodo !== undefined) {
+      per = periodoParaGuardar(periodo)
+      if (per === undefined) return reply.code(400).send({ error: 'El período tiene que ser YYYY-MM' })
+    }
 
     const actualizado = await fastify.db.inspeccionFolio.update({
       where: { id: actual.id },
       data: {
         ...(concepto !== undefined ? { concepto: String(concepto).trim() } : {}),
         ...(estado !== undefined && estado !== '' ? { estado: normalizarEstado(estado) } : {}),
+        ...(fecha_emision !== undefined ? { fecha_emision: emision } : {}),
+        ...(periodo !== undefined ? { periodo: per } : {}),
         ...(vence !== undefined ? { vence: fecha } : {}),
         ...(observaciones !== undefined ? { observaciones: observaciones?.trim() || null } : {}),
+        id_updated_by: request.user?.id ?? null,
       },
       include: { archivos: { orderBy: { orden: 'asc' } } },
     })
@@ -202,6 +231,12 @@ export default async function inspeccionesRoutes(fastify) {
     if (actualizado.concepto !== actual.concepto) cambios.push('concepto')
     if (fechaISO(actualizado.vence) !== fechaISO(actual.vence)) {
       cambios.push(`vence ${fechaISO(actual.vence) ?? 'sin fecha'} -> ${fechaISO(actualizado.vence) ?? 'sin fecha'}`)
+    }
+    if (fechaISO(actualizado.fecha_emision) !== fechaISO(actual.fecha_emision)) {
+      cambios.push(`emisión ${fechaISO(actual.fecha_emision) ?? 'sin fecha'} -> ${fechaISO(actualizado.fecha_emision) ?? 'sin fecha'}`)
+    }
+    if (periodoISO(actualizado.periodo) !== periodoISO(actual.periodo)) {
+      cambios.push(`período ${periodoISO(actual.periodo) ?? 'sin período'} -> ${periodoISO(actualizado.periodo) ?? 'sin período'}`)
     }
     if ((actualizado.observaciones ?? '') !== (actual.observaciones ?? '')) cambios.push('observaciones')
     if (cambios.length) await log(request, actualizado, 'editado', cambios.join(' | '))

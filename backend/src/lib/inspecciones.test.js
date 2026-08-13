@@ -6,6 +6,7 @@ import {
   esEstadoValido, normalizarEstado, contarPorEstado, contarAbiertos,
   numerarDesdeOrden, moverEnLista, moverUno, validarOrden,
   siguienteFolio, validarFolio, fechaISO, fechaParaGuardar,
+  periodoISO, periodoParaGuardar,
 } from './inspecciones.js'
 
 // ── estados ─────────────────────────────────────────────────────────────────
@@ -233,4 +234,41 @@ test('CONTRATO: vence es una columna DATE', () => {
   const i = schema.indexOf('model InspeccionFolio')
   const bloque = schema.slice(i, schema.indexOf('\n}', i))
   assert.match(bloque, /vence\s+DateTime\?\s+@db\.Date/)
+})
+
+// ── periodo ─────────────────────────────────────────────────────────────────
+
+test('el periodo va y viene como YYYY-MM', () => {
+  assert.equal(periodoISO(new Date(Date.UTC(2026, 8, 1))), '2026-09')
+  assert.equal(periodoISO('2026-09-01T00:00:00.000Z'), '2026-09')
+  assert.equal(periodoISO(null), null)
+})
+
+test('guardar un periodo lo deja en el dia 1 del mes', () => {
+  // Igual que Pago.periodo: el mes se representa con su primer dia.
+  assert.equal(periodoParaGuardar('2026-09').toISOString(), '2026-09-01T00:00:00.000Z')
+})
+
+test('acepta una fecha completa y se queda con el mes', () => {
+  // Por si llega desde una carga por API en vez del input month.
+  assert.equal(periodoParaGuardar('2026-09-23').toISOString(), '2026-09-01T00:00:00.000Z')
+})
+
+test('vaciar el periodo guarda null', () => {
+  for (const v of [null, '', undefined]) assert.equal(periodoParaGuardar(v), null)
+})
+
+test('un periodo mal formado devuelve undefined para que la ruta lo rechace', () => {
+  // Igual que fechaParaGuardar: null es "borralo", undefined es "esto no es un periodo".
+  for (const v of ['09/2026', '2026', 'setiembre', '2026-13', '2026-00']) {
+    assert.equal(periodoParaGuardar(v), undefined, `${v} no dio undefined`)
+  }
+})
+
+test('CONTRATO: periodo es una columna DATE', () => {
+  const schema = readFileSync(new URL('../../prisma/schema.prisma', import.meta.url), 'utf8')
+  const i = schema.indexOf('model InspeccionFolio')
+  const bloque = schema.slice(i, schema.indexOf('\n}', i))
+  assert.match(bloque, /periodo\s+DateTime\?\s+@db\.Date/)
+  assert.match(bloque, /fecha_emision\s+DateTime\?\s+@db\.Date/)
 })
