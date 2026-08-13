@@ -365,3 +365,114 @@ test('CONTRASTE: el rotulo de las tarjetas usa --t2, no --t3', () => {
     }
   }
 })
+
+// ── fondos de lo que se queda quieto mientras algo scrollea ─────────────────
+//
+// Un elemento sticky con fondo translucido deja ver pasar el contenido por debajo. Paso
+// tres veces en el mismo dia: el drawer del tema claro, las columnas fijas de la tabla de
+// pagos, y el cartel del cuadre -- ahi por cascada, porque la clase del semaforo tiene dos
+// clases y le ganaba por especificidad a la que ponia el fondo opaco.
+//
+// Este test recorre las reglas que se quedan quietas y exige un `background-color` opaco:
+// un token solido, o un rgba con alfa >= 0.9. Un `background` shorthand con un token `--*-bg`
+// (que son tintes de ~12%) no pasa.
+
+const OPACOS = ['--bg-app', '--bg-sidebar', '--bg-elevated', '--bg-drawer', '--bg-drawer-head', '--bg-sticky', '--bg-menu']
+
+// Reglas que tienen que ser opacas, y por que.
+const REGLAS_QUIETAS = [
+  ['.cuadre-vivo-sticky', 'el cartel del cuadre queda fijo arriba del formulario'],
+  ['.cuadre-vivo.cuadre-cuadra', 'el semaforo pisa el fondo del sticky por especificidad'],
+  ['.cuadre-vivo.cuadre-no-cuadra', 'idem'],
+  ['.cuadre-vivo.cuadre-sin-datos', 'idem'],
+  ['.data-table td.col-fija', 'las columnas fijas dejan pasar las que se deslizan'],
+  ['.data-table th.col-fija', 'idem, en el encabezado'],
+]
+
+const SALTO = String.fromCharCode(10)
+const reglaDe = (css, selector) => {
+  // Se busca el selector como regla PROPIA y no como substring: la linea que arranca con el
+  // selector y sigue con `{` o `,`. Sin regex a proposito -- escapar un selector con puntos
+  // y corchetes para meterlo en un RegExp es mas facil de romper que de leer.
+  const lineas = css.split(SALTO)
+  const idx = lineas.findIndex((l) => {
+    const t = l.trim()
+    if (!t.startsWith(selector)) return false
+    const sigue = t.slice(selector.length).trimStart()[0]
+    return sigue === '{' || sigue === ','
+  })
+  assert.ok(idx > -1, `no existe la regla ${selector}`)
+  const desde = css.indexOf(lineas[idx])
+  const abre = css.indexOf('{', desde)
+  return css.slice(abre + 1, css.indexOf('}', abre))
+}
+
+
+test('lo que se queda quieto tiene fondo OPACO', () => {
+  const css = CSS()
+  for (const [selector, motivo] of REGLAS_QUIETAS) {
+    const regla = reglaDe(css, selector)
+    const m = regla.match(/background-color:\s*([^;]+);/)
+    assert.ok(m, `${selector} no declara background-color (${motivo}). Un \`background\` shorthand con un token --*-bg es un tinte translucido.`)
+    const valor = m[1].trim()
+    const token = valor.match(/var\((--[\w-]+)\)/)?.[1]
+    if (token) {
+      assert.ok(OPACOS.includes(token), `${selector} usa ${token}, que no es un fondo opaco (${motivo})`)
+    } else {
+      const alfa = valor.match(/rgba?\([^)]*,\s*([\d.]+)\s*\)/)?.[1]
+      assert.ok(!alfa || Number(alfa) >= 0.9, `${selector} usa alfa ${alfa} (${motivo})`)
+    }
+  }
+})
+
+test('los tokens que se dan por opacos lo son de verdad', () => {
+  // Si alguno pasara a ser un velo, el test de arriba dejaria de proteger nada.
+  const css = CSS()
+  for (const bloque of [bloqueOscuro(), bloqueClaro()]) {
+    for (const t of OPACOS) {
+      const m = bloque.match(new RegExp(`${t}:\s*([^;]+);`))
+      if (!m) continue // --bg-menu se saco; si no esta, no hay nada que validar
+      const v = m[1].trim()
+      const alfa = v.match(/rgba?\([^)]*,\s*([\d.]+)\s*\)/)?.[1]
+      assert.ok(!alfa || Number(alfa) >= 0.9, `${t} vale ${v}: dejo de ser opaco`)
+    }
+  }
+})
+
+test('CONTRASTE: el estado del cuadre se lee sobre su fondo tintado', () => {
+  // Es el texto que decide si la caja se guarda bien. Sobre el tinte, --green y --red daban
+  // 4.23x y 3.70x, por eso el cartel tiene colores propios (--cuadre-*-texto). 4.5x es el
+  // minimo para texto normal, y 13.5px bold NO califica como texto grande (hace falta 18.66px).
+  const componer = (tinte, base) => {
+    const p = tinte.match(/rgba?\(([^)]+)\)/)[1].split(',').map((x) => parseFloat(x.trim()))
+    return [0, 1, 2].map((i) => Math.round(p[i] * p[3] + base[i] * (1 - p[3])))
+  }
+  for (const [nombre, bloque] of [['oscuro', bloqueOscuro()], ['claro', bloqueClaro()]]) {
+    const base = hexARgb(variable(bloque, 'bg-drawer-head'))
+    for (const [estado, tinte, texto] of [
+      ['cuadra', 'cuadre-ok-tinte', 'cuadre-ok-texto'],
+      ['no cuadra', 'cuadre-no-tinte', 'cuadre-no-texto'],
+    ]) {
+      const fondo = componer(variable(bloque, tinte), base)
+      const r = contraste(hexARgb(variable(bloque, texto)), fondo)
+      assert.ok(r >= 4.5, `tema ${nombre}, "${estado}": ${r.toFixed(2)}x y necesita 4.5x`)
+    }
+  }
+})
+
+test('el tinte del cartel se distingue del fondo del encabezado', () => {
+  // Si el tinte fuera tan suave que no se nota, el color no comunica nada y el cartel
+  // depende solo del signo y el borde.
+  const componer = (tinte, base) => {
+    const p = tinte.match(/rgba?\(([^)]+)\)/)[1].split(',').map((x) => parseFloat(x.trim()))
+    return [0, 1, 2].map((i) => Math.round(p[i] * p[3] + base[i] * (1 - p[3])))
+  }
+  for (const [nombre, bloque] of [['oscuro', bloqueOscuro()], ['claro', bloqueClaro()]]) {
+    const base = hexARgb(variable(bloque, 'bg-drawer-head'))
+    for (const tinte of ['cuadre-ok-tinte', 'cuadre-no-tinte']) {
+      const fondo = componer(variable(bloque, tinte), base)
+      const dif = contraste(fondo, base)
+      assert.ok(dif >= 1.15, `tema ${nombre}, ${tinte}: apenas se distingue (${dif.toFixed(2)}x)`)
+    }
+  }
+})

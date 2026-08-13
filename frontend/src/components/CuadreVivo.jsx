@@ -14,7 +14,7 @@
 // El formateador vive en lib/cajaMayor.js: mismo criterio (separador de miles y los
 // decimales siempre, para que no parezca redondeado).
 import { fmtMonto } from '../lib/cajaMayor.js'
-import { describirCuadre, faltaParaCuadrar, colorCuadre } from '../lib/cuadreCaja.js'
+import { describirCuadre, faltaParaCuadrar } from '../lib/cuadreCaja.js'
 
 export default function CuadreVivo({ cuadre, origin }) {
   if (!cuadre) return null
@@ -35,7 +35,10 @@ export default function CuadreVivo({ cuadre, origin }) {
       {/* El estado, en grande y con el color del semaforo: verde cuadra, ROJO no cuadra.
           El monto que falta va PEGADO al texto y en el mismo tamano -- "faltan $1.000" dice
           que buscar, mientras que "diferencia -1000" hay que pensarlo. */}
-      <div className="cuadre-vivo-estado" style={{ color: colorCuadre(leyenda.tono) }}>
+      {/* Sin `style` de color: lo pone el CSS segun la clase del cartel, porque el color
+          depende del fondo tintado sobre el que se lee (ver --cuadre-*-texto). El gris del
+          estado "sin datos" sale del color base del bloque. */}
+      <div className="cuadre-vivo-estado">
         <span className="cuadre-vivo-marca" aria-hidden="true">{estado === 'cuadra' ? '✓' : estado === 'no-cuadra' ? '!' : '·'}</span>
         <strong>{leyenda.texto}</strong>
         {falta > 0 && <strong className="cuadre-vivo-falta"> {fmtMonto(falta)}</strong>}
