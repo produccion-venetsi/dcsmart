@@ -316,3 +316,52 @@ test('el th del tema claro se separa del fondo de la pagina', () => {
   const th = color(variable(b, 'bg-sticky'), app)
   assert.notDeepEqual(th, app, '--bg-sticky es igual a --bg-app')
 })
+
+// ── tarjetas de totales de cuenta corriente ─────────────────────────────────
+//
+// Son texto de color sobre fondo del MISMO color (--red sobre --red-bg). Es la
+// combinacion mas facil de romper al retocar una paleta, y no la cubre ningun test
+// anterior porque los otros miden contra --bg-app.
+
+const bloqueOscuro = () => {
+  const css = CSS()
+  const i = css.indexOf(':root {')
+  return css.slice(i, css.indexOf('\n}', i))
+}
+
+const sobreTarjeta = (bloque, tono) => {
+  const app = hexARgb(variable(bloque, 'bg-app'))
+  const fondo = color(variable(bloque, `${tono}-bg`), app)
+  return {
+    fondo,
+    valor: contraste(color(variable(bloque, tono), fondo), fondo),
+    rotulo: contraste(color(variable(bloque, 't2'), fondo), fondo),
+  }
+}
+
+test('CONTRASTE: el valor de las tarjetas se lee sobre su propio fondo tintado', () => {
+  // El valor va en 22px bold: texto grande, minimo WCAG 3.0.
+  for (const [nombre, bloque] of [['oscuro', bloqueOscuro()], ['claro', bloqueClaro()]]) {
+    for (const tono of ['red', 'blue', 'green']) {
+      const { valor } = sobreTarjeta(bloque, tono)
+      assert.ok(valor >= 3, `tema ${nombre}: --${tono} sobre --${tono}-bg da ${valor.toFixed(2)}x y necesita 3x`)
+    }
+  }
+})
+
+test('CONTRASTE: el rotulo de las tarjetas usa --t2, no --t3', () => {
+  // El rotulo es 10px en mayusculas: con --t3 daba 3,07x. Se subio a --t2 (5,4x) porque
+  // esta pantalla se rehizo por legibilidad. Si vuelve a --t3, este test avisa.
+  const css = CSS()
+  const i = css.indexOf('.cta-kpi-rotulo')
+  assert.ok(i > -1, 'no existe .cta-kpi-rotulo')
+  const regla = css.slice(i, css.indexOf('}', i))
+  assert.match(regla, /color:\s*var\(--t2\)/)
+
+  for (const [nombre, bloque] of [['oscuro', bloqueOscuro()], ['claro', bloqueClaro()]]) {
+    for (const tono of ['red', 'blue', 'green']) {
+      const { rotulo } = sobreTarjeta(bloque, tono)
+      assert.ok(rotulo >= 4.5, `tema ${nombre}: --t2 sobre --${tono}-bg da ${rotulo.toFixed(2)}x y necesita 4.5x`)
+    }
+  }
+})

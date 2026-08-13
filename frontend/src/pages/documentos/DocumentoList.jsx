@@ -19,6 +19,7 @@ import CampoSelect from '../../components/CampoSelect.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import IconoDocumento from '../../components/IconoDocumento.jsx'
 import TiposDocumentoPanel from './TiposDocumentoPanel.jsx'
+import CarpetaInspecciones from './CarpetaInspecciones.jsx'
 import ArchivosDocumento from './ArchivosDocumento.jsx'
 import DocumentoDetalle from './DocumentoDetalle.jsx'
 import { esRolDc } from '../../lib/roles.js'
@@ -93,6 +94,11 @@ export default function DocumentoList() {
   const [abiertos, setAbiertos] = useState(new Set())
 
   // Panel de detalle / edición
+  // Qué se está mirando: los documentos sueltos o la carpeta de inspecciones. Son dos
+  // cosas distintas dentro del mismo módulo -- un documento es un archivo con nombre, la
+  // carpeta es una planilla de control por local -- así que van en pestañas y no mezcladas
+  // en la misma tabla.
+  const [seccion, setSeccion] = useState('documentos')
   const [panelOpen, setPanelOpen] = useState(false)
   const [sel, setSel] = useState(null)
   const [modo, setModo] = useState(MODOS.VER)
@@ -331,6 +337,34 @@ export default function DocumentoList() {
           </button>
         </div>
       </div>
+
+      {/* ── Las dos secciones ───────────────────────────────────────────────── */}
+      <div
+        role="tablist"
+        aria-label="Secciones de Documentos"
+        style={{ display: 'flex', gap: 4, marginBottom: '1rem', borderBottom: '1px solid var(--glass-border)' }}
+      >
+        {[['documentos', 'Documentos'], ['inspecciones', 'Carpeta de inspecciones']].map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={seccion === k}
+            onClick={() => setSeccion(k)}
+            style={{
+              font: 'inherit', cursor: 'pointer', background: 'none', border: 'none',
+              borderBottom: `2px solid ${seccion === k ? 'var(--gold)' : 'transparent'}`,
+              color: seccion === k ? 'var(--t1)' : 'var(--t3)',
+              fontWeight: seccion === k ? 600 : 400,
+              padding: '8px 14px', marginBottom: -1,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {seccion === 'inspecciones' ? <CarpetaInspecciones /> : <>
 
       {/* Lo urgente arriba y clickeable: con la lista larga, un vencido en la fila 40 no
           se ve. El cartel además filtra, así que sirve para algo más que informar. */}
@@ -756,6 +790,9 @@ export default function DocumentoList() {
           onCambio={() => { cargarTipos(); cargar() }}
         />
       </DrawerPanel>
+
+      {/* Cierra la seccion de documentos: los dos drawers son suyos, no de la carpeta. */}
+      </>}
     </div>
   )
 }

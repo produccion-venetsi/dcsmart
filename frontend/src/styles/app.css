@@ -920,6 +920,38 @@ select option:disabled { color: var(--t4); }
 .data-table tbody tr { transition: background 0.13s var(--ease); }
 .data-table tbody tr:hover { background: var(--bg-tr-hover); }
 
+/* ─── Columnas fijas al deslizar ──────────────────────────────────────────────
+   La tabla de pagos tiene 18 columnas: al deslizar a la derecha se pierde de vista de
+   que pago es cada fila. Las primeras quedan fijas hasta Proveedor inclusive.
+
+   El fondo TIENE que ser opaco: una celda sticky transparente deja ver pasar por debajo
+   el contenido que se desliza. Por eso `background-color` con un token solido y el tinte
+   del hover como `background-image` encima -- si el hover usara background-color pisaria
+   el fondo opaco y volveria a transparentarse.
+
+   El ancho de estas columnas es FIJO y no minimo: el desplazamiento lateral de cada una se
+   calcula sumando los anchos de las anteriores (ver COLS_FIJAS en PagoList.jsx), y con
+   anchos flexibles las celdas del cuerpo se desalinean del encabezado. */
+.data-table td.col-fija,
+.data-table th.col-fija {
+  position: sticky;
+  background-color: var(--bg-app);
+}
+.data-table td.col-fija { z-index: 2; }
+/* El encabezado ya es sticky en vertical (top: 0). La esquina que es fija en los dos ejes
+   tiene que ir por encima de las dos. */
+.data-table th.col-fija { z-index: 5; background-color: var(--bg-sticky); }
+
+.data-table tbody tr:hover td.col-fija,
+tr.row-clickable:hover td.col-fija {
+  background-image: linear-gradient(rgba(var(--velo-rgb), 0.05), rgba(var(--velo-rgb), 0.05));
+}
+/* Una linea para que se vea donde termina lo fijo y arranca lo que se desliza. */
+.data-table td.col-fija-ultima,
+.data-table th.col-fija-ultima {
+  box-shadow: 1px 0 0 var(--glass-border);
+}
+
 /* td modifiers */
 .td-primary { color: var(--t1) !important; font-weight: 600; }
 .td-mono { font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 12px; }
@@ -1652,6 +1684,123 @@ select.campo-ia {
    dd/mm/aaaa sin recortar el texto ni el iconito del calendario. Abajo de eso se
    pasa solo a una columna: es mas legible angosto y en una fila que apretado en
    dos. */
+
+/* ── Tarjetas de totales de una cuenta corriente ─────────────────────────────
+   Cuatro números grandes arriba y la tabla abajo. Es el patrón que pidió el
+   cliente a partir de un sistema de facturación que usan.
+
+   El fondo tintado sale de los tokens `--*-bg`, que ya existen en los dos temas y
+   tienen el contraste medido: la referencia usaba bloques de color pleno con letra
+   blanca, que en tema claro sería un ladrillo y obligaría a un juego de colores
+   propio para el texto.
+
+   Son de SOLO LECTURA a propósito. Antes estos cuatro números eran botones que
+   además filtraban la tabla, y eso era la mitad de la confusión: parecían
+   indicadores y respondían como controles. El filtro ahora vive en su propia fila
+   (.cta-filtros), que se lee como filtro. */
+/* Flechitas de subir/bajar de la carpeta de inspecciones. Son la via por teclado del
+   reordenamiento: el drag and drop nativo solo responde al mouse. */
+.btn-icon-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--t3);
+  cursor: pointer;
+}
+.btn-icon-mini:hover:not(:disabled) { color: var(--gold-bright); background: rgba(var(--velo-rgb), 0.08); }
+.btn-icon-mini:disabled { opacity: 0.3; cursor: default; }
+.btn-icon-mini:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+.cta-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+.cta-kpi {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+/* --t2 y no --t3: es la etiqueta que dice QUÉ es el número, en 10px y en mayúsculas.
+   Con --t3 daba 3,07x sobre el fondo tintado -- pasa el mínimo que el proyecto se fijó
+   para texto auxiliar, pero esta pantalla se rehizo justamente porque costaba leerla. */
+.cta-kpi-rotulo {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--t2);
+}
+.cta-kpi-valor {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--t1);
+  /* Un importe largo no puede empujar la grilla ni cortarse a la mitad. */
+  overflow-wrap: anywhere;
+}
+.cta-kpi-nota { font-size: 10.5px; color: var(--t3); }
+
+.cta-kpi.tono-rojo   { background: var(--red-bg);   border-left-color: var(--red); }
+.cta-kpi.tono-rojo   .cta-kpi-valor { color: var(--red); }
+.cta-kpi.tono-azul   { background: var(--blue-bg);  border-left-color: var(--blue); }
+.cta-kpi.tono-azul   .cta-kpi-valor { color: var(--blue); }
+.cta-kpi.tono-verde  { background: var(--green-bg); border-left-color: var(--green); }
+.cta-kpi.tono-verde  .cta-kpi-valor { color: var(--green); }
+/* En cero el color de alarma no corresponde: una cuenta sin deuda no es un problema. */
+.cta-kpi.en-cero { background: var(--bg-card); border-left-color: var(--glass-border); }
+.cta-kpi.en-cero .cta-kpi-valor { color: var(--t2); font-weight: 600; }
+
+/* ── Fila de filtros ─────────────────────────────────────────────────────── */
+.cta-filtros {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+.cta-filtro {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--t2);
+  white-space: nowrap;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.cta-filtro:hover { border-color: var(--glass-border-hi); color: var(--t1); }
+.cta-filtro[aria-pressed="true"] {
+  border-color: var(--gold);
+  color: var(--t1);
+  background: rgba(var(--velo-rgb), 0.05);
+}
+.cta-filtro .cta-filtro-n {
+  font-size: 10.5px;
+  color: var(--t3);
+  margin-left: 5px;
+  font-variant-numeric: tabular-nums;
+}
+/* Un filtro sin resultados se ve apagado: clickearlo no lleva a ninguna parte. */
+.cta-filtro.vacio { opacity: 0.5; }
+
 .datos-persona-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -1715,6 +1864,26 @@ select.campo-ia {
   font-size: 12px;
   color: var(--t3);
 }
+/* Pegado al tope del cuerpo del drawer, que es el que scrollea. Antes el cuadre vivia
+   dentro del grid del formulario y el scroll se lo comia justo cuando mas importa: cargando
+   el quinto movimiento, que es cuando uno quiere ver si cierra.
+
+   El fondo es opaco y no un velo: con --bg-input translucido se leen los campos del
+   formulario por debajo mientras pasan. El z-index lo pone por encima de los inputs. */
+.cuadre-vivo-sticky {
+  position: sticky;
+  top: calc(-1.5rem - 1px);
+  z-index: 3;
+  margin: -1.5rem -1.5rem 1rem;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  background: var(--bg-drawer-head);
+  padding: 0.7rem 1.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
 .cuadre-vivo-cuentas {
   display: flex;
   flex-wrap: wrap;
