@@ -24,6 +24,7 @@ model App {
   usage          UserAppUsage[]
   clientes       Cliente[]
   documentos     Documento[]
+  inspeccion_folios InspeccionFolio[]
 
   @@map("apps")
 }
@@ -60,6 +61,7 @@ model Local {
   detalle_tipos DetalleTipo[]
   movimientos_cm MovimientoCM[]
   documentos    Documento[]
+  inspeccion_folios InspeccionFolio[]
 
   @@map("locales")
 }
@@ -117,6 +119,7 @@ model User {
   mov_cm_creados   MovimientoCM[]    @relation("MovimientoCMCreatedBy")
   mov_cm_recibidos MovimientoCM[]    @relation("MovimientoCMRecibidaBy")
   documentos_creados Documento[]  @relation("DocumentoCreatedBy")
+  folios_creados     InspeccionFolio[] @relation("FolioCreatedBy")
 
   @@map("users")
 }
@@ -404,6 +407,84 @@ model DocumentoArchivo {
 
   @@index([id_documento, orden])
   @@map("documento_archivos")
+}
+
+// ─── CARPETA DE INSPECCIONES ─────────────────────────────────────────────────
+//
+// Vive dentro del módulo Documentos pero NO es un Documento: un documento es un
+// archivo con nombre y vencimiento, y esto es una planilla de control. Cada local
+// tiene su carpeta -- la "carpeta" no es una fila, es la agrupación por local -- y
+// adentro los folios, que son las líneas de control con su concepto y su estado.
+//
+// El orden lo maneja la persona (se arrastra en la pantalla), así que `folio` es un
+// dato editable y no un autoincremental.
+//
+// NO lleva `@@unique([id_local, folio])` a propósito: reordenar con esa restricción
+// obliga a un pase intermedio con números provisorios para no chocar mientras se
+// escribe. El orden se reescribe entero en una transacción (ver PUT /orden), que da
+// la misma garantía sin el baile de valores temporales.
+model InspeccionFolio {
+  id       String @id @default(uuid())
+  id_app   String
+  // La carpeta. Obligatorio: un folio sin local no pertenece a ninguna carpeta.
+  id_local String
+
+  // Posición en la planilla, alterable por quien la ordena.
+  folio    Int
+  concepto String
+  estado   EstadoFolio @default(FALTA)
+
+  // Informativo: se muestra en la columna Vence. NO define el estado -- el estado lo
+  // elige una persona (decisión del usuario, 13/08). Un folio puede estar OK sin
+  // fecha, o tener fecha y estar EN_ESPERA porque falta el certificado.
+  vence         DateTime? @db.Date
+  observaciones String?
+
+  id_created_by String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  app        App   @relation(fields: [id_app], references: [id])
+  local      Local @relation(fields: [id_local], references: [id])
+  created_by User? @relation("FolioCreatedBy", fields: [id_created_by], references: [id])
+  archivos   FolioArchivo[]
+
+  // La planilla se pide siempre por local y ordenada por folio.
+  @@index([id_local, folio])
+  @@index([id_app])
+  @@map("inspeccion_folios")
+}
+
+// Mismo diseño que DocumentoArchivo, y por el mismo motivo: varios archivos por
+// folio (el certificado, la foto, el comprobante de pago) con su propio orden.
+model FolioArchivo {
+  id       String @id @default(uuid())
+  id_folio String
+
+  gs_path         String
+  tipo            String
+  nombre_original String?
+  orden           Int      @default(0)
+  created_at      DateTime @default(now())
+
+  folio InspeccionFolio @relation(fields: [id_folio], references: [id], onDelete: Cascade)
+
+  @@index([id_folio, orden])
+  @@map("folio_archivos")
+}
+
+// Los seis estados que pidió el usuario. Se eligen a mano: VENCIDO y PROX_VENC no se
+// deducen de `vence` aunque se podría, porque el criterio de "próximo" lo pone quien
+// controla la carpeta y no siempre coincide con una cantidad de días.
+enum EstadoFolio {
+  OK
+  VENCIDO
+  EN_ESPERA @map("EN ESPERA")
+  FALTA
+  REVISAR
+  PROX_VENC @map("PROX VENC")
+
+  @@map("estado_folio")
 }
 
 model Proveedor {
