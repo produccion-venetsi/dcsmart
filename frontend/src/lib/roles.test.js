@@ -28,20 +28,30 @@ test('externo NO es rol interno de DC', () => {
   assert.equal(esRolDc(ROLES.ADMIN), false)
 })
 
-test('exportan super_admin, dcsmart y externo; admin y cajero no', () => {
+test('exportan super_admin, dcsmart, externo y admin; el cajero no', () => {
   assert.equal(puedeExportar(ROLES.SUPER), true)
   assert.equal(puedeExportar(ROLES.DCSMART), true)
   assert.equal(puedeExportar(ROLES.EXTERNO), true)
-  assert.equal(puedeExportar(ROLES.ADMIN), false)
+  // admin es dueño o gerente del local: se baja los pagos de SUS locales.
+  assert.equal(puedeExportar(ROLES.ADMIN), true)
   assert.equal(puedeExportar(ROLES.CAJERO), false)
 })
 
 test('exportar NO alcanza para ver los datos internos de DC', () => {
   // La columna "Creado" del export se arma con esRolDc, no con puedeExportar:
-  // externo exporta, pero sin ese dato. Si algun dia los dos coincidieran,
-  // exportar seria una puerta lateral a lo que la tabla esconde.
-  assert.equal(puedeExportar(ROLES.EXTERNO), true)
-  assert.equal(esRolDc(ROLES.EXTERNO), false)
+  // externo y admin exportan, pero sin ese dato. Si algun dia los dos
+  // coincidieran, exportar seria una puerta lateral a lo que la tabla esconde.
+  for (const rol of [ROLES.EXTERNO, ROLES.ADMIN]) {
+    assert.equal(puedeExportar(rol), true)
+    assert.equal(esRolDc(rol), false, `${rol} no puede contar como DC`)
+  }
+})
+
+test('exportar no ensancha el alcance de locales', () => {
+  // El archivo se arma con las filas que ya trae la pantalla, y esas vienen
+  // recortadas por allowedLocalIds. Si admin pasara a tener alcance global, el
+  // export dejaria de ser "mis pagos" y seria "todos los pagos del grupo".
+  assert.equal(esAlcanceGlobal(ROLES.ADMIN), false)
 })
 
 test('externo NO tiene alcance global de locales', () => {
