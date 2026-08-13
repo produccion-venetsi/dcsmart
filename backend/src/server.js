@@ -31,6 +31,7 @@ import notificacionesRoutes from './routes/notificaciones.js'
 import cajaMayorRoutes from './routes/caja_mayor.js'
 import clientesRoutes from './routes/clientes.js'
 import documentosRoutes from './routes/documentos.js'
+import inspeccionesRoutes from './routes/inspecciones.js'
 
 // Serializar BigInt como string en JSON (para columnas como pagos.nro con IDs de MP)
 BigInt.prototype.toJSON = function () { return this.toString() }
@@ -108,6 +109,9 @@ await app.register(notificacionesRoutes, { prefix: '/api/notificaciones' })
 await app.register(cajaMayorRoutes, { prefix: '/api/caja-mayor' })
 await app.register(clientesRoutes, { prefix: '/api/clientes' })
 await app.register(documentosRoutes, { prefix: '/api/documentos' })
+// La carpeta de inspecciones vive dentro del modulo Documentos pero tiene su propio
+// prefijo: es una planilla de control, no un archivo con nombre.
+await app.register(inspeccionesRoutes, { prefix: '/api/inspecciones' })
 
 app.get('/health', async () => ({ status: 'ok' }))
 

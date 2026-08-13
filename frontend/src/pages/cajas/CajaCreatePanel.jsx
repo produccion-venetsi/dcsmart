@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { cajasApi } from '../../api/cajas.js'
 import { detallesApi } from '../../api/detalles.js'
+import CuadreVivo from '../../components/CuadreVivo.jsx'
+import { calcularCuadre } from '../../lib/cuadreCaja.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -76,6 +78,32 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
 
   const [pendingMovimientos, setPendingMovimientos] = useState([])
   const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
+
+  // ── Cuadre en vivo ─────────────────────────────────────────────────────────
+  //
+  // Se recalcula con cada tecla del total y del efectivo y con cada detalle o movimiento
+  // que se agrega, igual que en la edicion. El panel lo pinta pegado arriba
+  // (components/CuadreVivo.jsx) para que no se lo coma el scroll.
+  //
+  // Dos traducciones necesarias:
+  //   - los detalles pendientes guardan la clasificacion en `clasificacion`, y el calculo
+  //     la lee de `tipo` (que es como se llama la columna en la base).
+  //   - los movimientos necesitan el NOMBRE del metodo, no su id: el calculo distingue el
+  //     efectivo del resto (ver esEfectivo en lib/cuadreCaja.js).
+  //
+  // `origin: 'DCSMART'` porque una caja que se crea desde la app es de la app; las de
+  // TapTap entran por el sync y no pasan por esta pantalla.
+  const cuadreVivo = useMemo(() => calcularCuadre({
+    origin: 'DCSMART',
+    total: form.total,
+    efectivo: form.efectivo,
+    detalles: pendingDetalles.map((d) => ({ tipo: d.clasificacion, monto: d.monto })),
+    movimientos: pendingMovimientos.map((m) => ({
+      tipo: m.tipo,
+      monto: m.monto,
+      metodo_pago: { nombre: metodos.find((x) => x.id === m.id_metodo)?.nombre },
+    })),
+  }), [form.total, form.efectivo, pendingDetalles, pendingMovimientos, metodos])
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -181,6 +209,9 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
 
   return (
     <form onSubmit={handleCreate}>
+      {/* Pegado al tope del drawer: se ve mientras se carga todo lo de abajo. */}
+      <CuadreVivo cuadre={cuadreVivo} origin="DCSMART" />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
