@@ -223,3 +223,96 @@ test('CONTRASTE: el velo del tema claro es NEGRO, no blanco', () => {
 test('CONTRASTE: el tema claro declara color-scheme light', () => {
   assert.match(bloqueClaro(), /color-scheme:\s*light/)
 })
+
+// ── superficies solidas ─────────────────────────────────────────────────────
+//
+// El primer intento del tema claro convirtio los velos (rgba blanco translucido) pero dejo
+// los fondos SOLIDOS escritos a mano en hex oscuro. Resultado: el drawer de detalle de op y
+// de caja quedaba negro con texto negro, y los encabezados de TODAS las tablas tambien.
+// Compilaba y pasaba los tests de contraste, porque esos colores no eran variables.
+
+const CSS = () => readFileSync(new URL('../styles/app.css', import.meta.url), 'utf8')
+
+// Rangos de linea de los bloques :root, donde un color literal SI corresponde.
+const rangosRoot = (css) => {
+  const out = []
+  const re = /^:root[^{]*\{/gm
+  let m
+  while ((m = re.exec(css)) !== null) {
+    const ini = css.slice(0, m.index).split('\n').length
+    const cierre = css.indexOf('\n}', m.index)
+    out.push([ini, css.slice(0, cierre).split('\n').length])
+  }
+  return out
+}
+
+const luminanciaDe = (literal) => {
+  let rgb
+  if (literal.startsWith('#')) {
+    let h = literal.slice(1)
+    if (h.length === 3) h = [...h].map((c) => c + c).join('')
+    if (h.length < 6) return null
+    rgb = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16))
+  } else {
+    const p = literal.match(/rgba?\(([^)]*)\)/)?.[1]?.split(',').map((x) => parseFloat(x.trim()))
+    if (!p || p.length < 3) return null
+    // Un alfa bajo es un velo sobre el fondo del tema, no una superficie: no aplica.
+    if (p.length > 3 && p[3] < 0.75) return null
+    rgb = p.slice(0, 3)
+  }
+  return luminancia(rgb)
+}
+
+test('NINGUN fondo solido oscuro escrito a mano fuera de las variables', () => {
+  const css = CSS()
+  const rangos = rangosRoot(css)
+  const enRoot = (n) => rangos.some(([a, b]) => n >= a && n <= b)
+  const lineas = css.split('\n')
+  const culpables = []
+
+  lineas.forEach((linea, i) => {
+    const n = i + 1
+    if (enRoot(n)) return
+    const l = linea.trim()
+    // Las sombras y los backdrop son negros a proposito en los dos temas.
+    if (/shadow|backdrop|mask-image/.test(l)) return
+    if (!/^background(-color)?\s*:/.test(l)) return
+    for (const lit of l.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g) ?? []) {
+      const L = luminanciaDe(lit)
+      // Un fondo casi negro fijo tapa cualquier texto que el tema claro pinte oscuro.
+      if (L != null && L < 0.15) culpables.push(`linea ${n}: ${l.slice(0, 70)}`)
+    }
+  })
+
+  assert.deepEqual(culpables, [], `fondos oscuros fijos:\n  ${culpables.join('\n  ')}`)
+})
+
+test('las superficies solidas estan definidas en LOS DOS temas', () => {
+  // Una variable definida solo en :root queda con el valor oscuro en tema claro, que es
+  // exactamente el bug que se vino a corregir.
+  const css = CSS()
+  const claro = bloqueClaro()
+  for (const v of ['bg-drawer', 'bg-drawer-head', 'bg-sticky', 'bg-toast', 'scroll-track', 'chevron']) {
+    assert.match(css, new RegExp(`--${v}:`), `--${v} no existe`)
+    assert.match(claro, new RegExp(`--${v}:`), `--${v} no esta redefinida en el tema claro`)
+  }
+})
+
+test('el drawer y el sticky del tema claro se leen con el texto del tema claro', () => {
+  const b = bloqueClaro()
+  const t1 = color(variable(b, 't1'), [255, 255, 255])
+  for (const superficie of ['bg-drawer', 'bg-drawer-head', 'bg-sticky']) {
+    const fondo = color(variable(b, superficie), [255, 255, 255])
+    const r = contraste(t1, fondo)
+    assert.ok(r >= 4.5, `--t1 sobre --${superficie} da ${r.toFixed(2)}x y necesita 4.5x`)
+  }
+})
+
+test('el th del tema claro se separa del fondo de la pagina', () => {
+  // Si el sticky queda igual que el fondo, el encabezado se pierde entre las filas al
+  // scrollear. No hace falta contraste de texto, solo que se distinga.
+  const b = bloqueClaro()
+  const app = hexARgb(variable(b, 'bg-app'))
+  const th = color(variable(b, 'bg-sticky'), app)
+  assert.notDeepEqual(th, app, '--bg-sticky es igual a --bg-app')
+})
