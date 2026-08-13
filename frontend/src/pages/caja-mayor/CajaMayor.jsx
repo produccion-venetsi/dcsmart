@@ -364,42 +364,72 @@ export default function CajaMayor() {
               display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1rem',
               background: 'var(--bg-input)', borderRadius: 8, padding: '0.9rem 1.1rem',
             }}>
-              <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Enviado a caja mayor</div>
-                <div style={{ fontSize: 18, color: 'var(--green)' }}>{fmtMonto(vista.totalEnviado, moneda)}</div>
+              {/* Los títulos dicen DEPOSITADO y EXTRAÍDO, no "enviado/recibido": esas dos
+                  palabras son los valores del estado (ENVIADA/RECIBIDA) y usarlas para la
+                  dirección hacía que un movimiento RECIBIDA apareciera bajo "enviadas". */}
+              <div title="Plata que los locales pusieron en la caja mayor">
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Depositado</div>
+                <div style={{ fontSize: 18, color: 'var(--green)' }}>{fmtMonto(vista.totalDepositado, moneda)}</div>
               </div>
-              <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Recibido de caja mayor</div>
-                <div style={{ fontSize: 18, color: 'var(--red)' }}>{fmtMonto(vista.totalRecibido, moneda)}</div>
+              <div title="Plata que los locales sacaron de la caja mayor">
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Extraído</div>
+                <div style={{ fontSize: 18, color: 'var(--red)' }}>{fmtMonto(vista.totalExtraido, moneda)}</div>
               </div>
-              <div>
+              <div title="Depositado menos extraído, contando todo">
                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Neto</div>
                 <div style={{ fontSize: 18 }}><Saldo valor={vista.neto} moneda={moneda} /></div>
               </div>
+              {/* El neto confirmado solo se muestra si difiere: dos números iguales al lado
+                  hacen dudar de cuál mirar. */}
+              {vista.totalPendiente > 0 && (
+                <div title="El neto contando solo lo que la caja mayor ya confirmó">
+                  <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Neto confirmado</div>
+                  <div style={{ fontSize: 18 }}><Saldo valor={vista.netoConfirmado} moneda={moneda} /></div>
+                </div>
+              )}
               <div>
                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Locales</div>
                 <div style={{ fontSize: 18, color: 'var(--t1)' }}>{vista.locales}</div>
               </div>
-              <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Sin recibir</div>
-                <div style={{ fontSize: 18, color: vista.sinRecibir ? 'var(--amber)' : 'var(--t2)' }}>{vista.sinRecibir}</div>
+              {/* "Sin confirmar" y no "sin recibir": es el estado ENVIADA, y decirlo con la
+                  palabra del estado evita confundirlo con la dirección. */}
+              <div title="Movimientos cargados que la caja mayor todavía no confirmó (estado ENVIADA)">
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Sin confirmar</div>
+                <div style={{ fontSize: 18, color: vista.sinRecibir ? 'var(--amber)' : 'var(--t2)' }}>
+                  {vista.sinRecibir}
+                  {vista.totalPendiente > 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--amber)', marginLeft: 6 }}>
+                      {fmtMonto(vista.totalPendiente, moneda)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── La vista partida en dos ──────────────────────────────────────
-              Un lado por direccion de la plata. Los DOS lados listan los mismos
-              locales en el mismo orden, incluso con cero de un lado: leer las dos
-              columnas a la misma altura es lo que permite comparar, y filtrar los
-              ceros desalinearia las filas.
+          {/* ── La vista partida en dos, por DIRECCION ───────────────────────
+              Los DOS lados listan los mismos locales en el mismo orden, incluso con
+              cero de un lado: leer las dos columnas a la misma altura es lo que
+              permite comparar, y filtrar los ceros desalinearia las filas.
+
+              Los titulos son DEPOSITADO / EXTRAIDO y no "enviado/recibido" a
+              proposito: esas dos palabras son los valores del estado
+              (ENVIADA/RECIBIDA), y usarlas para la direccion hacia que un movimiento
+              en estado RECIBIDA apareciera bajo la columna "enviadas" -- que es
+              exactamente lo que se reporto de ADA. El estado va aparte, en la columna
+              "Sin confirmar".
 
               Ojo con el dato: `ingresos` y `egresos` vienen desde la CAJA MAYOR, y un
               egreso del local es un ingreso a la caja mayor. Leerlo al derecho
               invierte los dos totales y los numeros igual parecen correctos. */}
           <div className="cm-split">
             {[
-              { clave: 'enviado',  titulo: 'Enviado a caja mayor',   ayuda: 'Plata que el local mando',  color: 'var(--green)', total: vista.totalEnviado },
-              { clave: 'recibido', titulo: 'Recibido de caja mayor', ayuda: 'Plata que volvio al local', color: 'var(--red)',   total: vista.totalRecibido },
+              { clave: 'depositado', pend: 'pendiente_depositado', ops: 'ops_depositado',
+                titulo: 'Depositado en caja mayor', ayuda: 'Plata que el local puso',
+                color: 'var(--green)', total: vista.totalDepositado },
+              { clave: 'extraido', pend: 'pendiente_extraido', ops: 'ops_extraido',
+                titulo: 'Extraído de caja mayor', ayuda: 'Plata que el local sacó',
+                color: 'var(--red)', total: vista.totalExtraido },
             ].map((lado) => (
               <div key={lado.clave} className="cm-split-panel">
                 <div className="cm-split-head">
@@ -449,17 +479,26 @@ export default function CajaMayor() {
                             <div style={{ color: f[lado.clave] ? lado.color : 'var(--t4)' }}>
                               {fmtMonto(f[lado.clave], f.moneda)}
                             </div>
-                            <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(255,255,255,0.07)' }}>
+                            {/* Lo que de ese monto todavía no confirmó la caja mayor. Va
+                                debajo del número y no en otra columna: es una aclaración
+                                del mismo importe, no un dato aparte. */}
+                            {f[lado.pend] > 0 && (
+                              <div style={{ fontSize: 10.5, color: 'var(--amber)' }}>
+                                {fmtMonto(f[lado.pend], f.moneda)} sin confirmar
+                              </div>
+                            )}
+                            <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(var(--velo-rgb), 0.07)' }}>
                               <div style={{
                                 height: '100%', borderRadius: 2, background: lado.color,
                                 width: `${proporcion(f[lado.clave], lado.total)}%`,
                               }} />
                             </div>
                           </td>
+                          {/* Los movimientos de ESTE lado, no los del local entero: en la
+                              columna de depositado, contar también los extraídos hacía que
+                              los dos lados mostraran el mismo número. */}
                           <td style={{ textAlign: 'right' }} className="td-muted">
-                            {f.sin_recibir > 0
-                              ? <span className="badge badge-amber" title={`${f.sin_recibir} sin confirmar`}>{f.ops}</span>
-                              : f.ops}
+                            {f[lado.ops]}
                           </td>
                         </tr>
                       ))}

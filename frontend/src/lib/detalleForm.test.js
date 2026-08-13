@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { conTipoElegido } from './detalleForm.js'
+import { conTipoElegido, conClasificacionElegida } from './detalleForm.js'
 
 const TIPOS = [
   { id: 't1', nombre: 'Mostrador', clasificacion: 'informativo' },
@@ -54,4 +54,47 @@ test('un tipo que no está en la lista tampoco rompe', () => {
   const r = conTipoElegido({ clasificacion: 'cobro' }, TIPOS, 'inexistente', 'X')
   assert.equal(r.clasificacion, 'cobro')
   assert.equal(r.id_tipo, 'inexistente')
+})
+
+// ── cambiar la clasificación y la cuenta corriente ──────────────────────────
+
+const CON_CUENTA = { clasificacion: 'cobro', id_cliente: 'c1', cliente: { id: 'c1', nombre: 'ACME' }, monto: '100' }
+
+test('pasar a informativo suelta la cuenta corriente', () => {
+  // Un informativo no mueve ninguna cuenta: el backend rechaza la combinación. Soltarlo acá
+  // evita que el error aparezca recién al apretar Guardar.
+  const r = conClasificacionElegida(CON_CUENTA, 'informativo')
+  assert.equal(r.clasificacion, 'informativo')
+  assert.equal(r.id_cliente, '')
+  assert.equal(r.cliente, null)
+})
+
+test('pasar de cobro a gasto CONSERVA la cuenta', () => {
+  // Las dos pueden llevar cuenta: borrarla seria perder un dato que sigue siendo valido.
+  const r = conClasificacionElegida(CON_CUENTA, 'gasto')
+  assert.equal(r.clasificacion, 'gasto')
+  assert.equal(r.id_cliente, 'c1')
+  assert.equal(r.cliente.nombre, 'ACME')
+})
+
+test('vaciar la clasificacion tambien suelta la cuenta', () => {
+  const r = conClasificacionElegida(CON_CUENTA, '')
+  assert.equal(r.id_cliente, '')
+})
+
+test('conserva el resto del formulario', () => {
+  const r = conClasificacionElegida({ ...CON_CUENTA, observaciones: 'mesa 4' }, 'gasto')
+  assert.equal(r.monto, '100')
+  assert.equal(r.observaciones, 'mesa 4')
+})
+
+test('no muta el formulario original', () => {
+  const form = { ...CON_CUENTA }
+  conClasificacionElegida(form, 'informativo')
+  assert.equal(form.id_cliente, 'c1')
+})
+
+test('sin cuenta puesta no agrega claves de mas', () => {
+  const r = conClasificacionElegida({ clasificacion: 'cobro', monto: '5' }, 'gasto')
+  assert.equal(r.id_cliente, undefined)
 })

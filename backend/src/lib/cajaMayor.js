@@ -225,6 +225,20 @@ export function saldoDeAgregados(grupos) {
 
 // Saldos por local y moneda desde un groupBy por (id_local, moneda, ingreso,
 // estado). `nombres` mapea id_local -> { local, grupo }.
+//
+// Devuelve las DOS dimensiones separadas, porque son dos preguntas distintas y hasta
+// ahora se confundían:
+//
+//   dirección (`ingreso`) -> ¿la plata entró a la caja mayor o salió?
+//   estado                -> ¿ya se confirmó la recepción o sigue en camino?
+//
+// Un movimiento con `ingreso: true` y `estado: RECIBIDA` es plata que el local depositó Y
+// que la caja mayor ya confirmó: las dos cosas a la vez. La pantalla mostraba la dirección
+// con las palabras "enviado/recibido", que son justo los dos valores del estado, así que
+// una fila RECIBIDA aparecía bajo "enviadas" y se leía como un error de datos.
+//
+// Por eso ahora los importes vienen cortados por estado además de por dirección:
+// `pendiente_*` es lo que todavía no se confirmó.
 export function saldosDeAgregados(grupos, nombres) {
   const porClave = new Map()
   for (const g of grupos ?? []) {
@@ -235,17 +249,37 @@ export function saldosDeAgregados(grupos, nombres) {
         id_local: g.id_local, moneda: g.moneda,
         local: n.local ?? null, grupo: n.grupo ?? null,
         ingresos: 0, egresos: 0, ops: 0, en_estudio: 0,
+        // Importes de lo que sigue en estado ENVIADA, por dirección.
+        pendiente_ingresos: 0, pendiente_egresos: 0,
+        // Cantidad de movimientos por dirección: sirve para decir "2 de 4" sin tener que
+        // pedir las filas.
+        ops_ingresos: 0, ops_egresos: 0,
       })
     }
     const acc = porClave.get(clave)
     const monto = Math.abs(num(g._sum?.importe))
     const cuantas = g._count?._all ?? 0
-    if (g.ingreso === true) acc.ingresos += monto; else acc.egresos += monto
+    const esIngreso = g.ingreso === true
+    const recibida = g.estado === 'RECIBIDA'
+
+    if (esIngreso) { acc.ingresos += monto; acc.ops_ingresos += cuantas }
+    else { acc.egresos += monto; acc.ops_egresos += cuantas }
+
     acc.ops += cuantas
-    if (g.estado !== 'RECIBIDA') acc.en_estudio += cuantas
+    if (!recibida) {
+      acc.en_estudio += cuantas
+      if (esIngreso) acc.pendiente_ingresos += monto
+      else acc.pendiente_egresos += monto
+    }
   }
   return [...porClave.values()]
-    .map(a => ({ ...a, saldo: a.ingresos - a.egresos }))
+    .map(a => ({
+      ...a,
+      saldo: a.ingresos - a.egresos,
+      // Lo confirmado, que es "cuánta plata hay de verdad" (distinto de "cuánta va a haber").
+      recibido_ingresos: a.ingresos - a.pendiente_ingresos,
+      recibido_egresos: a.egresos - a.pendiente_egresos,
+    }))
     .sort((a, b) =>
       (a.grupo ?? '').localeCompare(b.grupo ?? '') || (a.local ?? '').localeCompare(b.local ?? ''))
 }

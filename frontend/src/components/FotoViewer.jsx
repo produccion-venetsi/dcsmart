@@ -184,7 +184,7 @@ function ImageLightbox({ src, onClose }) {
   const doReset = (e) => { e.stopPropagation(); reset() }
 
   const btnStyle = {
-    background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+    background: 'rgba(var(--velo-rgb), 0.12)', border: '1px solid rgba(var(--velo-rgb), 0.2)',
     color: '#fff', borderRadius: 8, cursor: 'pointer', userSelect: 'none',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 36, height: 36, fontSize: 18, padding: 0,
@@ -260,7 +260,7 @@ function ImageLightbox({ src, onClose }) {
           display: 'flex', alignItems: 'center', gap: 8, zIndex: 10,
           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)',
           borderRadius: 12, padding: '6px 10px',
-          border: '1px solid rgba(255,255,255,0.12)',
+          border: '1px solid rgba(var(--velo-rgb), 0.12)',
         }}
       >
         <button style={btnStyle} onClick={rotarIzq} title="Girar a la izquierda (Shift+R)" aria-label="Girar a la izquierda">
@@ -270,7 +270,7 @@ function ImageLightbox({ src, onClose }) {
           <IcoRotarDer />
         </button>
 
-        <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.18)', margin: '0 2px' }} />
+        <span style={{ width: 1, height: 20, background: 'rgba(var(--velo-rgb), 0.18)', margin: '0 2px' }} />
 
         <button style={btnStyle} onClick={zoomOut} title="Alejar (-)">−</button>
 
@@ -289,7 +289,7 @@ function ImageLightbox({ src, onClose }) {
       {view.scale === 1 && (
         <div style={{
           position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
-          fontSize: 11, color: 'rgba(255,255,255,0.4)', pointerEvents: 'none',
+          fontSize: 11, color: 'rgba(var(--velo-rgb), 0.4)', pointerEvents: 'none',
           whiteSpace: 'nowrap',
         }}>
           Rueda para hacer zoom · Doble clic para ampliar · Arrastrá para mover · R para girar

@@ -121,7 +121,7 @@ function Avatar({ u, size = 36, radius = 10, fontSize = 13 }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: radius,
-      background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
+      background: 'rgba(var(--velo-rgb), 0.08)', border: '1px solid rgba(var(--velo-rgb), 0.1)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontWeight: 700, fontSize, color: 'var(--t1)', flexShrink: 0, overflow: 'hidden',
     }}>
@@ -1203,9 +1203,9 @@ export default function Users() {
                       <div key={r.id} style={{
                         padding: '0.75rem 1rem',
                         marginBottom: 6,
-                        background: 'rgba(255,255,255,0.04)',
+                        background: 'rgba(var(--velo-rgb), 0.04)',
                         borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.07)',
+                        border: '1px solid rgba(var(--velo-rgb), 0.07)',
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--t1)' }}>
@@ -1259,8 +1259,8 @@ export default function Users() {
                                     <span key={l.id} style={{
                                       display: 'inline-flex', alignItems: 'center', gap: 5,
                                       padding: '2px 6px 2px 8px', borderRadius: 6,
-                                      background: 'rgba(255,255,255,0.06)',
-                                      border: '1px solid rgba(255,255,255,0.1)',
+                                      background: 'rgba(var(--velo-rgb), 0.06)',
+                                      border: '1px solid rgba(var(--velo-rgb), 0.1)',
                                       fontSize: 11, color: 'var(--t2)',
                                     }}>
                                       {l.nombre}
@@ -1332,8 +1332,8 @@ export default function Users() {
                   </button>
                 ) : (
                   <form onSubmit={handleAssignRole} style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: 'rgba(var(--velo-rgb), 0.04)',
+                    border: '1px solid rgba(var(--velo-rgb), 0.08)',
                     borderRadius: 12,
                     padding: '1rem',
                     marginBottom: '1rem',
@@ -1365,7 +1365,7 @@ export default function Users() {
                         return (
                           <div style={{
                             padding: '0.5rem 0.75rem', borderRadius: 8, marginBottom: '1rem',
-                            background: 'rgba(255,255,255,0.05)', fontSize: 12, color: 'var(--t3)',
+                            background: 'rgba(var(--velo-rgb), 0.05)', fontSize: 12, color: 'var(--t3)',
                           }}>
                             Acceso global a todos los grupos y locales del sistema.
                           </div>
@@ -1459,7 +1459,7 @@ export default function Users() {
               {/* Activate / Deactivate — solo super_admin */}
               {amISuperAdmin && (
                 <>
-                  <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '1rem 0' }} />
+                  <div style={{ height: 1, background: 'rgba(var(--velo-rgb), 0.06)', margin: '1rem 0' }} />
                   {selected.activo ? (
                     <button
                       className="btn btn-sm btn-danger"
