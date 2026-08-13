@@ -91,6 +91,17 @@
   --bg-thumb-a:     #3A4A5C;
   --bg-thumb-b:     #22303E;
 
+  /* Tinte del cartel del cuadre. Mas fuerte que los `--*-bg` de los badges (12%): este
+     cartel decide si la caja se guarda bien y tiene que verse de una. Se compone sobre
+     --bg-drawer-head, que es opaco. */
+  --cuadre-ok-tinte: rgba(76, 175, 125, 0.26);
+  --cuadre-no-tinte: rgba(224, 92, 92, 0.24);
+  /* El texto del estado va sobre el tinte, no sobre el fondo de la app, asi que necesita su
+     propio color: --green y --red dan 4.23x y 3.70x ahi, y este es el texto que decide si la
+     caja se guarda bien. Medido: 5.71x y 4.95x. */
+  --cuadre-ok-texto: #5FCB92;
+  --cuadre-no-texto: #F07B7B;
+
   /* La flecha de los <select>. Va entera en una variable porque var() no se puede
      usar adentro de un url(): el color del SVG tiene que estar ya escrito. */
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(240,237,232,0.35)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
@@ -1437,6 +1448,13 @@ select.campo-ia {
   --bg-thumb-a:     #DCD7CE;
   --bg-thumb-b:     #CBC4B8;
 
+  /* En claro el tinte pesa mas sobre un fondo claro: alcanza con menos. */
+  --cuadre-ok-tinte: rgba(46, 125, 82, 0.17);
+  --cuadre-no-tinte: rgba(192, 57, 43, 0.15);
+  /* Medido sobre el tinte claro: 6.11x y 4.62x. */
+  --cuadre-ok-texto: #1C5036;
+  --cuadre-no-texto: #A32E22;
+
   /* La misma flecha, oscura. */
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(30,38,48,0.55)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
 
@@ -1879,10 +1897,54 @@ select.campo-ia {
   border-left: none;
   border-right: none;
   border-top: none;
-  background: var(--bg-drawer-head);
+  /* `background-color` y no el shorthand: el shorthand resetea `background-image`, que es
+     lo que usan las reglas del semaforo para poner el tinte encima de este fondo opaco. */
+  background-color: var(--bg-drawer-head);
   padding: 0.7rem 1.5rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
+
+/* El semaforo del cuadre. Verde cuadra, ROJO no cuadra, gris mientras no hay total: son
+   tres estados y no dos, porque pintar rojo antes de que se cargue el total seria marcar un
+   error que todavia no existe.
+
+   El color no va solo: el borde izquierdo grueso, el signo (✓ / !) y el fondo tintado dicen
+   lo mismo tres veces. Es a proposito -- 1 de cada 12 varones no distingue rojo de verde, y
+   este cartel es el que decide si la caja se guarda bien. */
+/* El tinte va como `background-image` SOBRE un `background-color` opaco, no como
+   `background`. Estas reglas tienen dos clases y le ganan por especificidad a
+   `.cuadre-vivo-sticky`, que es la que pone el fondo opaco: con el shorthand lo pisaban y el
+   cartel quedaba translucido -- se leian los campos del formulario pasando por detras.
+   Los tokens `--*-bg` son tintes de ~12% de alfa, no colores plenos. */
+.cuadre-vivo.cuadre-cuadra {
+  border-left: 4px solid var(--green);
+  background-color: var(--bg-drawer-head);
+  background-image: linear-gradient(var(--cuadre-ok-tinte), var(--cuadre-ok-tinte));
+}
+.cuadre-vivo.cuadre-no-cuadra {
+  border-left: 4px solid var(--red);
+  background-color: var(--bg-drawer-head);
+  background-image: linear-gradient(var(--cuadre-no-tinte), var(--cuadre-no-tinte));
+}
+.cuadre-vivo.cuadre-sin-datos {
+  border-left: 4px solid var(--glass-border);
+  background-color: var(--bg-drawer-head);
+  background-image: none;
+}
+
+.cuadre-vivo-estado { display: flex; align-items: baseline; gap: 5px; font-size: 13.5px; }
+/* El color del estado lo pone la clase del cartel y no un style inline: depende del fondo
+   tintado sobre el que se lee, y eso es cosa del CSS. */
+.cuadre-vivo.cuadre-cuadra    .cuadre-vivo-estado { color: var(--cuadre-ok-texto) !important; }
+.cuadre-vivo.cuadre-no-cuadra .cuadre-vivo-estado { color: var(--cuadre-no-texto) !important; }
+.cuadre-vivo-marca {
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+}
+/* El monto que falta, del mismo tamano que el texto y no como una nota al pie: es la
+   accion. */
+.cuadre-vivo-falta { font-variant-numeric: tabular-nums; }
 
 .cuadre-vivo-cuentas {
   display: flex;

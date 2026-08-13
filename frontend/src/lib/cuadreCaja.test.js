@@ -51,7 +51,10 @@ test('CONTRATO: la fuente se elige por origin, no por lo que tenga cargado', () 
 
 // ── la cuenta ───────────────────────────────────────────────────────────────
 
-const detalle = (monto, clasificacion) => ({ monto, tipo: { clasificacion } })
+// La forma REAL que manda la API: `tipo` es un String con la clasificacion y el objeto del
+// catalogo se llama `detalle_tipo`. Antes esto era `{ tipo: { clasificacion } }`, una forma
+// que la API nunca manda, y por eso los tests pasaban con el lib roto.
+const detalle = (monto, clasificacion) => ({ monto, tipo: clasificacion })
 const mov = (tipo, monto, metodo) => ({ tipo, monto, metodo_pago: metodo ? { nombre: metodo } : null })
 
 test('por detalles: cuadra cuando el total es efectivo + cobros - gastos', () => {
@@ -169,9 +172,11 @@ test('el texto nunca deja el numero pelado', () => {
   assert.equal(describirCuadre(null).texto, '')
 })
 
-test('el tono elige el color', () => {
+test('el tono elige el color: verde cuadra, ROJO no cuadra', () => {
+  // El descuadre era ambar y se leia como "ojo" en vez de "esto esta mal". Pedido del
+  // usuario: rojo si no esta en cero, verde si cuadra.
   assert.equal(colorCuadre('ok'), 'var(--green)')
-  assert.equal(colorCuadre('alerta'), 'var(--amber)')
+  assert.equal(colorCuadre('alerta'), 'var(--red)')
   assert.equal(colorCuadre('neutro'), 'var(--t3)')
 })
 
@@ -187,14 +192,21 @@ test('faltaParaCuadrar dice CUANTO, en positivo', () => {
 // ── roles ───────────────────────────────────────────────────────────────────
 
 test('el rol del detalle sale del tipo, o del detalle si viene plano', () => {
-  assert.equal(rolDeDetalle({ tipo: { clasificacion: 'cobro' } }), 'cobro')
-  assert.equal(rolDeDetalle({ clasificacion: 'gasto' }), 'gasto')
+  assert.equal(rolDeDetalle({ tipo: 'cobro' }), 'cobro')
+  // La del propio detalle gana sobre la del tipo del catalogo.
+  assert.equal(rolDeDetalle({ tipo: 'gasto', detalle_tipo: { clasificacion: 'cobro' } }), 'gasto')
+  // Sin clasificacion propia, la del catalogo.
+  assert.equal(rolDeDetalle({ detalle_tipo: { clasificacion: 'gasto' } }), 'gasto')
 })
 
-test('una clasificacion desconocida es informativa, no cobro', () => {
-  // Fallar hacia "no cuenta" es lo seguro: contarla como cobro inventa plata.
-  assert.equal(rolDeDetalle({ tipo: { clasificacion: 'nueva' } }), 'informativo')
-  assert.equal(rolDeDetalle({}), 'informativo')
+test('una clasificacion desconocida cuenta como cobro, igual que en el backend', () => {
+  // Este test decia lo contrario ("es informativa, no cobro") con el argumento de que fallar
+  // hacia "no cuenta" es lo seguro. Es defendible, pero el backend es la autoridad: es lo que
+  // se guarda y lo que usa la reporteria, y ahi un detalle sin clasificar cuenta como cobro
+  // para que no desaparezca del calculo sin aviso. Si la pantalla decidiera distinto,
+  // mostraria una diferencia que el servidor no comparte.
+  assert.equal(rolDeDetalle({ tipo: 'nueva' }), 'cobro')
+  assert.equal(rolDeDetalle({}), 'cobro')
   assert.equal(rolDeMovimiento({ tipo: 'NUEVO' }), 'informativo')
 })
 
@@ -204,4 +216,86 @@ test('reconoce el efectivo escrito de cualquier forma', () => {
   assert.equal(esEfectivo('efectivo en caja'), true)
   assert.equal(esEfectivo('Mercado Pago'), false)
   assert.equal(esEfectivo(null), false)
+})
+
+// ── CONTRATO de verdad: las dos funciones, con las mismas entradas ───────────
+//
+// El contrato anterior comparaba las CONSTANTES (ROL_POR_CLASIFICACION y
+// ROL_POR_TIPO_MOVIMIENTO) leyendo el archivo del backend como texto. Las constantes
+// coincidian y las FUNCIONES no: este lib leia `detalle.tipo.clasificacion` (como si `tipo`
+// fuera un objeto) y caia en 'informativo'. Todos los detalles contaban como informativos y
+// el cuadre en vivo ignoraba los cobros, en produccion, desde el 13/08.
+//
+// Comparar las constantes no alcanza. Estos tests importan la funcion del backend y corren
+// las dos con las mismas entradas -- incluida la forma EXACTA que manda la API.
+
+import {
+  rolDeDetalle as rolDetalleBackend,
+  rolDeMovimiento as rolMovBackend,
+  calcularCuadre as calcularBackend,
+} from '../../../backend/src/lib/cuadreCaja.js'
+
+test('CONTRATO: rolDeDetalle da lo mismo en los dos lados', () => {
+  const casos = [
+    // La forma que manda la API: tipo string + detalle_tipo objeto.
+    { tipo: 'cobro', detalle_tipo: { clasificacion: 'informativo' } },
+    { tipo: 'gasto', detalle_tipo: { clasificacion: 'cobro' } },
+    { tipo: 'informativo' },
+    { tipo: null, detalle_tipo: { clasificacion: 'cobro' } },
+    { tipo: null, detalle_tipo: null },
+    {},
+    // Clasificaciones historicas que siguen en la base.
+    { tipo: 'ingreso' }, { tipo: 'medio_pago' }, { tipo: 'egreso' },
+    { tipo: 'canal' }, { tipo: 'otro' }, { tipo: 'calculo' },
+    // Basura.
+    { tipo: 'nueva' }, { tipo: '' }, { tipo: 0 },
+  ]
+  for (const c of casos) {
+    assert.equal(rolDeDetalle(c), rolDetalleBackend(c), `difieren con ${JSON.stringify(c)}`)
+  }
+})
+
+test('CONTRATO: rolDeMovimiento da lo mismo en los dos lados', () => {
+  for (const t of ['COBRO', 'GASTO', 'INICIAL', 'RETIRO', 'VACIADO', 'INGRESO', 'EGRESO', 'NUEVO', null]) {
+    assert.equal(rolDeMovimiento({ tipo: t }), rolMovBackend({ tipo: t }), `difieren con ${t}`)
+  }
+})
+
+test('CONTRATO: calcularCuadre da el MISMO numero en los dos lados', () => {
+  // Lo que de verdad importa: que la pantalla y el servidor digan la misma diferencia.
+  const cajas = [
+    {
+      origin: 'DCSMART', total: 20000, efectivo: 12000,
+      detalles: [{ tipo: 'cobro', monto: 5000 }, { tipo: 'cobro', monto: 3000 }],
+      movimientos: [],
+    },
+    {
+      origin: 'DCSMART', total: 15000, efectivo: 10000,
+      detalles: [{ tipo: 'cobro', monto: 6000 }, { tipo: 'gasto', monto: 1000 }, { tipo: 'informativo', monto: 999 }],
+      movimientos: [],
+    },
+    {
+      origin: 'TAPTAP', total: 30000, efectivo: 20000,
+      detalles: [{ tipo: 'cobro', monto: 9999 }],
+      movimientos: [
+        { tipo: 'COBRO', monto: 10000, metodo_pago: { nombre: 'MP QR' } },
+        { tipo: 'COBRO', monto: 5000, metodo_pago: { nombre: 'Efectivo' } },
+        { tipo: 'GASTO', monto: 1000, metodo_pago: { nombre: 'Efectivo' } },
+      ],
+    },
+    // Caja sin total: no hay con que comparar.
+    { origin: 'DCSMART', total: null, efectivo: 500, detalles: [{ tipo: 'cobro', monto: 100 }], movimientos: [] },
+    // Detalle sin clasificacion, el caso que la divergencia rompia.
+    { origin: 'DCSMART', total: 1000, efectivo: 0, detalles: [{ monto: 1000 }], movimientos: [] },
+  ]
+  for (const caja of cajas) {
+    const a = calcularCuadre(caja)
+    const b = calcularBackend(caja)
+    assert.equal(a.cobros, b.cobros, `cobros difieren en ${JSON.stringify(caja.detalles)}`)
+    assert.equal(a.gastos, b.gastos, 'gastos difieren')
+    assert.equal(a.esperado, b.esperado, 'esperado difiere')
+    assert.equal(a.diferencia, b.diferencia, 'la diferencia difiere: la pantalla y el servidor dirian numeros distintos')
+    assert.equal(a.cuadra, b.cuadra, 'cuadra difiere')
+    assert.equal(a.fuente, b.fuente, 'la fuente difiere')
+  }
 })
