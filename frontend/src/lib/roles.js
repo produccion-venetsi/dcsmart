@@ -63,14 +63,20 @@ export const puedeBorrarMovimientos = (rol) => incluye(ROLES_BORRAN, rol)
 export const ROLES_CREAN_CAJAS = [...ROLES_TODOS, ROLES.DATA_ENTRY]
 export const puedeCrearCajas = (rol) => incluye(ROLES_CREAN_CAJAS, rol)
 
-// Exportar la tabla de pagos (Excel y Google Sheets). Incluye a `externo`: es
-// el rol de la gente de afuera que ordena la carga y necesita la planilla. No
-// incluye a `admin` ni a `cajero`.
+// Exportar la tabla de pagos (Excel y Google Sheets). Incluye a `externo` -- el rol
+// de la gente de afuera que ordena la carga y necesita la planilla -- y a `admin`,
+// que es dueño o gerente del local y pidió poder bajarse sus propios pagos. No
+// incluye a `cajero`.
 //
-// Ojo: exportar no es lo mismo que ver los datos internos. La columna "Creado"
-// del export sigue saliendo solo para ROLES_DC (ver PAGO_CSV_COLUMNS), porque
-// externo tampoco la ve en pantalla.
-export const puedeExportar = (rol) => incluye([...ROLES_DC, ROLES.EXTERNO], rol)
+// Exportar no agrega acceso a nada: el archivo se arma en el navegador con las
+// mismas filas que la pantalla ya trae de `GET /pagos`, que va recortado por
+// `allowedLocalIds`. Un admin se baja los pagos de SUS locales y de ningún otro; el
+// backend no tiene que autorizar nada aparte porque no hay endpoint de export.
+//
+// Ojo: exportar no es lo mismo que ver los datos internos. La columna "Creado" del
+// export sigue saliendo solo para ROLES_DC (ver PAGO_CSV_COLUMNS), porque ni
+// externo ni admin la ven en pantalla.
+export const puedeExportar = (rol) => incluye([...ROLES_DC, ROLES.EXTERNO, ROLES.ADMIN], rol)
 
 // ── Home por rol ────────────────────────────────────────────────────────────
 //
