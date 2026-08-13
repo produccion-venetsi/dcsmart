@@ -862,15 +862,20 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   // esperar al servidor. Es la razón de que exista el espejo en lib/cuadreCaja.js —
   // cargando cinco cobros seguidos, pedirlo al backend en cada alta mostraría siempre el
   // cuadre de antes del último. Al guardar, el backend lo recalcula y es el que manda.
+  // `form?` y no `form.`: acá arriba `form` todavía es null. El guard que devuelve el
+  // spinner está más abajo (`if (!form)`), pero los hooks corren SIEMPRE antes de cualquier
+  // return, así que leerlo directo rompía el panel en el primer render -- editar una caja
+  // tiraba la pantalla de error el 100% de las veces. `calcularCuadre` tolera los nulos y
+  // devuelve un cuadre sin total, que es lo correcto mientras no hay datos.
   const cuadreVivo = useMemo(
     () => calcularCuadre({
       origin,
-      total: form.total,
-      efectivo: form.efectivo,
+      total: form?.total,
+      efectivo: form?.efectivo,
       detalles,
       movimientos,
     }),
-    [origin, form.total, form.efectivo, detalles, movimientos]
+    [origin, form?.total, form?.efectivo, detalles, movimientos]
   )
   const leyendaCuadre = describirCuadre(cuadreVivo)
 

@@ -74,6 +74,26 @@
   --glass:           rgba(var(--velo-rgb), 0.05);
   --glass-border:    rgba(201, 176, 134, 0.18);
   --glass-border-hi: rgba(201, 176, 134, 0.34);
+
+  /* ── Superficies SÓLIDAS ────────────────────────────────────────────────
+     Estas no pueden ser un velo transparente como --bg-card: tapan algo que
+     está atrás. El drawer cubre la pantalla, el th de la tabla y la barra de
+     desglose son sticky y se les pasa contenido por abajo, y un menú flotante
+     que deja ver el texto de atrás no se lee.
+     Estaban escritas a mano con hex oscuros, así que en tema claro quedaban
+     paneles negros con texto negro: es lo que hacía ilegibles el detalle de
+     op, el de caja y los encabezados de TODAS las tablas. */
+  --bg-drawer:      #141D28;
+  --bg-drawer-head: #111820;
+  --bg-sticky:      #1A2535;
+  --bg-toast:       rgba(18, 25, 32, 0.92);
+  --scroll-track:   rgba(30, 43, 58, 0.6);
+  --bg-thumb-a:     #3A4A5C;
+  --bg-thumb-b:     #22303E;
+
+  /* La flecha de los <select>. Va entera en una variable porque var() no se puede
+     usar adentro de un url(): el color del SVG tiene que estar ya escrito. */
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(240,237,232,0.35)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 /* ═══════════════════════════════════════════════
@@ -257,7 +277,7 @@ select option:disabled { color: var(--t4); }
   transition: border-color 0.18s var(--ease);
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='rgba(240,237,232,0.35)' stroke-width='1.5' stroke-linecap='round' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 9px center;
 }
@@ -831,7 +851,7 @@ select option:disabled { color: var(--t4); }
   box-shadow: 0 4px 24px rgba(0,0,0,0.14);
   /* Firefox */
   scrollbar-width: thin;
-  scrollbar-color: var(--gold-deep) rgba(30, 43, 58, 0.6);
+  scrollbar-color: var(--gold-deep) var(--scroll-track);
 }
 
 /* ── custom scrollbar (webkit) ── */
@@ -840,7 +860,7 @@ select option:disabled { color: var(--t4); }
   width: 7px;
 }
 .table-wrap::-webkit-scrollbar-track {
-  background: rgba(30, 43, 58, 0.6);
+  background: var(--scroll-track);
   border-radius: 0 0 16px 16px;
 }
 .table-wrap::-webkit-scrollbar-thumb {
@@ -852,7 +872,7 @@ select option:disabled { color: var(--t4); }
   background: var(--gold);
 }
 .table-wrap::-webkit-scrollbar-corner {
-  background: rgba(30, 43, 58, 0.6);
+  background: var(--scroll-track);
   border-radius: 0 0 16px 16px;
 }
 .table-wrap::before {
@@ -882,7 +902,7 @@ select option:disabled { color: var(--t4); }
   text-transform: uppercase;
   letter-spacing: 0.11em;
   color: var(--t3);
-  background: #1a2535;
+  background: var(--bg-sticky);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
   position: sticky;
@@ -937,7 +957,7 @@ select option:disabled { color: var(--t4); }
   letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--t4);
-  background: #1a2535;
+  background: var(--bg-sticky);
   border-bottom: 1px solid var(--border);
 }
 .desglose-toggle-todo {
@@ -1373,6 +1393,21 @@ select.campo-ia {
   --glass-border:    rgba(0, 0, 0, 0.10);
   --glass-border-hi: rgba(140, 113, 66, 0.40);
 
+  /* Las superficies sólidas invertidas. El drawer va blanco y su cabecera en el
+     mismo tono que el sidebar, para que se lea como una hoja apoyada sobre la app
+     y no como un bloque más. El sticky es un gris apenas más oscuro que el fondo:
+     tiene que separarse de las filas sin pesar. */
+  --bg-drawer:      #FFFFFF;
+  --bg-drawer-head: #EAE6DF;
+  --bg-sticky:      #E7E3DB;
+  --bg-toast:       rgba(255, 255, 255, 0.96);
+  --scroll-track:   rgba(0, 0, 0, 0.06);
+  --bg-thumb-a:     #DCD7CE;
+  --bg-thumb-b:     #CBC4B8;
+
+  /* La misma flecha, oscura. */
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='rgba(30,38,48,0.55)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+
   /* el degradé de IA, con el dorado y el azul del tema claro */
   --ia-azul:        #2C6FB0;
   --ia-grad:        linear-gradient(115deg, rgba(140, 113, 66, 0.16) 0%, rgba(110, 87, 48, 0.12) 38%, rgba(44, 111, 176, 0.16) 100%);
@@ -1505,7 +1540,7 @@ select.campo-ia {
   left: 0;
   z-index: 11;
   min-width: 240px;
-  background: var(--bg-elevated, #1e1e24);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -1948,7 +1983,7 @@ select.campo-ia {
 .form-input-wrap select {
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='rgba(240,237,232,0.35)' stroke-width='1.5' stroke-linecap='round' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 0 center;
   padding-right: 20px;
@@ -2061,7 +2096,7 @@ select.campo-ia {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='rgba(240,237,232,0.35)' stroke-width='1.5' stroke-linecap='round' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-image: var(--chevron);
   background-repeat: no-repeat;
   background-position: right 10px center;
   transition: border-color 0.18s var(--ease);
@@ -2210,9 +2245,9 @@ tr.skel-row td {
   animation: notifIn 0.32s var(--ease) both;
   pointer-events: all;
 }
-.notification-success { background: rgba(18,25,32,0.92); border: 1px solid var(--green-border); color: var(--green); }
-.notification-error   { background: rgba(18,25,32,0.92); border: 1px solid var(--red-border);   color: var(--red); }
-.notification-info    { background: rgba(18,25,32,0.92); border: 1px solid var(--blue-border);  color: var(--blue); }
+.notification-success { background: var(--bg-toast); border: 1px solid var(--green-border); color: var(--green); }
+.notification-error   { background: var(--bg-toast); border: 1px solid var(--red-border);   color: var(--red); }
+.notification-info    { background: var(--bg-toast); border: 1px solid var(--blue-border);  color: var(--blue); }
 
 @keyframes notifIn {
   from { opacity: 0; transform: translateX(20px); }
@@ -2791,7 +2826,7 @@ tr.skel-row td {
   top: 0;
   right: 0;
   height: 100dvh;
-  background: #141d28;
+  background: var(--bg-drawer);
   border-left: 1px solid rgba(var(--velo-rgb), 0.10);
   z-index: 1011;
   display: flex;
@@ -2812,7 +2847,7 @@ tr.skel-row td {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid rgba(var(--velo-rgb), 0.08);
   flex-shrink: 0;
-  background: #111820;
+  background: var(--bg-drawer-head);
 }
 .drawer-title {
   font-size: 14px;
@@ -2956,7 +2991,7 @@ tr.row-clickable:hover td {
   overflow-y: auto;
   max-height: calc(100vh - 290px);
   scrollbar-width: thin;
-  scrollbar-color: var(--gold-deep) rgba(30, 43, 58, 0.6);
+  scrollbar-color: var(--gold-deep) var(--scroll-track);
 }
 .pdp-col-body::-webkit-scrollbar { width: 7px; }
 .pdp-col-body::-webkit-scrollbar-thumb { background: var(--gold-deep); border-radius: 10px; }
@@ -3362,7 +3397,7 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   height: 44px;
   border-radius: 8px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #3a4a5c, #22303e);
+  background: linear-gradient(135deg, var(--bg-thumb-a), var(--bg-thumb-b));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3540,7 +3575,7 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
 .filters-inline-body,
 .filters-inline-body .multiselect-lista {
   scrollbar-width: thin;
-  scrollbar-color: var(--gold-deep) rgba(30, 43, 58, 0.6);
+  scrollbar-color: var(--gold-deep) var(--scroll-track);
 }
 .filters-inline-body::-webkit-scrollbar,
 .filters-inline-body .multiselect-lista::-webkit-scrollbar {
@@ -3549,7 +3584,7 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
 }
 .filters-inline-body::-webkit-scrollbar-track,
 .filters-inline-body .multiselect-lista::-webkit-scrollbar-track {
-  background: rgba(30, 43, 58, 0.6);
+  background: var(--scroll-track);
   border-radius: 10px;
 }
 .filters-inline-body::-webkit-scrollbar-thumb,
