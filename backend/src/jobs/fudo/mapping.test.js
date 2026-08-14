@@ -82,7 +82,7 @@ test('los cobros anulados se ignoran', () => {
 test('los seis detalles se crean siempre, aunque den cero', () => {
   const { detalles } = mapear()
   assert.deepEqual(detalles.map((d) => d.nombre), DETALLES_SIEMPRE)
-  assert.equal(detalles.find((d) => d.nombre === 'Salon').monto, '10000.00')
+  assert.equal(detalles.find((d) => d.nombre === 'Salón').monto, '10000.00')
   assert.equal(detalles.find((d) => d.nombre === 'Mostrador').monto, '797000.00')
   assert.equal(detalles.find((d) => d.nombre === 'Delivery').monto, '0.00')
   assert.equal(detalles.find((d) => d.nombre === 'Online').monto, '0.00')

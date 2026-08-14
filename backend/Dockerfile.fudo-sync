@@ -10,5 +10,9 @@ RUN npm ci
 RUN npx prisma generate
 
 COPY src/jobs ./src/jobs/
+# El job importa el catalogo estandar de detalles desde src/lib: sin esto,
+# funciona en los tests (corren desde el repo completo) y muere en produccion
+# con un MODULE_NOT_FOUND, porque la imagen solo traia src/jobs.
+COPY src/lib ./src/lib/
 
 CMD ["node", "src/jobs/fudo-sync.js"]

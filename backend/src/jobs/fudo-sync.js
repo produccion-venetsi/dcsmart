@@ -2,7 +2,8 @@
 // Arma las cajas de DCSmart a partir de las ventas de Fudo. Corre como Cloud Run
 // Job vía Cloud Scheduler, 7am diario (una hora despues del corte de las 06:00).
 //
-// Uso local: DATABASE_URL=... FUDO_API_KEY=... FUDO_API_SECRET=... node src/jobs/fudo-sync.js
+// Uso local: DATABASE_URL=... FUDO_API_KEY_GRISGRIS=... FUDO_API_SECRET_GRISGRIS=... node src/jobs/fudo-sync.js
+// (el sufijo es el envSufijo de cada local en LOCALES_FUDO, no hay variable generica)
 // Un solo local:  node src/jobs/fudo-sync.js LTRXNBIR
 'use strict'
 import { PrismaClient } from '@prisma/client'
@@ -10,6 +11,15 @@ import { crearCliente } from './fudo/api.js'
 import { diasAProcesar, ventanaDia } from './fudo/dias.js'
 import { resolverMetodos } from './fudo/metodos.js'
 import { mapDia, esMovimientoDelJob, DETALLES_SIEMPRE } from './fudo/mapping.js'
+import { CATALOGO_ESTANDAR_DETALLE_TIPOS } from '../lib/detalleTiposEstandar.js'
+
+// Clasificacion que le corresponde a cada nombre segun el catalogo estandar
+// (el que se siembra a toda app nueva). Si el nombre no esta en el catalogo
+// (caso de 'Tarjetas', propio del job), se cae en 'informativo'.
+const CLASIFICACION_POR_NOMBRE = new Map(
+  CATALOGO_ESTANDAR_DETALLE_TIPOS.map((t) => [t.nombre, t.clasificacion])
+)
+const clasificacionDe = (nombre) => CLASIFICACION_POR_NOMBRE.get(nombre) ?? 'informativo'
 
 const prisma = new PrismaClient()
 
@@ -24,10 +34,18 @@ const LOCALES_FUDO = [
 // nunca vuelve) no necesitaba contemplar.
 const DIAS_A_REPROCESAR = 4
 
+// Sin fallback a una variable generica: con 14 locales, si a uno le falta su
+// secret y existe un FUDO_API_KEY sin sufijo, el job no fallaba -- leia la
+// cuenta de Fudo de OTRO local y escribia esas ventas bajo el id_local
+// equivocado, con pinta de datos normales. Mejor romper con un mensaje que
+// diga exactamente que variable falta.
 function credenciales(local) {
-  const apiKey = process.env[`FUDO_API_KEY_${local.envSufijo}`] || process.env.FUDO_API_KEY
-  const apiSecret = process.env[`FUDO_API_SECRET_${local.envSufijo}`] || process.env.FUDO_API_SECRET
-  if (!apiKey || !apiSecret) throw new Error(`Faltan credenciales de Fudo para ${local.nombre}`)
+  const keyVar = `FUDO_API_KEY_${local.envSufijo}`
+  const secretVar = `FUDO_API_SECRET_${local.envSufijo}`
+  const apiKey = process.env[keyVar]
+  const apiSecret = process.env[secretVar]
+  if (!apiKey) throw new Error(`Falta ${keyVar} para el local ${local.nombre}`)
+  if (!apiSecret) throw new Error(`Falta ${secretVar} para el local ${local.nombre}`)
   return { apiKey, apiSecret }
 }
 
@@ -116,41 +134,55 @@ async function procesarLocal(local) {
   const metodosExistentes = await prisma.metodoPago.findMany({ select: { id: true, nombre: true } })
 
   let nuevas = 0, actualizadas = 0, sinVentas = 0
+  const errores = []
+  // La ventana de reproceso es de 4 dias: un dia que falla (un 500 de Fudo, un
+  // metodo de pago sin equivalente) y aborta los dias siguientes puede dejarlos
+  // sin sincronizar para siempre si el problema tarda mas de 4 dias en
+  // resolverse. Por eso el try/catch es POR DIA: uno que falla se registra y
+  // se sigue con el resto.
   for (const fecha of diasAProcesar(new Date(), DIAS_A_REPROCESAR, local.horaCorte)) {
-    const { desde, hasta } = ventanaDia(fecha, local.horaCorte)
-    const ventas = await cliente.ventasDelDia({ desde, hasta })
-    const gastos = await cliente.gastosDelDia({ fecha })
+    try {
+      const { desde, hasta } = ventanaDia(fecha, local.horaCorte)
+      const ventas = await cliente.ventasDelDia({ desde, hasta })
+      const gastos = await cliente.gastosDelDia({ fecha })
 
-    const armado = mapDia({
-      ventas: ventas.data,
-      incluidos: ventas.included,
-      gastos: gastos.data,
-      fecha,
-      horaCorte: local.horaCorte,
-    })
-    if (!armado) { sinVentas++; continue }
-
-    const { porCode, faltantes } = resolverMetodos([...armado.codes], metodosExistentes)
-    if (faltantes.length) {
-      throw new Error(`Métodos de pago de Fudo sin equivalente en DCSmart: ${faltantes.join(', ')}`)
-    }
-
-    const tiposPorNombre = new Map()
-    for (const d of armado.detalles) {
-      const dt = await prisma.detalleTipo.upsert({
-        where: { nombre_id_app: { nombre: d.nombre, id_app: local_db.id_app } },
-        create: { nombre: d.nombre, id_app: local_db.id_app, clasificacion: 'informativo' },
-        update: {},
+      const armado = mapDia({
+        ventas: ventas.data,
+        incluidos: ventas.included,
+        gastos: gastos.data,
+        fecha,
+        horaCorte: local.horaCorte,
       })
-      tiposPorNombre.set(d.nombre, dt.id)
-    }
+      if (!armado) { sinVentas++; continue }
 
-    const r = await escribirCaja({ local, armado, metodosPorCode: porCode, tiposPorNombre })
-    if (r === 'nueva') nuevas++
-    else actualizadas++
+      const { porCode, faltantes } = resolverMetodos([...armado.codes], metodosExistentes)
+      if (faltantes.length) {
+        // Un PaymentMethod puede no venir en el `included` de la respuesta: el
+        // code queda undefined, y ese es justo el caso mas dificil de
+        // diagnosticar si se muestra como string vacio.
+        const legibles = faltantes.map((f) => f ?? '(sin code)')
+        throw new Error(`Métodos de pago de Fudo sin equivalente en DCSmart: ${legibles.join(', ')}`)
+      }
+
+      const tiposPorNombre = new Map()
+      for (const d of armado.detalles) {
+        const dt = await prisma.detalleTipo.upsert({
+          where: { nombre_id_app: { nombre: d.nombre, id_app: local_db.id_app } },
+          create: { nombre: d.nombre, id_app: local_db.id_app, clasificacion: clasificacionDe(d.nombre) },
+          update: {},
+        })
+        tiposPorNombre.set(d.nombre, dt.id)
+      }
+
+      const r = await escribirCaja({ local, armado, metodosPorCode: porCode, tiposPorNombre })
+      if (r === 'nueva') nuevas++
+      else actualizadas++
+    } catch (err) {
+      errores.push({ fecha, error: err.message })
+    }
   }
 
-  return { cajasNuevas: nuevas, cajasActualizadas: actualizadas, diasSinVentas: sinVentas }
+  return { cajasNuevas: nuevas, cajasActualizadas: actualizadas, diasSinVentas: sinVentas, errores }
 }
 
 function localesAProcesar() {
@@ -172,7 +204,11 @@ async function main() {
     try {
       resultado[local.id_local] = await procesarLocal(local)
       const r = resultado[local.id_local]
-      console.log(`[${local.nombre}] ${r.cajasNuevas} nuevas, ${r.cajasActualizadas} actualizadas, ${r.diasSinVentas} días sin ventas`)
+      // Dias individuales que fallaron (ver el try/catch por dia en
+      // procesarLocal) no interrumpen el local, pero la corrida no es "ok":
+      // esos dias quedan pendientes para la proxima ventana de reproceso.
+      if (r.errores.length) ok = false
+      console.log(`[${local.nombre}] ${r.cajasNuevas} nuevas, ${r.cajasActualizadas} actualizadas, ${r.diasSinVentas} días sin ventas, ${r.errores.length} día(s) con error`)
     } catch (err) {
       ok = false
       resultado[local.id_local] = { error: err.message }
@@ -185,6 +221,11 @@ async function main() {
     data: { finished_at: new Date(), resultado, ok },
   })
   console.log('Sincronización finalizada.', ok ? '(sin errores)' : '(con errores, ver resultado)')
+
+  // Sin esto, un local que fallo entero dejaba el proceso en exit 0: Cloud Run
+  // reporta SUCCESS y ninguna alerta se dispara. El detalle del error queda en
+  // `resultado`, pero nadie lo mira si nada avisa que hay que mirarlo.
+  if (!ok) process.exitCode = 1
 }
 
 main()

@@ -5,12 +5,16 @@
 import { ventanaDia } from './dias.js'
 import { esEfectivo, esTarjeta, esCuentaCorriente } from './metodos.js'
 
-// saleType de Fudo -> detalle, con los mismos nombres que ya usa GRIS GRIS.
-const DETALLE_POR_TIPO_VENTA = { 'EAT-IN': 'Salon', 'TAKEAWAY': 'Mostrador', 'DELIVERY': 'Delivery' }
+// saleType de Fudo -> detalle. Los nombres tienen que coincidir EXACTO con el
+// catalogo estandar (lib/detalleTiposEstandar.js): la unicidad es por texto y
+// los reportes agrupan por nombre exacto, asi que un nombre distinto (aunque
+// sea solo la tilde) aparece como una columna aparte en vez de sumarse.
+const DETALLE_POR_TIPO_VENTA = { 'EAT-IN': 'Salón', 'TAKEAWAY': 'Mostrador', 'DELIVERY': 'Delivery' }
 
 // Igual que TapTap: estos se crean siempre, aunque den cero, para poder
-// comparar dia contra dia y local contra local.
-export const DETALLES_SIEMPRE = ['Salon', 'Mostrador', 'Delivery', 'Online', 'Tarjetas', 'Cta Cte']
+// comparar dia contra dia y local contra local. 'Tarjetas' no esta en el
+// catalogo estandar -- se deja como valor propio del job.
+export const DETALLES_SIEMPRE = ['Salón', 'Mostrador', 'Delivery', 'Online', 'Tarjetas', 'Cta Cte']
 
 // Los tipos que escribe el job. INICIAL/RETIRO/VACIADO son del encargado y el
 // job no los toca nunca: Fudo no los expone (viven en su arqueo).
