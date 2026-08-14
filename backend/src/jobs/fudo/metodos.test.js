@@ -54,3 +54,9 @@ test('un code conocido que no esta en la base tambien es faltante', () => {
   const { faltantes } = resolverMetodos(['payway'], [{ id: 'id-efectivo', nombre: 'Efectivo' }])
   assert.deepEqual(faltantes, ['payway'])
 })
+
+test('normaliza acentos reales: credit-card matchea Crédito en la base', () => {
+  const existentes = [{ id: 'id-credito', nombre: 'Crédito' }]
+  const { porCode } = resolverMetodos(['credit-card'], existentes)
+  assert.equal(porCode.get('credit-card'), 'id-credito')
+})
