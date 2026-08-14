@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   calcularCuadre, TOLERANCIA, ROL_POR_CLASIFICACION, ROL_POR_TIPO_MOVIMIENTO,
+  ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS,
   rolDeDetalle, rolDeMovimiento, esEfectivo,
   describirCuadre, colorCuadre, faltaParaCuadrar,
 } from './cuadreCaja.js'
@@ -46,7 +47,17 @@ test('CONTRATO: la formula del esperado es la misma', () => {
 test('CONTRATO: la fuente se elige por origin, no por lo que tenga cargado', () => {
   // Elegirla mirando "si tiene movimientos" fue un bug real: una caja no-TapTap con un
   // gasto suelto por movimiento hacia ignorar $3.559.398 en detalles.
-  assert.ok(/origin === 'TAPTAP' \? 'movimientos' : 'detalles'/.test(BACK))
+  assert.ok(/ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS\.includes\(caja\.origin\)/.test(BACK))
+})
+
+test('CONTRATO: los origenes que cuadran por movimientos coinciden', () => {
+  // FFUDO se sumo a TAPTAP: el job de Fudo tambien escribe los cobros como
+  // CajaMovimiento. Si diverge de un lado, una caja de Fudo cuadraria en la
+  // pantalla y descuadraria al guardar (o viceversa).
+  const m = BACK.match(/export const ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS = \[([^\]]*)\]/)
+  assert.ok(m, 'no se encontro ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS en el backend')
+  const delBackend = m[1].split(',').map((s) => s.trim().replace(/'/g, '')).filter(Boolean)
+  assert.deepEqual(ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS, delBackend)
 })
 
 // ── la cuenta ───────────────────────────────────────────────────────────────
@@ -124,6 +135,21 @@ test('el fondo inicial, los retiros y los vaciados no cambian la venta', () => {
     movimientos: [mov('INICIAL', 5000), mov('RETIRO', 300), mov('VACIADO', 700)],
   })
   assert.equal(c.esperado, 1000)
+  assert.equal(c.cuadra, true)
+})
+
+test('en FFUDO la fuente tambien son los movimientos, igual que TapTap', () => {
+  // El job de Fudo escribe los cobros como CajaMovimiento (uno por metodo de pago) y los
+  // detalles son solo informativos (canales de venta). Si la fuente fuera 'detalles', el
+  // cuadre daria cobros = 0 y toda caja de Fudo descuadraria por el total menos el efectivo.
+  const c = calcularCuadre({
+    origin: 'FFUDO', efectivo: 10000, total: 30000,
+    movimientos: [mov('COBRO', 10000, 'Efectivo'), mov('COBRO', 20000, 'Mercado Pago')],
+    detalles: [detalle(30000, 'informativo')], // canales de venta, se ignoran
+  })
+  assert.equal(c.fuente, 'movimientos')
+  assert.equal(c.cobros, 20000) // el cobro en efectivo no se suma, ya esta en caja.efectivo
+  assert.equal(c.esperado, 30000)
   assert.equal(c.cuadra, true)
 })
 
@@ -281,6 +307,14 @@ test('CONTRATO: calcularCuadre da el MISMO numero en los dos lados', () => {
         { tipo: 'COBRO', monto: 10000, metodo_pago: { nombre: 'MP QR' } },
         { tipo: 'COBRO', monto: 5000, metodo_pago: { nombre: 'Efectivo' } },
         { tipo: 'GASTO', monto: 1000, metodo_pago: { nombre: 'Efectivo' } },
+      ],
+    },
+    {
+      origin: 'FFUDO', total: 30000, efectivo: 10000,
+      detalles: [{ tipo: 'informativo', monto: 30000 }],
+      movimientos: [
+        { tipo: 'COBRO', monto: 10000, metodo_pago: { nombre: 'Efectivo' } },
+        { tipo: 'COBRO', monto: 20000, metodo_pago: { nombre: 'Mercado Pago' } },
       ],
     },
     // Caja sin total: no hay con que comparar.

@@ -14,11 +14,14 @@
 //
 // LA FUENTE (de donde salen cobros/gastos) la define `caja.origin`, no lo que
 // esta caja puntual tenga cargado:
-//   - origin !== TAPTAP: por DETALLES (los tipos con rol de cobro o gasto).
-//   - origin === TAPTAP: por MOVIMIENTOS (los cobros que NO son en efectivo,
+//   - TAPTAP y FFUDO: por MOVIMIENTOS (los cobros que NO son en efectivo,
 //     porque el efectivo ya esta en el campo `efectivo` y contarlo de nuevo lo
 //     duplicaria; los gastos SI restan aunque sean en efectivo, porque un
-//     gasto no duplica nada, solo salio del cajon).
+//     gasto no duplica nada, solo salio del cajon). Son los dos origenes cuyo
+//     job/integracion escribe los cobros como CajaMovimiento.
+//   - el resto (las cajas que se cargan a mano en DCSmart): por DETALLES (los
+//     tipos con rol de cobro o gasto), porque ahi los cobros se anotan como
+//     CajaDetalle.
 //
 // Antes la fuente se elegia mirando si la caja tenia movimientos "utiles"
 // cargados, y una caja no-TapTap con un movimiento suelto (tipico: un gasto
@@ -91,6 +94,13 @@ export function rolDeMovimiento(movimiento) {
   return ROL_POR_TIPO_MOVIMIENTO[movimiento?.tipo] ?? 'informativo'
 }
 
+// Origenes cuyos cobros se escriben como CajaMovimiento (tipo COBRO), no como
+// CajaDetalle: TapTap y el job de sincronizacion de Fudo. El resto de las
+// cajas (cargadas a mano en DCSmart) anotan los cobros como detalles. Si un
+// origen nuevo empieza a escribir movimientos en vez de detalles, se agrega
+// aca -- y en el espejo del frontend.
+export const ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS = ['TAPTAP', 'FFUDO']
+
 // Devuelve el desglose completo, no solo el numero: la UI necesita explicar
 // contra que se comparo cuando algo no cuadra.
 export function calcularCuadre(caja) {
@@ -101,7 +111,7 @@ export function calcularCuadre(caja) {
 
   // La fuente la define como carga el local (origin), no lo que esta caja
   // puntual tenga cargado. Ver el comentario de arriba.
-  const fuente = caja.origin === 'TAPTAP' ? 'movimientos' : 'detalles'
+  const fuente = ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS.includes(caja.origin) ? 'movimientos' : 'detalles'
 
   let cobros = 0
   let gastos = 0
