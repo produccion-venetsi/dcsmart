@@ -45,7 +45,7 @@ gcloud run jobs deploy fudo-sync --project=$PROJECT --region=$REGION \
   --service-account fudo-sync@$PROJECT.iam.gserviceaccount.com \
   --set-cloudsql-instances $INSTANCE \
   --set-env-vars "^|^DATABASE_URL=${DATABASE_URL:?Exportá DATABASE_URL con la cadena de Cloud SQL antes de correr esto. Se puede copiar del job que ya existe: gcloud run jobs describe taptap-sync --project=$PROJECT --region=$REGION --format=\'value(spec.template.spec.template.spec.containers[0].env[0].value)\'}" \
-  --set-secrets "FUDO_API_KEY_GRISGRIS=fudo-api-key-grisgris:latest,FUDO_API_SECRET_GRISGRIS=fudo-api-secret-grisgris:latest" \
+  --set-secrets "FUDO_API_KEY_GRISGRIS=fudo-api-key-grisgris:latest,FUDO_API_SECRET_GRISGRIS=fudo-api-secret-grisgris:latest,FUDO_API_KEY_CONDARCO=fudo-api-key-condarco:latest,FUDO_API_SECRET_CONDARCO=fudo-api-secret-condarco:latest" \
   --max-retries 1 --task-timeout 900
 
 # 7am hora Argentina: una hora despues del corte de las 06:00, para que el dia

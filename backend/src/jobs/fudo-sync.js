@@ -27,6 +27,7 @@ const prisma = new PrismaClient()
 // asi que cada uno trae su propio par de credenciales desde el entorno.
 const LOCALES_FUDO = [
   { nombre: 'GRIS GRIS', id_local: 'LTRXNBIR', horaCorte: 6, envSufijo: 'GRISGRIS' },
+  { nombre: 'CONDARCO', id_local: 'ltuibyvty', horaCorte: 6, envSufijo: 'CONDARCO' },
 ]
 
 // Cuantos dias se reprocesan en cada corrida. Un dia ya cerrado puede recibir
