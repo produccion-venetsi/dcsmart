@@ -146,7 +146,20 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
       ) : (
         <div className="drawer-detail">
           <div className="drawer-detail-row"><span className="drawer-detail-key">Total contado</span><span className="drawer-detail-val">{fmt$(total)}</span></div>
-          <div className="drawer-detail-row"><span className="drawer-detail-key">Total arqueo anterior</span><span className="drawer-detail-val">{fmt$(preview?.total_ultimo_arqueo)}</span></div>
+          {/* La fecha del anterior va pegada a su total: el arqueo mide el
+              período entre los dos, y sin saber desde cuándo no se puede leer
+              ni el total anterior ni los ingresos y gastos de abajo. */}
+          <div className="drawer-detail-row">
+            <span className="drawer-detail-key">Total arqueo anterior</span>
+            <span className="drawer-detail-val">
+              {fmt$(preview?.total_ultimo_arqueo)}
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--t3)', fontWeight: 400 }}>
+                {preview?.fecha_ultimo_arqueo
+                  ? `del ${fmtDateTime(preview.fecha_ultimo_arqueo)}`
+                  : 'primer arqueo del local'}
+              </span>
+            </span>
+          </div>
           <div className="drawer-detail-row"><span className="drawer-detail-key">Ingresos</span><span className="drawer-detail-val">{fmt$(preview?.ingresos)}</span></div>
           <div className="drawer-detail-row"><span className="drawer-detail-key">Gastos</span><span className="drawer-detail-val">{fmt$(preview?.gastos)}</span></div>
           <div className="drawer-detail-row">
