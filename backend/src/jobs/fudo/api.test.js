@@ -90,6 +90,19 @@ test('los gastos se piden por fecha sin hora: con hora la API responde 400', asy
   assert.match(url, /filter\[date\]=and\(gte\.2026-08-13,lte\.2026-08-13\)/)
 })
 
+test('los gastos piden los fields: sin eso vienen sin amount ni useInCashCount', async () => {
+  // Un gasto pedido sin `fields[expense]` llega con relationships y SIN
+  // attributes. El job los descartaba a todos sin aviso. Si alguien saca estos
+  // campos, este test tiene que romper.
+  const f = fetchFalso([authOk(9999999999), ok({ data: [] })])
+  const c = crearCliente({ apiKey: 'k', apiSecret: 's', fetchImpl: f })
+  await c.gastosDelDia({ fecha: '2026-08-13' })
+  const url = decodeURIComponent(f.llamadas[1].url)
+  for (const campo of ['amount', 'useInCashCount', 'date', 'canceled']) {
+    assert.match(url, new RegExp(`fields\\[expense\\]=[^&]*\\b${campo}\\b`), `falta ${campo}`)
+  }
+})
+
 test('un error de la API dice que ruta fallo', async () => {
   const f = fetchFalso([authOk(9999999999), { ok: false, status: 400, text: async () => 'detalle del error' }])
   const c = crearCliente({ apiKey: 'k', apiSecret: 's', fetchImpl: f })

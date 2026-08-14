@@ -57,8 +57,15 @@ export function crearCliente({ apiKey, apiSecret, fetchImpl = fetch, ahora = () 
   // dia siguiente (como hacia antes), sus gastos entrarian aca Y en su propia
   // corrida cuando se procese ese dia, duplicandose solos en los 4 dias que
   // reprocesa el job.
+  //
+  // Los `fields[expense]` NO son opcionales: sin ellos el gasto viene con
+  // `relationships` y SIN `attributes`, o sea sin `amount` ni `useInCashCount`.
+  // El job los daba por descartados en silencio -- medido contra CONDARCO:
+  // 83 gastos de caja por $4.343.732 en dos semanas que no llegaban nunca.
   const gastosDelDia = ({ fecha }) =>
-    listar(`/expenses?filter[date]=and(gte.${fecha},lte.${fecha})&include=paymentMethod,provider`)
+    listar(`/expenses?filter[date]=and(gte.${fecha},lte.${fecha})` +
+      `&fields[expense]=amount,canceled,date,description,status,useInCashCount` +
+      `&include=paymentMethod,provider`)
 
   return { token, listar, ventasDelDia, gastosDelDia }
 }
