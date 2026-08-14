@@ -178,6 +178,20 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
         </div>
       )}
 
+      {/* El período que cubre, al pie y en una frase: los ingresos, los gastos
+          y la comprobación de arriba salen de lo que pasó entre el arqueo
+          anterior y este, y sin decirlo el número no se puede discutir con
+          nadie. */}
+      {!loadingPreview && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: '1rem', lineHeight: 1.5 }}>
+          {preview?.fecha_ultimo_arqueo ? (
+            <>Mide desde el <strong>{fmtDateTime(preview.fecha_ultimo_arqueo)}</strong> (arqueo anterior) hasta ahora, <strong>{fmtDateTime(fechaArqueo)}</strong>.</>
+          ) : (
+            <>Primer arqueo de este local: no hay una medición anterior contra la que comparar.</>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving || loadingPreview}>
           {saving ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : 'Confirmar arqueo'}
