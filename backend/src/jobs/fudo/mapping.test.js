@@ -103,8 +103,15 @@ test('un dia sin ventas no arma caja', () => {
   assert.equal(mapDia({ ventas: [], incluidos: [], fecha: '2026-08-13' }), null)
 })
 
-test('devuelve los codes vistos para resolverlos contra la base', () => {
-  assert.deepEqual([...mapear().codes].sort(), ['cash', 'mp'])
+test('devuelve los metodos (code + name) vistos para resolverlos contra la base', () => {
+  const metodos = mapear().metodos
+  assert.deepEqual(
+    metodos.map((m) => m.code).sort(),
+    ['cash', 'mp'],
+  )
+  const porCode = Object.fromEntries(metodos.map((m) => [m.code, m.name]))
+  assert.equal(porCode['cash'], 'Efectivo')
+  assert.equal(porCode['mp'], 'Mp')
 })
 
 test('solo COBRO y GASTO son del job: el resto lo carga la gente', () => {
@@ -159,10 +166,11 @@ test('un dia con ventas pero todas anuladas no arma caja', () => {
   assert.equal(mapDia({ ventas, incluidos: crudo.included, fecha: '2026-08-13' }), null)
 })
 
-test('codes incluye cash cuando hay un gasto, aunque ningun cobro haya sido en efectivo', () => {
+test('metodos incluye cash/Efectivo cuando hay un gasto, aunque ningun cobro haya sido en efectivo', () => {
   // Solo la 55953 (cobro en mp), ningun cobro en cash.
   const ventas = [crudo.data[0]]
   const gastos = [{ id: '1', attributes: { amount: 100, useInCashCount: true, description: 'Test' } }]
-  const { codes } = mapDia({ ventas, incluidos: crudo.included, gastos, fecha: '2026-08-13' })
-  assert.deepEqual([...codes].sort(), ['cash', 'mp'])
+  const { metodos } = mapDia({ ventas, incluidos: crudo.included, gastos, fecha: '2026-08-13' })
+  assert.deepEqual(metodos.map((m) => m.code).sort(), ['cash', 'mp'])
+  assert.equal(metodos.find((m) => m.code === 'cash').name, 'Efectivo')
 })

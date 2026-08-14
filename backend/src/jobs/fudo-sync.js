@@ -135,11 +135,15 @@ async function procesarLocal(local) {
 
   let nuevas = 0, actualizadas = 0, sinVentas = 0
   const errores = []
-  // La ventana de reproceso es de 4 dias: un dia que falla (un 500 de Fudo, un
-  // metodo de pago sin equivalente) y aborta los dias siguientes puede dejarlos
-  // sin sincronizar para siempre si el problema tarda mas de 4 dias en
-  // resolverse. Por eso el try/catch es POR DIA: uno que falla se registra y
-  // se sigue con el resto.
+  // Metodos de pago que no matchearon ningun MetodoPago existente (ni por
+  // alias de nombre, ni por code, ni por nombre normalizado): quedaron bajo
+  // "Metodo desconocido". Ya no aborta el local -- la plata entra igual y
+  // esto queda como rastro para ir a clasificarlos a mano.
+  const metodosSinResolver = []
+  // La ventana de reproceso es de 4 dias: un dia que falla (un 500 de Fudo)
+  // y aborta los dias siguientes puede dejarlos sin sincronizar para siempre
+  // si el problema tarda mas de 4 dias en resolverse. Por eso el try/catch es
+  // POR DIA: uno que falla se registra y se sigue con el resto.
   for (const fecha of diasAProcesar(new Date(), DIAS_A_REPROCESAR, local.horaCorte)) {
     try {
       const { desde, hasta } = ventanaDia(fecha, local.horaCorte)
@@ -155,13 +159,15 @@ async function procesarLocal(local) {
       })
       if (!armado) { sinVentas++; continue }
 
-      const { porCode, faltantes } = resolverMetodos([...armado.codes], metodosExistentes)
-      if (faltantes.length) {
+      const { porCode, sinResolver } = resolverMetodos(armado.metodos, metodosExistentes)
+      if (sinResolver.length) {
         // Un PaymentMethod puede no venir en el `included` de la respuesta: el
-        // code queda undefined, y ese es justo el caso mas dificil de
-        // diagnosticar si se muestra como string vacio.
-        const legibles = faltantes.map((f) => f ?? '(sin code)')
-        throw new Error(`Métodos de pago de Fudo sin equivalente en DCSmart: ${legibles.join(', ')}`)
+        // code (y a veces el name) quedan undefined, y ese es justo el caso
+        // mas dificil de diagnosticar si se muestra como string vacio.
+        for (const m of sinResolver) {
+          console.warn(`[${local.nombre}] ${fecha}: método de pago sin equivalente -- code="${m.code ?? '(sin code)'}" name="${m.name ?? '(sin nombre)'}" -> se carga bajo "Metodo desconocido"`)
+        }
+        metodosSinResolver.push(...sinResolver.map((m) => ({ fecha, code: m.code ?? null, name: m.name ?? null })))
       }
 
       const tiposPorNombre = new Map()
@@ -182,7 +188,7 @@ async function procesarLocal(local) {
     }
   }
 
-  return { cajasNuevas: nuevas, cajasActualizadas: actualizadas, diasSinVentas: sinVentas, errores }
+  return { cajasNuevas: nuevas, cajasActualizadas: actualizadas, diasSinVentas: sinVentas, errores, metodosSinResolver }
 }
 
 function localesAProcesar() {
@@ -208,7 +214,7 @@ async function main() {
       // procesarLocal) no interrumpen el local, pero la corrida no es "ok":
       // esos dias quedan pendientes para la proxima ventana de reproceso.
       if (r.errores.length) ok = false
-      console.log(`[${local.nombre}] ${r.cajasNuevas} nuevas, ${r.cajasActualizadas} actualizadas, ${r.diasSinVentas} días sin ventas, ${r.errores.length} día(s) con error`)
+      console.log(`[${local.nombre}] ${r.cajasNuevas} nuevas, ${r.cajasActualizadas} actualizadas, ${r.diasSinVentas} días sin ventas, ${r.errores.length} día(s) con error, ${r.metodosSinResolver.length} método(s) sin resolver`)
     } catch (err) {
       ok = false
       resultado[local.id_local] = { error: err.message }

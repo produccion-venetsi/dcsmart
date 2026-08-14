@@ -34,7 +34,7 @@ export function mapDia({ ventas, incluidos, gastos = [], fecha, horaCorte = 6 })
   const anuladas = ventas.length - cerradas.length
 
   let total = 0, efectivo = 0, fiscal = 0, comensales = 0, tarjetas = 0, ctaCte = 0
-  const porCode = new Map()
+  const porCode = new Map() // code -> { monto, cantidad, name }
   const porDetalle = new Map(DETALLES_SIEMPRE.map((n) => [n, 0]))
   const cierres = new Map()
 
@@ -53,15 +53,17 @@ export function mapDia({ ventas, incluidos, gastos = [], fecha, horaCorte = 6 })
     for (const ref of v.relationships?.payments?.data || []) {
       const pago = idx[`Payment:${ref.id}`]
       if (!pago || pago.attributes.canceled) continue
-      const code = idx[`PaymentMethod:${pago.relationships?.paymentMethod?.data?.id}`]?.attributes?.code
+      const metodo = idx[`PaymentMethod:${pago.relationships?.paymentMethod?.data?.id}`]?.attributes
+      const code = metodo?.code
+      const name = metodo?.name
       // `amount` es lo imputado a la venta, que es lo que queda en la caja.
       // `receivedAmount` incluiria el vuelto, y ademas no se puede pedir desde
       // /sales (fields[payment] devuelve 400 ahi).
       const monto = Number(pago.attributes.amount || 0)
-      if (esEfectivo(code)) efectivo += monto
-      if (esTarjeta(code)) tarjetas += monto
-      if (esCuentaCorriente(code)) { ctaCte += monto; continue }
-      const acc = porCode.get(code) || { monto: 0, cantidad: 0 }
+      if (esEfectivo(code, name)) efectivo += monto
+      if (esTarjeta(code, name)) tarjetas += monto
+      if (esCuentaCorriente(code, name)) { ctaCte += monto; continue }
+      const acc = porCode.get(code) || { monto: 0, cantidad: 0, name }
       acc.monto += monto
       acc.cantidad++
       porCode.set(code, acc)
@@ -71,11 +73,11 @@ export function mapDia({ ventas, incluidos, gastos = [], fecha, horaCorte = 6 })
   porDetalle.set('Cta Cte', ctaCte)
 
   const movimientos = [...porCode.entries()].map(([code, v]) => ({
-    tipo: 'COBRO', code, monto: decimal(v.monto), cantidad: v.cantidad,
+    tipo: 'COBRO', code, name: v.name, monto: decimal(v.monto), cantidad: v.cantidad,
   }))
   for (const g of gastos) {
     if (!g.attributes.useInCashCount) continue // el resto no salio de la caja
-    movimientos.push({ tipo: 'GASTO', code: 'cash', monto: decimal(g.attributes.amount), cantidad: 1 })
+    movimientos.push({ tipo: 'GASTO', code: 'cash', name: 'Efectivo', monto: decimal(g.attributes.amount), cantidad: 1 })
   }
 
   const observaciones = [`Fudo · día comercial ${fecha}`]
@@ -99,6 +101,12 @@ export function mapDia({ ventas, incluidos, gastos = [], fecha, horaCorte = 6 })
     },
     movimientos,
     detalles: [...porDetalle.entries()].map(([nombre, monto]) => ({ nombre, monto: decimal(monto) })),
-    codes: new Set([...porCode.keys(), ...(movimientos.some((m) => m.tipo === 'GASTO') ? ['cash'] : [])]),
+    // Metodos completos (code + name) vistos en el dia, para que se
+    // resuelvan por nombre contra el catalogo -- ver jobs/fudo/metodos.js.
+    metodos: (() => {
+      const vistos = new Map([...porCode.entries()].map(([code, v]) => [code, { code, name: v.name }]))
+      if (movimientos.some((m) => m.tipo === 'GASTO')) vistos.set('cash', { code: 'cash', name: 'Efectivo' })
+      return [...vistos.values()]
+    })(),
   }
 }
