@@ -21,9 +21,11 @@
 // participan: mueven plata del cajón, no cambian lo vendido.
 //
 // La FUENTE la define `caja.origin`, no lo que la caja tenga cargado:
-//   - origin !== TAPTAP  -> por DETALLES
-//   - origin === TAPTAP  -> por MOVIMIENTOS (los cobros en efectivo NO se suman, porque
-//     ya están en el campo `efectivo`; los gastos sí restan aunque sean en efectivo)
+//   - TAPTAP y FFUDO  -> por MOVIMIENTOS (los cobros en efectivo NO se suman, porque
+//     ya están en el campo `efectivo`; los gastos sí restan aunque sean en efectivo).
+//     Son los dos orígenes cuyo job/integración escribe los cobros como CajaMovimiento.
+//   - el resto (cajas cargadas a mano en DCSmart) -> por DETALLES, porque ahí los
+//     cobros se anotan como CajaDetalle.
 //
 // Elegir la fuente mirando "si tiene movimientos cargados" fue un bug real: una caja
 // no-TapTap con un gasto suelto por movimiento hacía ignorar $3.559.398 en detalles.
@@ -84,12 +86,17 @@ export function rolDeMovimiento(movimiento) {
   return ROL_POR_TIPO_MOVIMIENTO[movimiento?.tipo] ?? 'informativo'
 }
 
+// Origenes cuyos cobros se escriben como CajaMovimiento (tipo COBRO), no como
+// CajaDetalle: TapTap y el job de sincronizacion de Fudo. COPIA EXACTA del
+// backend -- ver el comentario ahi.
+export const ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS = ['TAPTAP', 'FFUDO']
+
 export function calcularCuadre(caja) {
   if (!caja) return null
 
   const detalles = caja.detalles ?? []
   const movimientos = caja.movimientos ?? []
-  const fuente = caja.origin === 'TAPTAP' ? 'movimientos' : 'detalles'
+  const fuente = ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS.includes(caja.origin) ? 'movimientos' : 'detalles'
 
   let cobros = 0
   let gastos = 0

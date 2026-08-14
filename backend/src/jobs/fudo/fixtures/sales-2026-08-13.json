@@ -1,0 +1,73 @@
+{
+  "data": [
+    {
+      "type": "Sale",
+      "id": "55953",
+      "attributes": {
+        "closedAt": "2026-08-14T03:23:58Z",
+        "createdAt": "2026-08-14T00:38:23Z",
+        "people": null,
+        "total": 797000,
+        "saleType": "TAKEAWAY",
+        "saleState": "CLOSED"
+      },
+      "relationships": {
+        "payments": { "data": [{ "type": "Payment", "id": "53881" }] },
+        "commercialDocuments": { "data": [{ "type": "CommercialDocument", "id": "35408" }] },
+        "closedBy": { "data": { "type": "User", "id": "1" } }
+      }
+    },
+    {
+      "type": "Sale",
+      "id": "55942",
+      "attributes": {
+        "closedAt": "2026-08-13T23:56:43Z",
+        "createdAt": "2026-08-13T23:38:07Z",
+        "people": 1,
+        "total": 10000,
+        "saleType": "EAT-IN",
+        "saleState": "CLOSED"
+      },
+      "relationships": {
+        "payments": { "data": [{ "type": "Payment", "id": "53866" }] },
+        "commercialDocuments": { "data": [] },
+        "closedBy": { "data": { "type": "User", "id": "1" } }
+      }
+    },
+    {
+      "type": "Sale",
+      "id": "55969",
+      "attributes": {
+        "closedAt": "2026-08-14T04:57:52Z",
+        "createdAt": "2026-08-14T03:48:13Z",
+        "people": 1,
+        "total": 0,
+        "saleType": "EAT-IN",
+        "saleState": "CANCELED"
+      },
+      "relationships": {
+        "payments": { "data": [] },
+        "commercialDocuments": { "data": [] },
+        "closedBy": { "data": { "type": "User", "id": "1" } }
+      }
+    }
+  ],
+  "included": [
+    {
+      "type": "Payment",
+      "id": "53881",
+      "attributes": { "amount": 797000, "canceled": null },
+      "relationships": { "paymentMethod": { "data": { "type": "PaymentMethod", "id": "5" } } }
+    },
+    {
+      "type": "Payment",
+      "id": "53866",
+      "attributes": { "amount": 10000, "canceled": null },
+      "relationships": { "paymentMethod": { "data": { "type": "PaymentMethod", "id": "1" } } }
+    },
+    { "type": "PaymentMethod", "id": "5", "attributes": { "name": "Mp", "code": "mp" } },
+    { "type": "PaymentMethod", "id": "1", "attributes": { "name": "Efectivo", "code": "cash" } },
+    { "type": "User", "id": "1", "attributes": { "name": "Angeles Zeballos" } },
+    { "type": "CommercialDocument", "id": "35408", "attributes": { "code": "invoice", "number": "7426" } }
+  ]
+}

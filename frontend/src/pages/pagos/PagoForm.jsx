@@ -17,7 +17,7 @@ import { patchDesdeLectura, faltaParaDuplicado } from '../../lib/precargaIA.js'
 import { ESTADO_OP_OPTIONS, ESTADO_CTA_CTE_CLIENTE } from '../../lib/estadoOp.js'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
-import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, descuentoParaInput } from '../../lib/descuentoMovstock.js'
+import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, siguienteDescuento, TIPO_MOVSTOCK } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
 import { cashflowAutomatico, siguienteCashflow, soloFecha, ayudaCashflow } from '../../lib/cashflowPago.js'
 import CampoCuit from '../../components/CampoCuit.jsx'
@@ -205,7 +205,11 @@ export default function PagoForm() {
   // MovStock descuenta un porcentaje fijo del neto (30% salvo que el local
   // tenga otro pactado). Se mira el tipo del formulario y no el de la URL: si
   // alguien cambia el comprobante a otra cosa, el descuento deja de aplicar.
-  const esMovStock = modoRapido && form.id_tipo === 'STK'
+  // Manda el tipo del formulario y NADA más: el descuento le corresponde a
+  // todo MovStock, se haya entrado por el botón de carga rápida o eligiendo el
+  // comprobante a mano en el formulario común. Antes exigía además el modo
+  // rápido, así que elegir MovStock desde el formulario largo no descontaba.
+  const esMovStock = form.id_tipo === TIPO_MOVSTOCK
   // Porcentaje del local activo. Se completa cuando llega la ficha del local;
   // hasta entonces vale el general, que es lo que corresponde a casi todos.
   const [pctDescuento, setPctDescuento] = useState(DESCUENTO_MOVSTOCK_DEFAULT)
@@ -250,7 +254,10 @@ export default function PagoForm() {
     // El contexto del local (proveedor + descuento) solo hace falta al crear en
     // los modos rápidos. Va por pagosApi y no por localesApi: ver el comentario
     // de `contextoLocal` en api/pagos.js.
-    const pideContexto = !isEditing && modoRapido && Boolean(activeLocal)
+    // Se pide siempre que se cree, no solo en los modos rápidos: ahora que
+    // MovStock se puede elegir desde el formulario común, sin el contexto el
+    // descuento saldría con el 30 general en un local que tiene otro pactado.
+    const pideContexto = !isEditing && Boolean(activeLocal)
 
     cargarArranquePago({
       metodos:  metodosApi.list(),
@@ -551,11 +558,18 @@ export default function PagoForm() {
 
     setForm(f => {
       const next = { ...f, [field]: value }
-      // En MovStock el descuento sale del neto por el porcentaje del local. Se
-      // recalcula mientras nadie lo haya escrito a mano.
-      if (field === 'importe_neto' && esMovStock && !isEditing && !descuentoManual) {
-        next.descuento = descuentoParaInput(value, pctDescuento)
-      }
+      // En MovStock el descuento sale del neto por el porcentaje del local.
+      // Escucha el neto Y el tipo: el orden en que se cargan los campos no
+      // puede decidir si se aplica o no. La regla vive en lib/descuentoMovstock.js.
+      const nuevoDescuento = siguienteDescuento({
+        campo:    field,
+        tipo:     next.id_tipo,
+        neto:     next.importe_neto,
+        pct:      pctDescuento,
+        editando: isEditing,
+        manual:   descuentoManual,
+      })
+      if (nuevoDescuento !== undefined) next.descuento = nuevoDescuento
       if (field === 'fecha') {
         next.periodo = value
         // El número de los movimientos internos es la fecha, así que sigue a
@@ -1264,6 +1278,15 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <input type="number" step="0.01" placeholder="0.00" value={form.importe} disabled readOnly style={{ opacity: 0.75 }} />
               </div>
+              {/* El total ya viene descontado, y eso no se ve mirando el número:
+                  quien carga tiene que saber que el local aplicó su descuento,
+                  o va a creer que el sistema le cambió el importe de la factura. */}
+              {esMovStock && Number(form.descuento) > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--gold-bright)', marginTop: 3, display: 'block' }}>
+                  Ya tiene descontados {fmtMoneda(form.descuento)}
+                  {!descuentoManual && pctDescuento > 0 && ` (${pctDescuento}% de este local)`}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>

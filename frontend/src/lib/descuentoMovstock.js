@@ -32,3 +32,24 @@ export function descuentoParaInput(neto, porcentaje) {
   const monto = calcularDescuento(neto, porcentaje)
   return monto === 0 ? '' : monto.toFixed(2)
 }
+
+// Campos del formulario que pueden cambiar el descuento automático. Antes el
+// recálculo colgaba solo del neto: si alguien lo cargaba primero y después
+// elegía el comprobante MovStock, el descuento no aparecía nunca y el pago se
+// guardaba por el total sin descontar.
+const CAMPOS_QUE_MUEVEN_EL_DESCUENTO = ['importe_neto', 'id_tipo']
+
+export const TIPO_MOVSTOCK = 'STK'
+
+// Qué descuento corresponde después de tocar un campo del formulario.
+// Devuelve `undefined` cuando no hay que tocarlo (que no es lo mismo que ''
+// -- ese es "sin descuento", y sí se escribe).
+export function siguienteDescuento({ campo, tipo, neto, pct, editando, manual }) {
+  // Un pago que ya existe se deja como está, y un descuento escrito por una
+  // persona no se pisa en silencio. Mismo criterio que el cashflow.
+  if (editando || manual) return undefined
+  if (!CAMPOS_QUE_MUEVEN_EL_DESCUENTO.includes(campo)) return undefined
+  // Dejó de ser MovStock: el descuento automático se va con él.
+  if (tipo !== TIPO_MOVSTOCK) return ''
+  return descuentoParaInput(neto, pct)
+}

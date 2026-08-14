@@ -200,7 +200,10 @@ export default async function arqueoRoutes(fastify) {
     const ingresos = await calcularIngresos(fastify, id_local, fechaDesde, fechaArqueo)
     const gastos = await calcularGastos(fastify, id_local, fechaDesde, fechaArqueo)
 
-    return { total_ultimo_arqueo: totalUltimoArqueo, ingresos, gastos }
+    // La fecha va junto al total porque el arqueo mide el período entre el
+    // anterior y este: sin saber desde cuándo, el número de arriba no se puede
+    // interpretar. Es null en el primer arqueo del local.
+    return { total_ultimo_arqueo: totalUltimoArqueo, fecha_ultimo_arqueo: fechaDesde, ingresos, gastos }
   })
 
   // ── POST / ────────────────────────────────────────────────────────────

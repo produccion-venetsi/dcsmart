@@ -954,6 +954,17 @@ model TapTapSyncRun {
   @@map("taptap_sync_runs")
 }
 
+// Registro de corridas del job de sincronizacion de cajas desde Fudo.
+model FudoSyncRun {
+  id          String    @id @default(uuid())
+  started_at  DateTime  @default(now())
+  finished_at DateTime?
+  resultado   Json?     // { "LTRXNBIR": { cajasNuevas: 1, cajasActualizadas: 3 }, ... } por id_local
+  ok          Boolean   @default(true)
+
+  @@map("fudo_sync_runs")
+}
+
 // Filtros guardados por usuario ("mis filtros") de las pantallas de listado.
 // `modulo` existe para que la misma tabla sirva a pagos y despues a cajas sin
 // migrar de nuevo. El tope de 5 por usuario y modulo se valida en la ruta, no

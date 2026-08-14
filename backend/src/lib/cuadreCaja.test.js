@@ -198,6 +198,24 @@ test('los gastos en movimientos restan siempre, incluso en efectivo', () => {
   assert.equal(conTarjeta.cuadra, true)
 })
 
+// ── Cuadre por movimientos (origen FFUDO) ───────────────────────────────────
+
+test('con origin FFUDO se valida por movimientos, igual que TapTap', () => {
+  // El job de Fudo escribe los cobros como CajaMovimiento (uno por metodo de pago); los
+  // detalles que escribe son informativos (canales de venta). Si la fuente fuera
+  // 'detalles', cobros daria 0 y toda caja de Fudo descuadraria por el total menos el
+  // efectivo.
+  const r = calcularCuadre({
+    total: 30000, efectivo: 10000, origin: 'FFUDO',
+    detalles: [det(30000, 'informativo')],
+    movimientos: [mov('COBRO', 10000, 'Efectivo'), mov('COBRO', 20000, 'Mercado Pago')]
+  })
+  assert.equal(r.fuente, 'movimientos')
+  assert.equal(r.cobros, 20000)
+  assert.equal(r.esperado, 30000)
+  assert.equal(r.cuadra, true)
+})
+
 // ── Bordes ──────────────────────────────────────────────────────────────────
 
 test('sin total cargado no se marca descuadre', () => {
