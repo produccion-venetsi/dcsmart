@@ -281,9 +281,10 @@ const NAV_MAIN = [
   // rechaza con 403 a quien no tenga grant habilitado del lado de Costos.
   { key: 'costos', label: 'Costos', Icon: IcoCalculator, external: true },
   // Tareas (DC-PLATAFORMA) es OTRA app tambien (backend/base separados),
-  // mismo patron SSO que Costos. Visible para todos: el departamento
-  // (o su ausencia) se resuelve del lado de Tareas, no aca.
-  { key: 'tareas', label: 'Tareas', Icon: IcoTareas, external: true },
+  // mismo patron SSO que Costos. A diferencia de Costos, todavia no tiene
+  // deploy propio -- oculto hasta que VITE_TAREAS_URL apunte a algo real,
+  // para no mostrar un boton que hoy rompe (cae al default de localhost).
+  ...(import.meta.env.VITE_TAREAS_URL ? [{ key: 'tareas', label: 'Tareas', Icon: IcoTareas, external: true }] : [])
 ]
 
 const NAV_ADMIN = [
