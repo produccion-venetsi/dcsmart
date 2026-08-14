@@ -153,10 +153,13 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
             <span className="drawer-detail-key">Total arqueo anterior</span>
             <span className="drawer-detail-val">
               {fmt$(preview?.total_ultimo_arqueo)}
+              {/* "Primer arqueo" solo cuando el total anterior también es cero.
+                  Si hay un total pero no vino la fecha, el dato falta -- decir
+                  que es el primero sería mentir sobre lo que se está midiendo. */}
               <span style={{ display: 'block', fontSize: 11, color: 'var(--t3)', fontWeight: 400 }}>
                 {preview?.fecha_ultimo_arqueo
                   ? `del ${fmtDateTime(preview.fecha_ultimo_arqueo)}`
-                  : 'primer arqueo del local'}
+                  : Number(preview?.total_ultimo_arqueo) ? '' : 'primer arqueo del local'}
               </span>
             </span>
           </div>
@@ -186,6 +189,10 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
         <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: '1rem', lineHeight: 1.5 }}>
           {preview?.fecha_ultimo_arqueo ? (
             <>Mide desde el <strong>{fmtDateTime(preview.fecha_ultimo_arqueo)}</strong> (arqueo anterior) hasta ahora, <strong>{fmtDateTime(fechaArqueo)}</strong>.</>
+          ) : Number(preview?.total_ultimo_arqueo) ? (
+            // Hay arqueo anterior (su total llegó) pero no su fecha: no se
+            // afirma nada sobre el período en vez de inventar que es el primero.
+            <>Mide desde el arqueo anterior hasta ahora, <strong>{fmtDateTime(fechaArqueo)}</strong>.</>
           ) : (
             <>Primer arqueo de este local: no hay una medición anterior contra la que comparar.</>
           )}
