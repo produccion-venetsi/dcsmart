@@ -61,17 +61,40 @@ Todo lo que sigue se comprobó con la cuenta de GRIS GRIS, no se dedujo del spec
 
 ## Config de locales
 
-Mismo patrón que `LOCALES_TAPTAP`: un array en el repo, con la ventana horaria por local.
+Son 14 locales en Fudo, cada uno con su propia cuenta y por lo tanto **su propio par de
+credenciales** — la API no tiene concepto de sucursal, así que no hay forma de leer varios locales
+con un solo token. Mismo patrón que `LOCALES_TAPTAP`: un array en el repo, con la ventana horaria
+por local y el nombre del secret del que sale cada credencial.
+
+| Local en Fudo | `id_local` en DCSmart | App |
+|---|---|---|
+| Acuario | `BUFGOGEG` | GRUPO ACUARIO |
+| Ada | `sdfghjfvfd` | GRUPO ADA |
+| Loreto | `dadea6bc-c4ef-43fd-8a2b-94268bcd96d7` | LORETO |
+| Condarco | `ltuibyvty` | GRUPO CONDARCO |
+| Gris Gris | `LTRXNBIR` | GRUPO GRIS GRIS |
+| 878 | `6cda1b45` (878COOP) | GRUPO 878 |
+| Ti Amo | `546ergft` | GRUPO PRITANY |
+| Sorellina | `546eFGHF` | GRUPO PRITANY |
+| Caprichito | **falta** — no existe en la base | — |
+| TITA - LA ISLA | `O12UIE2U` (TITA) | GRUPO TITA |
+| TITA - CHACARITA | `OR8GO56T` (TITA-CH) | GRUPO TITA |
+| victor | `WMIJEWEX` | GRUPO 3MONOS |
+| La Uat | `XPKLVUKP` | GRUPO 3MONOS |
+| Tres Monos | `QHOBGKXW` | GRUPO 3MONOS |
 
 ```js
 const LOCALES_FUDO = [
-  { nombre: 'GRIS GRIS', id_local: 'LTRXNBIR', horaCorte: 6 },
+  { nombre: 'GRIS GRIS', id_local: 'LTRXNBIR', horaCorte: 6, secret: 'fudo-grisgris' },
+  // …
 ]
 ```
 
-Las credenciales son **una por cuenta de Fudo**, como secrets de Cloud Run
-(`FUDO_API_KEY` / `FUDO_API_SECRET`). Si más adelante entran locales de otras cuentas, el par de
-credenciales pasa a ser parte de la config del local.
+Pendientes de la config: las credenciales de los 13 locales que faltan (hoy solo se tiene la de
+GRIS GRIS), el alta de Caprichito, y confirmar que el 878 de la lista es `878COOP` y no `878 BAR`
+(que está inactivo).
+
+Las credenciales van como secrets de Cloud Run, nunca en el repo.
 
 ## Cambios de schema (Prisma)
 
