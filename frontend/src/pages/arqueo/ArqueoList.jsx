@@ -146,7 +146,23 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
       ) : (
         <div className="drawer-detail">
           <div className="drawer-detail-row"><span className="drawer-detail-key">Total contado</span><span className="drawer-detail-val">{fmt$(total)}</span></div>
-          <div className="drawer-detail-row"><span className="drawer-detail-key">Total arqueo anterior</span><span className="drawer-detail-val">{fmt$(preview?.total_ultimo_arqueo)}</span></div>
+          {/* La fecha del anterior va pegada a su total: el arqueo mide el
+              período entre los dos, y sin saber desde cuándo no se puede leer
+              ni el total anterior ni los ingresos y gastos de abajo. */}
+          <div className="drawer-detail-row">
+            <span className="drawer-detail-key">Total arqueo anterior</span>
+            <span className="drawer-detail-val">
+              {fmt$(preview?.total_ultimo_arqueo)}
+              {/* "Primer arqueo" solo cuando el total anterior también es cero.
+                  Si hay un total pero no vino la fecha, el dato falta -- decir
+                  que es el primero sería mentir sobre lo que se está midiendo. */}
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--t3)', fontWeight: 400 }}>
+                {preview?.fecha_ultimo_arqueo
+                  ? `del ${fmtDateTime(preview.fecha_ultimo_arqueo)}`
+                  : Number(preview?.total_ultimo_arqueo) ? '' : 'primer arqueo del local'}
+              </span>
+            </span>
+          </div>
           <div className="drawer-detail-row"><span className="drawer-detail-key">Ingresos</span><span className="drawer-detail-val">{fmt$(preview?.ingresos)}</span></div>
           <div className="drawer-detail-row"><span className="drawer-detail-key">Gastos</span><span className="drawer-detail-val">{fmt$(preview?.gastos)}</span></div>
           <div className="drawer-detail-row">
@@ -162,6 +178,24 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
               )
             })()}
           </div>
+        </div>
+      )}
+
+      {/* El período que cubre, al pie y en una frase: los ingresos, los gastos
+          y la comprobación de arriba salen de lo que pasó entre el arqueo
+          anterior y este, y sin decirlo el número no se puede discutir con
+          nadie. */}
+      {!loadingPreview && (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginTop: '1rem', lineHeight: 1.5 }}>
+          {preview?.fecha_ultimo_arqueo ? (
+            <>Mide desde el <strong>{fmtDateTime(preview.fecha_ultimo_arqueo)}</strong> (arqueo anterior) hasta ahora, <strong>{fmtDateTime(fechaArqueo)}</strong>.</>
+          ) : Number(preview?.total_ultimo_arqueo) ? (
+            // Hay arqueo anterior (su total llegó) pero no su fecha: no se
+            // afirma nada sobre el período en vez de inventar que es el primero.
+            <>Mide desde el arqueo anterior hasta ahora, <strong>{fmtDateTime(fechaArqueo)}</strong>.</>
+          ) : (
+            <>Primer arqueo de este local: no hay una medición anterior contra la que comparar.</>
+          )}
         </div>
       )}
 
