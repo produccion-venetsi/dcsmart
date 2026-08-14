@@ -51,10 +51,14 @@ export function crearCliente({ apiKey, apiSecret, fetchImpl = fetch, ahora = () 
       `&include=payments.paymentMethod,closedBy,commercialDocuments`)
 
   // Unico filtro del sistema que NO acepta timestamp: con hora devuelve 400.
-  const gastosDelDia = ({ fecha }) => {
-    const siguiente = new Date(new Date(`${fecha}T00:00:00Z`).getTime() + 864e5).toISOString().slice(0, 10)
-    return listar(`/expenses?filter[date]=and(gte.${fecha},lte.${siguiente})&include=paymentMethod,provider`)
-  }
+  // Por eso es por dia calendario y no por la ventana de 06:00 a 06:00 que usa
+  // ventasDelDia -- es una aproximacion deliberada: un gasto cargado de
+  // madrugada cae en el dia siguiente. Ojo con `lte`: si se pidiera hasta el
+  // dia siguiente (como hacia antes), sus gastos entrarian aca Y en su propia
+  // corrida cuando se procese ese dia, duplicandose solos en los 4 dias que
+  // reprocesa el job.
+  const gastosDelDia = ({ fecha }) =>
+    listar(`/expenses?filter[date]=and(gte.${fecha},lte.${fecha})&include=paymentMethod,provider`)
 
   return { token, listar, ventasDelDia, gastosDelDia }
 }

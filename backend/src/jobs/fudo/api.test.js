@@ -87,7 +87,7 @@ test('los gastos se piden por fecha sin hora: con hora la API responde 400', asy
   const c = crearCliente({ apiKey: 'k', apiSecret: 's', fetchImpl: f })
   await c.gastosDelDia({ fecha: '2026-08-13' })
   const url = decodeURIComponent(f.llamadas[1].url)
-  assert.match(url, /filter\[date\]=and\(gte\.2026-08-13,lte\.2026-08-14\)/)
+  assert.match(url, /filter\[date\]=and\(gte\.2026-08-13,lte\.2026-08-13\)/)
 })
 
 test('un error de la API dice que ruta fallo', async () => {

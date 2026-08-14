@@ -9,7 +9,7 @@ import { PrismaClient } from '@prisma/client'
 import { crearCliente } from './fudo/api.js'
 import { diasAProcesar, ventanaDia } from './fudo/dias.js'
 import { resolverMetodos } from './fudo/metodos.js'
-import { mapDia, esMovimientoDelJob } from './fudo/mapping.js'
+import { mapDia, esMovimientoDelJob, DETALLES_SIEMPRE } from './fudo/mapping.js'
 
 const prisma = new PrismaClient()
 
@@ -66,9 +66,11 @@ async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre }) {
     return 'nueva'
   }
 
-  // Reproceso: se reemplaza SOLO lo que escribe el job. Los INICIAL/RETIRO/
-  // VACIADO que cargo el encargado se quedan donde estan -- Fudo no los expone,
-  // asi que pisarlos seria borrar trabajo de la gente.
+  // Reproceso: se reemplaza SOLO lo que escribe el job. INICIAL/RETIRO/VACIADO
+  // (y tambien INGRESO) sobreviven porque Fudo no los expone -- son la carga
+  // manual del encargado. OJO: la proteccion es por TIPO, no por quien lo
+  // creo. Si alguien carga a mano un COBRO o un GASTO en una caja de Fudo, el
+  // reproceso se lo lleva igual: no hay forma de distinguir su origen.
   const existentes = await prisma.cajaMovimiento.findMany({
     where: { id_caja: previa.id },
     select: { id: true, tipo: true },
@@ -76,8 +78,18 @@ async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre }) {
   const aBorrar = existentes.filter((m) => esMovimientoDelJob(m.tipo)).map((m) => m.id)
 
   await prisma.$transaction([
-    prisma.cajaMovimiento.deleteMany({ where: { id: { in: aBorrar } } }),
-    prisma.cajaDetalle.deleteMany({ where: { id_caja: previa.id } }),
+    // Cinturon y tirantes: el filtro por tipo va tambien en la clausula del
+    // deleteMany, para que un refactor del findMany de arriba no lo convierta
+    // en un borrado sin techo.
+    prisma.cajaMovimiento.deleteMany({
+      where: { id: { in: aBorrar }, id_caja: previa.id, tipo: { in: ['COBRO', 'GASTO'] } },
+    }),
+    // Igual que con los movimientos: solo se tocan los detalles que escribe
+    // el job (DETALLES_SIEMPRE). Un CajaDetalle puede llevar id_cliente y ser
+    // una linea de cuenta corriente -- plata anotada en la cuenta de alguien
+    // -- y borrar todos los detalles de la caja la haria desaparecer sin
+    // rastro en la proxima corrida.
+    prisma.cajaDetalle.deleteMany({ where: { id_caja: previa.id, nombre: { in: DETALLES_SIEMPRE } } }),
     prisma.caja.update({
       where: { id: previa.id },
       data: {
