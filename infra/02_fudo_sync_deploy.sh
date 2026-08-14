@@ -7,6 +7,11 @@ INSTANCE=${INSTANCE:-dc-smart-mvp:us-central1:dcsmart-mvp-insta}
 
 gcloud iam service-accounts create fudo-sync --project=$PROJECT \
   --display-name="Fudo Sync Job" || true
+
+# IAM tarda unos segundos en propagar la cuenta recien creada: sin esta espera,
+# los add-iam-policy-binding de abajo fallan con "Service account does not exist"
+# y, con set -e, cortan el deploy a la mitad. Pasó la primera vez que se corrió.
+sleep 15
 gcloud projects add-iam-policy-binding $PROJECT \
   --member="serviceAccount:fudo-sync@$PROJECT.iam.gserviceaccount.com" \
   --role=roles/cloudsql.client --condition=None -q
@@ -21,14 +26,19 @@ gcloud projects add-iam-policy-binding $PROJECT \
 #   printf '%s' "$KEY"    | gcloud secrets create fudo-api-key-grisgris    --data-file=- --project=$PROJECT
 #   printf '%s' "$SECRET" | gcloud secrets create fudo-api-secret-grisgris --data-file=- --project=$PROJECT
 
-gcloud builds submit ../backend --project=$PROJECT \
-  --config <(cat <<EOF
+# La config del build va a un archivo de verdad y no a un <(...): en Windows,
+# gcloud no puede leer el /proc/PID/fd/N que genera la process substitution y
+# falla con "Unable to read file". Pasó al correr esto desde Git Bash.
+CONFIG_BUILD=$(mktemp)
+trap 'rm -f "$CONFIG_BUILD"' EXIT
+cat > "$CONFIG_BUILD" <<EOF
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-f', 'Dockerfile.fudo-sync', '-t', '$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/fudo-sync:latest', '.']
 images: ['$REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/fudo-sync:latest']
 EOF
-)
+
+gcloud builds submit ../backend --project=$PROJECT --config "$CONFIG_BUILD"
 
 gcloud run jobs deploy fudo-sync --project=$PROJECT --region=$REGION \
   --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/fudo-sync:latest \
