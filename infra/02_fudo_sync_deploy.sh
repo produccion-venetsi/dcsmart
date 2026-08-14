@@ -34,7 +34,7 @@ gcloud run jobs deploy fudo-sync --project=$PROJECT --region=$REGION \
   --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/fudo-sync:latest \
   --service-account fudo-sync@$PROJECT.iam.gserviceaccount.com \
   --set-cloudsql-instances $INSTANCE \
-  --set-env-vars "DATABASE_URL=postgresql://postgres:REEMPLAZAR_PASSWORD@localhost/postgres?host=/cloudsql/$INSTANCE&schema=public" \
+  --set-env-vars "^|^DATABASE_URL=${DATABASE_URL:?Exportá DATABASE_URL con la cadena de Cloud SQL antes de correr esto. Se puede copiar del job que ya existe: gcloud run jobs describe taptap-sync --project=$PROJECT --region=$REGION --format=\'value(spec.template.spec.template.spec.containers[0].env[0].value)\'}" \
   --set-secrets "FUDO_API_KEY_GRISGRIS=fudo-api-key-grisgris:latest,FUDO_API_SECRET_GRISGRIS=fudo-api-secret-grisgris:latest" \
   --max-retries 1 --task-timeout 900
 
