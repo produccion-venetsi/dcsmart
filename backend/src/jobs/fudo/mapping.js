@@ -3,7 +3,7 @@
 // con fixtures reales sin mockear nada.
 'use strict'
 import { ventanaDia } from './dias.js'
-import { nombreMetodo, esEfectivo, esTarjeta, esCuentaCorriente } from './metodos.js'
+import { esEfectivo, esTarjeta, esCuentaCorriente } from './metodos.js'
 
 // saleType de Fudo -> detalle, con los mismos nombres que ya usa GRIS GRIS.
 const DETALLE_POR_TIPO_VENTA = { 'EAT-IN': 'Salon', 'TAKEAWAY': 'Mostrador', 'DELIVERY': 'Delivery' }

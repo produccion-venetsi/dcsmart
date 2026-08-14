@@ -114,3 +114,55 @@ test('solo COBRO y GASTO son del job: el resto lo carga la gente', () => {
     assert.ok(!esMovimientoDelJob(t), t)
   }
 })
+
+test('mas de un cobro del mismo metodo se acumulan monto y cantidad', () => {
+  // La 55942 del fixture ya trae un cobro en cash por 10000. Agregamos otra
+  // venta con otro cobro en cash para probar que se suman de verdad.
+  const incluidos = [
+    ...crudo.included,
+    { type: 'Payment', id: '77', attributes: { amount: 5000, canceled: null }, relationships: { paymentMethod: { data: { type: 'PaymentMethod', id: '1' } } } },
+  ]
+  const ventas = [
+    ...crudo.data,
+    { type: 'Sale', id: '77', attributes: { closedAt: '2026-08-13T20:00:00Z', people: 2, total: 5000, saleType: 'EAT-IN', saleState: 'CLOSED' },
+      relationships: { payments: { data: [{ type: 'Payment', id: '77' }] }, commercialDocuments: { data: [] }, closedBy: { data: { type: 'User', id: '1' } } } },
+  ]
+  const { movimientos } = mapDia({ ventas, incluidos, fecha: '2026-08-13' })
+  const cash = movimientos.find((m) => m.code === 'cash')
+  assert.equal(cash.monto, '15000.00') // 10000 (fixture) + 5000
+  assert.equal(cash.cantidad, 2)
+})
+
+test('los montos con centavos se suman sin perder precision', () => {
+  const ventas = [
+    { type: 'Sale', id: '201', attributes: { closedAt: '2026-08-13T12:00:00Z', people: 1, total: 10.10, saleType: 'EAT-IN', saleState: 'CLOSED' },
+      relationships: { payments: { data: [{ type: 'Payment', id: '201' }] }, commercialDocuments: { data: [] }, closedBy: { data: { type: 'User', id: '1' } } } },
+    { type: 'Sale', id: '202', attributes: { closedAt: '2026-08-13T13:00:00Z', people: 1, total: 20.20, saleType: 'EAT-IN', saleState: 'CLOSED' },
+      relationships: { payments: { data: [{ type: 'Payment', id: '202' }] }, commercialDocuments: { data: [] }, closedBy: { data: { type: 'User', id: '1' } } } },
+    { type: 'Sale', id: '203', attributes: { closedAt: '2026-08-13T14:00:00Z', people: 1, total: 0.05, saleType: 'EAT-IN', saleState: 'CLOSED' },
+      relationships: { payments: { data: [{ type: 'Payment', id: '203' }] }, commercialDocuments: { data: [] }, closedBy: { data: { type: 'User', id: '1' } } } },
+  ]
+  const incluidos = [
+    { type: 'Payment', id: '201', attributes: { amount: 10.10, canceled: null }, relationships: { paymentMethod: { data: { type: 'PaymentMethod', id: '1' } } } },
+    { type: 'Payment', id: '202', attributes: { amount: 20.20, canceled: null }, relationships: { paymentMethod: { data: { type: 'PaymentMethod', id: '1' } } } },
+    { type: 'Payment', id: '203', attributes: { amount: 0.05, canceled: null }, relationships: { paymentMethod: { data: { type: 'PaymentMethod', id: '1' } } } },
+    { type: 'PaymentMethod', id: '1', attributes: { name: 'Efectivo', code: 'cash' } },
+    { type: 'User', id: '1', attributes: { name: 'Angeles Zeballos' } },
+  ]
+  const { caja } = mapDia({ ventas, incluidos, fecha: '2026-08-13' })
+  assert.equal(caja.total, '30.35')
+  assert.equal(caja.efectivo, '30.35')
+})
+
+test('un dia con ventas pero todas anuladas no arma caja', () => {
+  const ventas = crudo.data.filter((v) => v.attributes.saleState === 'CANCELED')
+  assert.equal(mapDia({ ventas, incluidos: crudo.included, fecha: '2026-08-13' }), null)
+})
+
+test('codes incluye cash cuando hay un gasto, aunque ningun cobro haya sido en efectivo', () => {
+  // Solo la 55953 (cobro en mp), ningun cobro en cash.
+  const ventas = [crudo.data[0]]
+  const gastos = [{ id: '1', attributes: { amount: 100, useInCashCount: true, description: 'Test' } }]
+  const { codes } = mapDia({ ventas, incluidos: crudo.included, gastos, fecha: '2026-08-13' })
+  assert.deepEqual([...codes].sort(), ['cash', 'mp'])
+})
