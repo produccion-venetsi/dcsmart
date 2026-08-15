@@ -20,6 +20,7 @@ export const DEPARTAMENTOS = [
   'AUDITORIA',
   'MANTENIMIENTO',
   'DIRECCION',
+  'COSTOS',
 ]
 
 export const DEPARTAMENTO_LABEL = {
@@ -33,6 +34,7 @@ export const DEPARTAMENTO_LABEL = {
   AUDITORIA: 'Auditoría',
   MANTENIMIENTO: 'Mantenimiento',
   DIRECCION: 'Dirección',
+  COSTOS: 'Costos',
 }
 
 // Para los <select>: la opción vacía va primero porque el dato puede faltar.
