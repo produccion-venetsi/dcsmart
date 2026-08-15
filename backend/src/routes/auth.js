@@ -362,9 +362,16 @@ export default async function authRoutes(fastify) {
 
   // POST /api/auth/tareas-ticket
   // Igual que /analytics-ticket, pero ademas lleva el departamento (texto
-  // validado contra lib/datosUsuario.js) y si el usuario es super_admin --
-  // DC-PLATAFORMA no tiene tabla de departamentos propia del lado de
-  // dcsmart, interpreta ese string contra su propio catalogo.
+  // validado contra lib/datosUsuario.js), si el usuario es super_admin, y el
+  // catalogo COMPLETO de locales activos (id/nombre/grupo=App.nombre) --
+  // DC-PLATAFORMA no distingue permisos por local dentro de un departamento
+  // (cualquiera del depto gestiona todos los locales), asi que no hace falta
+  // resolver el acceso especifico del usuario como si hace costos-ticket: el
+  // catalogo entero alcanza y sobra.
+  //
+  // Acceso a Tareas restringido a los roles 'dcsmart'/'super_admin' (mismo
+  // criterio que costos-ticket) -- cualquier otro rol (ej. un usuario con
+  // acceso a un solo modulo puntual) no debe poder entrar a DC-PLATAFORMA.
   fastify.post('/tareas-ticket', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     if (!process.env.INTERNAL_SHARED_SECRET) {
       return reply.code(500).send({ error: 'Integración con Tareas no configurada' })
@@ -376,12 +383,24 @@ export default async function authRoutes(fastify) {
     })
     if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
 
-    const esSuperAdmin = await fastify.db.userAppRole.findFirst({
-      where: { id_user: request.user.id, role: { nombre: 'super_admin' } }
+    const userRoles = await fastify.db.userAppRole.findMany({
+      where: { id_user: request.user.id },
+      include: { role: true }
     })
+    const isSuperAdmin = userRoles.some((r) => r.role.nombre === 'super_admin')
+    const isDcsmart = !isSuperAdmin && userRoles.some((r) => r.role.nombre === 'dcsmart')
+    if (!isSuperAdmin && !isDcsmart) {
+      return reply.code(403).send({ error: 'No tenes acceso a Tareas' })
+    }
+
+    const localesDb = await fastify.db.local.findMany({
+      where: { activo: true, app: { activo: true } },
+      select: { id: true, nombre: true, app: { select: { nombre: true } } }
+    })
+    const locales = localesDb.map((l) => ({ id: l.id, nombre: l.nombre, grupo: l.app.nombre }))
 
     const ticket = jwt.sign(
-      { email: user.email, nombre: user.nombre, departamento: user.departamento, es_super_admin: !!esSuperAdmin },
+      { email: user.email, nombre: user.nombre, departamento: user.departamento, es_super_admin: isSuperAdmin, locales },
       process.env.INTERNAL_SHARED_SECRET,
       { expiresIn: '60s', issuer: 'dcsmart-gestion', audience: 'dc-plataforma' }
     )
