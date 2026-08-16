@@ -588,7 +588,14 @@ model Caja {
   detalles    CajaDetalle[]
 
   @@index([id_local, fecha_inicio])
-  @@index([id_local, id_externo])
+  // Idempotencia de los syncs (TapTap/Fudo): el mismo turno/día externo no
+  // puede existir dos veces para un local+origen. Los syncs ya deduplican por
+  // código, pero con 14 locales de Fudo una carrera o un bug lo pasarían por
+  // alto en silencio — esto lo hace imposible a nivel base. Postgres trata los
+  // NULL como distintos, así que las cajas manuales (id_externo null) no
+  // chocan entre sí. Reemplaza al índice de consulta [id_local, id_externo]:
+  // el índice único cubre ese prefijo.
+  @@unique([id_local, id_externo, origin])
   @@map("cajas")
 }
 
