@@ -249,10 +249,13 @@ export default function Reportes() {
                 <div className="rep-filter-col" style={{ maxWidth: 180 }}>
                   <div className="rep-filter-label">Tipo de fecha</div>
                   <div className="rep-date-input">
+                    {/* La flechita usa el token --chevron (uno por tema): el SVG inline
+                        traía un trazo beige casi blanco que en modo claro se borraba y
+                        el select quedaba sin indicador de desplegable. */}
                     <select
                       value={campoFecha}
                       onChange={(e) => setCampoFecha(e.target.value)}
-                      style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif', appearance: 'none', WebkitAppearance: 'none', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='rgba(240,237,232,0.55)' stroke-width='1.5' stroke-linecap='round' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right center', paddingRight: 16, cursor: 'pointer' }}
+                      style={{ backgroundColor: 'transparent', border: 'none', outline: 'none', color: 'var(--t1)', fontSize: 15, fontWeight: 600, width: '100%', fontFamily: 'Montserrat, sans-serif', appearance: 'none', WebkitAppearance: 'none', backgroundImage: 'var(--chevron)', backgroundRepeat: 'no-repeat', backgroundPosition: 'right center', paddingRight: 16, cursor: 'pointer' }}
                     >
                       {CAMPO_FECHA_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>

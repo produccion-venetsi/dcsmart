@@ -418,15 +418,18 @@ export default function Users() {
 
     if (!roleForm.id_role) { notify('El Rol es requerido', 'error'); return }
     if (!global && !roleForm.id_app) { notify('El Grupo es requerido', 'error'); return }
-    if (roleName === 'cajero' && !roleForm.id_local) { notify('El Local es requerido para cajero', 'error'); return }
+    // Todo rol scoped sin "todos los locales" (cajero, data_entry...) necesita
+    // un local sí o sí: sin filas en user_local_access no ve ni carga nada.
+    const localObligatorio = !global && !sinLocalesVeTodos(roleName)
+    if (localObligatorio && !roleForm.id_local) { notify(`El Local es requerido para ${roleName}`, 'error'); return }
 
     setRoleSaving(true)
     try {
       const payload = {
         id_role: roleForm.id_role,
         ...(global ? {} : { id_app: roleForm.id_app }),
-        // cajero: siempre envía local; admin: solo si eligió locales específicos
-        ...(!global && roleForm.id_local && (roleName === 'cajero' || !roleForm.all_locals)
+        // cajero/data_entry: siempre envía local; admin: solo si eligió locales específicos
+        ...(!global && roleForm.id_local && (localObligatorio || !roleForm.all_locals)
           ? { id_local: roleForm.id_local }
           : {}),
       }
@@ -1264,7 +1267,7 @@ export default function Users() {
                                       fontSize: 11, color: 'var(--t2)',
                                     }}>
                                       {l.nombre}
-                                      {amISuperAdmin && comoAdmin && (
+                                      {amISuperAdmin && !isCajero && (
                                         <button
                                           onClick={() => handleRemoveLocal(r.id_app, l.id)}
                                           disabled={accessBusy}
@@ -1284,8 +1287,11 @@ export default function Users() {
                                 </span>
                               )}
 
-                              {/* Admin/externo: agregar más locales (quitar todos = vuelve a "todos los locales") */}
-                              {amISuperAdmin && comoAdmin && available.length > 0 && (
+                              {/* Todo rol scoped menos cajero puede sumar locales (para admin/externo,
+                                  quitar todos = vuelve a "todos los locales"; para data_entry y afines,
+                                  sin locales no ve nada). Antes solo admin/externo tenían este select y
+                                  a un data_entry no había forma de darle un local desde la pantalla. */}
+                              {amISuperAdmin && !isCajero && available.length > 0 && (
                                 <select
                                   className="filter-select"
                                   value=""
@@ -1420,8 +1426,11 @@ export default function Users() {
                             </>
                           )}
 
-                          {roleName === 'cajero' && (
-                            /* Cajero: 1 solo local, requerido */
+                          {!sinLocalesVeTodos(roleName) && (
+                            /* Cajero, data_entry y cualquier rol scoped sin "todos los
+                               locales": el local es requerido. Antes esta rama era solo
+                               de cajero y a un data_entry no se le podía asignar local
+                               desde acá: quedaba sin locales y no veía ni cargaba nada. */
                             <div className="form-group" style={{ marginBottom: '1rem' }}>
                               <label className="form-label">Local *</label>
                               <div className="form-input-wrap">

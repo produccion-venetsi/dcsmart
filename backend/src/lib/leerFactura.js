@@ -17,8 +17,17 @@
 
 import { GoogleAuth } from 'google-auth-library'
 
-const MODELO = process.env.GEMINI_MODELO || 'gemini-2.5-flash'
-const LOCATION = process.env.VERTEX_LOCATION || 'us-central1'
+// gemini-3.5-flash-lite existe SOLO en el endpoint global de Vertex (verificado
+// 2026-08-16: en us-central1 responde 404, en global 200). Por eso el default de
+// LOCATION pasa a 'global' junto con el modelo -- si se pisa GEMINI_MODELO por
+// env con un modelo regional, setear VERTEX_LOCATION acorde.
+const MODELO = process.env.GEMINI_MODELO || 'gemini-3.5-flash-lite'
+const LOCATION = process.env.VERTEX_LOCATION || 'global'
+
+// El host regional lleva la region como prefijo; el global no lleva ninguno.
+const VERTEX_HOST = LOCATION === 'global'
+  ? 'aiplatform.googleapis.com'
+  : `${LOCATION}-aiplatform.googleapis.com`
 
 // Tipos de comprobante que maneja el sistema (enum TipoPago del schema). Se
 // mapean desde lo que diga la factura, que puede escribirlo de varias formas.
@@ -287,7 +296,7 @@ export async function extraerDeArchivo(buffer, mimeType, { proyecto = proyectoPo
 
   const auth = getAuth()
   const token = await auth.getAccessToken()
-  const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${proyecto}/locations/${LOCATION}/publishers/google/models/${MODELO}:generateContent`
+  const url = `https://${VERTEX_HOST}/v1/projects/${proyecto}/locations/${LOCATION}/publishers/google/models/${MODELO}:generateContent`
 
   const res = await fetch(url, {
     method: 'POST',
@@ -319,4 +328,4 @@ export async function extraerDeArchivo(buffer, mimeType, { proyecto = proyectoPo
   return JSON.parse(texto)
 }
 
-export const _internals = { PROMPT, ESQUEMA, MODELO, LOCATION }
+export const _internals = { PROMPT, ESQUEMA, MODELO, LOCATION, VERTEX_HOST }

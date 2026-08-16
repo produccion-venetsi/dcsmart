@@ -233,6 +233,35 @@ test('CONTRASTE: el tema claro declara color-scheme light', () => {
 
 const CSS = () => readFileSync(new URL('../styles/app.css', import.meta.url), 'utf8')
 
+// ── paridad de tokens de color entre temas ──────────────────────────────────
+// Todo color de status definido en :root tiene que estar redefinido en el
+// bloque claro: los que faltan quedan con el valor del tema oscuro y se lavan
+// sobre fondo claro. Pasó con --teal/--orange en las stat-cards (1.7x-2.0x de
+// contraste, mínimo 4.5x): las demás familias estaban adaptadas y esas dos no.
+test('todo token de color de status tiene su versión clara', () => {
+  const css = CSS()
+  const bloque = (desde) => {
+    const abre = css.indexOf('{', desde)
+    let nivel = 1, i = abre + 1
+    while (nivel > 0 && i < css.length) {
+      if (css[i] === '{') nivel++
+      if (css[i] === '}') nivel--
+      i++
+    }
+    return css.slice(abre + 1, i - 1)
+  }
+  const root = bloque(css.indexOf(':root {'))
+  const claro = bloque(css.indexOf(':root[data-tema="claro"]'))
+  const FAMILIAS = ['green', 'red', 'blue', 'amber', 'purple', 'teal', 'orange']
+  const tokensStatus = [...root.matchAll(/--([\w-]+):/g)]
+    .map((m) => m[1])
+    .filter((t) => FAMILIAS.some((f) => t === f || t.startsWith(`${f}-`)))
+  assert.ok(tokensStatus.length >= 21, `se esperaban los tokens de status en :root (hay ${tokensStatus.length})`)
+  for (const t of tokensStatus) {
+    assert.ok(claro.includes(`--${t}:`), `--${t} no está redefinido en el tema claro (queda con el valor oscuro)`)
+  }
+})
+
 // Rangos de linea de los bloques :root, donde un color literal SI corresponde.
 const rangosRoot = (css) => {
   const out = []
@@ -387,6 +416,10 @@ const REGLAS_QUIETAS = [
   ['.cuadre-vivo.cuadre-sin-datos', 'idem'],
   ['.data-table td.col-fija', 'las columnas fijas dejan pasar las que se deslizan'],
   ['.data-table th.col-fija', 'idem, en el encabezado'],
+  // El hover de las filas clickeables (tr.row-clickable:hover td) le gana en
+  // cascada a td.col-fija: si esta regla no repone el fondo opaco, en hover se
+  // transparentan las columnas fijas y el texto se ve pasar por debajo.
+  ['.data-table tbody tr:hover td.col-fija', 'el hover de la fila pisa el fondo opaco de las fijas'],
 ]
 
 const SALTO = String.fromCharCode(10)

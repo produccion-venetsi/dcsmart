@@ -63,6 +63,14 @@
   --purple:        #B5A7EA;
   --purple-bg:     rgba(181, 167, 234, 0.13);
   --purple-border: rgba(181, 167, 234, 0.26);
+  /* teal y orange eran los únicos colores de status hardcodeados en las
+     stat-cards: en modo claro quedaban lavados porque nadie los adaptaba. */
+  --teal:          #34D399;
+  --teal-bg:       rgba(52, 211, 153, 0.13);
+  --teal-border:   rgba(52, 211, 153, 0.26);
+  --orange:        #FB923C;
+  --orange-bg:     rgba(251, 146, 60, 0.13);
+  --orange-border: rgba(251, 146, 60, 0.26);
 
   /* layout */
   --sidebar-w: 234px;
@@ -955,6 +963,11 @@ select option:disabled { color: var(--t4); }
 
 .data-table tbody tr:hover td.col-fija,
 tr.row-clickable:hover td.col-fija {
+  /* El background-color va DE NUEVO acá: la regla de hover de las filas
+     clickeables (tr.row-clickable:hover td, más abajo) le gana en cascada a
+     .data-table td.col-fija y dejaba la celda fija translúcida en hover -- el
+     texto de las columnas que se deslizan se veía pasar por debajo. */
+  background-color: var(--bg-app);
   background-image: linear-gradient(rgba(var(--velo-rgb), 0.05), rgba(var(--velo-rgb), 0.05));
 }
 /* Una linea para que se vea donde termina lo fijo y arranca lo que se desliza. */
@@ -1429,6 +1442,15 @@ select.campo-ia {
   --purple:        #6A5AA8;
   --purple-bg:     rgba(106, 90, 168, 0.10);
   --purple-border: rgba(106, 90, 168, 0.26);
+  /* teal/orange oscurecidos igual que el resto de los status. Medidos sobre
+     #F4F2EE: #1E7D5F da 4.52x y #A85410 da 4.77x (mínimo texto 4.5x; los
+     valores del tema oscuro daban 1.72x y 2.02x acá). */
+  --teal:          #1E7D5F;
+  --teal-bg:       rgba(30, 125, 95, 0.10);
+  --teal-border:   rgba(30, 125, 95, 0.28);
+  --orange:        #A85410;
+  --orange-bg:     rgba(168, 84, 16, 0.10);
+  --orange-border: rgba(168, 84, 16, 0.28);
 
   /* glass: en claro el "vidrio" es un velo blanco sobre el fondo gris, no una capa
      blanca transparente sobre oscuro. */
@@ -1464,6 +1486,17 @@ select.campo-ia {
   --ia-grad-hover:  linear-gradient(115deg, rgba(140, 113, 66, 0.26) 0%, rgba(110, 87, 48, 0.20) 38%, rgba(44, 111, 176, 0.28) 100%);
   --ia-borde:       rgba(140, 113, 66, 0.55);
   --ia-borde-hover: rgba(110, 87, 48, 0.85);
+}
+
+/* ── Ajustes puntuales de componentes en claro ────────────────────────────────
+   Para los pocos colores que viven hardcodeados en su regla (no son tokens de
+   status) y en claro pierden contraste. Medidos sobre #F4F2EE. */
+:root[data-tema="claro"] .pdp-group-transfer {
+  color: var(--blue); /* #38bdf8 daba 1.92x; el azul del tema claro da 4.69x */
+}
+:root[data-tema="claro"] .cargar-opcion-ico {
+  color: #1D7A80; /* el teal #3fb6bd daba ~2x; este da 4.53x */
+  background: rgba(29, 122, 128, 0.12);
 }
 
 /* El barrido y el latido son la parte "IA" del efecto. Se definen una sola vez
@@ -2855,10 +2888,10 @@ tr.skel-row td {
 .stat-card.amber .stat-value { color: var(--amber); }
 .stat-card.purple .stat-icon  { background: var(--purple-bg); border-color: var(--purple-border); color: var(--purple); }
 .stat-card.purple .stat-value { color: var(--purple); }
-.stat-card.teal .stat-icon  { background: rgba(52,211,153,0.13); border-color: rgba(52,211,153,0.26); color: #34d399; }
-.stat-card.teal .stat-value { color: #34d399; }
-.stat-card.orange .stat-icon  { background: rgba(251,146,60,0.13); border-color: rgba(251,146,60,0.26); color: #fb923c; }
-.stat-card.orange .stat-value { color: #fb923c; }
+.stat-card.teal .stat-icon  { background: var(--teal-bg); border-color: var(--teal-border); color: var(--teal); }
+.stat-card.teal .stat-value { color: var(--teal); }
+.stat-card.orange .stat-icon  { background: var(--orange-bg); border-color: var(--orange-border); color: var(--orange); }
+.stat-card.orange .stat-value { color: var(--orange); }
 
 /* ═══════════════════════════════════════════════
    SECTION LABEL (Pagos / Cajas headers)
@@ -2947,7 +2980,10 @@ tr.skel-row td {
   outline: none;
   transition: border-color 0.18s var(--ease);
   cursor: pointer;
-  color-scheme: dark;
+  /* Sin color-scheme propio: lo hereda del tema (:root lo declara por tema).
+     Forzarlo a dark acá hacía que en modo claro el ícono del calendario y el
+     picker nativo se dibujaran para fondo oscuro sobre el input claro -- el
+     mismo bug que ya se arregló en los desplegables nativos. */
 }
 .period-input:focus { border-color: var(--border-hi); }
 
@@ -3114,8 +3150,11 @@ tr.skel-row td {
 tr.row-clickable {
   cursor: pointer;
 }
+/* background-color (no el shorthand `background`): el shorthand resetea el
+   background-image y arrasa con cualquier fondo opaco heredado, que es lo que
+   transparentaba las columnas fijas de Pagos en hover. */
 tr.row-clickable:hover td {
-  background: rgba(201,176,134,0.05);
+  background-color: rgba(201,176,134,0.05);
 }
 
 /* ─── Drawer detail rows (key/value pairs) ─── */

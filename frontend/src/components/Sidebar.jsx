@@ -493,7 +493,9 @@ export default function Sidebar() {
             <div style={{
               fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              color: role === 'super_admin' ? 'var(--gold, #C9B086)' : '#a78bfa',
+              // var(--purple) y no un violeta fijo: #a78bfa sobre el sidebar
+              // claro daba ~2.4x de contraste para un texto de 10px.
+              color: role === 'super_admin' ? 'var(--gold, #C9B086)' : 'var(--purple)',
               marginBottom: 4, opacity: 0.9,
             }}>
               {role === 'super_admin' ? '● Super Admin' : '● DCSmart'} — Acceso global
