@@ -387,6 +387,10 @@ const REGLAS_QUIETAS = [
   ['.cuadre-vivo.cuadre-sin-datos', 'idem'],
   ['.data-table td.col-fija', 'las columnas fijas dejan pasar las que se deslizan'],
   ['.data-table th.col-fija', 'idem, en el encabezado'],
+  // El hover de las filas clickeables (tr.row-clickable:hover td) le gana en
+  // cascada a td.col-fija: si esta regla no repone el fondo opaco, en hover se
+  // transparentan las columnas fijas y el texto se ve pasar por debajo.
+  ['.data-table tbody tr:hover td.col-fija', 'el hover de la fila pisa el fondo opaco de las fijas'],
 ]
 
 const SALTO = String.fromCharCode(10)

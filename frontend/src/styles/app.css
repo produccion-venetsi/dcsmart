@@ -955,6 +955,11 @@ select option:disabled { color: var(--t4); }
 
 .data-table tbody tr:hover td.col-fija,
 tr.row-clickable:hover td.col-fija {
+  /* El background-color va DE NUEVO acá: la regla de hover de las filas
+     clickeables (tr.row-clickable:hover td, más abajo) le gana en cascada a
+     .data-table td.col-fija y dejaba la celda fija translúcida en hover -- el
+     texto de las columnas que se deslizan se veía pasar por debajo. */
+  background-color: var(--bg-app);
   background-image: linear-gradient(rgba(var(--velo-rgb), 0.05), rgba(var(--velo-rgb), 0.05));
 }
 /* Una linea para que se vea donde termina lo fijo y arranca lo que se desliza. */
@@ -3114,8 +3119,11 @@ tr.skel-row td {
 tr.row-clickable {
   cursor: pointer;
 }
+/* background-color (no el shorthand `background`): el shorthand resetea el
+   background-image y arrasa con cualquier fondo opaco heredado, que es lo que
+   transparentaba las columnas fijas de Pagos en hover. */
 tr.row-clickable:hover td {
-  background: rgba(201,176,134,0.05);
+  background-color: rgba(201,176,134,0.05);
 }
 
 /* ─── Drawer detail rows (key/value pairs) ─── */
