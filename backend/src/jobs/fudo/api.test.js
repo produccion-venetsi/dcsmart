@@ -51,6 +51,26 @@ test('un error de autenticacion se propaga con el status', async () => {
   await assert.rejects(() => c.token(), /401/)
 })
 
+test('un 429 del auth espera y reintenta en vez de perder la corrida del local', async () => {
+  // Con 6+ locales pidiendo token en rafaga, auth.fu.do responde 429 "Retry
+  // later" al ultimo (paso con LORETO, 2026-08-16).
+  const esperas = []
+  const f = fetchFalso([
+    { ok: false, status: 429, text: async () => 'Retry later' },
+    authOk(9999999999),
+  ])
+  const c = crearCliente({ apiKey: 'k', apiSecret: 's', fetchImpl: f, esperar: async (ms) => esperas.push(ms) })
+  assert.equal(await c.token(), 'tok-123')
+  assert.equal(esperas.length, 1)
+})
+
+test('el 429 no reintenta para siempre: despues del tope corta con el status', async () => {
+  const r429 = () => ({ ok: false, status: 429, text: async () => 'Retry later' })
+  const f = fetchFalso([r429(), r429(), r429(), r429()])
+  const c = crearCliente({ apiKey: 'k', apiSecret: 's', fetchImpl: f, esperar: async () => {} })
+  await assert.rejects(() => c.token(), /429/)
+})
+
 test('manda el token como Bearer en cada request', async () => {
   const f = fetchFalso([authOk(9999999999), ok({ data: [] })])
   const c = crearCliente({ apiKey: 'k', apiSecret: 's', fetchImpl: f })

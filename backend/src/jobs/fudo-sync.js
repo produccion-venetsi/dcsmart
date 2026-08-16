@@ -217,8 +217,13 @@ async function main() {
   const run = await prisma.fudoSyncRun.create({ data: {} })
   const resultado = {}
   let ok = true
+  let primero = true
 
   for (const local of locales) {
+    // Pausa entre locales: cada uno abre sesión contra auth.fu.do (cuentas
+    // separadas) y en ráfaga el auth devuelve 429 a los últimos.
+    if (!primero) await new Promise((r) => setTimeout(r, 15_000))
+    primero = false
     try {
       resultado[local.id_local] = await procesarLocal(local)
       const r = resultado[local.id_local]
