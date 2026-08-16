@@ -28,6 +28,14 @@ const prisma = new PrismaClient()
 const LOCALES_FUDO = [
   { nombre: 'GRIS GRIS', id_local: 'LTRXNBIR', horaCorte: 6, envSufijo: 'GRISGRIS' },
   { nombre: 'CONDARCO', id_local: 'ltuibyvty', horaCorte: 6, envSufijo: 'CONDARCO' },
+  // Alta 2026-08-16 (credenciales de las tarjetas de Trello, verificadas contra
+  // auth.fu.do). OJO: estos locales siguen cargando cajas a mano -- hasta que
+  // dejen de hacerlo, cada dia tiene la caja manual Y la de Fudo (decision del
+  // usuario, mismo criterio que GRIS GRIS).
+  { nombre: 'ADA', id_local: 'sdfghjfvfd', horaCorte: 6, envSufijo: 'ADA' },
+  { nombre: 'ACUARIO', id_local: 'BUFGOGEG', horaCorte: 6, envSufijo: 'ACUARIO' },
+  { nombre: '878COOP', id_local: '6cda1b45', horaCorte: 6, envSufijo: '878COOP' },
+  { nombre: 'LORETO', id_local: 'dadea6bc-c4ef-43fd-8a2b-94268bcd96d7', horaCorte: 6, envSufijo: 'LORETO' },
 ]
 
 // Cuantos dias se reprocesan en cada corrida. Un dia ya cerrado puede recibir
