@@ -8,6 +8,9 @@ import { homeDeRol, HOME_POR_DEFECTO } from '../lib/roles.js'
 //   asignaciones de rol del usuario (para zonas globales como Admin).
 // `reportesOnly`: exige que la app activa tenga el permiso real de Reportes
 //   (activeApp.can_reportes), no un nombre de rol.
+// `cajaMayorOnly`: como reportesOnly pero para Caja Mayor, que es global (no
+//   depende de la app activa): super_admin entra siempre, cualquier otro por
+//   can_caja_mayor de my-apps (el override individual del módulo caja_mayor).
 // `excludeRoles`: si el rol de la app activa está en esta lista, se lo manda a SU
 //   home en vez de dejarlo pasar.
 //
@@ -17,7 +20,7 @@ import { homeDeRol, HOME_POR_DEFECTO } from '../lib/roles.js'
 // los cargadores de datos a una pantalla de reportes que no pueden ver.
 export default function ProtectedRoute({
   children, requireApp = true, roles = null,
-  globalRoles = null, reportesOnly = false, excludeRoles = null
+  globalRoles = null, reportesOnly = false, cajaMayorOnly = false, excludeRoles = null
 }) {
   const token = useAuthStore((s) => s.token)
   const user = useAuthStore((s) => s.user)
@@ -29,6 +32,14 @@ export default function ProtectedRoute({
     const userRoleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
     if (!globalRoles.some(r => userRoleNames.includes(r))) return <Navigate to={HOME_POR_DEFECTO} replace />
     return children
+  }
+
+  // Se evalúa antes del requireApp: la ruta es global y el super_admin puede
+  // entrar sin app activa (igual que antes con GlobalGuard roles={SUPER}).
+  if (cajaMayorOnly) {
+    const userRoleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
+    if (userRoleNames.includes('super_admin') || activeApp?.can_caja_mayor) return children
+    return <Navigate to={activeApp ? homeDeRol(activeApp.role) : HOME_POR_DEFECTO} replace />
   }
 
   if (requireApp && !activeApp) return <Navigate to="/select-app" replace />

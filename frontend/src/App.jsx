@@ -90,6 +90,12 @@ const CARGAN = [...ROLES_OPERATIVOS, ROLES.CAJERO, ROLES.DATA_ENTRY]
 function ReportesGuard({ children }) {
   return <ProtectedRoute requireApp reportesOnly>{children}</ProtectedRoute>
 }
+// Caja Mayor: global (sin app activa) + el permiso real, no el nombre del rol:
+// super_admin siempre, cualquier otro por can_caja_mayor (override individual
+// del módulo caja_mayor, otorgable desde Admin → Usuarios).
+function CajaMayorGuard({ children }) {
+  return <ProtectedRoute requireApp={false} cajaMayorOnly>{children}</ProtectedRoute>
+}
 // Zonas globales (Admin): independientes de la app activa -- evalúa TODAS
 // las asignaciones de rol del usuario, no la app elegida.
 function GlobalGuard({ roles, children }) {
@@ -180,7 +186,7 @@ export default function App() {
           <Route path="actividad"                   element={<GlobalGuard roles={SUPER}><ActivityLog /></GlobalGuard>} />
           {/* Caja Mayor es global a propósito: se ven todos los grupos juntos, sin
               depender de la app activa (ver routes/caja_mayor.js en el backend). */}
-          <Route path="caja-mayor"                  element={<GlobalGuard roles={SUPER}><CajaMayor /></GlobalGuard>} />
+          <Route path="caja-mayor"                  element={<CajaMayorGuard><CajaMayor /></CajaMayorGuard>} />
           <Route path="admin/users"                element={<GlobalGuard roles={SUPER}><Users /></GlobalGuard>} />
           <Route path="admin/apps"                 element={<GlobalGuard roles={ADMIN_PANEL}><Apps /></GlobalGuard>} />
           <Route path="admin/locales"              element={<GlobalGuard roles={ADMIN_PANEL}><Locales /></GlobalGuard>} />

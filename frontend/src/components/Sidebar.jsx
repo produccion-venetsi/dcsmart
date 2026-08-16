@@ -297,7 +297,9 @@ const NAV_ADMIN = [
   { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
   { to: '/auditorias',          label: 'Auditorías',    Icon: IcoAuditorias, roles: ['super_admin'] },
   { to: '/actividad',           label: 'Actividad',     Icon: IcoActivity,   roles: ['super_admin'] },
-  { to: '/caja-mayor',          label: 'Caja Mayor',    Icon: IcoCajaMayor,  roles: ['super_admin'] },
+  // Sin `roles`: se decide por permiso real (can_caja_mayor), como `documentos`
+  // en NAV_MAIN — ver el filtro de adminItemsPermitidos.
+  { key: 'caja_mayor', to: '/caja-mayor', label: 'Caja Mayor', Icon: IcoCajaMayor },
 ]
 
 export default function Sidebar() {
@@ -431,7 +433,12 @@ export default function Sidebar() {
   // Admin: independiente de la app activa -- evalúa TODAS las asignaciones
   // de rol del usuario, no la app elegida (para cuando no hay app activa).
   const globalRoleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
-  const adminItemsPermitidos = NAV_ADMIN.filter(item => !item.roles || item.roles.some(r => globalRoleNames.includes(r)))
+  const adminItemsPermitidos = NAV_ADMIN.filter(item => {
+    // Caja Mayor va por permiso real, no por rol: super_admin siempre, cualquier
+    // otro por can_caja_mayor (override individual del módulo, viene en my-apps).
+    if (item.key === 'caja_mayor') return globalRoleNames.includes('super_admin') || !!activeApp?.can_caja_mayor
+    return !item.roles || item.roles.some(r => globalRoleNames.includes(r))
+  })
 
   // Quien puede administrar ve el switch y un solo bloque a la vez. Quien no tiene
   // acceso a nada de admin no cambia de comportamiento: ve lo operativo, como antes.

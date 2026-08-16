@@ -291,34 +291,41 @@ export default async function authRoutes(fastify) {
       return 0
     })
 
-    // Resolver si el usuario puede ver Reportes — misma lógica de precedencia
-    // que fastify.can(): override individual (UserPermission) manda si existe;
-    // si no, el permiso del rol (super_admin bypasea todo).
-    const reportesModule = await fastify.db.module.findUnique({ where: { nombre: 'reportes' } })
-    const userReportesPerm = reportesModule
-      ? await fastify.db.userPermission.findUnique({
-          where: { id_user_id_module: { id_user: request.user.id, id_module: reportesModule.id } }
+    // Resolver si el usuario puede ver Reportes y Caja Mayor — misma lógica de
+    // precedencia que fastify.can(): override individual (UserPermission) manda
+    // si existe; si no, el permiso del rol (super_admin bypasea todo). El front
+    // gatea esas pantallas por estos flags, no por nombre de rol.
+    const FLAGS_MODULO = [
+      { modulo: 'reportes', campo: 'can_reportes' },
+      { modulo: 'caja_mayor', campo: 'can_caja_mayor' },
+    ]
+    for (const { modulo, campo } of FLAGS_MODULO) {
+      const moduleRecord = await fastify.db.module.findUnique({ where: { nombre: modulo } })
+      const userPerm = moduleRecord
+        ? await fastify.db.userPermission.findUnique({
+            where: { id_user_id_module: { id_user: request.user.id, id_module: moduleRecord.id } }
+          })
+        : null
+
+      let rolePermByRole = {}
+      if (moduleRecord && !isSuperAdmin) {
+        const roleIds = [...new Set(result.map(r => {
+          const match = userRoles.find(ur => ur.app?.id === r.app.id)
+            ?? userRoles.find(ur => ur.id_app === null)
+          return match?.id_role
+        }).filter(Boolean))]
+        const rolePerms = await fastify.db.rolePermission.findMany({
+          where: { id_role: { in: roleIds }, id_module: moduleRecord.id }
         })
-      : null
+        rolePermByRole = Object.fromEntries(rolePerms.map(rp => [rp.id_role, rp.can_view]))
+      }
 
-    let reportesRolePermByRole = {}
-    if (reportesModule && !isSuperAdmin) {
-      const roleIds = [...new Set(result.map(r => {
-        const match = userRoles.find(ur => ur.app?.id === r.app.id)
-          ?? userRoles.find(ur => ur.id_app === null)
-        return match?.id_role
-      }).filter(Boolean))]
-      const rolePerms = await fastify.db.rolePermission.findMany({
-        where: { id_role: { in: roleIds }, id_module: reportesModule.id }
-      })
-      reportesRolePermByRole = Object.fromEntries(rolePerms.map(rp => [rp.id_role, rp.can_view]))
-    }
-
-    for (const entry of result) {
-      if (isSuperAdmin) { entry.can_reportes = true; continue }
-      if (userReportesPerm) { entry.can_reportes = !!userReportesPerm.can_view; continue }
-      const roleMatch = userRoles.find(ur => ur.app?.id === entry.app.id) ?? userRoles.find(ur => ur.id_app === null)
-      entry.can_reportes = !!reportesRolePermByRole[roleMatch?.id_role]
+      for (const entry of result) {
+        if (isSuperAdmin) { entry[campo] = true; continue }
+        if (userPerm) { entry[campo] = !!userPerm.can_view; continue }
+        const roleMatch = userRoles.find(ur => ur.app?.id === entry.app.id) ?? userRoles.find(ur => ur.id_app === null)
+        entry[campo] = !!rolePermByRole[roleMatch?.id_role]
+      }
     }
 
     return result
