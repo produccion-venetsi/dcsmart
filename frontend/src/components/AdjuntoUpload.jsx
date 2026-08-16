@@ -158,7 +158,10 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
             className="adjunto-picker-menu"
             style={{
               position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 11,
-              background: 'var(--bg2, #1e1e24)', border: '1px solid var(--border, #333)',
+              // --bg-menu y no --bg2: --bg2 no existe en ningún CSS, así que
+              // siempre caía al fallback oscuro y en modo claro el menú quedaba
+              // negro con el texto (inherit = --t1 casi negro) ilegible encima.
+              background: 'var(--bg-menu)', border: '1px solid var(--border)',
               borderRadius: 10, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
               minWidth: 200,
             }}

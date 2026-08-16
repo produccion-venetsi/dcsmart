@@ -52,9 +52,9 @@ function SalesTooltip({ active, payload }) {
   const d = payload[0]?.payload
   return (
     <div style={{
-      background: 'rgba(30,43,58,.95)', border: '1px solid rgba(201,176,134,.18)',
-      borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#F0EDE8',
-      boxShadow: '0 8px 24px rgba(0,0,0,.5)'
+      background: 'var(--bg-menu)', border: '1px solid var(--border)',
+      borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--t1)',
+      boxShadow: '0 8px 24px rgba(0,0,0,.25)'
     }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>Semana del {d?.label}</div>
       <div style={{ color: '#3FB6BD', fontWeight: 600 }}>{fmt(d?.total ?? 0)}</div>
@@ -67,9 +67,9 @@ function PayTooltip({ active, payload }) {
   const d = payload[0]?.payload
   return (
     <div style={{
-      background: 'rgba(30,43,58,.95)', border: '1px solid rgba(201,176,134,.18)',
-      borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#F0EDE8',
-      boxShadow: '0 8px 24px rgba(0,0,0,.5)'
+      background: 'var(--bg-menu)', border: '1px solid var(--border)',
+      borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--t1)',
+      boxShadow: '0 8px 24px rgba(0,0,0,.25)'
     }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>{d?.name}</div>
       <div style={{ fontWeight: 600 }}>{fmt(d?.val ?? 0)}</div>
@@ -278,8 +278,11 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                   tick={{ fill: 'rgba(var(--velo-rgb), .3)', fontSize: 10, fontFamily: 'Montserrat' }}
                   tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
                 <Tooltip content={<SalesTooltip />} />
+                {/* El relleno del punto es el fondo de la app (efecto "calado"):
+                    #19232f era el --bg-app del tema oscuro fijo y en claro
+                    quedaban puntos azul-noche macizos. */}
                 <Area type="monotone" dataKey="total" stroke="#3FB6BD" strokeWidth={2.5}
-                  fill="url(#repAreaGrad)" dot={{ r: 3, fill: '#19232f', stroke: '#3FB6BD', strokeWidth: 2 }} />
+                  fill="url(#repAreaGrad)" dot={{ r: 3, fill: 'var(--bg-app)', stroke: '#3FB6BD', strokeWidth: 2 }} />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -303,7 +306,9 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
                   }}>
                     <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.06em', color: 'rgba(var(--velo-rgb), .4)', textTransform: 'uppercase' }}>Fiscal</span>
-                    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 22, fontWeight: 700, color: '#F4F2EE', lineHeight: 1.1 }}>{fiscalPct}%</span>
+                    {/* var(--t1) y no un color fijo: #F4F2EE era EXACTAMENTE el
+                        --bg-app del tema claro y el número desaparecía. */}
+                    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 22, fontWeight: 700, color: 'var(--t1)', lineHeight: 1.1 }}>{fiscalPct}%</span>
                   </div>
                 </div>
               </div>
