@@ -62,9 +62,15 @@ export function crearCliente({ apiKey, apiSecret, fetchImpl = fetch, ahora = () 
   // `relationships` y SIN `attributes`, o sea sin `amount` ni `useInCashCount`.
   // El job los daba por descartados en silencio -- medido contra CONDARCO:
   // 83 gastos de caja por $4.343.732 en dos semanas que no llegaban nunca.
+  //
+  // `paymentMethod` y `provider` tienen que ir TAMBIÉN en fields[expense]:
+  // fields restringe el documento y sin nombrarlos ahí los gastos vienen sin
+  // `relationships`, con lo que el `include` trae los PaymentMethod sueltos
+  // pero no se puede saber cuál corresponde a cada gasto (verificado contra
+  // CONDARCO 2026-08-16 -- por eso el job cargaba todo gasto como Efectivo).
   const gastosDelDia = ({ fecha }) =>
     listar(`/expenses?filter[date]=and(gte.${fecha},lte.${fecha})` +
-      `&fields[expense]=amount,canceled,date,description,status,useInCashCount` +
+      `&fields[expense]=amount,canceled,date,description,status,useInCashCount,paymentMethod,provider` +
       `&include=paymentMethod,provider`)
 
   return { token, listar, ventasDelDia, gastosDelDia }

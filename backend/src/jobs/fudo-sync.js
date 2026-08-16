@@ -155,6 +155,9 @@ async function procesarLocal(local) {
         ventas: ventas.data,
         incluidos: ventas.included,
         gastos: gastos.data,
+        // Sin esto no hay forma de resolver el metodo de pago de cada gasto:
+        // los PaymentMethod de /expenses vienen en SU included, no en el de ventas.
+        gastosIncluidos: gastos.included,
         fecha,
         horaCorte: local.horaCorte,
       })

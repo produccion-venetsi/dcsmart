@@ -99,6 +99,33 @@ test('los gastos que cuentan en caja entran como movimiento GASTO', () => {
   assert.equal(gasto[0].monto, '3000.00')
 })
 
+test('un gasto anulado no entra aunque tenga useInCashCount', () => {
+  const gastos = [
+    { id: '10', attributes: { amount: 3000, useInCashCount: true, canceled: true, description: 'Anulado' } },
+  ]
+  const { movimientos } = mapear({ gastos })
+  assert.equal(movimientos.filter((m) => m.tipo === 'GASTO').length, 0)
+})
+
+test('el gasto usa su metodo de pago real, con Efectivo como fallback', () => {
+  const gastosIncluidos = [
+    { type: 'PaymentMethod', id: '3', attributes: { name: 'Transferencia', code: 'transfer' } },
+  ]
+  const gastos = [
+    // con relación: usa el método del gasto
+    { id: '10', attributes: { amount: 3000, useInCashCount: true, description: 'Pago transf' },
+      relationships: { paymentMethod: { data: { type: 'PaymentMethod', id: '3' } } } },
+    // sin relación (payload viejo o incompleto): cae a Efectivo
+    { id: '11', attributes: { amount: 500, useInCashCount: true, description: 'Caja chica' } },
+  ]
+  const { movimientos, metodos } = mapear({ gastos, gastosIncluidos })
+  const porDesc = movimientos.filter((m) => m.tipo === 'GASTO')
+  assert.equal(porDesc.find((m) => m.monto === '3000.00').code, 'transfer')
+  assert.equal(porDesc.find((m) => m.monto === '500.00').code, 'cash')
+  // el método del gasto viaja en `metodos` para resolverse contra la base
+  assert.ok(metodos.some((m) => m.code === 'transfer' && m.name === 'Transferencia'))
+})
+
 test('un dia sin ventas no arma caja', () => {
   assert.equal(mapDia({ ventas: [], incluidos: [], fecha: '2026-08-13' }), null)
 })

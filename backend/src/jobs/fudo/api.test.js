@@ -98,7 +98,11 @@ test('los gastos piden los fields: sin eso vienen sin amount ni useInCashCount',
   const c = crearCliente({ apiKey: 'k', apiSecret: 's', fetchImpl: f })
   await c.gastosDelDia({ fecha: '2026-08-13' })
   const url = decodeURIComponent(f.llamadas[1].url)
-  for (const campo of ['amount', 'useInCashCount', 'date', 'canceled']) {
+  // paymentMethod y provider en fields[expense] no son decorativos: fields
+  // restringe el documento y sin nombrarlos los gastos vienen SIN
+  // relationships, con lo que no se sabe qué método corresponde a cada gasto
+  // (por eso el job cargaba todos los gastos como Efectivo).
+  for (const campo of ['amount', 'useInCashCount', 'date', 'canceled', 'paymentMethod', 'provider']) {
     assert.match(url, new RegExp(`fields\\[expense\\]=[^&]*\\b${campo}\\b`), `falta ${campo}`)
   }
 })
