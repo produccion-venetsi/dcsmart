@@ -17,6 +17,7 @@ import { patchDesdeLectura, faltaParaDuplicado } from '../../lib/precargaIA.js'
 import { ESTADO_OP_OPTIONS, ESTADO_CTA_CTE_CLIENTE } from '../../lib/estadoOp.js'
 import { saveDraft, loadDraft, clearDraft } from '../../lib/formDraft.js'
 import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtMonthUTC, diasDesdeFinDePeriodo, periodoDemasiadoViejo, nroDesdeFecha } from '../../lib/dates.js'
+import { nombreProveedor, razonSocialExtra } from '../../lib/proveedorLabel.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, siguienteDescuento, TIPO_MOVSTOCK } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
 import { cashflowAutomatico, siguienteCashflow, soloFecha, ayudaCashflow } from '../../lib/cashflowPago.js'
@@ -213,6 +214,10 @@ export default function PagoForm() {
   // Porcentaje del local activo. Se completa cuando llega la ficha del local;
   // hasta entonces vale el general, que es lo que corresponde a casi todos.
   const [pctDescuento, setPctDescuento] = useState(DESCUENTO_MOVSTOCK_DEFAULT)
+  // Tipo del local activo (Gastronomía, etc.), para ordenar proveedores y
+  // rubcat por afinidad. Sale del contexto del local: el activeLocal del store
+  // no lo trae (my-apps proyecta solo id y nombre).
+  const [tipoLocalCtx, setTipoLocalCtx] = useState(null)
   // Escribir el descuento a mano lo desengancha del cálculo, igual que el
   // cashflow con el plazo del proveedor: un valor puesto por una persona no se
   // pisa en silencio. Es estado y no un ref porque el aviso de abajo del campo
@@ -288,6 +293,7 @@ export default function PagoForm() {
         // El porcentaje de descuento sale de la ficha del local. Se guarda
         // aunque no sea MovStock: el tipo se puede cambiar dentro del form.
         if (contexto) setPctDescuento(porcentajeDelLocal(contexto))
+        if (contexto?.tipo_local) setTipoLocalCtx(contexto.tipo_local)
         if (d) {
           if (d.id_proveedor && d.proveedor) {
             setProvSelected(d.proveedor)
@@ -678,13 +684,17 @@ export default function PagoForm() {
     set('id_cliente', '')
   }
 
+  // El tipo del local llega por el contexto (tipoLocalCtx); el fallback a
+  // activeLocal.tipo_local queda por si my-apps lo devuelve algún día.
+  const tipoLocalActivo = tipoLocalCtx || activeLocal?.tipo_local || null
+
   const fetchProveedores = (search) =>
     proveedoresApi
-      .list({ search, activo: 'true', limit: 60, ...(activeLocal?.tipo_local ? { tipo_local: activeLocal.tipo_local } : {}) })
+      .list({ search, activo: 'true', limit: 60, ...(tipoLocalActivo ? { tipo_local: tipoLocalActivo } : {}) })
       .then(r => r.data.data)
 
   const fetchRubcats = (search) =>
-    rubcatApi.list({ search }).then(r => {
+    rubcatApi.list({ search, ...(tipoLocalActivo ? { tipo_local: tipoLocalActivo } : {}) }).then(r => {
       const data = r.data
       if (modoRapido && form.id_tipo === 'STK') {
         return data.filter(rc => rc.rubro?.nombre?.toUpperCase().startsWith('CMV'))
@@ -1073,9 +1083,10 @@ export default function PagoForm() {
               <label className="form-label">Proveedor</label>
               <Combobox
                 value={form.id_proveedor}
-                displayValue={provSelected?.nombre || ''}
+                displayValue={nombreProveedor(provSelected)}
                 getKey={p => p.id}
-                getLabel={p => p.nombre}
+                getLabel={p => nombreProveedor(p)}
+                getSublabel={p => razonSocialExtra(p)}
                 onSelect={selectProveedor}
                 onClear={clearProveedor}
                 fetchItems={fetchProveedores}
