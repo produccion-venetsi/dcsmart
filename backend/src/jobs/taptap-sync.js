@@ -10,8 +10,11 @@
 //   - la respuesta INCLUYE el turno abierto ("Turno Actual"), que la API vieja
 //     no mandaba: hay que saltearlo o queda una caja con datos parciales que la
 //     idempotencia por id_externo congela para siempre
-//   - hay rate limit POR CREDENCIAL (del orden de una consulta cada 10-60s),
-//     así que entre local y local se espera TAPTAP_RATE_MS
+//   - hay rate limit POR CREDENCIAL: medido el 2026-08-16, nuestra clave
+//     admite ~1 consulta por minuto (con 11s de pausa fallaron 12 de 15
+//     locales con 400). Entre local y local se espera TAPTAP_RATE_MS, y el
+//     task-timeout del Cloud Run Job está en 1800s para que entren los ~15
+//     minutos que tarda la vuelta completa.
 //
 // Uso local: DATABASE_URL=... TAPTAP_API_SECRET=... node src/jobs/taptap-sync.js
 'use strict'
@@ -22,8 +25,8 @@ import { mapTurno, esTurnoAbierto } from './taptap/mapping.js'
 const prisma = new PrismaClient()
 const API_BASE_URL = 'https://function-gethisto-679004960826.southamerica-east1.run.app'
 const API_SECRET = process.env.TAPTAP_API_SECRET
-// Pausa entre locales para no pisar el rate limit por credencial.
-const RATE_MS = Number(process.env.TAPTAP_RATE_MS || 11000)
+// Pausa entre locales para no pisar el rate limit por credencial (medido: 1/min).
+const RATE_MS = Number(process.env.TAPTAP_RATE_MS || 61000)
 
 // groupId de TapTap -> id_local de DCSmart. Agregar acá cuando se sume un local nuevo.
 const LOCALES_TAPTAP = [
@@ -102,7 +105,12 @@ async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
     headers: { 'Content-Type': 'application/json', 'x-api-secret': API_SECRET },
     body: JSON.stringify({ maxperiodid: maxId, tienda: local.groupId, tabla: 'turnos' }),
   })
-  if (!resp.ok) throw new Error(`API TapTap respondió ${resp.status}`)
+  if (!resp.ok) {
+    // El 400 pelado no distingue "Ratelimit superado" de "No autorizado": el
+    // cuerpo sí, y sin él el diagnóstico del 2026-08-16 hubiera sido a ciegas.
+    const cuerpo = await resp.text().catch(() => '')
+    throw new Error(`API TapTap respondió ${resp.status}${cuerpo ? `: ${cuerpo.slice(0, 200)}` : ''}`)
+  }
   const json = await resp.json()
   // El rate limit y otros rechazos vienen como {status:'error', msg} -- sin
   // esto, un "Ratelimit superado" pasaría por "0 turnos nuevos" y el hueco

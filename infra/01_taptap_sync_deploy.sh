@@ -37,7 +37,7 @@ gcloud run jobs deploy taptap-sync --project=$PROJECT --region=$REGION \
   --set-cloudsql-instances $INSTANCE \
   --set-env-vars "DATABASE_URL=postgresql://postgres:REEMPLAZAR_PASSWORD@localhost/postgres?host=/cloudsql/$INSTANCE&schema=public" \
   --set-secrets "TAPTAP_API_SECRET=taptap-api-secret:latest" \
-  --max-retries 1 --task-timeout 900
+  --max-retries 1 --task-timeout 1800  # rate limit de 1/min x ~15 locales ≈ 15 min
 
 # Scheduler: 5am hora Argentina, todos los días
 gcloud scheduler jobs create http taptap-sync-trigger --project=$PROJECT --location=$REGION \
