@@ -45,6 +45,7 @@ const LOCALES_TAPTAP = [
   { groupId: 'bebop',            id_local: 'UYPLAVIG' },
   { groupId: 'casonaazopardo',   id_local: 'OLHGEOYQ' },  // ALDOS — POIUYTR (config original) no existe en la base
   { groupId: 'luckylouis',       id_local: 'd6944000-861e-43dd-a229-bee1c1533255' },  // LUCKY LOUIS
+  { groupId: 'donaldo',          id_local: '56ASFD4' },  // DON ALDO — alta 2026-08-16, historial migrado por CSV hasta el 13/08
 ]
 
 // El maxid que espera la API es NUMÉRICO. No alcanza con ordenar id_externo
