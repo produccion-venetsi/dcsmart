@@ -19,6 +19,11 @@ const ALIAS_POR_NOMBRE = {
   'Qr': 'MP QR',
   'Transferencia banco galicia': 'Transferencia',
   'FudoPagos': 'FudoPagos',
+  // Alta de ADA/ACUARIO/878COOP/LORETO (2026-08-16): nombres que esos locales
+  // inventaron en su cuenta de Fudo. "Mercardo" es el typo tal cual viene.
+  'Mercardo Pago': 'Mercado Pago',
+  'Pedido Ya': 'PedidosYa',
+  'MP': 'Mercado Pago',
 }
 
 // Alias por code: los codes estandar de Fudo, que ya estaban resueltos antes
@@ -50,7 +55,9 @@ const ALIAS_POR_NOMBRE_NORM = new Map(
 )
 
 export function nombreMetodo(code) {
-  return NOMBRE_POR_CODE[code] ?? null
+  // Los codes llegan con espacios de mas ("mp ") porque cada cuenta los carga
+  // a mano: sin el trim, "mp " no matcheaba el alias estandar de "mp".
+  return NOMBRE_POR_CODE[String(code ?? '').trim()] ?? null
 }
 
 const contiene = (normalizado, sub) => normalizado.includes(sub)
