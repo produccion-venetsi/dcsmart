@@ -36,6 +36,12 @@ const LOCALES_FUDO = [
   { nombre: 'ACUARIO', id_local: 'BUFGOGEG', horaCorte: 6, envSufijo: 'ACUARIO' },
   { nombre: '878COOP', id_local: '6cda1b45', horaCorte: 6, envSufijo: '878COOP' },
   { nombre: 'LORETO', id_local: 'dadea6bc-c4ef-43fd-8a2b-94268bcd96d7', horaCorte: 6, envSufijo: 'LORETO' },
+  // Segunda tanda 2026-08-17 (tarjetas "3MONOS" y "PRITANY" de Trello). Mismos
+  // avisos que arriba: duplican contra la carga manual hasta que dejen.
+  { nombre: 'UAT', id_local: 'XPKLVUKP', horaCorte: 6, envSufijo: 'UAT' },
+  { nombre: '3MONOS', id_local: 'QHOBGKXW', horaCorte: 6, envSufijo: '3MONOS' },
+  { nombre: 'VICTOR', id_local: 'WMIJEWEX', horaCorte: 6, envSufijo: 'VICTOR' },
+  { nombre: 'CAPRICCHIO', id_local: '54676ergft', horaCorte: 6, envSufijo: 'CAPRICCHIO' },
 ]
 
 // Cuantos dias se reprocesan en cada corrida. Un dia ya cerrado puede recibir
