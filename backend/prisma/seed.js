@@ -10,7 +10,7 @@ const T = true, F = false
 const MODULES = [
   'caja', 'caja_movimientos', 'pagos', 'proveedores',
   'rubros', 'categorias', 'metodos_pago', 'usuarios', 'apps', 'locales', 'reportes', 'arqueo',
-  'clientes', 'documentos'
+  'clientes', 'documentos', 'caja_mayor'
 ]
 
 const MATRIX = {
@@ -21,6 +21,7 @@ const MATRIX = {
     reportes: [T,T,T,T], arqueo: [T,T,T,T],
     clientes: [T,T,T,T],
     documentos: [T,T,T,T],
+    caja_mayor: [T,T,T,T],
   },
   dcsmart: {
     // Operación total — gestiona datos de todos los grupos pero NO administra la estructura
@@ -31,6 +32,10 @@ const MATRIX = {
     reportes: [T,F,F,F], arqueo: [T,T,T,T],
     clientes: [T,T,T,T],
     documentos: [T,T,T,T],
+    // Caja Mayor NO se gana por rol (ni siquiera dcsmart): solo super_admin, o
+    // el usuario puntual al que se le concede por UserPermission (checkbox en
+    // Admin → Usuarios), siempre recortado a sus locales asignados.
+    caja_mayor: [F,F,F,F],
   },
   admin: {
     caja: [T,T,T,F], caja_movimientos: [T,T,T,F], pagos: [T,T,T,F],
@@ -43,6 +48,7 @@ const MATRIX = {
     clientes: [T,T,T,F],
     // Carga y corrige documentos del grupo, pero no los borra.
     documentos: [T,T,T,F],
+    caja_mayor: [F,F,F,F],
   },
   externo: {
     // Igual que admin salvo que SÍ borra: pagos (y sus impuestos, que van por
@@ -58,6 +64,7 @@ const MATRIX = {
     reportes: [F,F,F,F], arqueo: [T,T,F,F],
     clientes: [T,T,T,T],
     documentos: [T,T,T,T],
+    caja_mayor: [F,F,F,F],
   },
   cajero: {
     caja: [T,T,F,F], caja_movimientos: [T,T,F,F], pagos: [T,T,F,F],
@@ -68,6 +75,7 @@ const MATRIX = {
     // Solo ve, y solo los marcados como visibles para todos (ver
     // filtroVisibilidad en lib/documentos.js): carga plata, no maneja contratos.
     documentos: [T,F,F,F],
+    caja_mayor: [F,F,F,F],
   },
   reportes: {
     // Rol restringido: solo ve Reportes, nada más.
@@ -77,6 +85,7 @@ const MATRIX = {
     reportes: [T,F,F,F], arqueo: [F,F,F,F],
     clientes: [F,F,F,F],
     documentos: [F,F,F,F],
+    caja_mayor: [F,F,F,F],
   },
 }
 
