@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { mapTurno } from './mapping.js'
+import { mapTurno, esTurnoAbierto } from './mapping.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const turno = JSON.parse(readFileSync(join(__dirname, '__fixtures__/turno-ejemplo.json'), 'utf8'))
@@ -41,6 +41,18 @@ test('mapTurno arma los detalles que siempre se crean (Delivery/Takeaway/Salon/W
   assert.equal(porNombre['Web'], 0)
   assert.equal(porNombre['Tarjetas'], 515600)
   assert.equal(porNombre['Cta Cte'], 0)
+})
+
+test('mapTurno acepta el campo `id` del endpoint viejo como fallback de turnoid', () => {
+  const { turnoid, ...resto } = turno
+  const { caja } = mapTurno({ ...resto, id: turnoid })
+  assert.equal(caja.id_externo, '237719609')
+})
+
+test('esTurnoAbierto detecta el "Turno Actual" que la API pública incluye en la respuesta', () => {
+  assert.equal(esTurnoAbierto(turno), false) // el fixture es un turno cerrado ("Turno #675")
+  const abierto = { ...turno, info: { ...turno.info, header: { ...turno.info.header, name: 'Turno Actual' } } }
+  assert.equal(esTurnoAbierto(abierto), true)
 })
 
 test('mapTurno arma "A Cobrar" en detallesSiOcurren cuando cobrarmonto > 0, y NO arma Mesas Abiertas si abiertasmonto es 0', () => {

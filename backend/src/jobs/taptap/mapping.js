@@ -25,6 +25,16 @@ function toDecimalString(n) {
   return String(Math.abs(Number(n) || 0))
 }
 
+// La API pública (2026-08) incluye el turno EN CURSO en la respuesta, siempre
+// primero y con nombre "Turno Actual" (los cerrados vienen como "Turno #N").
+// No hay que insertarlo: sus montos siguen cambiando, y la idempotencia por
+// id_externo congelaría esa foto parcial para siempre. Saltearlo no pierde
+// nada -- al no insertarse, el maxperiodid no avanza y el turno vuelve a
+// aparecer (ya cerrado) en la consulta siguiente.
+export function esTurnoAbierto(turno) {
+  return turno?.info?.header?.name === 'Turno Actual'
+}
+
 export function mapTurno(turno) {
   const info = turno.info || {}
   const header = info.header || {}
@@ -45,7 +55,9 @@ export function mapTurno(turno) {
   if (recargos) obsParts.push(`Recargos: ${recargos}`)
 
   const caja = {
-    id_externo: String(turno.id),
+    // La API pública renombró `id` a `turnoid`; el fallback cubre fixtures y
+    // payloads del endpoint viejo mientras conviven.
+    id_externo: String(turno.turnoid ?? turno.id),
     nro_turno: header.secuenciador != null ? String(header.secuenciador) : null,
     fecha_inicio: header.desde ? new Date(header.desde) : null,
     fecha_cierre: header.hasta ? new Date(header.hasta) : null,
