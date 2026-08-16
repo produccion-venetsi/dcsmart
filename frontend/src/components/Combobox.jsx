@@ -12,6 +12,11 @@ export default function Combobox({
   wrapClassName = '',
   onCreate,            // opcional: (texto) => void. Si se define, muestra
   createLabel = 'crear', // "+ crear «texto»" cuando el texto no matchea nada.
+  // opcional: (item) => string. Segunda línea apagada debajo del label (ej. la
+  // razón social del proveedor). Va aparte de getLabel a propósito: hasExact
+  // compara lo tipeado contra getLabel, y meter el dato extra ahí haría
+  // aparecer "+ crear" para items que ya existen.
+  getSublabel,
 }) {
   const [search, setSearch]     = useState(displayValue || '')
   const [open, setOpen]         = useState(false)
@@ -100,16 +105,22 @@ export default function Combobox({
               ? <div className="combobox-inline-empty">Buscando…</div>
               : items.length === 0 && !showCreate
                 ? <div className="combobox-inline-empty">Sin resultados</div>
-                : items.map(item => (
-                  <button
-                    key={getKey(item)}
-                    type="button"
-                    className="combobox-option"
-                    onClick={() => handleSelect(item)}
-                  >
-                    {getLabel(item)}
-                  </button>
-                ))
+                : items.map(item => {
+                  const sub = getSublabel ? getSublabel(item) : ''
+                  return (
+                    <button
+                      key={getKey(item)}
+                      type="button"
+                      className="combobox-option"
+                      onClick={() => handleSelect(item)}
+                    >
+                      {getLabel(item)}
+                      {sub && (
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--t4)' }}>{sub}</span>
+                      )}
+                    </button>
+                  )
+                })
             }
             {showCreate && (
               <button

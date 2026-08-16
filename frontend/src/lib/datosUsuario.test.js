@@ -53,7 +53,7 @@ test('CONTRATO: los largos maximos coinciden', () => {
 // ── opciones del select ─────────────────────────────────────────────────────
 
 test('cada departamento es una opcion con su etiqueta', () => {
-  assert.equal(OPCIONES_DEPARTAMENTO.length, 10)
+  assert.equal(OPCIONES_DEPARTAMENTO.length, 11)
   assert.deepEqual(OPCIONES_DEPARTAMENTO[0], { value: 'ADMINISTRACION', label: 'Administración' })
 })
 

@@ -142,6 +142,30 @@ test('alias: FudoPagos -> FudoPagos', () => {
   assert.equal(porCode.get('fudo_payments'), 'id-fudopagos')
 })
 
+test('alias de los locales de agosto: Mercardo Pago (typo), Pedido Ya y MP', () => {
+  const existentes = [
+    { id: 'id-mp', nombre: 'Mercado Pago' },
+    { id: 'id-peya', nombre: 'PedidosYa' },
+    ...CON_DESCONOCIDO,
+  ]
+  // Vienen con espacios al final tal cual los cargó cada cuenta.
+  const casos = [
+    { code: 'mercardo pago ', name: 'Mercardo Pago ', esperado: 'id-mp' },
+    { code: 'pedido ya ', name: 'Pedido Ya ', esperado: 'id-peya' },
+    { code: 'mp ', name: 'MP ', esperado: 'id-mp' },
+  ]
+  for (const { code, name, esperado } of casos) {
+    const { porCode, sinResolver } = resolverMetodos([{ code, name }], existentes)
+    assert.equal(porCode.get(code), esperado, name)
+    assert.deepEqual(sinResolver, [], name)
+  }
+})
+
+test('el code con espacios de mas matchea el alias estandar igual', () => {
+  assert.equal(nombreMetodo('mp '), 'Mercado Pago')
+  assert.equal(nombreMetodo(' cash '), 'Efectivo')
+})
+
 test('los alias se comparan normalizados: Cta. Cte., CTA CTE y cta.cte. caen todos en el mismo lugar', () => {
   const existentes = [{ id: 'id-cc', nombre: 'Cuenta Cte.' }, ...CON_DESCONOCIDO]
   for (const variante of ['Cta. Cte.', 'CTA CTE', 'cta.cte.', 'Cta Cte']) {

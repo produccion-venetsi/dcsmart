@@ -10,21 +10,35 @@ const TAMANO_PAGINA = 500
 // de una corrida larga.
 const MARGEN_RENOVACION_MS = 5 * 60 * 1000
 
-export function crearCliente({ apiKey, apiSecret, fetchImpl = fetch, ahora = () => Date.now() }) {
+// auth.fu.do tiene rate limit propio: con 6+ locales pidiendo token en ráfaga
+// (una cuenta por local) devuelve 429 "Retry later" y el local que llega último
+// pierde la corrida entera -- pasó con LORETO el 2026-08-16, la primera corrida
+// con 6 locales. Ante un 429 se espera y se reintenta; el resto de los errores
+// de auth siguen cortando de una.
+const REINTENTOS_AUTH_429 = 3
+const ESPERA_429_MS = 65_000
+
+export function crearCliente({ apiKey, apiSecret, fetchImpl = fetch, ahora = () => Date.now(), esperar = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   let cache = null // { token, venceEn }
 
   async function token() {
     if (cache && cache.venceEn - MARGEN_RENOVACION_MS > ahora()) return cache.token
-    const resp = await fetchImpl(AUTH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ apiKey, apiSecret }),
-    })
-    const texto = await resp.text()
-    if (!resp.ok) throw new Error(`Fudo auth respondió ${resp.status}: ${texto.slice(0, 300)}`)
-    const { token: t, exp } = JSON.parse(texto)
-    cache = { token: t, venceEn: Number(exp) * 1000 }
-    return t
+    for (let intento = 0; ; intento++) {
+      const resp = await fetchImpl(AUTH_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ apiKey, apiSecret }),
+      })
+      const texto = await resp.text()
+      if (resp.status === 429 && intento < REINTENTOS_AUTH_429) {
+        await esperar(ESPERA_429_MS)
+        continue
+      }
+      if (!resp.ok) throw new Error(`Fudo auth respondió ${resp.status}: ${texto.slice(0, 300)}`)
+      const { token: t, exp } = JSON.parse(texto)
+      cache = { token: t, venceEn: Number(exp) * 1000 }
+      return t
+    }
   }
 
   // La respuesta no trae el total de items: se pide pagina tras pagina hasta
@@ -62,9 +76,15 @@ export function crearCliente({ apiKey, apiSecret, fetchImpl = fetch, ahora = () 
   // `relationships` y SIN `attributes`, o sea sin `amount` ni `useInCashCount`.
   // El job los daba por descartados en silencio -- medido contra CONDARCO:
   // 83 gastos de caja por $4.343.732 en dos semanas que no llegaban nunca.
+  //
+  // `paymentMethod` y `provider` tienen que ir TAMBIÉN en fields[expense]:
+  // fields restringe el documento y sin nombrarlos ahí los gastos vienen sin
+  // `relationships`, con lo que el `include` trae los PaymentMethod sueltos
+  // pero no se puede saber cuál corresponde a cada gasto (verificado contra
+  // CONDARCO 2026-08-16 -- por eso el job cargaba todo gasto como Efectivo).
   const gastosDelDia = ({ fecha }) =>
     listar(`/expenses?filter[date]=and(gte.${fecha},lte.${fecha})` +
-      `&fields[expense]=amount,canceled,date,description,status,useInCashCount` +
+      `&fields[expense]=amount,canceled,date,description,status,useInCashCount,paymentMethod,provider` +
       `&include=paymentMethod,provider`)
 
   return { token, listar, ventasDelDia, gastosDelDia }

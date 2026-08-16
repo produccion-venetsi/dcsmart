@@ -28,6 +28,20 @@ const prisma = new PrismaClient()
 const LOCALES_FUDO = [
   { nombre: 'GRIS GRIS', id_local: 'LTRXNBIR', horaCorte: 6, envSufijo: 'GRISGRIS' },
   { nombre: 'CONDARCO', id_local: 'ltuibyvty', horaCorte: 6, envSufijo: 'CONDARCO' },
+  // Alta 2026-08-16 (credenciales de las tarjetas de Trello, verificadas contra
+  // auth.fu.do). OJO: estos locales siguen cargando cajas a mano -- hasta que
+  // dejen de hacerlo, cada dia tiene la caja manual Y la de Fudo (decision del
+  // usuario, mismo criterio que GRIS GRIS).
+  { nombre: 'ADA', id_local: 'sdfghjfvfd', horaCorte: 6, envSufijo: 'ADA' },
+  { nombre: 'ACUARIO', id_local: 'BUFGOGEG', horaCorte: 6, envSufijo: 'ACUARIO' },
+  { nombre: '878COOP', id_local: '6cda1b45', horaCorte: 6, envSufijo: '878COOP' },
+  { nombre: 'LORETO', id_local: 'dadea6bc-c4ef-43fd-8a2b-94268bcd96d7', horaCorte: 6, envSufijo: 'LORETO' },
+  // Segunda tanda 2026-08-17 (tarjetas "3MONOS" y "PRITANY" de Trello). Mismos
+  // avisos que arriba: duplican contra la carga manual hasta que dejen.
+  { nombre: 'UAT', id_local: 'XPKLVUKP', horaCorte: 6, envSufijo: 'UAT' },
+  { nombre: '3MONOS', id_local: 'QHOBGKXW', horaCorte: 6, envSufijo: '3MONOS' },
+  { nombre: 'VICTOR', id_local: 'WMIJEWEX', horaCorte: 6, envSufijo: 'VICTOR' },
+  { nombre: 'CAPRICCHIO', id_local: '54676ergft', horaCorte: 6, envSufijo: 'CAPRICCHIO' },
 ]
 
 // Cuantos dias se reprocesan en cada corrida. Un dia ya cerrado puede recibir
@@ -155,6 +169,9 @@ async function procesarLocal(local) {
         ventas: ventas.data,
         incluidos: ventas.included,
         gastos: gastos.data,
+        // Sin esto no hay forma de resolver el metodo de pago de cada gasto:
+        // los PaymentMethod de /expenses vienen en SU included, no en el de ventas.
+        gastosIncluidos: gastos.included,
         fecha,
         horaCorte: local.horaCorte,
       })
@@ -206,8 +223,13 @@ async function main() {
   const run = await prisma.fudoSyncRun.create({ data: {} })
   const resultado = {}
   let ok = true
+  let primero = true
 
   for (const local of locales) {
+    // Pausa entre locales: cada uno abre sesión contra auth.fu.do (cuentas
+    // separadas) y en ráfaga el auth devuelve 429 a los últimos.
+    if (!primero) await new Promise((r) => setTimeout(r, 15_000))
+    primero = false
     try {
       resultado[local.id_local] = await procesarLocal(local)
       const r = resultado[local.id_local]

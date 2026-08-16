@@ -5,14 +5,15 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
-import FotoViewer from '../../components/FotoViewer.jsx'
+import PagoDetailPanel from '../pagos/PagoDetailPanel.jsx'
 import { generarReportePdp } from '../../lib/pdpReport.js'
 import {
   idsDeGrupos, estadoSeleccion, textoSeleccionarTodo, ayudaSeleccionarTodo,
 } from '../../lib/seleccionPdp.js'
 import { pdpApi } from '../../api/pdp.js'
-import { fmtDateUTC, fmtMonthUTC, fmtDateArg, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
+import { fmtDateUTC, fmtDateTimeArg, nowDateTimeLocalInput, toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
+import { esRolDc, puedeEditar, puedeBorrarPagos } from '../../lib/roles.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -21,7 +22,6 @@ function fmt$(n) {
     : '—'
 }
 const fmtDate  = fmtDateUTC
-const fmtMonth = fmtMonthUTC
 
 function provName(p) {
   return p.proveedor?.razon_social || p.proveedor?.nombre || 'Sin proveedor'
@@ -236,62 +236,6 @@ function PagarModal({ count, total, metodos, onClose, onConfirm, working }) {
   )
 }
 
-/* ── detalle del pago (solo lectura) ── */
-function PagoDetailPdp({ pago, navigate }) {
-  const rows = [
-    ['Nro Orden',   pago.nro_ord != null ? `OP-${pago.nro_ord}` : '—'],
-    ['Fecha',       fmtDate(pago.fecha)],
-    ['Proveedor',   provName(pago)],
-    ['Rubro / Cat', pago.rubcat ? `${pago.rubcat.rubro?.nombre} / ${pago.rubcat.categoria?.nombre}` : '—'],
-    ['Tipo',        pago.id_tipo || '—'],
-    ['PV',          pago.pv ?? '—'],
-    ['Nro',         pago.nro ?? '—'],
-    ['Neto',        fmt$(pago.importe_neto)],
-    ['Descuento',   fmt$(pago.descuento)],
-    ['Importe',     fmt$(pago.importe)],
-    ['Método',      pago.metodo_pago?.nombre || '—'],
-    ['Dirección',   pago.ingresa_egreso != null ? (pago.ingresa_egreso ? 'Ingreso' : 'Egreso') : '—'],
-    ['Estado Op.',  pago.estado_op || '—'],
-    ['Pagado',      pago.pagado ? 'Sí' : 'No'],
-    ['Fecha Pago',  pago.fecha_pago ? fmtDateArg(pago.fecha_pago) : '—'],
-    ['Período',     fmtMonth(pago.periodo)],
-    ['Local',       pago.local?.nombre || '—'],
-  ]
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        <button className="btn btn-secondary" onClick={() => navigate(`/pagos/${pago.id}/editar`)}>
-          Editar pago
-        </button>
-      </div>
-
-      {pago.observaciones && (
-        <div style={{ marginBottom: '1rem', padding: '10px 14px', background: 'rgba(var(--velo-rgb), 0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
-          {pago.observaciones}
-        </div>
-      )}
-
-      {(pago.foto_url || pago.pdf_url) && (
-        <div style={{ marginBottom: '0.5rem' }}>
-          <div className="drawer-section-title">Adjuntos</div>
-          <FotoViewer pagoId={pago.id} fotoUrl={pago.foto_url} pdfUrl={pago.pdf_url} />
-        </div>
-      )}
-
-      <div className="drawer-section-title">Datos del pago</div>
-      <div className="drawer-detail">
-        {rows.map(([k, v]) => (
-          <div key={k} className="drawer-detail-row">
-            <span className="drawer-detail-key">{k}</span>
-            <span className="drawer-detail-val">{v}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 /* ── columna ── */
 function PdpColumn({
   title, loading, groups, total, emptyText, onRowClick,
@@ -495,6 +439,7 @@ export default function PdpDashboard() {
   const activeLocal = useAppStore((s) => s.activeLocal)
   const activeApp   = useAppStore((s) => s.activeApp)
   const notify      = useUiStore((s) => s.notify)
+  const showPrompt  = useUiStore((s) => s.showPrompt)
   const role        = activeApp?.role
   const canVerUltimoUsuario = ['dcsmart', 'super_admin'].includes(role)
 
@@ -516,6 +461,39 @@ export default function PdpDashboard() {
   const [panelOpen,    setPanelOpen]    = useState(false)
   const [selectedPago, setSelectedPago] = useState(null)
   const openDetail = (p) => { setSelectedPago(p); setPanelOpen(true) }
+
+  // El detalle es el mismo panel completo de Pagos (PagoDetailPanel), con el
+  // menú Acciones incluido: antes acá había una copia reducida de solo lectura
+  // y desde PDP no se podía auditar una OP. Cualquier acción del panel puede
+  // mover la OP de columna o cambiar los totales, así que después de cada una
+  // se recargan las dos columnas con load(); el pago abierto en el drawer se
+  // actualiza aparte porque load() no lo toca.
+  const patchPagoAudit = (id, audit) => {
+    setSelectedPago(prev => prev?.id === id ? { ...prev, audit } : prev)
+    load()
+  }
+
+  const patchPago = (id, fields) => {
+    setSelectedPago(prev => prev?.id === id ? { ...prev, ...fields } : prev)
+    load()
+  }
+
+  // Mismo flujo que en PagoList: se pide el motivo (el borrado es real y el
+  // motivo queda en activity_log), se cierra el drawer y se recarga.
+  const handleDeletePago = async (id) => {
+    const motivo = await showPrompt(
+      'Se va a eliminar este pago con sus impuestos. No se puede deshacer.',
+      { title: 'Eliminar pago', placeholder: 'Por qué se elimina (opcional)' }
+    )
+    if (motivo === null) return
+    try {
+      await pagosApi.remove(id, motivo)
+      notify('Pago eliminado', 'success')
+      setPanelOpen(false)
+      load()
+    }
+    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
+  }
 
 
   const load = () => {
@@ -794,7 +772,21 @@ export default function PdpDashboard() {
         title={selectedPago ? `Pago ${selectedPago.nro_ord != null ? `OP-${selectedPago.nro_ord}` : selectedPago.id?.slice(0, 8)}` : 'Detalle de pago'}
         width={560}
       >
-        {selectedPago && <PagoDetailPdp pago={selectedPago} navigate={navigate} />}
+        {selectedPago && (
+          <PagoDetailPanel
+            pago={selectedPago}
+            navigate={navigate}
+            onDelete={handleDeletePago}
+            onAudit={patchPagoAudit}
+            onPatch={patchPago}
+            metodos={metodos}
+            canEdit={puedeEditar(role)}
+            canDelete={puedeBorrarPagos(role)}
+            canAuditDc={esRolDc(role)}
+            canSeeCreated={esRolDc(role)}
+            canSeeActivity={esRolDc(role)}
+          />
+        )}
       </DrawerPanel>
     </div>
   )

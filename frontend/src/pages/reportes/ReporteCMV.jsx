@@ -18,9 +18,9 @@ function CmvTooltip({ active, payload }) {
   const d = payload[0]?.payload
   return (
     <div style={{
-      background: 'rgba(30,43,58,.95)', border: '1px solid rgba(201,176,134,.18)',
-      borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#F0EDE8',
-      boxShadow: '0 8px 24px rgba(0,0,0,.5)'
+      background: 'var(--bg-menu)', border: '1px solid var(--border)',
+      borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--t1)',
+      boxShadow: '0 8px 24px rgba(0,0,0,.25)'
     }}>
       <div style={{ fontWeight: 700, marginBottom: 4 }}>{d?.name}</div>
       <div style={{ fontWeight: 600 }}>{fmt(d?.val ?? 0)}</div>
@@ -72,8 +72,10 @@ function CostTable({ title, dotColor, items, total, gradient }) {
         display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center',
         height: 40, marginTop: 4, borderTop: '1px solid var(--border-hi)'
       }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Total</span>
-        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>{fmt(total)}</span>
+        {/* var(--t1): el #fff fijo dejaba el total del reporte blanco sobre
+            fondo claro (ilegible en modo claro). */}
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--t1)' }}>Total</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--t1)', fontVariantNumeric: 'tabular-nums' }}>{fmt(total)}</span>
       </div>
     </div>
   )

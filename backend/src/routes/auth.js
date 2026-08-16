@@ -291,34 +291,41 @@ export default async function authRoutes(fastify) {
       return 0
     })
 
-    // Resolver si el usuario puede ver Reportes — misma lógica de precedencia
-    // que fastify.can(): override individual (UserPermission) manda si existe;
-    // si no, el permiso del rol (super_admin bypasea todo).
-    const reportesModule = await fastify.db.module.findUnique({ where: { nombre: 'reportes' } })
-    const userReportesPerm = reportesModule
-      ? await fastify.db.userPermission.findUnique({
-          where: { id_user_id_module: { id_user: request.user.id, id_module: reportesModule.id } }
+    // Resolver si el usuario puede ver Reportes y Caja Mayor — misma lógica de
+    // precedencia que fastify.can(): override individual (UserPermission) manda
+    // si existe; si no, el permiso del rol (super_admin bypasea todo). El front
+    // gatea esas pantallas por estos flags, no por nombre de rol.
+    const FLAGS_MODULO = [
+      { modulo: 'reportes', campo: 'can_reportes' },
+      { modulo: 'caja_mayor', campo: 'can_caja_mayor' },
+    ]
+    for (const { modulo, campo } of FLAGS_MODULO) {
+      const moduleRecord = await fastify.db.module.findUnique({ where: { nombre: modulo } })
+      const userPerm = moduleRecord
+        ? await fastify.db.userPermission.findUnique({
+            where: { id_user_id_module: { id_user: request.user.id, id_module: moduleRecord.id } }
+          })
+        : null
+
+      let rolePermByRole = {}
+      if (moduleRecord && !isSuperAdmin) {
+        const roleIds = [...new Set(result.map(r => {
+          const match = userRoles.find(ur => ur.app?.id === r.app.id)
+            ?? userRoles.find(ur => ur.id_app === null)
+          return match?.id_role
+        }).filter(Boolean))]
+        const rolePerms = await fastify.db.rolePermission.findMany({
+          where: { id_role: { in: roleIds }, id_module: moduleRecord.id }
         })
-      : null
+        rolePermByRole = Object.fromEntries(rolePerms.map(rp => [rp.id_role, rp.can_view]))
+      }
 
-    let reportesRolePermByRole = {}
-    if (reportesModule && !isSuperAdmin) {
-      const roleIds = [...new Set(result.map(r => {
-        const match = userRoles.find(ur => ur.app?.id === r.app.id)
-          ?? userRoles.find(ur => ur.id_app === null)
-        return match?.id_role
-      }).filter(Boolean))]
-      const rolePerms = await fastify.db.rolePermission.findMany({
-        where: { id_role: { in: roleIds }, id_module: reportesModule.id }
-      })
-      reportesRolePermByRole = Object.fromEntries(rolePerms.map(rp => [rp.id_role, rp.can_view]))
-    }
-
-    for (const entry of result) {
-      if (isSuperAdmin) { entry.can_reportes = true; continue }
-      if (userReportesPerm) { entry.can_reportes = !!userReportesPerm.can_view; continue }
-      const roleMatch = userRoles.find(ur => ur.app?.id === entry.app.id) ?? userRoles.find(ur => ur.id_app === null)
-      entry.can_reportes = !!reportesRolePermByRole[roleMatch?.id_role]
+      for (const entry of result) {
+        if (isSuperAdmin) { entry[campo] = true; continue }
+        if (userPerm) { entry[campo] = !!userPerm.can_view; continue }
+        const roleMatch = userRoles.find(ur => ur.app?.id === entry.app.id) ?? userRoles.find(ur => ur.id_app === null)
+        entry[campo] = !!rolePermByRole[roleMatch?.id_role]
+      }
     }
 
     return result
@@ -362,9 +369,16 @@ export default async function authRoutes(fastify) {
 
   // POST /api/auth/tareas-ticket
   // Igual que /analytics-ticket, pero ademas lleva el departamento (texto
-  // validado contra lib/datosUsuario.js) y si el usuario es super_admin --
-  // DC-PLATAFORMA no tiene tabla de departamentos propia del lado de
-  // dcsmart, interpreta ese string contra su propio catalogo.
+  // validado contra lib/datosUsuario.js), si el usuario es super_admin, y el
+  // catalogo COMPLETO de locales activos (id/nombre/grupo=App.nombre) --
+  // DC-PLATAFORMA no distingue permisos por local dentro de un departamento
+  // (cualquiera del depto gestiona todos los locales), asi que no hace falta
+  // resolver el acceso especifico del usuario como si hace costos-ticket: el
+  // catalogo entero alcanza y sobra.
+  //
+  // Acceso a Tareas restringido a los roles 'dcsmart'/'super_admin' (mismo
+  // criterio que costos-ticket) -- cualquier otro rol (ej. un usuario con
+  // acceso a un solo modulo puntual) no debe poder entrar a DC-PLATAFORMA.
   fastify.post('/tareas-ticket', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     if (!process.env.INTERNAL_SHARED_SECRET) {
       return reply.code(500).send({ error: 'Integración con Tareas no configurada' })
@@ -376,12 +390,24 @@ export default async function authRoutes(fastify) {
     })
     if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
 
-    const esSuperAdmin = await fastify.db.userAppRole.findFirst({
-      where: { id_user: request.user.id, role: { nombre: 'super_admin' } }
+    const userRoles = await fastify.db.userAppRole.findMany({
+      where: { id_user: request.user.id },
+      include: { role: true }
     })
+    const isSuperAdmin = userRoles.some((r) => r.role.nombre === 'super_admin')
+    const isDcsmart = !isSuperAdmin && userRoles.some((r) => r.role.nombre === 'dcsmart')
+    if (!isSuperAdmin && !isDcsmart) {
+      return reply.code(403).send({ error: 'No tenes acceso a Tareas' })
+    }
+
+    const localesDb = await fastify.db.local.findMany({
+      where: { activo: true, app: { activo: true } },
+      select: { id: true, nombre: true, app: { select: { nombre: true } } }
+    })
+    const locales = localesDb.map((l) => ({ id: l.id, nombre: l.nombre, grupo: l.app.nombre }))
 
     const ticket = jwt.sign(
-      { email: user.email, nombre: user.nombre, departamento: user.departamento, es_super_admin: !!esSuperAdmin },
+      { email: user.email, nombre: user.nombre, departamento: user.departamento, es_super_admin: isSuperAdmin, locales },
       process.env.INTERNAL_SHARED_SECRET,
       { expiresIn: '60s', issuer: 'dcsmart-gestion', audience: 'dc-plataforma' }
     )

@@ -29,12 +29,15 @@ EOF
 # No existe un secreto de Secret Manager para este password al momento del deploy
 # (gcloud secrets list --project=dc-smart-mvp solo muestra analytics-* e internal-shared-secret),
 # por eso se usa --set-env-vars con el mismo valor que ya usa el servicio dcsmart-backend.
+# La API pública de TapTap (2026-08) exige x-api-secret: el valor vive en
+# Secret Manager como taptap-api-secret (crearlo antes de correr esto).
 gcloud run jobs deploy taptap-sync --project=$PROJECT --region=$REGION \
   --image $REGION-docker.pkg.dev/$PROJECT/cloud-run-source-deploy/taptap-sync:latest \
   --service-account taptap-sync@$PROJECT.iam.gserviceaccount.com \
   --set-cloudsql-instances $INSTANCE \
   --set-env-vars "DATABASE_URL=postgresql://postgres:REEMPLAZAR_PASSWORD@localhost/postgres?host=/cloudsql/$INSTANCE&schema=public" \
-  --max-retries 1 --task-timeout 900
+  --set-secrets "TAPTAP_API_SECRET=taptap-api-secret:latest" \
+  --max-retries 1 --task-timeout 1800  # rate limit de 1/min x ~15 locales ≈ 15 min
 
 # Scheduler: 5am hora Argentina, todos los días
 gcloud scheduler jobs create http taptap-sync-trigger --project=$PROJECT --location=$REGION \

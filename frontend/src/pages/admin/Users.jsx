@@ -418,15 +418,18 @@ export default function Users() {
 
     if (!roleForm.id_role) { notify('El Rol es requerido', 'error'); return }
     if (!global && !roleForm.id_app) { notify('El Grupo es requerido', 'error'); return }
-    if (roleName === 'cajero' && !roleForm.id_local) { notify('El Local es requerido para cajero', 'error'); return }
+    // Todo rol scoped sin "todos los locales" (cajero, data_entry...) necesita
+    // un local sí o sí: sin filas en user_local_access no ve ni carga nada.
+    const localObligatorio = !global && !sinLocalesVeTodos(roleName)
+    if (localObligatorio && !roleForm.id_local) { notify(`El Local es requerido para ${roleName}`, 'error'); return }
 
     setRoleSaving(true)
     try {
       const payload = {
         id_role: roleForm.id_role,
         ...(global ? {} : { id_app: roleForm.id_app }),
-        // cajero: siempre envía local; admin: solo si eligió locales específicos
-        ...(!global && roleForm.id_local && (roleName === 'cajero' || !roleForm.all_locals)
+        // cajero/data_entry: siempre envía local; admin: solo si eligió locales específicos
+        ...(!global && roleForm.id_local && (localObligatorio || !roleForm.all_locals)
           ? { id_local: roleForm.id_local }
           : {}),
       }
@@ -993,39 +996,90 @@ export default function Users() {
                 </div>
               </div>
 
-              {/* Permisos individuales */}
-              {userRoles.some(r => r.role?.nombre === 'admin') && (
-                <>
-                  <div className="drawer-section-title">Permisos individuales</div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none', marginBottom: '1.25rem', fontSize: 13, color: 'var(--t2)' }}>
-                    <input
-                      type="checkbox"
-                      className="select-checkbox"
-                      checked={(selected.user_permissions ?? []).some(p => p.module?.nombre === 'reportes' && p.can_view)}
-                      onChange={async (e) => {
-                        const checked = e.target.checked
-                        const msg = checked
-                          ? '¿Dar acceso a Reportes a este usuario?'
-                          : '¿Quitar el acceso a Reportes a este usuario?'
-                        if (!(await showConfirm(msg))) return
-                        try {
-                          if (checked) {
-                            await usersApi.setPermission(selected.id, 'reportes', { can_view: true })
-                          } else {
-                            await usersApi.removePermission(selected.id, 'reportes')
-                          }
-                          const { data } = await usersApi.get(selected.id)
-                          setSelected(data)
-                          usersApi.list().then(({ data: all }) => setUsers(all)).catch(() => {})
-                        } catch (err) {
-                          notify(err.response?.data?.error || 'Error al actualizar el permiso', 'error')
-                        }
-                      }}
-                    />
-                    Puede ver Reportes
-                  </label>
-                </>
-              )}
+              {/* Permisos individuales. Reportes se ofrece solo a admins (como
+                  siempre); Caja Mayor a cualquier usuario con rol que no sea
+                  super_admin (el super entra siempre, el checkbox sería mentira). */}
+              {(() => {
+                const esAdminRol = userRoles.some(r => r.role?.nombre === 'admin')
+                const esSuperAdminUsr = userRoles.some(r => r.role?.nombre === 'super_admin')
+                const muestraCajaMayor = userRoles.length > 0 && !esSuperAdminUsr
+                if (!esAdminRol && !muestraCajaMayor) return null
+
+                const labelStyle = { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none', fontSize: 13, color: 'var(--t2)' }
+                const refrescar = async () => {
+                  const { data } = await usersApi.get(selected.id)
+                  setSelected(data)
+                  usersApi.list().then(({ data: all }) => setUsers(all)).catch(() => {})
+                }
+                const tienePermiso = (mod) =>
+                  (selected.user_permissions ?? []).some(p => p.module?.nombre === mod && p.can_view)
+
+                return (
+                  <>
+                    <div className="drawer-section-title">Permisos individuales</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: '1.25rem' }}>
+                      {esAdminRol && (
+                        <label style={labelStyle}>
+                          <input
+                            type="checkbox"
+                            className="select-checkbox"
+                            checked={tienePermiso('reportes')}
+                            onChange={async (e) => {
+                              const checked = e.target.checked
+                              const msg = checked
+                                ? '¿Dar acceso a Reportes a este usuario?'
+                                : '¿Quitar el acceso a Reportes a este usuario?'
+                              if (!(await showConfirm(msg))) return
+                              try {
+                                if (checked) {
+                                  await usersApi.setPermission(selected.id, 'reportes', { can_view: true })
+                                } else {
+                                  await usersApi.removePermission(selected.id, 'reportes')
+                                }
+                                await refrescar()
+                              } catch (err) {
+                                notify(err.response?.data?.error || 'Error al actualizar el permiso', 'error')
+                              }
+                            }}
+                          />
+                          Puede ver Reportes
+                        </label>
+                      )}
+                      {muestraCajaMayor && (
+                        <label style={labelStyle}>
+                          <input
+                            type="checkbox"
+                            className="select-checkbox"
+                            checked={tienePermiso('caja_mayor')}
+                            onChange={async (e) => {
+                              const checked = e.target.checked
+                              const msg = checked
+                                ? '¿Dar acceso a Caja Mayor a este usuario? Va a ver y cargar movimientos solo de sus locales asignados.'
+                                : '¿Quitar el acceso a Caja Mayor a este usuario?'
+                              if (!(await showConfirm(msg))) return
+                              try {
+                                if (checked) {
+                                  // Acceso operativo completo al módulo; el recorte
+                                  // por local lo aplica el backend igual.
+                                  await usersApi.setPermission(selected.id, 'caja_mayor', {
+                                    can_view: true, can_create: true, can_edit: true, can_delete: true,
+                                  })
+                                } else {
+                                  await usersApi.removePermission(selected.id, 'caja_mayor')
+                                }
+                                await refrescar()
+                              } catch (err) {
+                                notify(err.response?.data?.error || 'Error al actualizar el permiso', 'error')
+                              }
+                            }}
+                          />
+                          Puede usar Caja Mayor (solo sus locales)
+                        </label>
+                      )}
+                    </div>
+                  </>
+                )
+              })()}
 
               {/* Acceso a dcsmart-analisis (plataforma de reportes, backend/base separados) */}
               <div className="drawer-section-title">Analytics (reportes)</div>
@@ -1264,7 +1318,7 @@ export default function Users() {
                                       fontSize: 11, color: 'var(--t2)',
                                     }}>
                                       {l.nombre}
-                                      {amISuperAdmin && comoAdmin && (
+                                      {amISuperAdmin && !isCajero && (
                                         <button
                                           onClick={() => handleRemoveLocal(r.id_app, l.id)}
                                           disabled={accessBusy}
@@ -1284,8 +1338,11 @@ export default function Users() {
                                 </span>
                               )}
 
-                              {/* Admin/externo: agregar más locales (quitar todos = vuelve a "todos los locales") */}
-                              {amISuperAdmin && comoAdmin && available.length > 0 && (
+                              {/* Todo rol scoped menos cajero puede sumar locales (para admin/externo,
+                                  quitar todos = vuelve a "todos los locales"; para data_entry y afines,
+                                  sin locales no ve nada). Antes solo admin/externo tenían este select y
+                                  a un data_entry no había forma de darle un local desde la pantalla. */}
+                              {amISuperAdmin && !isCajero && available.length > 0 && (
                                 <select
                                   className="filter-select"
                                   value=""
@@ -1420,8 +1477,11 @@ export default function Users() {
                             </>
                           )}
 
-                          {roleName === 'cajero' && (
-                            /* Cajero: 1 solo local, requerido */
+                          {!sinLocalesVeTodos(roleName) && (
+                            /* Cajero, data_entry y cualquier rol scoped sin "todos los
+                               locales": el local es requerido. Antes esta rama era solo
+                               de cajero y a un data_entry no se le podía asignar local
+                               desde acá: quedaba sin locales y no veía ni cargaba nada. */
                             <div className="form-group" style={{ marginBottom: '1rem' }}>
                               <label className="form-label">Local *</label>
                               <div className="form-input-wrap">

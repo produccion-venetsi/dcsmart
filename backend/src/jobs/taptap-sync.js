@@ -2,14 +2,31 @@
 // Reemplaza los ~14 Apps Script individuales (uno por local, escribían a
 // Google Sheets). Corre como Cloud Run Job vía Cloud Scheduler, 5am diario.
 //
-// Uso local: DATABASE_URL=... node src/jobs/taptap-sync.js
+// Desde 2026-08 usa la API pública nueva de TapTap (ver TAPTAP_api_publica.md
+// en la raíz del workspace): POST con body JSON y header x-api-secret, en
+// reemplazo del GET ?groupid=&maxid= (endpoint function-dc-getturnos, que el
+// proveedor da de baja). Diferencias que importan:
+//   - el campo id del turno ahora se llama `turnoid`
+//   - la respuesta INCLUYE el turno abierto ("Turno Actual"), que la API vieja
+//     no mandaba: hay que saltearlo o queda una caja con datos parciales que la
+//     idempotencia por id_externo congela para siempre
+//   - hay rate limit POR CREDENCIAL: medido el 2026-08-16, nuestra clave
+//     admite ~1 consulta por minuto (con 11s de pausa fallaron 12 de 15
+//     locales con 400). Entre local y local se espera TAPTAP_RATE_MS, y el
+//     task-timeout del Cloud Run Job está en 1800s para que entren los ~15
+//     minutos que tarda la vuelta completa.
+//
+// Uso local: DATABASE_URL=... TAPTAP_API_SECRET=... node src/jobs/taptap-sync.js
 'use strict'
 import { PrismaClient } from '@prisma/client'
 import { resolverMetodo } from './taptap/metodos.js'
-import { mapTurno } from './taptap/mapping.js'
+import { mapTurno, esTurnoAbierto } from './taptap/mapping.js'
 
 const prisma = new PrismaClient()
-const API_BASE_URL = 'https://function-dc-getturnos-679004960826.southamerica-east1.run.app/'
+const API_BASE_URL = 'https://function-gethisto-679004960826.southamerica-east1.run.app'
+const API_SECRET = process.env.TAPTAP_API_SECRET
+// Pausa entre locales para no pisar el rate limit por credencial (medido: 1/min).
+const RATE_MS = Number(process.env.TAPTAP_RATE_MS || 61000)
 
 // groupId de TapTap -> id_local de DCSmart. Agregar acá cuando se sume un local nuevo.
 const LOCALES_TAPTAP = [
@@ -28,6 +45,7 @@ const LOCALES_TAPTAP = [
   { groupId: 'bebop',            id_local: 'UYPLAVIG' },
   { groupId: 'casonaazopardo',   id_local: 'OLHGEOYQ' },  // ALDOS — POIUYTR (config original) no existe en la base
   { groupId: 'luckylouis',       id_local: 'd6944000-861e-43dd-a229-bee1c1533255' },  // LUCKY LOUIS
+  { groupId: 'donaldo',          id_local: '56ASFD4' },  // DON ALDO — alta 2026-08-16, historial migrado por CSV hasta el 13/08
 ]
 
 // El maxid que espera la API es NUMÉRICO. No alcanza con ordenar id_externo
@@ -83,16 +101,31 @@ async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
   if (!local_db) throw new Error(`Local ${local.id_local} no existe en la base`)
 
   const maxId = await obtenerMaxId(local.id_local)
-  const url = `${API_BASE_URL}?groupid=${local.groupId}&maxid=${maxId}`
-  const resp = await fetch(url)
-  if (!resp.ok) throw new Error(`API TapTap respondió ${resp.status}`)
+  const resp = await fetch(API_BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-secret': API_SECRET },
+    body: JSON.stringify({ maxperiodid: maxId, tienda: local.groupId, tabla: 'turnos' }),
+  })
+  if (!resp.ok) {
+    // El 400 pelado no distingue "Ratelimit superado" de "No autorizado": el
+    // cuerpo sí, y sin él el diagnóstico del 2026-08-16 hubiera sido a ciegas.
+    const cuerpo = await resp.text().catch(() => '')
+    throw new Error(`API TapTap respondió ${resp.status}${cuerpo ? `: ${cuerpo.slice(0, 200)}` : ''}`)
+  }
   const json = await resp.json()
+  // El rate limit y otros rechazos vienen como {status:'error', msg} -- sin
+  // esto, un "Ratelimit superado" pasaría por "0 turnos nuevos" y el hueco
+  // quedaría invisible hasta que el local supere los 10 turnos de la ventana.
+  if (json.status === 'error') throw new Error(`API TapTap: ${json.msg}`)
   const turnos = json.turnos || []
 
   let turnosNuevos = 0
   for (const turno of turnos) {
+    // El turno abierto todavía va a cambiar: si se inserta ahora, el dedup por
+    // id_externo bloquea la versión definitiva cuando cierre.
+    if (esTurnoAbierto(turno)) continue
     const yaExiste = await prisma.caja.findFirst({
-      where: { id_local: local.id_local, id_externo: String(turno.id) },
+      where: { id_local: local.id_local, id_externo: String(turno.turnoid ?? turno.id) },
       select: { id: true },
     })
     if (yaExiste) continue // idempotencia: turno ya sincronizado, se saltea completo
@@ -141,6 +174,7 @@ function localesAProcesar() {
 }
 
 async function main() {
+  if (!API_SECRET) throw new Error('Falta TAPTAP_API_SECRET (la API nueva exige x-api-secret)')
   const locales = localesAProcesar()
   if (locales.length !== LOCALES_TAPTAP.length) {
     console.log(`Corrida parcial: ${locales.map((l) => l.groupId).join(', ')}`)
@@ -150,8 +184,11 @@ async function main() {
   const cacheDetalleTipos = new Map()
   const resultado = {}
   let ok = true
+  let primero = true
 
   for (const local of locales) {
+    if (!primero) await new Promise((r) => setTimeout(r, RATE_MS))
+    primero = false
     try {
       resultado[local.id_local] = await procesarLocal(local, cacheMetodos, cacheDetalleTipos)
       console.log(`[${local.groupId}] ${resultado[local.id_local].turnosNuevos} turnos nuevos`)

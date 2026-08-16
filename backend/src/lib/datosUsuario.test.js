@@ -10,8 +10,8 @@ const HOY = new Date('2026-08-11T12:00:00Z')
 
 // ── departamentos ───────────────────────────────────────────────────────────
 
-test('los diez departamentos tienen etiqueta', () => {
-  assert.equal(DEPARTAMENTOS.length, 10)
+test('los once departamentos tienen etiqueta', () => {
+  assert.equal(DEPARTAMENTOS.length, 11)
   for (const d of DEPARTAMENTOS) {
     assert.ok(DEPARTAMENTO_LABEL[d], `${d} sin etiqueta`)
   }

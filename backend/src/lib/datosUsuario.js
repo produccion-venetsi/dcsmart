@@ -34,6 +34,7 @@ export const DEPARTAMENTOS = [
   'AUDITORIA',
   'MANTENIMIENTO',
   'DIRECCION',
+  'COSTOS',
 ]
 
 // Cómo se muestra cada uno. La clave va en mayúsculas sin acentos para que el valor
@@ -49,6 +50,7 @@ export const DEPARTAMENTO_LABEL = {
   AUDITORIA: 'Auditoría',
   MANTENIMIENTO: 'Mantenimiento',
   DIRECCION: 'Dirección',
+  COSTOS: 'Costos',
 }
 
 // Largos máximos, iguales a lo que aceptan las columnas.

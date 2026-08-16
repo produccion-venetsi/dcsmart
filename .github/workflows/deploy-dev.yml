@@ -38,6 +38,9 @@ jobs:
           # probar sin mandar a los usuarios de produccion a un entorno de prueba.
           # Si el secret de dev no esta cargado, cae al de produccion.
           VITE_COSTOS_URL: ${{ secrets.VITE_COSTOS_URL_DEV || secrets.VITE_COSTOS_URL }}
+          # DC-PLATAFORMA no tiene un site de prueba separado (Fase 8) -- el canal
+          # dev apunta directo al real, mismo criterio que VITE_API_URL de esta build.
+          VITE_TAREAS_URL: ${{ secrets.VITE_TAREAS_URL }}
 
       - name: Autenticar en Google Cloud
         uses: google-github-actions/auth@v2

@@ -281,9 +281,10 @@ const NAV_MAIN = [
   // rechaza con 403 a quien no tenga grant habilitado del lado de Costos.
   { key: 'costos', label: 'Costos', Icon: IcoCalculator, external: true },
   // Tareas (DC-PLATAFORMA) es OTRA app tambien (backend/base separados),
-  // mismo patron SSO que Costos. Visible para todos: el departamento
-  // (o su ausencia) se resuelve del lado de Tareas, no aca.
-  { key: 'tareas', label: 'Tareas', Icon: IcoTareas, external: true },
+  // mismo patron SSO que Costos. A diferencia de Costos, todavia no tiene
+  // deploy propio -- oculto hasta que VITE_TAREAS_URL apunte a algo real,
+  // para no mostrar un boton que hoy rompe (cae al default de localhost).
+  ...(import.meta.env.VITE_TAREAS_URL ? [{ key: 'tareas', label: 'Tareas', Icon: IcoTareas, external: true }] : [])
 ]
 
 const NAV_ADMIN = [
@@ -296,7 +297,9 @@ const NAV_ADMIN = [
   { to: '/admin/detalle-tipos', label: 'Tipos Detalle', Icon: IcoTag,     roles: ['super_admin', 'dcsmart'] },
   { to: '/auditorias',          label: 'Auditorías',    Icon: IcoAuditorias, roles: ['super_admin'] },
   { to: '/actividad',           label: 'Actividad',     Icon: IcoActivity,   roles: ['super_admin'] },
-  { to: '/caja-mayor',          label: 'Caja Mayor',    Icon: IcoCajaMayor,  roles: ['super_admin'] },
+  // Sin `roles`: se decide por permiso real (can_caja_mayor), como `documentos`
+  // en NAV_MAIN — ver el filtro de adminItemsPermitidos.
+  { key: 'caja_mayor', to: '/caja-mayor', label: 'Caja Mayor', Icon: IcoCajaMayor },
 ]
 
 export default function Sidebar() {
@@ -430,7 +433,12 @@ export default function Sidebar() {
   // Admin: independiente de la app activa -- evalúa TODAS las asignaciones
   // de rol del usuario, no la app elegida (para cuando no hay app activa).
   const globalRoleNames = (user?.user_app_roles ?? []).map(r => r.role?.nombre)
-  const adminItemsPermitidos = NAV_ADMIN.filter(item => !item.roles || item.roles.some(r => globalRoleNames.includes(r)))
+  const adminItemsPermitidos = NAV_ADMIN.filter(item => {
+    // Caja Mayor va por permiso real, no por rol: super_admin siempre, cualquier
+    // otro por can_caja_mayor (override individual del módulo, viene en my-apps).
+    if (item.key === 'caja_mayor') return globalRoleNames.includes('super_admin') || !!activeApp?.can_caja_mayor
+    return !item.roles || item.roles.some(r => globalRoleNames.includes(r))
+  })
 
   // Quien puede administrar ve el switch y un solo bloque a la vez. Quien no tiene
   // acceso a nada de admin no cambia de comportamiento: ve lo operativo, como antes.
@@ -492,7 +500,9 @@ export default function Sidebar() {
             <div style={{
               fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              color: role === 'super_admin' ? 'var(--gold, #C9B086)' : '#a78bfa',
+              // var(--purple) y no un violeta fijo: #a78bfa sobre el sidebar
+              // claro daba ~2.4x de contraste para un texto de 10px.
+              color: role === 'super_admin' ? 'var(--gold, #C9B086)' : 'var(--purple)',
               marginBottom: 4, opacity: 0.9,
             }}>
               {role === 'super_admin' ? '● Super Admin' : '● DCSmart'} — Acceso global

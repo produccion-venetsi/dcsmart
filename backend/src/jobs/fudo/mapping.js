@@ -23,12 +23,14 @@ export const esMovimientoDelJob = (tipo) => TIPOS_DEL_JOB.includes(tipo)
 
 const decimal = (n) => (Number(n) || 0).toFixed(2)
 
-export function mapDia({ ventas, incluidos, gastos = [], fecha, horaCorte = 6 }) {
+export function mapDia({ ventas, incluidos, gastos = [], gastosIncluidos = [], fecha, horaCorte = 6 }) {
   const cerradas = ventas.filter((v) => v.attributes.saleState === 'CLOSED')
   if (!cerradas.length) return null
 
+  // Los included de /expenses van al mismo índice: los ids de PaymentMethod
+  // son los mismos objetos en las dos respuestas de la misma cuenta.
   const idx = {}
-  for (const i of incluidos) idx[`${i.type}:${i.id}`] = i
+  for (const i of [...incluidos, ...gastosIncluidos]) idx[`${i.type}:${i.id}`] = i
 
   const { desde, hasta } = ventanaDia(fecha, horaCorte)
   const anuladas = ventas.length - cerradas.length
@@ -76,8 +78,20 @@ export function mapDia({ ventas, incluidos, gastos = [], fecha, horaCorte = 6 })
     tipo: 'COBRO', code, name: v.name, monto: decimal(v.monto), cantidad: v.cantidad,
   }))
   for (const g of gastos) {
+    if (g.attributes.canceled) continue // anulado: nunca salio de la caja
     if (!g.attributes.useInCashCount) continue // el resto no salio de la caja
-    movimientos.push({ tipo: 'GASTO', code: 'cash', name: 'Efectivo', monto: decimal(g.attributes.amount), cantidad: 1 })
+    // El metodo real del gasto viene por relationships.paymentMethod (pedirlo
+    // en fields[expense], ver api.js). Antes se cargaba todo como Efectivo
+    // fijo. Si la relacion no vino, Efectivo sigue siendo el fallback: es lo
+    // que significa useInCashCount.
+    const metodo = idx[`PaymentMethod:${g.relationships?.paymentMethod?.data?.id}`]?.attributes
+    movimientos.push({
+      tipo: 'GASTO',
+      code: metodo?.code ?? 'cash',
+      name: metodo?.name ?? 'Efectivo',
+      monto: decimal(g.attributes.amount),
+      cantidad: 1,
+    })
   }
 
   const observaciones = [`Fudo · día comercial ${fecha}`]
@@ -105,7 +119,10 @@ export function mapDia({ ventas, incluidos, gastos = [], fecha, horaCorte = 6 })
     // resuelvan por nombre contra el catalogo -- ver jobs/fudo/metodos.js.
     metodos: (() => {
       const vistos = new Map([...porCode.entries()].map(([code, v]) => [code, { code, name: v.name }]))
-      if (movimientos.some((m) => m.tipo === 'GASTO')) vistos.set('cash', { code: 'cash', name: 'Efectivo' })
+      // Los gastos aportan su propio metodo (ya no es siempre Efectivo).
+      for (const m of movimientos) {
+        if (m.tipo === 'GASTO' && !vistos.has(m.code)) vistos.set(m.code, { code: m.code, name: m.name })
+      }
       return [...vistos.values()]
     })(),
   }

@@ -310,7 +310,7 @@ export default async function pagosRoutes(fastify) {
 
     const local = await fastify.db.local.findUnique({
       where: { id: id_local },
-      select: { id: true, id_proveedor: true, descuento_movstock: true }
+      select: { id: true, id_proveedor: true, descuento_movstock: true, tipo_local: true }
     })
     if (!local) return reply.code(404).send({ error: 'Local no encontrado' })
 
@@ -321,6 +321,10 @@ export default async function pagosRoutes(fastify) {
       // que distinguir "0" de "0.00" ni parsear un string (un local en 0 es un
       // descuento pactado en cero, no un local sin configurar).
       descuento_movstock: local.descuento_movstock == null ? null : Number(local.descuento_movstock),
+      // El tipo del local alimenta el orden por afinidad de proveedores y
+      // rubcat en el formulario. Va acá y no en my-apps: el activeLocal del
+      // store persiste entre sesiones y quedaría desactualizado.
+      tipo_local: local.tipo_local,
     }
   })
 
