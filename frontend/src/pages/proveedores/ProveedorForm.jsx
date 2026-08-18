@@ -225,12 +225,9 @@ export default function ProveedorForm() {
                 <input type="text" placeholder="Ej: PROVEEDOR" value={form.tipo} onChange={e => set('tipo', e.target.value)} />
               </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Tipo de Local</label>
-              <div className="form-input-wrap">
-                <input type="text" placeholder="Ej: GASTRONOMICO" value={form.tipo_local} onChange={e => set('tipo_local', e.target.value)} />
-              </div>
-            </div>
+            {/* El campo viejo "Tipo de Local" (texto libre) se saco del form:
+                convivia con los checkboxes de abajo y la gente asignaba ahi,
+                donde no tiene ningun efecto. El dato historico queda en la base. */}
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
               <label className="form-label">¿Para qué tipo de local sirve?</label>
               <p style={{ margin: '0 0 8px', fontSize: 11.5, color: 'var(--t3)', lineHeight: 1.45 }}>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { rubrosApi, categoriasApi, rubcatApi } from '../../api/rubcat.js'
+import { TIPOS_LOCAL } from '../../lib/tiposLocal.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 
@@ -112,7 +113,7 @@ function NombreSection({ title, items, onSave, onDelete }) {
   )
 }
 
-const RC_EMPTY = { id_rub: '', id_cat: '', cuenta: '', tipo: '', costo: '', clasificacion: '' }
+const RC_EMPTY = { id_rub: '', id_cat: '', cuenta: '', tipo: '', costo: '', clasificacion: '', tipos_afines: [], es_general: false }
 
 export default function RubCat() {
   const notify      = useUiStore((s) => s.notify)
@@ -165,7 +166,12 @@ export default function RubCat() {
   const openCreate = () => { setSelectedRc(null); setRcForm(RC_EMPTY); setPanelOpen(true) }
   const openEdit   = (rc) => {
     setSelectedRc(rc)
-    setRcForm({ id_rub: rc.id_rub, id_cat: rc.id_cat, cuenta: rc.cuenta || '', tipo: rc.tipo || '', costo: rc.costo || '', clasificacion: rc.clasificacion || '' })
+    setRcForm({
+      id_rub: rc.id_rub, id_cat: rc.id_cat, cuenta: rc.cuenta || '', tipo: rc.tipo || '',
+      costo: rc.costo || '', clasificacion: rc.clasificacion || '',
+      // puede venir null en registros viejos (columna agregada despues)
+      tipos_afines: rc.tipos_afines ?? [], es_general: rc.es_general ?? false
+    })
     setPanelOpen(true)
   }
   const closePanel = () => setPanelOpen(false)
@@ -367,6 +373,43 @@ export default function RubCat() {
               <div className="form-input-wrap">
                 <input placeholder="Costo de Ventas" value={rcForm.clasificacion} onChange={e => setRcF('clasificacion', e.target.value)} />
               </div>
+            </div>
+            {/* Mismo bloque que el form de proveedores: ordena el buscador del
+                pago por afinidad con el tipo del local, nunca esconde nada. */}
+            <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+              <label className="form-label">¿Para qué tipo de local sirve?</label>
+              <p style={{ margin: '0 0 8px', fontSize: 11.5, color: 'var(--t3)', lineHeight: 1.45 }}>
+                Solo ordena el buscador: los rubros que aplican al local aparecen primero.
+                Nunca se esconde ninguno, así que si no estás seguro dejalo sin marcar.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.1rem' }}>
+                {TIPOS_LOCAL.map((t) => (
+                  <label key={t.value} className="checkbox-wrap">
+                    <input
+                      type="checkbox"
+                      checked={rcForm.tipos_afines.includes(t.value)}
+                      disabled={rcForm.es_general}
+                      onChange={(e) => setRcF(
+                        'tipos_afines',
+                        e.target.checked
+                          ? [...rcForm.tipos_afines, t.value]
+                          : rcForm.tipos_afines.filter((v) => v !== t.value)
+                      )}
+                    />
+                    <span className="checkbox-label">{t.label}</span>
+                  </label>
+                ))}
+              </div>
+              <label className="checkbox-wrap" style={{ marginTop: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={rcForm.es_general}
+                  onChange={(e) => setRcF('es_general', e.target.checked)}
+                />
+                <span className="checkbox-label">
+                  General — sirve a cualquier rubro (impuestos, servicios, alquileres)
+                </span>
+              </label>
             </div>
           </div>
           <div className="form-actions" style={{ marginTop: '1.5rem' }}>
