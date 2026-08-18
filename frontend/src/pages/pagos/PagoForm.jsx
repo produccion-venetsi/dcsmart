@@ -331,9 +331,12 @@ export default function PagoForm() {
           // El nombre del cliente viene en el include del pago: sin esto el
           // combobox abriría vacío y parecería que la op perdió el cliente.
           if (d.cliente) setCliSelected(d.cliente)
-        } else if (contexto?.id_proveedor) {
-          // Carga Avión y MovStock facturan contra el proveedor del propio
-          // local (la sociedad que factura por él), así que viene precargado.
+        } else if (contexto?.id_proveedor && modoRapido) {
+          // SOLO en los modos rápidos: Carga Avión y MovStock facturan contra
+          // el proveedor del propio local (la sociedad que factura por él),
+          // así que viene precargado. En el "nuevo pago" común ese default
+          // metía la razón social del local en pagos de cualquier proveedor
+          // cuando nadie tocaba el campo.
           const { data: prov } = await proveedoresApi.get(contexto.id_proveedor, ctrl.signal)
           setLocalProveedor(prov)
           setProvSelected(prov)
