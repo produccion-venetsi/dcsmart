@@ -9,6 +9,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import client from '../../api/client.js'
 import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { nombreCliente } from '../../lib/clientes.js'
@@ -1639,6 +1640,12 @@ export default function PagoForm() {
               onFileSelected={setFotoFile}
               onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null); setFallaLectura(null) }}
               uploading={uploadingFoto || leyendoTipo === 'foto'}
+              // En edición el adjunto guardado se trae por el endpoint firmado
+              // (la url cruda del bucket no es accesible) y se ve en el cuadro.
+              cargarContenido={isEditing ? async () => {
+                const r = await client.get(`/pagos/${id}/attachment?type=foto`, { responseType: 'blob' })
+                return URL.createObjectURL(r.data)
+              } : undefined}
             />
             <AdjuntoUpload
               label="PDF"
@@ -1648,6 +1655,10 @@ export default function PagoForm() {
               onFileSelected={setPdfFile}
               onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null); setFallaLectura(null) }}
               uploading={uploadingPdf || leyendoTipo === 'pdf'}
+              cargarContenido={isEditing ? async () => {
+                const r = await client.get(`/pagos/${id}/attachment?type=pdf`, { responseType: 'blob' })
+                return URL.createObjectURL(r.data)
+              } : undefined}
             />
           </div>
         </div>
