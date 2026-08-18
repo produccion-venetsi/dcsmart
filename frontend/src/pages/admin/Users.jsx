@@ -165,6 +165,11 @@ export default function Users() {
   const [editNombre,    setEditNombre]    = useState('')
   const [editSaving,    setEditSaving]    = useState(false)
 
+  // Asignar/resetear la contraseña de la cuenta desde la ficha. null = form
+  // cerrado; el objeto guarda el borrador mientras se escribe.
+  const [pwForm,   setPwForm]   = useState(null)
+  const [pwSaving, setPwSaving] = useState(false)
+
   // ── datos de la persona (departamento / rol / fecha de nac.) ──
   // Se editan en el panel con un Guardar propio, no campo por campo: son tres y
   // guardar de a uno serían tres PUT y tres avisos para completar una ficha.
@@ -283,6 +288,7 @@ export default function Users() {
     setShowRoleForm(false)
     setRoleForm(EMPTY_ROLE)
     setEditingNombre(false)
+    setPwForm(null)
     setPersonaForm(valoresPersona(u))
     setPanelOpen(true)
     usersApi.get(u.id).then(({ data }) => {
@@ -376,6 +382,28 @@ export default function Users() {
       notify('Error al actualizar', 'error')
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  // ── contraseña ────────────────────────────────────────────────────────────
+
+  const handleSavePassword = async (e) => {
+    e.preventDefault()
+    const pw = pwForm.password.trim()
+    if (pw.length < 8) { notify('La contraseña tiene que tener al menos 8 caracteres', 'error'); return }
+    if (pw !== pwForm.password2.trim()) { notify('Las contraseñas no coinciden', 'error'); return }
+    setPwSaving(true)
+    try {
+      // El backend hashea y ademas resetea last_login: asignar contraseña
+      // tambien destraba una cuenta frenada por inactividad.
+      await usersApi.update(selected.id, { password: pw })
+      notify('Contraseña asignada', 'success')
+      setPwForm(null)
+      await reloadSelected(selected.id)
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al asignar la contraseña', 'error')
+    } finally {
+      setPwSaving(false)
     }
   }
 
@@ -994,7 +1022,82 @@ export default function Users() {
                       : <span style={{ color: 'var(--t3)' }}>No vinculado</span>}
                   </span>
                 </div>
+                <div className="drawer-detail-row">
+                  <span className="drawer-detail-key">Contraseña</span>
+                  <span className="drawer-detail-val" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {selected.tiene_password
+                      ? <span className="bool-yes">● Asignada</span>
+                      : <span style={{ color: 'var(--t3)' }}>Sin contraseña{selected.google_id ? ' (entra solo con Google)' : ''}</span>}
+                    {amISuperAdmin && !pwForm && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => setPwForm({ password: '', password2: '', ver: false })}
+                      >
+                        {selected.tiene_password ? 'Cambiar' : 'Asignar contraseña'}
+                      </button>
+                    )}
+                  </span>
+                </div>
               </div>
+
+              {/* Form de contraseña: colapsado por defecto para que la ficha no
+                  invite a resetear claves de pasada. Solo super_admin. */}
+              {amISuperAdmin && pwForm && (
+                <form onSubmit={handleSavePassword} style={{ marginBottom: '1.25rem' }}>
+                  <div className="form-group" style={{ marginBottom: 8 }}>
+                    <label className="form-label" htmlFor={`pw-${selected.id}`}>Nueva contraseña</label>
+                    <div className="form-input-wrap" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        id={`pw-${selected.id}`}
+                        autoFocus
+                        type={pwForm.ver ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        value={pwForm.password}
+                        onChange={e => setPwForm({ ...pwForm, password: e.target.value })}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPwForm({ ...pwForm, ver: !pwForm.ver })}
+                        title={pwForm.ver ? 'Ocultar' : 'Mostrar'}
+                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--t3)', fontSize: 12, padding: '0 4px' }}
+                      >
+                        {pwForm.ver ? '🙈' : '👁'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 8 }}>
+                    <label className="form-label" htmlFor={`pw2-${selected.id}`}>Repetir contraseña</label>
+                    <div className="form-input-wrap">
+                      <input
+                        id={`pw2-${selected.id}`}
+                        type={pwForm.ver ? 'text' : 'password'}
+                        autoComplete="new-password"
+                        value={pwForm.password2}
+                        onChange={e => setPwForm({ ...pwForm, password2: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <p className="form-hint" style={{ margin: '0 0 10px' }}>
+                    Mínimo 8 caracteres. La persona va a poder entrar con esta contraseña
+                    {selected.google_id ? ' además de Google' : ''}; si la cuenta estaba frenada por
+                    inactividad, esto la destraba.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="submit"
+                      className="btn btn-sm btn-primary"
+                      disabled={pwSaving || pwForm.password.trim().length < 8 || pwForm.password.trim() !== pwForm.password2.trim()}
+                    >
+                      {pwSaving ? 'Guardando…' : 'Guardar contraseña'}
+                    </button>
+                    <button type="button" className="btn btn-sm btn-secondary" disabled={pwSaving} onClick={() => setPwForm(null)}>
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              )}
 
               {/* Permisos individuales. Reportes se ofrece solo a admins (como
                   siempre); Caja Mayor a cualquier usuario con rol que no sea

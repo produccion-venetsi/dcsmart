@@ -129,6 +129,7 @@ export default async function usersRoutes(fastify) {
       select: {
         id: true, email: true, nombre: true, avatar_url: true,
         activo: true, google_id: true, created_at: true, updated_at: true,
+        password_hash: true,
         ...CAMPOS_PERSONA,
         user_app_roles: { include: { app: true, role: true } },
         local_access: { include: { local: { select: { id: true, nombre: true } }, app: { select: { id: true } } } },
@@ -136,7 +137,10 @@ export default async function usersRoutes(fastify) {
       }
     })
     if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' })
-    return user
+    // Solo el booleano: la pantalla necesita saber si la cuenta tiene contraseña
+    // (o entra solo con Google), nunca el hash.
+    const { password_hash, ...resto } = user
+    return { ...resto, tiene_password: !!password_hash }
   })
 
   fastify.post('/', {
