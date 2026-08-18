@@ -3,7 +3,7 @@
 
 // Orden del enum TipoImpuesto en schema.prisma. Se respeta para que el archivo
 // tenga siempre las mismas columnas en el mismo orden entre exports.
-const ORDEN_TIPOS = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION']
+const ORDEN_TIPOS = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'PERC_IVA', 'PERC_IIBB']
 
 function montoDe(pago, tipo) {
   return (pago.impuestos ?? [])

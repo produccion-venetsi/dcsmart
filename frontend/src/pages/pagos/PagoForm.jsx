@@ -159,7 +159,9 @@ export default function PagoForm() {
   const [editingImpId,  setEditingImpId]  = useState(null)
   const [editImpForm,   setEditImpForm]   = useState({ tipo: 'IVA21', monto: '' })
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
-  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
+  // Sin PERCEPCION: se cargan separadas como PERC_IVA / PERC_IIBB. El tipo
+  // viejo sigue existiendo en la base por los pagos historicos.
+  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERC_IVA', 'PERC_IIBB', 'IMP_INTERNOS']
 
   // multimoneda (solo al crear — un único registro por pago)
   const [mmForm,  setMmForm]  = useState({ tipo: 'USD', tdc: '', monto: '' })
