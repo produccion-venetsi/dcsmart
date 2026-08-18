@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
-  dividirPorDireccion, depositadoPorLocal, extraidoPorLocal, netoDeFila, proporcion,
+  dividirPorDireccion, dividirPorEstado, depositadoPorLocal, extraidoPorLocal, netoDeFila, proporcion,
   pendienteDepositado, pendienteExtraido, tienePendiente, textoEstado,
 } from './cajaMayorVista.js'
 
@@ -190,4 +190,56 @@ test('CONTRATO: el estado sigue siendo ENVIADA / RECIBIDA', () => {
   assert.ok(m, 'no se encontro el enum EstadoCM')
   const valores = m[1].split('\n').map(s => s.trim()).filter(v => /^[A-Z_]+$/.test(v))
   assert.deepEqual(valores.sort(), ['ENVIADA', 'RECIBIDA'])
+})
+
+// ── División por ESTADO (pedido del Trello: la primera pantalla parte por
+// enviada/recibida, con la dirección adentro de cada lado) ──────────────────
+
+test('cada fila trae los dos lados por estado, con la direccion adentro', () => {
+  const v = dividirPorEstado([{
+    id_local: 'L1', local: 'ADA', moneda: 'ARS',
+    ingresos: 100, egresos: 50,
+    pendiente_ingresos: 40, pendiente_egresos: 10,
+    en_estudio: 2, ops: 5, ops_ingresos: 3, ops_egresos: 2,
+  }])
+  const f = v.filas[0]
+  // ENVIADA = lo que sigue sin confirmar
+  assert.equal(f.enviada_depositado, 40)
+  assert.equal(f.enviada_extraido, 10)
+  assert.equal(f.enviada_total, 50)
+  assert.equal(f.ops_enviada, 2)
+  // RECIBIDA = lo confirmado (total menos pendiente)
+  assert.equal(f.recibida_depositado, 60)
+  assert.equal(f.recibida_extraido, 40)
+  assert.equal(f.recibida_total, 100)
+  assert.equal(f.ops_recibida, 3)
+})
+
+test('EL CASO DE ADA al reves: todo RECIBIDA cae entero en el lado recibidas', () => {
+  const v = dividirPorEstado([{
+    id_local: 'L1', local: 'ADA', moneda: 'ARS',
+    ingresos: 200, egresos: 80,
+    pendiente_ingresos: 0, pendiente_egresos: 0,
+    en_estudio: 0, ops: 4, ops_ingresos: 2, ops_egresos: 2,
+  }])
+  const f = v.filas[0]
+  assert.equal(f.enviada_total, 0)
+  assert.equal(f.ops_enviada, 0)
+  assert.equal(f.recibida_total, 280)
+  assert.equal(f.ops_recibida, 4)
+  assert.equal(v.totalEnviada, 0)
+  assert.equal(v.totalRecibida, 280)
+})
+
+test('los totales del encabezado se conservan (direccion y neto)', () => {
+  const v = dividirPorEstado([{
+    id_local: 'L1', local: 'A', moneda: 'ARS',
+    ingresos: 100, egresos: 30, pendiente_ingresos: 20, pendiente_egresos: 0,
+    en_estudio: 1, ops: 3, ops_ingresos: 2, ops_egresos: 1,
+  }])
+  assert.equal(v.totalDepositado, 100)
+  assert.equal(v.totalExtraido, 30)
+  assert.equal(v.neto, 70)
+  assert.equal(v.totalPendiente, 20)
+  assert.equal(v.sinRecibir, 1)
 })
