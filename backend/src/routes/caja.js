@@ -4,6 +4,7 @@ import { toTipoTurnoEnum, fromTipoTurnoEnum, toTipoTurnoEnumList } from '../lib/
 import { parseCsvParam } from '../lib/queryParams.js'
 import { calcularCuadre } from '../lib/cuadreCaja.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
+import { parseMonto, parseEntero } from '../lib/montos.js'
 import { avisarDesauditado } from '../lib/avisos.js'
 
 // El estado de auditoría de una caja se guarda en la tabla `audits`
@@ -234,20 +235,33 @@ export default async function cajaRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso a este local' })
     }
 
+    // Cero es un valor real: un turno que cerró en $0 tiene que guardar 0, no
+    // null. Y un texto no numérico tiene que ser 400, no NaN camino a Prisma
+    // (nro_turno llegó a persistir el string "NaN").
+    const parsed = {}
+    for (const [campo, val, fn] of [
+      ['total', total, parseMonto], ['efectivo', efectivo, parseMonto], ['fiscal', fiscal, parseMonto],
+      ['comensales', comensales, parseEntero], ['tickets', tickets, parseEntero], ['nro_turno', nro_turno, parseEntero]
+    ]) {
+      const r = fn(val, { campo })
+      if (!r.ok) return reply.code(400).send({ error: r.error })
+      parsed[campo] = r.value
+    }
+
     const caja = await fastify.db.caja.create({
       data: {
-        nro_turno:    nro_turno    ? String(parseInt(nro_turno)) : null,
+        nro_turno:    parsed.nro_turno != null ? String(parsed.nro_turno) : null,
         tipo_turno:   toTipoTurnoEnum(tipo_turno),
         fecha_inicio: new Date(fecha_inicio),
         // Si no se carga cierre, se asume igual a la apertura (evita cajas
         // con fecha_cierre vacía).
         fecha_cierre: fecha_cierre ? new Date(fecha_cierre)      : new Date(fecha_inicio),
         id_local, cajero,
-        total:        total        ? parseFloat(total)           : null,
-        efectivo:     efectivo     ? parseFloat(efectivo)        : null,
-        fiscal:       fiscal       ? parseFloat(fiscal)          : null,
-        comensales:   comensales   ? parseInt(comensales)        : null,
-        tickets:      tickets      ? parseInt(tickets)           : null,
+        total:        parsed.total,
+        efectivo:     parsed.efectivo,
+        fiscal:       parsed.fiscal,
+        comensales:   parsed.comensales,
+        tickets:      parsed.tickets,
         observaciones, foto_url,
         origin: origin || 'DCSMART',
         created_by: request.user.id
@@ -277,20 +291,34 @@ export default async function cajaRoutes(fastify) {
       return reply.code(400).send({ error: 'fecha_inicio no puede quedar vacía' })
     }
 
+    // Mismo contrato que el POST: cero es un valor, '' es null, y lo no
+    // numérico es 400 (antes parseFloat('') pasaba NaN a Prisma → 500).
+    // `undefined` sigue significando "no tocar el campo".
+    const parsed = {}
+    for (const [campo, val, fn] of [
+      ['total', total, parseMonto], ['efectivo', efectivo, parseMonto], ['fiscal', fiscal, parseMonto],
+      ['comensales', comensales, parseEntero], ['tickets', tickets, parseEntero], ['nro_turno', nro_turno, parseEntero]
+    ]) {
+      if (val === undefined) { parsed[campo] = undefined; continue }
+      const r = fn(val, { campo })
+      if (!r.ok) return reply.code(400).send({ error: r.error })
+      parsed[campo] = r.value
+    }
+
     const caja = await fastify.db.caja.update({
       where: { id: request.params.id },
       data: {
-        nro_turno,
+        nro_turno:     parsed.nro_turno !== undefined ? (parsed.nro_turno != null ? String(parsed.nro_turno) : null) : undefined,
         tipo_turno:    tipo_turno    !== undefined ? toTipoTurnoEnum(tipo_turno) : undefined,
         fecha_inicio:  fecha_inicio  !== undefined ? new Date(fecha_inicio) : undefined,
         // Si se envía cierre vacío, se asume igual a la apertura (nunca queda vacío).
         fecha_cierre:  fecha_cierre  !== undefined ? (fecha_cierre ? new Date(fecha_cierre) : new Date(fecha_inicio || existing.fecha_inicio)) : undefined,
         cajero,
-        total:         total         !== undefined ? (total       !== null ? parseFloat(total)      : null) : undefined,
-        efectivo:      efectivo      !== undefined ? (efectivo    !== null ? parseFloat(efectivo)   : null) : undefined,
-        fiscal:        fiscal        !== undefined ? (fiscal      !== null ? parseFloat(fiscal)      : null) : undefined,
-        comensales:    comensales    !== undefined ? (comensales  !== null ? parseInt(comensales)    : null) : undefined,
-        tickets:       tickets       !== undefined ? (tickets     !== null ? parseInt(tickets)       : null) : undefined,
+        total:         parsed.total,
+        efectivo:      parsed.efectivo,
+        fiscal:        parsed.fiscal,
+        comensales:    parsed.comensales,
+        tickets:       parsed.tickets,
         observaciones, foto_url
       }
     })
