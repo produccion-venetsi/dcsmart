@@ -22,6 +22,7 @@ import { nombreProveedor, razonSocialExtra } from '../../lib/proveedorLabel.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, siguienteDescuento, TIPO_MOVSTOCK } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
 import { opcionesMetodos } from '../../lib/metodosSelect.js'
+import { mensajeCatalogo } from '../../lib/catalogos.js'
 import { cashflowAutomatico, siguienteCashflow, soloFecha, ayudaCashflow } from '../../lib/cashflowPago.js'
 import CampoCuit from '../../components/CampoCuit.jsx'
 
@@ -134,6 +135,12 @@ export default function PagoForm() {
   // Método guardado en el pago que se edita: si quedó inactivo ya no viene en
   // el catálogo y sin esto el select se vería en blanco (ver lib/metodosSelect).
   const [metodoOriginal,  setMetodoOriginal]  = useState(null)
+  // El catálogo de métodos falló: mensaje persistente bajo el select (un toast
+  // efímero no alcanza cuando el formulario queda inutilizable sin métodos).
+  const [errorMetodos,    setErrorMetodos]    = useState(null)
+  // El pago a editar no se pudo cargar: guardar pisaría el pago real con un
+  // formulario virgen, así que se bloquea el submit.
+  const [pagoNoCargado,   setPagoNoCargado]   = useState(false)
   const [rubros,          setRubros]          = useState([])
   const [categorias,      setCategorias]      = useState([])
   const [loading,         setLoading]         = useState(false)
@@ -287,7 +294,11 @@ export default function PagoForm() {
         draftReadyRef.current = true
         // Editar sin los datos del pago es peor que no abrir el formulario: se
         // guardaría un pago existente con los campos en blanco.
-        if (fallas.pago) { notify('Error al cargar datos', 'error'); return }
+        if (fallas.pago) {
+          setPagoNoCargado(true)
+          notify('No se pudo cargar el pago: no se puede editar hasta recargar la página', 'error')
+          return
+        }
         // El contexto sí es opcional: sin él se sigue cargando a mano, con el
         // descuento general. Antes su 403 se llevaba puestos los métodos de pago.
         if (fallas.contexto) notify('No se pudo leer la configuración del local: revisá proveedor y descuento', 'info')
@@ -333,7 +344,10 @@ export default function PagoForm() {
             pagado:         d.pagado,
             fecha_pago:     toDateTimeLocalInput(d.fecha_pago),
             periodo:        d.periodo    ? d.periodo.slice(0, 10)    : '',
-            estado_op:      d.estado_op      || 'CUENTA CTE',
+            // 'CUENTA_CTE' con guion bajo: es el valor del enum. El fallback
+            // anterior ('CUENTA CTE', con espacio) no matcheaba ninguna option
+            // (select en blanco) y el PUT rebotaba contra el enum de Prisma.
+            estado_op:      d.estado_op      || 'CUENTA_CTE',
             id_cliente:     d.id_cliente     || '',
             ingresa_egreso: d.ingresa_egreso,
             periodico:      d.periodico      ?? false,
@@ -374,7 +388,14 @@ export default function PagoForm() {
           setLocalProveedor(false)
         }
       })
-      .catch(() => { if (!ctrl.signal.aborted) { draftReadyRef.current = true; notify('Error al cargar datos', 'error') } })
+      .catch((err) => {
+        if (ctrl.signal.aborted) return
+        draftReadyRef.current = true
+        // Acá solo cae la falla de métodos: cargarArranquePago propaga esa y
+        // maneja las demás como `fallas`. Sin métodos el formulario no se puede
+        // completar, así que el aviso queda fijo bajo el select, con reintento.
+        setErrorMetodos(mensajeCatalogo(err, 'los métodos de pago'))
+      })
 
     return () => ctrl.abort()
   }, [id])
@@ -838,8 +859,16 @@ export default function PagoForm() {
     } catch (err) { notify(err.response?.data?.error || 'Error al eliminar el impuesto', 'error') }
   }
 
+  const reintentarMetodos = () => {
+    setErrorMetodos(null)
+    metodosApi.list()
+      .then(r => setMetodos(r.data || []))
+      .catch(err => setErrorMetodos(mensajeCatalogo(err, 'los métodos de pago')))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (pagoNoCargado) { notify('El pago no se cargó: recargá la página antes de editar', 'error'); return }
     if (!activeLocal && !form.id_local) { notify('Seleccioná un local', 'error'); return }
     if (!form.fecha)     { notify('La fecha es obligatoria', 'error'); return }
     if (!form.id_rubcat) { notify('El rubro / categoría es obligatorio', 'error'); return }
@@ -1151,6 +1180,12 @@ export default function PagoForm() {
                   ).map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                 </select>
               </div>
+              {errorMetodos && (
+                <p style={{ color: 'var(--red)', fontSize: '0.8rem', marginTop: 4 }}>
+                  {errorMetodos}{' '}
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={reintentarMetodos}>Reintentar</button>
+                </p>
+              )}
             </div>
           </div>
 
@@ -1690,7 +1725,7 @@ export default function PagoForm() {
         </div>
 
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={loading}>
+          <button type="submit" className="btn btn-primary" disabled={loading || pagoNoCargado}>
             {loading
               ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</>
               : isEditing ? 'Actualizar Pago' : 'Crear Pago'}
