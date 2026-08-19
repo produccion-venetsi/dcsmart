@@ -840,7 +840,7 @@ export function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, can
   )
 }
 
-export function CajaEditPanel({ cajaId, onSaved, onBack }) {
+export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const [form,   setForm]   = useState(null)
@@ -895,6 +895,8 @@ export function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const loadRelacionales = (idLocal) => {
     cajasApi.get(cajaId).then(({ data }) => {
       setDetalles(data.detalles || [])
+
+  useEffect(() => { onCuadre?.(cuadreVivo) }, [cuadreVivo, onCuadre])
       setMovimientos(data.movimientos || [])
     }).catch(() => notify('Error al cargar detalles/movimientos', 'error'))
     detallesApi.tipos(idLocal)
@@ -1056,7 +1058,7 @@ export function CajaEditPanel({ cajaId, onSaved, onBack }) {
       {/* Primero del cuerpo y `sticky`: queda a la vista mientras se scrollea el
           formulario. Antes vivia dentro del grid y el scroll se lo comia justo cuando mas
           importa, cargando el quinto movimiento. */}
-      <CuadreVivo cuadre={cuadreVivo} origin={origin} />
+      {!onCuadre && <CuadreVivo cuadre={cuadreVivo} origin={origin} />}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1.25rem' }}>
         <button type="button" className="btn btn-secondary btn-sm" onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>

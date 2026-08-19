@@ -61,7 +61,7 @@ function IcoTrash() {
   )
 }
 
-export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
+export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClose, onCuadre }) {
   const notify = useUiStore((s) => s.notify)
   const [form,      setForm]    = useState(EMPTY_CAJA)
   const [localId,   setLocalId] = useState(activeLocal?.id || '')
@@ -106,6 +106,10 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
       metodo_pago: { nombre: metodos.find((x) => x.id === m.id_metodo)?.nombre },
     })),
   }), [form.total, form.efectivo, pendingDetalles, pendingMovimientos, metodos])
+
+  // El padre (la pantalla completa B+C) pinta el panel de cuadre en su propia
+  // columna: se le publica el calculo en vez de duplicarlo.
+  useEffect(() => { onCuadre?.(cuadreVivo) }, [cuadreVivo, onCuadre])
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -212,7 +216,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   return (
     <form onSubmit={handleCreate}>
       {/* Pegado al tope del drawer: se ve mientras se carga todo lo de abajo. */}
-      <CuadreVivo cuadre={cuadreVivo} origin="DCSMART" />
+      {!onCuadre && <CuadreVivo cuadre={cuadreVivo} origin="DCSMART" />}
 
       <div className="drawer-section-title">1 · Lo que vendiste</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>

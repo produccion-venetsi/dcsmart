@@ -4027,3 +4027,27 @@ th.sortable.active .sort-ico { opacity: 1; color: var(--gold-bright); }
   background: var(--gold);
   color: #1a1710;
 }
+
+
+/* ── Diseño B+C: alta y edición de caja en pantalla completa ──────────────
+   Dos columnas en escritorio (formulario + panel de cuadre sticky a la
+   derecha); en celular el panel pasa ARRIBA como banner fijo compacto y el
+   desglose se pliega para no tapar la carga. */
+.bc-grid { display: flex; gap: 1.25rem; align-items: flex-start; }
+.bc-form { flex: 3 1 560px; min-width: 0; }
+.bc-lado { flex: 1.2 1 280px; max-width: 380px; position: sticky; top: 1rem; }
+.bc-panel { display: flex; flex-direction: column; gap: 10px; }
+.bc-panel details.bc-desglose > summary { display: none; }
+
+@media (max-width: 860px) {
+  .bc-grid { flex-wrap: wrap; }
+  .bc-lado {
+    order: -1; flex: 1 1 100%; max-width: none;
+    position: sticky; top: 0; z-index: 25;
+    background: var(--bg-app); padding-bottom: 6px;
+  }
+  /* En celular el desglose y las ayudas se pliegan: el banner queda compacto. */
+  .bc-panel details.bc-desglose > summary { display: block; }
+  .bc-panel details.bc-desglose:not([open]) > div { display: none; }
+  .bc-panel .bc-quemirar, .bc-panel .bc-gastos { display: none; }
+}
