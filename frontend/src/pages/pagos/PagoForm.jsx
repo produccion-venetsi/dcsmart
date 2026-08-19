@@ -273,6 +273,12 @@ export default function PagoForm() {
       contexto: pideContexto ? pagosApi.contextoLocal(activeLocal.id, ctrl.signal) : null,
     })
       .then(async ({ metodos: mets, pago: d, contexto, fallas }) => {
+        // Una carga abortada no es una falla que haya que avisar: cargarArranquePago
+        // usa allSettled, asi que la peticion cancelada vuelve como `rejected` y
+        // marcaba fallas.contexto. Al remontarse el formulario (StrictMode en dev,
+        // o cualquier desmontaje) salia el aviso azul "revisá proveedor y descuento"
+        // de la ejecucion abortada mientras la buena precargaba el proveedor bien.
+        if (ctrl.signal.aborted) return
         setMetodos(mets)
         draftReadyRef.current = true
         // Editar sin los datos del pago es peor que no abrir el formulario: se
