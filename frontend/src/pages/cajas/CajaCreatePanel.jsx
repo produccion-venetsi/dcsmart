@@ -6,6 +6,7 @@ import { calcularCuadre } from '../../lib/cuadreCaja.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { mensajeCatalogo } from '../../lib/catalogos.js'
+import { enterEjecuta } from '../../lib/formularios.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
@@ -330,7 +331,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </table>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+      <div onKeyDown={enterEjecuta(addPendingDetalle)} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Clasificación *</label>
           <ClasificacionSelect
@@ -392,7 +393,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </table>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+      <div onKeyDown={enterEjecuta(addPendingMovimiento)} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Tipo</label>
           <div className="form-input-wrap">

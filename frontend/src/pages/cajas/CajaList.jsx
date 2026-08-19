@@ -6,6 +6,7 @@ import { detallesApi } from '../../api/detalles.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { opcionesMetodos } from '../../lib/metodosSelect.js'
 import { mensajeCatalogo } from '../../lib/catalogos.js'
+import { enterEjecuta } from '../../lib/formularios.js'
 import { puedeEditar, puedeBorrarCajas, puedeCrearCajas } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -1227,7 +1228,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin detalles</div>
       )}
       {addingDet && (
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1.5rem' }} onKeyDown={enterEjecuta(() => handleAddDet({ preventDefault: () => {} }))}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Clasificación *</label>
@@ -1345,7 +1346,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin movimientos</div>
       )}
       {addingMov && (
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1.5rem' }} onKeyDown={enterEjecuta(() => handleAddMov({ preventDefault: () => {} }))}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Tipo</label>
