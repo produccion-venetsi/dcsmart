@@ -593,7 +593,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                         />
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button className="btn btn-sm btn-primary" disabled={savingDetEdit} onClick={() => handleSaveDet(d.id)}>Guardar</button>
@@ -667,7 +667,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
-              <input type="number" step="0.01" required placeholder="0.00" value={newDet.monto} onChange={e => setNewDet({ ...newDet, monto: e.target.value })} />
+              <input type="number" step="0.01" min="0" required placeholder="0.00" value={newDet.monto} onChange={e => setNewDet({ ...newDet, monto: e.target.value })} />
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -721,7 +721,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                         </select>
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td>
                         <input type="number" min="1" step="1" style={{ maxWidth: 70 }} value={editMovForm.cantidad} onChange={e => setEditMovForm(f => ({ ...f, cantidad: e.target.value }))} />
@@ -782,7 +782,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
-              <input type="number" step="0.01" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
+              <input type="number" step="0.01" min="0" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -1186,7 +1186,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                         />
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button type="button" className="btn btn-sm btn-primary" disabled={savingDetEdit} onClick={() => handleSaveDet(d.id)}>Guardar</button>
@@ -1256,7 +1256,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
               <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={newDet.monto} onChange={e => setNewDet(f => ({ ...f, monto: e.target.value }))} />
+                <input type="number" step="0.01" min="0" placeholder="0.00" value={newDet.monto} onChange={e => setNewDet(f => ({ ...f, monto: e.target.value }))} />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1308,7 +1308,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                         </select>
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td>
                         <input type="number" min="1" step="1" style={{ maxWidth: 70 }} value={editMovForm.cantidad} onChange={e => setEditMovForm(f => ({ ...f, cantidad: e.target.value }))} />
@@ -1366,7 +1366,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
               <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={newMov.monto} onChange={e => setNewMov(f => ({ ...f, monto: e.target.value }))} />
+                <input type="number" step="0.01" min="0" placeholder="0.00" value={newMov.monto} onChange={e => setNewMov(f => ({ ...f, monto: e.target.value }))} />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>

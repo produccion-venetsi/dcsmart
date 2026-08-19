@@ -352,7 +352,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Monto</label>
           <div className="form-input-wrap">
-            <input type="number" step="0.01" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
+            <input type="number" step="0.01" min="0" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
@@ -412,7 +412,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Monto</label>
           <div className="form-input-wrap">
-            <input type="number" step="0.01" placeholder="0.00" value={movForm.monto} onChange={e => setMovForm(f => ({ ...f, monto: e.target.value }))} />
+            <input type="number" step="0.01" min="0" placeholder="0.00" value={movForm.monto} onChange={e => setMovForm(f => ({ ...f, monto: e.target.value }))} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>

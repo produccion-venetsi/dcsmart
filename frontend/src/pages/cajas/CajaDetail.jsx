@@ -317,7 +317,7 @@ export default function CajaDetail() {
                           </select>
                         </td>
                         <td>
-                          <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                          <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
                         </td>
                         <td className="td-muted">{m.cantidad ?? '—'}</td>
                         <td style={{ display: 'flex', gap: 4 }}>
@@ -383,7 +383,7 @@ export default function CajaDetail() {
               <div className="form-group">
                 <label className="form-label">Monto *</label>
                 <div className="form-input-wrap">
-                  <input type="number" step="0.01" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
+                  <input type="number" step="0.01" min="0" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
                 </div>
               </div>
             </div>
