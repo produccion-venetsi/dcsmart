@@ -35,7 +35,7 @@ import { multiParam } from '../../lib/filtros.js'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
 // describirCuadre / colorCuadre / faltaParaCuadrar se fueron a components/CuadreVivo.jsx,
 // que es el unico que pinta el cuadre ahora.
-import { calcularCuadre } from '../../lib/cuadreCaja.js'
+import { calcularCuadre } from '../../lib/cuadreVenta.js'
 
 // EMPTY_CAJA se fue con CajaCreatePanel: era el estado inicial del alta y este
 // listado ya no lo usa.

@@ -26,10 +26,14 @@ export default function CuadreVivo({ cuadre, origin }) {
 
   return (
     <div className={`cuadre-vivo cuadre-vivo-sticky cuadre-${estado}`}>
+      {/* La cuenta es la de la VENTA: todo lo vendido tiene que estar explicado
+          por alguna forma de cobro, incluida la que quedó a deber. Los gastos y
+          los retiros no van acá -- mueven la plata del cajón, no cambian lo
+          vendido; eso se lee abajo, en el circuito del efectivo. */}
       <div className="cuadre-vivo-cuentas">
         <span>Efectivo <strong>{fmtMonto(cuadre.efectivo)}</strong></span>
-        <span>+ Cobros <strong>{fmtMonto(cuadre.cobros)}</strong></span>
-        {cuadre.gastos > 0 && <span>− Gastos <strong>{fmtMonto(cuadre.gastos)}</strong></span>}
+        <span>+ Otros cobros <strong>{fmtMonto(cuadre.cobros)}</strong></span>
+        {cuadre.no_cobrado > 0 && <span>+ A cobrar <strong>{fmtMonto(cuadre.no_cobrado)}</strong></span>}
         <span className="cuadre-vivo-igual">= <strong>{fmtMonto(cuadre.esperado)}</strong></span>
       </div>
       {/* El estado, en grande y con el color del semaforo: verde cuadra, ROJO no cuadra.
@@ -43,11 +47,24 @@ export default function CuadreVivo({ cuadre, origin }) {
         <strong>{leyenda.texto}</strong>
         {falta > 0 && <strong className="cuadre-vivo-falta"> {fmtMonto(falta)}</strong>}
       </div>
+      {/* El circuito de la plata física, que es otra pregunta: cuánto tendría
+          que haber en el cajón al cerrar. Solo se muestra si el origen informa
+          los movimientos de caja (Fudo no expone fondo inicial ni retiros, y
+          las cajas manuales rara vez los cargan). */}
+      {cuadre.efectivo_fisico?.disponible && (
+        <div className="cuadre-vivo-cuentas" style={{ opacity: 0.85, fontSize: '0.92em' }}>
+          <span>En el cajón:</span>
+          {cuadre.efectivo_fisico.inicial > 0 && <span>inicial <strong>{fmtMonto(cuadre.efectivo_fisico.inicial)}</strong></span>}
+          <span>+ cobrado <strong>{fmtMonto(cuadre.efectivo_fisico.cobrado)}</strong></span>
+          {cuadre.efectivo_fisico.gastos > 0 && <span>− gastos <strong>{fmtMonto(cuadre.efectivo_fisico.gastos)}</strong></span>}
+          {cuadre.efectivo_fisico.retiros > 0 && <span>− retiros <strong>{fmtMonto(cuadre.efectivo_fisico.retiros)}</strong></span>}
+          {cuadre.efectivo_fisico.vaciados > 0 && <span>− vaciados <strong>{fmtMonto(cuadre.efectivo_fisico.vaciados)}</strong></span>}
+          <span className="cuadre-vivo-igual">= <strong>{fmtMonto(cuadre.efectivo_fisico.queda)}</strong></span>
+        </div>
+      )}
       <div className="cuadre-vivo-fuente">
-        {/* De dónde sale la cuenta: en una caja de TapTap los detalles no cuentan, y sin
-            decirlo el número parece estar mal. */}
-        según {cuadre.fuente === 'movimientos' ? 'los movimientos' : 'los detalles'}
-        {origin && origin !== 'DCSMART' ? ` (${origin})` : ''}
+        la venta tiene que estar explicada por lo que se cobró
+        {origin && origin !== 'DCSMART' ? ` · ${origin}` : ''}
       </div>
     </div>
   )

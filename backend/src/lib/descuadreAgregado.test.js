@@ -40,9 +40,14 @@ test('una diferencia de dos pesos ya es descuadre', () => {
 })
 
 test('el descuadre tiene en cuenta cobros y gastos de los detalles', () => {
-  // Por detalles los gastos restan: esperado = 500 + 300 - 100 = 700.
+  // En carga manual el campo `efectivo` es lo que QUEDÓ en el cajón, ya neteado
+  // del gasto que se pagó con esa misma plata. Para reconstruir lo cobrado hay
+  // que devolvérselo: 500 + 100 = 600 de efectivo cobrado, más 300 de MP QR,
+  // da una venta de 900. Ver lib/cuadreVenta.js -- antes este mismo caso
+  // esperaba 700 (los gastos restaban) y por eso las cajas con gastos
+  // cargados casi nunca cuadraban.
   const c = {
-    total: 700, efectivo: 500, movimientos: [],
+    total: 900, efectivo: 500, movimientos: [],
     detalles: [
       { tipo: 'cobro', monto: 300, detalle_tipo: { nombre: 'MP QR', clasificacion: 'cobro' } },
       { tipo: 'gasto', monto: 100, detalle_tipo: { nombre: 'Fletes', clasificacion: 'gasto' } },
@@ -51,7 +56,7 @@ test('el descuadre tiene en cuenta cobros y gastos de los detalles', () => {
   assert.equal(agregarDescuadre([c]).cantidad_cajas, 0)
 
   // Y con un total distinto, descuadra.
-  assert.equal(agregarDescuadre([{ ...c, total: 900 }]).cantidad_cajas, 1)
+  assert.equal(agregarDescuadre([{ ...c, total: 700 }]).cantidad_cajas, 1)
 })
 
 test('cajas null en la lista no rompen', () => {

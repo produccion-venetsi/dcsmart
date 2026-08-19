@@ -5,7 +5,8 @@
 // justamente porque antes habia dos copias divergentes de esta regla y la misma
 // caja mostraba diferencias distintas segun desde donde se la mirara.
 
-import { calcularCuadre, TOLERANCIA, ROL_POR_CLASIFICACION } from './cuadreCaja.js'
+import { TOLERANCIA, ROL_POR_CLASIFICACION } from './cuadreCaja.js'
+import { calcularCuadre } from './cuadreVenta.js'
 
 const num = (v) => {
   const n = Number(v)
