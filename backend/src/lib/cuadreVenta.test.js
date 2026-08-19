@@ -19,6 +19,19 @@ test('no confunde un canal de venta con venta no cobrada', () => {
   }
 })
 
+// Cuando el detalle sale del catálogo, su `nombre` queda null y el nombre real
+// vive en el tipo -- así los guarda el sync de TapTap, que es justo donde la
+// venta fiada importa. Mirar solo `d.nombre` la hacía invisible.
+test('la venta fiada se reconoce aunque el nombre venga del tipo del catalogo', () => {
+  const r = calcularCuadreVenta({
+    total: 1000, efectivo: 300, origin: 'TAPTAP',
+    movimientos: [mov('COBRO', 300, 'Efectivo'), mov('COBRO', 600, 'MP Point')],
+    detalles: [{ monto: 100, tipo: 'informativo', nombre: null, detalle_tipo: { nombre: 'Cta Cte', clasificacion: 'informativo' } }],
+  })
+  assert.equal(r.no_cobrado, 100)
+  assert.equal(r.cuadra, true)
+})
+
 // ── Cuadre de VENTA ───────────────────────────────────────────────────────
 
 test('la venta se explica con el efectivo cobrado y los cobros no efectivo', () => {
@@ -151,4 +164,27 @@ test('solo cuenta el efectivo: un gasto pagado con tarjeta no sale del cajon', (
 test('sin movimientos de caja el circuito de efectivo no se puede armar', () => {
   const r = calcularEfectivoFisico({ efectivo: 500, origin: 'DCSMART', movimientos: [], detalles: [] })
   assert.equal(r.disponible, false)
+})
+
+// Fudo informa cobros y gastos pero NO fondo inicial, retiros ni vaciados: con
+// eso no se puede decir cuánto quedó en el cajón.
+test('con solo cobros y gastos el circuito sigue incompleto', () => {
+  const r = calcularEfectivoFisico({
+    efectivo: 200, origin: 'FFUDO',
+    movimientos: [mov('COBRO', 200, 'Efectivo'), mov('GASTO', 12, 'Efectivo')], detalles: []
+  })
+  assert.equal(r.disponible, false)
+})
+
+// El ejemplo 908: el retiro se anotó como movimiento pero el cobro en efectivo
+// vive en el campo. Mirando solo los movimientos, el cajón daba -150.000.
+test('el cajon no queda negativo cuando el cobro en efectivo no es un movimiento', () => {
+  const r = calcularEfectivoFisico({
+    efectivo: 200000, origin: 'DCSMART',
+    movimientos: [mov('COBRO', 100000, 'Tarjeta de Crédito'), mov('RETIRO', 150000, 'Efectivo')],
+    detalles: []
+  })
+  assert.equal(r.cobrado, 200000)
+  assert.equal(r.queda, 50000)
+  assert.ok(r.queda >= 0)
 })

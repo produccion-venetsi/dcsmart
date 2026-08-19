@@ -52,6 +52,17 @@ export function esVentaNoCobrada(nombre) {
   return RE_NO_COBRADA.test(String(nombre ?? ''))
 }
 
+// Cómo se llama un detalle. Cuando sale del catálogo el nombre vive en el tipo
+// y el campo propio queda en null -- que es como los guarda el sync de TapTap.
+// Mirar solo `d.nombre` hacía que la venta fiada no se reconociera justo en las
+// cajas donde más importa: se descubrió con las cajas de ejemplo de Local
+// Testing, donde "Cta Cte" existe como tipo y el detalle quedaba sin nombre.
+export function nombreDeDetalle(detalle) {
+  return detalle?.nombre ?? detalle?.detalle_tipo?.nombre ?? ''
+}
+
+const detalleEsNoCobrado = (d) => esVentaNoCobrada(nombreDeDetalle(d))
+
 const movs = (caja) => caja?.movimientos ?? []
 const dets = (caja) => caja?.detalles ?? []
 
@@ -77,10 +88,10 @@ export function calcularCuadreVenta(caja) {
   // como detalle (carga manual). Se suman los dos: un local puede usar ambos y
   // hasta ahora se ignoraba uno entero según el origen.
   const noEfectivoMovs = suma(movs(caja), (m) => m.tipo === 'COBRO' && !esEfectivo(m.metodo_pago?.nombre))
-  const noEfectivoDets = suma(dets(caja), (d) => rolDeDetalle(d) === 'cobro' && !esVentaNoCobrada(d.nombre))
+  const noEfectivoDets = suma(dets(caja), (d) => rolDeDetalle(d) === 'cobro' && !detalleEsNoCobrado(d))
   const cobrosNoEfectivo = noEfectivoMovs + noEfectivoDets
 
-  const noCobrado = suma(dets(caja), (d) => esVentaNoCobrada(d.nombre))
+  const noCobrado = suma(dets(caja), detalleEsNoCobrado)
 
   const esperado = efectivo + cobrosNoEfectivo + noCobrado
 
@@ -112,13 +123,24 @@ export function calcularEfectivoFisico(caja) {
   const porTipo = (t) => suma(movs(caja), (m) => m.tipo === t && enEfectivo(m))
 
   const inicial = porTipo('INICIAL')
-  const cobrado = porTipo('COBRO')
   const gastos = porTipo('GASTO')
   const retiros = porTipo('RETIRO')
   const vaciados = porTipo('VACIADO')
 
+  // El cobro en efectivo se toma de la MISMA fuente que el cuadre de venta: si
+  // solo mirara los movimientos, una caja que anota el retiro como movimiento
+  // pero el cobro en el campo daría un cajón negativo (pasó con el ejemplo 908:
+  // −150.000, un imposible que nadie sabría interpretar).
+  const cobrado = efectivoCobrado(caja)
+
+  // El circuito solo se puede cerrar si el origen informa lo que SACA plata del
+  // cajón. Fudo no expone fondo inicial, retiros ni vaciados, y las cajas
+  // manuales rara vez los cargan: ahí "lo que queda" sería un número que
+  // parece un dato y no lo es.
+  const tieneCircuito = movs(caja).some((m) => ['INICIAL', 'RETIRO', 'VACIADO'].includes(m.tipo))
+
   return {
-    disponible: movs(caja).length > 0,
+    disponible: tieneCircuito,
     inicial, cobrado, gastos, retiros, vaciados,
     queda: inicial + cobrado - gastos - retiros - vaciados,
   }
@@ -142,7 +164,7 @@ export function calcularCuadre(caja) {
   // para poder mostrarlos sin que nadie los sume por error.
   const informativos = suma(
     dets(caja),
-    (d) => rolDeDetalle(d) === 'informativo' && !esVentaNoCobrada(d.nombre)
+    (d) => rolDeDetalle(d) === 'informativo' && !detalleEsNoCobrado(d)
   )
 
   return {
