@@ -30,6 +30,8 @@
 // Elegir la fuente mirando "si tiene movimientos cargados" fue un bug real: una caja
 // no-TapTap con un gasto suelto por movimiento hacía ignorar $3.559.398 en detalles.
 
+import { estadoDescuadre } from './estadoDescuadre.js'
+
 export const TOLERANCIA = 1
 
 export const ROL_POR_CLASIFICACION = {
@@ -133,7 +135,7 @@ export function calcularCuadre(caja) {
 
   // Sin total cargado no hay nada contra qué comparar.
   if (caja.total == null || caja.total === '') {
-    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null }
+    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null, estado: 'sin_total' }
   }
 
   const total = num(caja.total)
@@ -143,6 +145,7 @@ export function calcularCuadre(caja) {
     fuente, efectivo, cobros, gastos, informativos, esperado, total, diferencia,
     // Positiva = el total declarado es mayor que lo que suman los componentes.
     cuadra: Math.abs(diferencia) <= TOLERANCIA,
+    estado: estadoDescuadre(diferencia)
   }
 }
 

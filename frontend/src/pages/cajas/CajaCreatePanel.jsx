@@ -214,6 +214,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
       {/* Pegado al tope del drawer: se ve mientras se carga todo lo de abajo. */}
       <CuadreVivo cuadre={cuadreVivo} origin="DCSMART" />
 
+      <div className="drawer-section-title">1 · Lo que vendiste</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
@@ -273,7 +274,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           {/* No es un dato informativo: el arqueo del local lo suma como el efectivo
               del periodo. El texto vive en lib/camposCaja.js porque el mismo campo se
               carga en el alta y en la edicion. */}
-          <p className="form-hint" style={{ margin: '4px 0 0' }}>{AYUDA_EFECTIVO}</p>
+          <p className="form-hint" style={{ margin: '4px 0 0' }}>Solo billetes: tarjetas y apps van abajo como cobros. {AYUDA_EFECTIVO}</p>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fiscal</label>
@@ -309,7 +310,10 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </div>
         </div>
       </div>
-      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Detalles (opcional)</div>
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>2 · Cómo te lo pagaron, gastos y demás</div>
+      <p className="form-hint" style={{ margin: '0 0 0.6rem' }}>
+        Una línea por cada cosa: elegí la clasificación (cobro, gasto o informativo) y el monto. La suma de efectivo + cobros tiene que dar el total.
+      </p>
       {pendingDetalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">

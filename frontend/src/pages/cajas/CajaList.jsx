@@ -152,21 +152,25 @@ const BADGE_ORIGEN = { DCSMART: 'badge-blue', TAPTAP: 'badge-purple', FFUDO: 'ba
 // Semáforo del cuadre en la tabla: ✅ cuadra, ⚠️ no cuadra, guión cuando no se
 // puede saber (una caja sin total cargado no tiene contra qué comparar).
 // El cálculo llega hecho del backend en `caja.cuadre` (lib/cuadreCaja.js).
-function IcoCuadre({ cuadra }) {
-  if (cuadra == null) return <span className="td-muted">—</span>
-  return (
-    <span style={{ color: cuadra ? 'var(--green)' : 'var(--amber)', fontSize: 13 }}>
-      {cuadra ? '✅' : '⚠️'}
-    </span>
-  )
+// Los tres estados del usuario (lib/estadoDescuadre): correcto en verde,
+// menor en ámbar (hasta $2.000: vuelto/propina), incorrecto en rojo.
+function IcoCuadre({ cuadre }) {
+  const estado = cuadre?.estado ?? (cuadre?.cuadra == null ? 'sin_total' : cuadre.cuadra ? 'correcto' : 'incorrecto')
+  if (estado === 'sin_total') return <span className="td-muted">—</span>
+  const cfg = {
+    correcto:   { clase: 'badge-green', texto: 'Correcto' },
+    menor:      { clase: 'badge-amber', texto: 'Menor' },
+    incorrecto: { clase: 'badge-red',   texto: 'Incorrecto' },
+  }[estado]
+  return <span className={`badge ${cfg.clase}`}>{cfg.texto}</span>
 }
 
 function tituloCuadre(cuadre) {
   if (!cuadre) return 'Sin datos para calcular el cuadre'
   if (cuadre.cuadra == null) return 'Sin total cargado: no hay contra qué comparar'
-  const base = `Efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)}`
-    + `${cuadre.gastos ? ` − gastos ${fmt$(cuadre.gastos)}` : ''} = ${fmt$(cuadre.esperado)}`
-    + ` vs. total declarado ${fmt$(cuadre.total)}. Los cobros salen de los ${cuadre.fuente} de esta caja.`
+  const base = `Efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)} = ${fmt$(cuadre.esperado)}`
+    + ` vs. total declarado ${fmt$(cuadre.total)}.`
+    + `${cuadre.gastos ? ` Gastos aparte: ${fmt$(cuadre.gastos)}.` : ''}`
   if (cuadre.cuadra) return `Cuadra. ${base}`
   const signo = cuadre.diferencia > 0 ? 'sobra' : 'falta'
   return `No cuadra: ${signo} ${fmt$(Math.abs(cuadre.diferencia))}. ${base}`
@@ -1889,7 +1893,7 @@ export default function CajaList() {
                       </span>
                     </td>
                     <td style={{ textAlign: 'center' }} title={tituloCuadre(c.cuadre)}>
-                      <IcoCuadre cuadra={c.cuadre?.cuadra} />
+                      <IcoCuadre cuadre={c.cuadre} />
                     </td>
                     <td>{fmtDate(c.fecha_inicio)}</td>
                     <td>{c.cajero || <span className="td-muted">—</span>}</td>

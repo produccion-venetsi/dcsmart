@@ -37,6 +37,8 @@
 // Un peso. La tolerancia anterior era de un centavo y marcaba como descuadre
 // diferencias de $0,01 que son redondeo de Decimal, no errores de carga: no
 // circulan centavos. Diferencias reales de tipeo empiezan en la unidad.
+import { estadoDescuadre } from './estadoDescuadre.js'
+
 export const TOLERANCIA = 1
 
 // Rol de cada clasificacion de detalle. Las tres primeras son las vigentes; el
@@ -156,7 +158,7 @@ export function calcularCuadre(caja) {
 
   // Sin total cargado no hay nada contra que comparar
   if (caja.total == null) {
-    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null }
+    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null, estado: 'sin_total' }
   }
 
   const total = num(caja.total)
@@ -172,6 +174,8 @@ export function calcularCuadre(caja) {
     total,
     diferencia,
     // Positiva = el total declarado es mayor que lo que suman los componentes
-    cuadra: Math.abs(diferencia) <= TOLERANCIA
+    cuadra: Math.abs(diferencia) <= TOLERANCIA,
+    // Los tres estados del usuario: correcto / menor (hasta $2.000) / incorrecto.
+    estado: estadoDescuadre(diferencia)
   }
 }

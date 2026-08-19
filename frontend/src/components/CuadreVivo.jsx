@@ -1,57 +1,68 @@
-// El cuadre de la caja mientras se carga, pegado arriba.
+// El cuadre de la caja mientras se carga, pegado arriba (sticky): es el banner
+// del diseño B+C. En celular queda arriba de todo mientras se scrollea; en
+// escritorio acompaña el formulario.
 //
-// Estaba dentro del formulario de edición, como un campo más del grid: se lo comía el
-// scroll y quien cargaba movimientos dejaba de verlo justo cuando importa. Ahora va
-// `sticky` al tope del cuerpo del drawer, así que queda a la vista todo el tiempo, y lo
-// usan el alta y la edición.
+// Muestra los TRES estados del descuadre (correcto / menor / incorrecto) como
+// semáforo, con el umbral a la vista, y el mensaje de cada estado sale de
+// lib/estadoDescuadre.js — la misma regla que usan el backend y los reportes.
 //
-// Es sticky y no un prop del header de DrawerPanel a propósito: los datos del cuadre viven
-// dentro de cada panel y se recalculan con cada tecla. Subirlos al padre para que los pinte
-// el header obligaría a re-renderizar el listado de cajas entero en cada pulsación.
-//
-// El cálculo NO está acá: sale de lib/cuadreCaja.js, que es el espejo del backend.
+// El cálculo NO está acá: sale de lib/cuadreCaja.js, espejo del backend.
 
-// El formateador vive en lib/cajaMayor.js: mismo criterio (separador de miles y los
-// decimales siempre, para que no parezca redondeado).
 import { fmtMonto } from '../lib/cajaMayor.js'
-import { describirCuadre, faltaParaCuadrar } from '../lib/cuadreCaja.js'
+import { estadoDescuadre, describirEstado, UMBRAL_MENOR } from '../lib/estadoDescuadre.js'
+
+const SEGMENTOS = [
+  { id: 'correcto', label: 'correcto', sub: '$0' },
+  { id: 'menor', label: 'menor', sub: `hasta $${UMBRAL_MENOR.toLocaleString('es-AR')}` },
+  { id: 'incorrecto', label: 'incorrecto', sub: `+ de $${UMBRAL_MENOR.toLocaleString('es-AR')}` },
+]
+
+const COLOR = {
+  correcto: 'var(--green)',
+  menor: 'var(--amber)',
+  incorrecto: 'var(--red)',
+  sin_total: 'var(--t3)',
+}
 
 export default function CuadreVivo({ cuadre, origin }) {
   if (!cuadre) return null
-  const leyenda = describirCuadre(cuadre)
-  const falta = faltaParaCuadrar(cuadre)
-  // Tres estados y no dos: mientras no hay total cargado no se sabe si cuadra, y pintarlo
-  // rojo seria marcar un error que todavia no existe.
-  const estado = leyenda.tono === 'ok' ? 'cuadra' : leyenda.tono === 'alerta' ? 'no-cuadra' : 'sin-datos'
+  const estado = cuadre.estado ?? estadoDescuadre(cuadre.diferencia)
+  const leyenda = describirEstado(estado, cuadre.diferencia)
+  // Clase histórica del cartel: verde/rojo/gris del CSS existente. "menor" usa
+  // el tinte de alerta suave.
+  const claseEstado = estado === 'correcto' ? 'cuadra' : estado === 'sin_total' ? 'sin-datos' : 'no-cuadra'
 
   return (
-    <div className={`cuadre-vivo cuadre-vivo-sticky cuadre-${estado}`}>
-      {/* Modelo simple: la venta se explica con efectivo + cobros. El gasto no
-          cambia lo vendido (salió plata del cajón, no venta), así que se
-          muestra aparte y no dentro de la suma. */}
+    <div className={`cuadre-vivo cuadre-vivo-sticky cuadre-${claseEstado}`} style={estado === 'menor' ? { background: 'var(--amber-bg)', borderColor: 'var(--amber-border)' } : undefined}>
+      {/* La cuenta de la venta: efectivo + cobros. El gasto no participa (salió
+          plata del cajón, no cambia lo vendido) y se informa aparte. */}
       <div className="cuadre-vivo-cuentas">
         <span>Efectivo <strong>{fmtMonto(cuadre.efectivo)}</strong></span>
         <span>+ Cobros <strong>{fmtMonto(cuadre.cobros)}</strong></span>
         <span className="cuadre-vivo-igual">= <strong>{fmtMonto(cuadre.esperado)}</strong></span>
+        {cuadre.total != null && <span style={{ opacity: 0.75 }}>vs. vendido <strong>{fmtMonto(cuadre.total)}</strong></span>}
         {cuadre.gastos > 0 && <span style={{ opacity: 0.75 }}>· gastos aparte <strong>{fmtMonto(cuadre.gastos)}</strong></span>}
       </div>
-      {/* El estado, en grande y con el color del semaforo: verde cuadra, ROJO no cuadra.
-          El monto que falta va PEGADO al texto y en el mismo tamano -- "faltan $1.000" dice
-          que buscar, mientras que "diferencia -1000" hay que pensarlo. */}
-      {/* Sin `style` de color: lo pone el CSS segun la clase del cartel, porque el color
-          depende del fondo tintado sobre el que se lee (ver --cuadre-*-texto). El gris del
-          estado "sin datos" sale del color base del bloque. */}
-      <div className="cuadre-vivo-estado">
-        <span className="cuadre-vivo-marca" aria-hidden="true">{estado === 'cuadra' ? '✓' : estado === 'no-cuadra' ? '!' : '·'}</span>
-        <strong>{leyenda.texto}</strong>
-        {falta > 0 && <strong className="cuadre-vivo-falta"> {fmtMonto(falta)}</strong>}
+
+      <div className="cuadre-vivo-estado" style={estado === 'menor' ? { color: 'var(--amber)' } : undefined}>
+        <span className="cuadre-vivo-marca" aria-hidden="true">{estado === 'correcto' ? '✓' : estado === 'sin_total' ? '·' : '!'}</span>
+        <strong>{leyenda.titulo}</strong>
       </div>
-      <div className="cuadre-vivo-fuente">
-        {/* De dónde sale la cuenta: en una caja de TapTap los detalles no cuentan, y sin
-            decirlo el número parece estar mal. */}
-        según {cuadre.fuente === 'movimientos' ? 'los movimientos' : 'los detalles'}
-        {origin && origin !== 'DCSMART' ? ` (${origin})` : ''}
+
+      {/* Semáforo de los tres estados, con el umbral a la vista. */}
+      <div style={{ display: 'flex', gap: 4, marginTop: 7 }} aria-hidden="true">
+        {SEGMENTOS.map((s) => (
+          <div key={s.id} style={{ flex: 1 }}>
+            <div style={{ height: 5, borderRadius: 4, background: estado === s.id ? COLOR[s.id] : 'rgba(255,255,255,0.10)' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 2, color: estado === s.id ? COLOR[s.id] : 'var(--t4)' }}>
+              <span>{s.label}</span><span>{s.sub}</span>
+            </div>
+          </div>
+        ))}
       </div>
+
+      {/* El mensaje del estado, en lenguaje llano. El de "menor" tranquiliza. */}
+      <div className="cuadre-vivo-fuente" style={{ marginTop: 6 }}>{leyenda.detalle}</div>
     </div>
   )
 }
