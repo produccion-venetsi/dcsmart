@@ -299,6 +299,7 @@ model Cliente {
   // caja (una venta que se anotó en su cuenta en vez de cobrarse). Ver
   // lib/cuentaCorrienteCaja.js.
   caja_detalles CajaDetalle[]
+  caja_lineas   CajaLinea[]
 
   @@index([id_app])
   @@map("clientes")
@@ -556,6 +557,7 @@ model MetodoPago {
   activo Boolean @default(true)
 
   caja_movimientos CajaMovimiento[]
+  caja_lineas      CajaLinea[]
   pagos            Pago[]
 
   @@map("metodos_pago")
@@ -585,6 +587,7 @@ model Caja {
   local       Local            @relation(fields: [id_local], references: [id])
   creador     User?            @relation("CajaCreatedBy", fields: [created_by], references: [id])
   movimientos CajaMovimiento[]
+  lineas      CajaLinea[]
   detalles    CajaDetalle[]
 
   @@index([id_local, fecha_inicio])
@@ -610,6 +613,7 @@ model DetalleTipo {
   app             App             @relation(fields: [id_app], references: [id])
   local           Local?          @relation(fields: [id_local], references: [id])
   detalles        CajaDetalle[]
+  lineas          CajaLinea[]
   arqueo_detalles ArqueoDetalle[]
 
   @@unique([nombre, id_app])
@@ -743,6 +747,76 @@ model CajaMovimiento {
   // Ver el comentario en CajaDetalle: mismo motivo. Medido: 2,1 ms -> 0,44 ms.
   @@index([id_caja])
   @@map("caja_movimientos")
+}
+
+// ── EXPERIMENTAL (lab) ──────────────────────────────────────────────────────
+// Una sola tabla para lo que hoy son CajaMovimiento y CajaDetalle.
+//
+// Las dos tablas guardan lo mismo -- una linea de plata con un monto y un
+// concepto -- y se separaron por historia, no por una diferencia real: un
+// movimiento COBRO y un detalle clasificado 'cobro' son la misma cosa contada
+// en dos lugares. Esa dualidad es la que obliga al cuadre a elegir una fuente
+// y descartar la otra, y la que deja al que carga por detalles sin donde poner
+// un gasto (485 gastos como movimiento contra 16 como detalle).
+//
+// La categoria vive en la FILA y no se hereda del catalogo: hoy el 78% de los
+// detalles no tiene clasificacion propia y la saca del tipo, que en TapTap
+// queda en 'otro' porque el sync lo crea sin clasificar.
+model CajaLinea {
+  id            String        @id @default(uuid())
+  id_caja       String
+  categoria     CategoriaLinea
+  monto         Decimal       @db.Decimal(12, 2)
+
+  // De los movimientos: con que medio se movio la plata.
+  id_metodo     String?
+  cantidad      Int?
+  // De los detalles: como se llama el concepto.
+  id_tipo       String?
+  nombre        String?
+  id_cliente    String?
+  observaciones String?
+
+  // De donde salio esta fila al migrar. Sirve para poder volver atras y para
+  // auditar la conversion; en filas nuevas queda null.
+  migrada_de    String?
+
+  created_at    DateTime      @default(now())
+
+  caja         Caja         @relation(fields: [id_caja], references: [id])
+  metodo_pago  MetodoPago?  @relation(fields: [id_metodo], references: [id])
+  detalle_tipo DetalleTipo? @relation(fields: [id_tipo], references: [id])
+  cliente      Cliente?     @relation(fields: [id_cliente], references: [id])
+
+  @@index([id_caja])
+  @@map("caja_lineas")
+}
+
+enum CategoriaLinea {
+  // Entra plata por una venta.
+  COBRO
+  // Venta entregada y NO cobrada: cuenta corriente, mesa abierta, a cobrar.
+  // Es categoria propia y no un nombre porque el cuadre la necesita explicita:
+  // detectarla por el texto del detalle fallaba cuando el nombre venia del
+  // catalogo y la fila lo tenia en null.
+  FIADO
+  // Sale plata del cajon para pagar algo.
+  GASTO
+  // Fondo con el que se abre el turno.
+  INICIAL
+  // Sale plata del cajon hacia otro lado (la lleva el encargado).
+  RETIRO
+  // Se rinde a la caja fuerte o se acredita la terminal.
+  VACIADO
+  // Entra plata que no es una venta.
+  INGRESO
+  // Ajuste informado por el origen (los "diffs" de TapTap).
+  DIFERENCIA
+  // Desglose de algo ya contado: canales de venta, totales por familia.
+  // No suma en ninguna cuenta.
+  INFORMATIVO
+
+  @@map("categoria_linea")
 }
 
 model Pago {
