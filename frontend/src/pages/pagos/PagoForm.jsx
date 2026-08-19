@@ -21,6 +21,7 @@ import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFr
 import { nombreProveedor, razonSocialExtra } from '../../lib/proveedorLabel.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, siguienteDescuento, TIPO_MOVSTOCK } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
+import { opcionesMetodos } from '../../lib/metodosSelect.js'
 import { cashflowAutomatico, siguienteCashflow, soloFecha, ayudaCashflow } from '../../lib/cashflowPago.js'
 import CampoCuit from '../../components/CampoCuit.jsx'
 
@@ -130,6 +131,9 @@ export default function PagoForm() {
   const ahoraDateTime = nowDateTimeLocalInput()
 
   const [metodos,         setMetodos]         = useState([])
+  // Método guardado en el pago que se edita: si quedó inactivo ya no viene en
+  // el catálogo y sin esto el select se vería en blanco (ver lib/metodosSelect).
+  const [metodoOriginal,  setMetodoOriginal]  = useState(null)
   const [rubros,          setRubros]          = useState([])
   const [categorias,      setCategorias]      = useState([])
   const [loading,         setLoading]         = useState(false)
@@ -312,6 +316,7 @@ export default function PagoForm() {
             setRubcatSelected(d.rubcat)
           }
           setSavedImp(d.impuestos || [])
+          if (d.id_metodo) setMetodoOriginal({ id: d.id_metodo, nombre: d.metodo_pago?.nombre })
           setForm({
             fecha:          d.fecha      ? d.fecha.slice(0, 10)      : '',
             id_proveedor:   d.id_proveedor   || '',
@@ -1139,7 +1144,11 @@ export default function PagoForm() {
               <div className="form-input-wrap">
                 <select required className={marcadoIA('id_metodo').trim()} value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
                   <option value="">Seleccioná un método…</option>
-                  {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                  {opcionesMetodos(
+                    metodos,
+                    form.id_metodo,
+                    metodoOriginal?.id === form.id_metodo ? metodoOriginal?.nombre : undefined
+                  ).map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                 </select>
               </div>
             </div>

@@ -4,6 +4,7 @@ import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { opcionesMetodos } from '../../lib/metodosSelect.js'
 import { puedeEditar, puedeBorrarCajas, puedeCrearCajas } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -714,7 +715,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
-                          {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                          {opcionesMetodos(metodos, editMovForm.id_metodo, m.metodo_pago?.nombre).map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>
                       </td>
                       <td>
@@ -1301,7 +1302,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
-                          {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                          {opcionesMetodos(metodos, editMovForm.id_metodo, m.metodo_pago?.nombre).map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>
                       </td>
                       <td>
