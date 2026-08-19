@@ -81,6 +81,77 @@ export default async function proveedoresRoutes(fastify) {
     return proveedor
   })
 
+  // ── GET /:id/resumen ──────────────────────────────────────────────────
+  // La actividad del proveedor: cuanto se le pago, desde cuando, en que
+  // locales y las ultimas ordenes. Es lo que convierte la ficha en algo util
+  // -- los campos sueltos (CBU, mail, tag) casi siempre estan vacios.
+  //
+  // Lleva appContext a proposito, a diferencia del resto de la ruta: el
+  // catalogo de proveedores es global, pero SUS PAGOS no. Sin el recorte por
+  // allowedLocalIds, un admin de un grupo veria los totales de otro.
+  fastify.get('/:id/resumen', {
+    preHandler: [fastify.authenticate, fastify.appContext, fastify.can('proveedores', 'view')]
+  }, async (request, reply) => {
+    const proveedor = await fastify.db.proveedor.findUnique({
+      where: { id: request.params.id }, select: { id: true }
+    })
+    if (!proveedor) return reply.code(404).send({ error: 'Proveedor no encontrado' })
+
+    const where = { id_proveedor: proveedor.id, id_local: { in: request.allowedLocalIds } }
+    const [agg, ultimos, porLocalRaw, sinPagar] = await Promise.all([
+      fastify.db.pago.aggregate({
+        where, _count: { _all: true }, _sum: { importe: true },
+        _min: { fecha: true }, _max: { fecha: true },
+      }),
+      fastify.db.pago.findMany({
+        where, orderBy: { fecha: 'desc' }, take: 5,
+        select: {
+          id: true, nro_ord: true, fecha: true, importe: true, pagado: true,
+          id_tipo: true, local: { select: { nombre: true } },
+        },
+      }),
+      fastify.db.pago.groupBy({
+        by: ['id_local'], where, _count: { _all: true }, _sum: { importe: true },
+      }),
+      fastify.db.pago.aggregate({
+        where: { ...where, pagado: false }, _count: { _all: true }, _sum: { importe: true },
+      }),
+    ])
+
+    // Los nombres de local no vienen en un groupBy: se piden aparte.
+    const idsLocal = porLocalRaw.map(g => g.id_local)
+    const locales = idsLocal.length
+      ? await fastify.db.local.findMany({
+        where: { id: { in: idsLocal } },
+        select: { id: true, nombre: true, app: { select: { nombre: true } } },
+      })
+      : []
+    const nombreLocal = new Map(locales.map(l => [l.id, l]))
+
+    return {
+      pagos: agg._count._all,
+      total: Number(agg._sum.importe ?? 0),
+      primer_pago: agg._min.fecha,
+      ultimo_pago: agg._max.fecha,
+      pendientes: sinPagar._count._all,
+      total_pendiente: Number(sinPagar._sum.importe ?? 0),
+      por_local: porLocalRaw
+        .map(g => ({
+          id_local: g.id_local,
+          local: nombreLocal.get(g.id_local)?.nombre ?? '—',
+          grupo: nombreLocal.get(g.id_local)?.app?.nombre ?? null,
+          pagos: g._count._all,
+          total: Number(g._sum.importe ?? 0),
+        }))
+        .sort((a, b) => b.total - a.total),
+      ultimos: ultimos.map(pg => ({
+        id: pg.id, nro_ord: pg.nro_ord, fecha: pg.fecha,
+        importe: Number(pg.importe ?? 0), pagado: pg.pagado,
+        id_tipo: pg.id_tipo, local: pg.local?.nombre ?? null,
+      })),
+    }
+  })
+
   fastify.post('/', {
     preHandler: [fastify.authenticate, fastify.can('proveedores', 'create')]
   }, async (request, reply) => {
