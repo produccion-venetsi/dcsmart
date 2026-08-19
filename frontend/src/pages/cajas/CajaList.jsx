@@ -10,7 +10,6 @@ import { enterEjecuta } from '../../lib/formularios.js'
 import { puedeEditar, puedeBorrarCajas, puedeCrearCajas } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
-import DrawerPanel from '../../components/DrawerPanel.jsx'
 import CuadreVivo from '../../components/CuadreVivo.jsx'
 import FotoViewer from '../../components/FotoViewer.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
@@ -29,10 +28,10 @@ import { nombreCliente } from '../../lib/clientes.js'
 import { downloadExcel } from '../../lib/excel.js'
 import { fmtDateArg, fmtDateTimeArg, toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, todayInputDate } from '../../lib/dates.js'
 import MultiSelect from '../../components/MultiSelect.jsx'
-import CajaCreatePanel from './CajaCreatePanel.jsx'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
 import { multiParam } from '../../lib/filtros.js'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
+import PistaTurno, { PistaPromedio } from '../../components/PistaTurno.jsx'
 // describirCuadre / colorCuadre / faltaParaCuadrar se fueron a components/CuadreVivo.jsx,
 // que es el unico que pinta el cuadre ahora.
 import { calcularCuadre } from '../../lib/cuadreCaja.js'
@@ -220,625 +219,10 @@ const CAJA_CSV_COLUMNS = [
 // de lib/desgloses.js — la misma que suma los grupos, para que el total de la
 // tabla y la suma de sus grupos no puedan divergir.
 
-export function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
-  const notify      = useUiStore((s) => s.notify)
-  const showConfirm = useUiStore((s) => s.showConfirm)
-  const showPrompt  = useUiStore((s) => s.showPrompt)
-  const [caja,       setCaja]      = useState(null)
-  const [loading,    setLoading]   = useState(true)
-  const [metodos,    setMetodos]   = useState([])
-  const [tipos,      setTipos]     = useState([])
-  const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
-  const [saving,     setSaving]    = useState(false)
-  const [addingMov,  setAddingMov] = useState(false)
-  const [newDet,     setNewDet]    = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
-  const [savingDet,  setSavingDet] = useState(false)
-  const [addingDet,  setAddingDet] = useState(false)
-  const [editingMovId, setEditingMovId] = useState(null)
-  const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
-  const [savingMovEdit, setSavingMovEdit] = useState(false)
-  const [editingDetId, setEditingDetId] = useState(null)
-  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
-  const [savingDetEdit, setSavingDetEdit] = useState(false)
-  const [auditando,  setAuditando] = useState(false)
-  const [auditandoDc, setAuditandoDc] = useState(false)
-  const [auditHistory, setAuditHistory] = useState([])
-  const [loadingHistory, setLoadingHistory] = useState(true)
-
-  const load = () => {
-    setLoading(true)
-    cajasApi.get(cajaId)
-      .then(({ data }) => setCaja(data))
-      .catch(() => notify('Error al cargar caja', 'error'))
-      .finally(() => setLoading(false))
-  }
-
-  const loadAuditHistory = () => {
-    setLoadingHistory(true)
-    cajasApi.auditHistory(cajaId)
-      .then(({ data }) => setAuditHistory(data))
-      .catch(() => {})
-      .finally(() => setLoadingHistory(false))
-  }
-
-  useEffect(() => {
-    if (!cajaId) return
-    load()
-    loadAuditHistory()
-    metodosApi.list()
-      .then(r => setMetodos(r.data || []))
-      .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
-  }, [cajaId])
-
-  // El catálogo se pide con o sin local. GET /caja-detalles/tipos ya devuelve los
-  // tipos del grupo (id_local null) y le SUMA los del local cuando se le pasa uno,
-  // así que cortar la llamada por no tener local dejaba el combo vacío teniendo 25
-  // tipos disponibles. En LOS GALGOS los 25 son del grupo: sin local igual salen.
-  useEffect(() => {
-    detallesApi.tipos(caja?.id_local)
-      .then(r => setTipos(r.data || []))
-      .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
-  }, [caja?.id_local, notify])
-
-  const handleAddMov = async (e) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      await movimientosApi.create({
-        tipo:      newMov.tipo,
-        id_metodo: newMov.id_metodo || null,
-        monto:     parseFloat(newMov.monto),
-        id_caja:   cajaId,
-        cantidad:  newMov.cantidad ? parseInt(newMov.cantidad) : null
-      })
-      notify('Movimiento agregado', 'success')
-      setNewMov({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
-      setAddingMov(false)
-      load()
-    } catch (err) { notify(err.response?.data?.error || 'Error al agregar movimiento', 'error') }
-    finally { setSaving(false) }
-  }
-
-  const handleDeleteMov = async (movId) => {
-    if (!(await showConfirm('¿Eliminar movimiento?'))) return
-    try { await movimientosApi.remove(movId); notify('Eliminado', 'success'); load() }
-    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
-  }
-
-  const handleAddDet = async (e) => {
-    e.preventDefault()
-    setSavingDet(true)
-    try {
-      await detallesApi.create({
-        id_caja:       cajaId,
-        id_tipo:       newDet.id_tipo       || null,
-        clasificacion: newDet.clasificacion || null,
-        nombre:        newDet.id_tipo ? null : (newDet.nombre || null),
-        monto:         parseFloat(newDet.monto),
-        observaciones: newDet.observaciones || null,
-        id_cliente:    newDet.id_cliente    || null
-      })
-      notify('Detalle agregado', 'success')
-      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
-      setAddingDet(false)
-      load()
-    } catch { notify('Error al agregar detalle', 'error') }
-    finally { setSavingDet(false) }
-  }
-
-  const handleDeleteDet = async (detId) => {
-    if (!(await showConfirm('¿Eliminar detalle?'))) return
-    try { await detallesApi.remove(detId); notify('Eliminado', 'success'); load() }
-    catch (err) { notify(err.response?.data?.error || 'Error al eliminar', 'error') }
-  }
-
-  const handleEditMov = (m) => {
-    setEditingMovId(m.id)
-    setEditMovForm({ tipo: m.tipo, id_metodo: m.id_metodo || '', monto: String(m.monto), cantidad: m.cantidad != null ? String(m.cantidad) : '' })
-  }
-
-  const handleSaveMov = async (movId) => {
-    if (!editMovForm.monto) return
-    setSavingMovEdit(true)
-    try {
-      await movimientosApi.update(movId, {
-        tipo:      editMovForm.tipo,
-        id_metodo: editMovForm.id_metodo || null,
-        monto:     parseFloat(editMovForm.monto),
-        cantidad:  editMovForm.cantidad ? parseInt(editMovForm.cantidad) : null
-      })
-      notify('Movimiento actualizado', 'success')
-      setEditingMovId(null)
-      load()
-    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar', 'error') }
-    finally { setSavingMovEdit(false) }
-  }
-
-  const handleEditDet = (d) => {
-    setEditingDetId(d.id)
-    setEditDetForm({
-      id_tipo:       d.id_tipo || '',
-      clasificacion: normalizarClasificacion(clasificacionDeDetalle(d)),
-      nombre:        d.detalle_tipo?.nombre || d.nombre || '',
-      monto:         String(d.monto),
-      observaciones: d.observaciones || '',
-      // La cuenta a la que ya estaba cargado. El objeto entero y no solo el id: el
-      // combobox necesita el nombre para abrir con lo que habia.
-      id_cliente:    d.cliente?.id || '',
-      cliente:       d.cliente || null
-    })
-  }
-
-  const handleSaveDet = async (detId) => {
-    if (!editDetForm.monto) return
-    setSavingDetEdit(true)
-    try {
-      await detallesApi.update(detId, {
-        id_tipo:       editDetForm.id_tipo || null,
-        clasificacion: editDetForm.clasificacion || null,
-        nombre:        editDetForm.id_tipo ? null : (editDetForm.nombre || null),
-        monto:         parseFloat(editDetForm.monto),
-        observaciones: editDetForm.observaciones || null,
-        id_cliente:    editDetForm.id_cliente    || null
-      })
-      notify('Detalle actualizado', 'success')
-      setEditingDetId(null)
-      load()
-    } catch (err) { notify(err.response?.data?.error || 'Error al actualizar', 'error') }
-    finally { setSavingDetEdit(false) }
-  }
-
-  const handleAudit = async () => {
-    let observaciones
-    if (caja.audit) {
-      observaciones = await showPrompt(
-        'Esta caja ya está auditada. ¿Querés desauditarla? Podés dejar un motivo.',
-        { placeholder: 'Motivo (opcional)' }
-      )
-      if (observaciones === null) return
-    }
-    setAuditando(true)
-    try {
-      const { data } = await cajasApi.audit(cajaId, caja.audit ? { observaciones } : undefined)
-      notify(data.audit ? 'Caja auditada' : 'Auditoría revertida', 'success')
-      setCaja(prev => ({ ...prev, audit: data.audit }))
-      onRefreshList?.()
-      loadAuditHistory()
-    } catch { notify('Error al auditar', 'error') }
-    finally { setAuditando(false) }
-  }
-
-  const handleAuditDc = async () => {
-    let observaciones
-    if (caja.audit_dc) {
-      observaciones = await showPrompt(
-        'Esta caja ya tiene audit DC. ¿Querés revertirlo? Podés dejar un motivo.',
-        { placeholder: 'Motivo (opcional)' }
-      )
-      if (observaciones === null) return
-    }
-    setAuditandoDc(true)
-    try {
-      const { data } = await cajasApi.auditDc(cajaId, caja.audit_dc ? { observaciones } : undefined)
-      notify(data.audit_dc ? 'Audit DC aplicado' : 'Audit DC revertido', 'success')
-      setCaja(prev => ({ ...prev, audit_dc: data.audit_dc, audit: data.audit }))
-      onRefreshList?.()
-      loadAuditHistory()
-    } catch { notify('Error al auditar (DC)', 'error') }
-    finally { setAuditandoDc(false) }
-  }
-
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><span className="spinner" /></div>
-  if (!caja) return <div style={{ color: 'var(--red)', padding: '1rem' }}>No se pudo cargar la caja.</div>
-
-  // La diferencia la calcula el backend (lib/cuadreCaja.js). Antes se calculaba
-  // acá y en CajaDetail, y las dos copias habían divergido: la misma caja
-  // mostraba diferencias distintas según desde dónde se la mirara.
-  const cuadre = caja.cuadre ?? {}
-  const hayDescuadre = cuadre.cuadra === false
-  const descuadre = cuadre.diferencia
-
-  const gruposDetalles    = agruparDetalles(caja.detalles)
-  const gruposMovimientos = agruparMovimientos(caja.movimientos)
-
-  const rows = [
-    ['Turno',      caja.nro_turno ? `TRN ${caja.nro_turno}` : '—'],
-    ['Tipo Turno', caja.tipo_turno ?? '—'],
-    ['Local',      caja.local?.nombre ?? '—'],
-    ['Inicio',     fmtDT(caja.fecha_inicio)],
-    ['Cierre',     fmtDT(caja.fecha_cierre)],
-    ['Cajero',     caja.cajero ?? '—'],
-    ['Total',      fmt$(caja.total)],
-    ['Efectivo',   fmt$(caja.efectivo)],
-    ['Fiscal',     fmt$(caja.fiscal)],
-    ['Cobros',     fmt$(cuadre.cobros)],
-    ...(cuadre.gastos ? [['Gastos', fmt$(cuadre.gastos)]] : []),
-    ['Comensales', caja.comensales ?? '—'],
-    ['Tickets',    caja.tickets ?? '—'],
-    // Sumas crudas de cada tabla interna. Antes estaban en la cabecera de su
-    // sección; se mueven acá para no competir con los totales por grupo, que son
-    // los que se usan para revisar el turno. Suman todo sin signo ni sentido
-    // contable (un VACIADO y un COBRO se apilan igual), así que no reemplazan a
-    // Cobros/Gastos ni a la diferencia de caja: quedan de referencia.
-    ['Total detalles',    fmt$(sumaMontos(caja.detalles))],
-    ['Total movimientos', fmt$(sumaMontos(caja.movimientos))],
-  ]
-
-  return (
-    <div>
-      {/* Tags destacados: mismos indicadores que ya tienen color/badge en la lista */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1rem' }}>
-        <span className={`badge ${caja.audit ? 'badge-green' : 'badge-muted'}`}>{caja.audit ? '✓ Auditado' : 'No auditado'}</span>
-        {canAuditDc && (
-          <span className={`badge ${caja.audit_dc ? 'badge-purple' : 'badge-muted'}`}>{caja.audit_dc ? '✓ Audit DC' : 'Sin Audit DC'}</span>
-        )}
-        {caja.origin && caja.origin !== 'DCSMART' && (
-          <span className="badge badge-muted">{caja.origin}</span>
-        )}
-        {hayDescuadre && (
-          <span
-            className="badge badge-red"
-            title={`Total declarado ${fmt$(cuadre.total)} vs. efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)}${cuadre.gastos ? ` − gastos ${fmt$(cuadre.gastos)}` : ''} = ${fmt$(cuadre.esperado)}. Los cobros salen de los ${cuadre.fuente} de esta caja.`}
-          >
-            ⚠ Diferencia: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
-          </span>
-        )}
-      </div>
-
-      <div style={{ marginBottom: '0.75rem' }}>
-        <ActionsMenu label="Acciones">
-          {canEdit && (
-            <button
-              className={`btn btn-sm ${caja.audit ? 'btn-secondary' : 'btn-primary'}`}
-              onClick={handleAudit}
-              disabled={auditando}
-            >
-              {auditando
-                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                : caja.audit ? '✓ Auditado' : 'Auditar'
-              }
-            </button>
-          )}
-          {canAuditDc && (
-            <button
-              className={`btn btn-sm ${caja.audit_dc ? 'btn-secondary' : 'btn-primary'}`}
-              onClick={handleAuditDc}
-              disabled={auditandoDc}
-            >
-              {auditandoDc
-                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                : caja.audit_dc ? '✓ Audit DC' : 'Audit DC'
-              }
-            </button>
-          )}
-          {canEdit && (
-            <button className="btn btn-secondary btn-sm" onClick={onEdit} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IcoEdit /> Editar
-            </button>
-          )}
-          {canDelete && (
-            <button className="btn btn-danger btn-sm" onClick={(e) => onDelete(cajaId, e)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IcoTrash /> Eliminar
-            </button>
-          )}
-        </ActionsMenu>
-      </div>
-
-      {caja.foto_url && (
-        <div style={{ marginBottom: '0.5rem' }}>
-          <div className="drawer-section-title">Adjuntos</div>
-          <FotoViewer pagoId={caja.id} fotoUrl={caja.foto_url} entity="cajas" />
-        </div>
-      )}
-
-      <div className="drawer-section-title">Datos del turno</div>
-      <div className="drawer-detail">
-        {rows.map(([k, v]) => (
-          <div key={k} className="drawer-detail-row">
-            <span className="drawer-detail-key">{k}</span>
-            <span className="drawer-detail-val">{v}</span>
-          </div>
-        ))}
-      </div>
-
-      {caja.observaciones && (
-        <div style={{ marginTop: '0.75rem', marginBottom: '1rem', padding: '10px 14px', background: 'rgba(var(--velo-rgb), 0.04)', borderRadius: 10, fontSize: 13, color: 'var(--t2)' }}>
-          {caja.observaciones}
-        </div>
-      )}
-
-      {/* ── DETALLES ─────────────────────────────────────────────────────── */}
-      {/* El total ya no vive acá: está arriba, en "Datos del turno". Lo que se
-          muestra en la tabla son los totales por grupo, que es lo que se venía
-          sumando a mano. */}
-      <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Detalles ({caja.detalles?.length || 0})</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {canEdit && !addingDet && (
-            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingDet(true)}>
-              <IcoPlus /> Añadir
-            </button>
-          )}
-        </div>
-      </div>
-      {caja.detalles && caja.detalles.length > 0 && (
-        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-          <TablaDesglose
-            grupos={gruposDetalles}
-            columnas={[{ label: 'Clasificación' }, { label: 'Nombre' }, { label: 'Cuenta' }, { label: 'Monto' }, { label: '' }]}
-            fmtMonto={fmt$2}
-            renderFila={(d) => (
-                <tr key={d.id}>
-                  {editingDetId === d.id ? (
-                    <>
-                      <td>
-                        <ClasificacionSelect
-                          compact
-                          value={editDetForm.clasificacion}
-                          onChange={(clasificacion) => setEditDetForm(f => conClasificacionElegida(f, clasificacion))}
-                        />
-                      </td>
-                      <td>
-                        <TipoDetalleCombo
-                          tipos={tipos}
-                          idTipo={editDetForm.id_tipo}
-                          nombre={editDetForm.nombre}
-                          onChange={(id_tipo, nombre) => setEditDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
-                        />
-                      </td>
-                      <td>
-                        <CampoClienteCuenta
-                          compact
-                          clasificacion={editDetForm.clasificacion}
-                          idCliente={editDetForm.id_cliente}
-                          clienteSel={editDetForm.cliente}
-                          onSelect={(c) => setEditDetForm(f => ({ ...f, id_cliente: c.id, cliente: c }))}
-                          onClear={() => setEditDetForm(f => ({ ...f, id_cliente: '', cliente: null }))}
-                        />
-                      </td>
-                      <td>
-                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
-                      </td>
-                      <td style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-sm btn-primary" disabled={savingDetEdit} onClick={() => handleSaveDet(d.id)}>Guardar</button>
-                        <button className="btn btn-sm btn-secondary" onClick={() => setEditingDetId(null)}>Cancelar</button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="td-muted">{clasificacionLabel(clasificacionDeDetalle(d))}</td>
-                      <td>{d.detalle_tipo?.nombre || d.nombre || '—'}</td>
-                      {/* A qué cuenta corriente se cargó. Se ve sin entrar a editar: un
-                          detalle que le genera deuda a alguien no puede parecer igual a uno
-                          que no. */}
-                      <td className="td-muted">
-                        {d.cliente ? (
-                          <span title="Cargado a la cuenta corriente de este cliente">
-                            {nombreCliente(d.cliente)}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td className="td-number">{fmt$2(d.monto)}</td>
-                      <td style={{ display: 'flex', gap: 4 }}>
-                        {canEdit && (
-                          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditDet(d)}>
-                            <IcoEdit />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteDet(d.id)}>
-                            <IcoTrash />
-                          </button>
-                        )}
-                      </td>
-                    </>
-                  )}
-                </tr>
-            )}
-          />
-        </div>
-      )}
-      {(!caja.detalles || caja.detalles.length === 0) && !addingDet && (
-        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin detalles</div>
-      )}
-
-      {canEdit && addingDet && <form onSubmit={handleAddDet}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Clasificación *</label>
-            <ClasificacionSelect
-              ayuda
-              value={newDet.clasificacion}
-              onChange={(clasificacion) => setNewDet(d => conClasificacionElegida(d, clasificacion))}
-            />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Nombre</label>
-            <TipoDetalleCombo
-              tipos={tipos}
-              idTipo={newDet.id_tipo}
-              nombre={newDet.nombre}
-              onChange={(id_tipo, nombre) => setNewDet(d => conTipoElegido(d, tipos, id_tipo, nombre))}
-            />
-          </div>
-          <CampoClienteCuenta
-            clasificacion={newDet.clasificacion}
-            idCliente={newDet.id_cliente}
-            clienteSel={newDet.cliente}
-            onSelect={(c) => setNewDet(d => ({ ...d, id_cliente: c.id, cliente: c }))}
-            onClear={() => setNewDet(d => ({ ...d, id_cliente: '', cliente: null }))}
-          />
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Monto *</label>
-            <div className="form-input-wrap">
-              <input type="number" step="0.01" min="0" required placeholder="0.00" value={newDet.monto} onChange={e => setNewDet({ ...newDet, monto: e.target.value })} />
-            </div>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Observaciones</label>
-            <div className="form-input-wrap">
-              <input type="text" placeholder="Opcional" value={newDet.observaciones} onChange={e => setNewDet({ ...newDet, observaciones: e.target.value })} />
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: '0.75rem', marginBottom: '1.5rem' }}>
-          <button type="submit" className="btn btn-primary" disabled={savingDet || !newDet.monto}>
-            {savingDet ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setAddingDet(false)}>✕</button>
-        </div>
-      </form>}
-
-      {/* ── MOVIMIENTOS (solo cajas viejas sin convertir) ─────────────────
-          En el modelo simple los movimientos no existen mas: todo es un
-          detalle de tres tipos. La seccion queda para el historico. */}
-      {(caja.movimientos?.length ?? 0) > 0 && (<>
-      <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Movimientos ({caja.movimientos?.length || 0})</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {canEdit && !addingMov && (
-            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setAddingMov(true)}>
-              <IcoPlus /> Añadir
-            </button>
-          )}
-        </div>
-      </div>
-      {caja.movimientos && caja.movimientos.length > 0 && (
-        <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-          <TablaDesglose
-            grupos={gruposMovimientos}
-            columnas={[{ label: 'Tipo' }, { label: 'Método' }, { label: 'Monto' }, { label: 'Cant.' }, { label: '' }]}
-            fmtMonto={fmt$2}
-            renderFila={(m) => (
-                <tr key={m.id}>
-                  {editingMovId === m.id ? (
-                    <>
-                      <td>
-                        <TipoMovimientoSelect
-                          className="filter-select"
-                          style={{ width: '100%' }}
-                          value={editMovForm.tipo}
-                          onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
-                        />
-                      </td>
-                      <td>
-                        <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
-                          <option value="">Sin método</option>
-                          {opcionesMetodos(metodos, editMovForm.id_metodo, m.metodo_pago?.nombre).map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
-                        </select>
-                      </td>
-                      <td>
-                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
-                      </td>
-                      <td>
-                        <input type="number" min="1" step="1" style={{ maxWidth: 70 }} value={editMovForm.cantidad} onChange={e => setEditMovForm(f => ({ ...f, cantidad: e.target.value }))} />
-                      </td>
-                      <td style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-sm btn-primary" disabled={savingMovEdit} onClick={() => handleSaveMov(m.id)}>Guardar</button>
-                        <button className="btn btn-sm btn-secondary" onClick={() => setEditingMovId(null)}>Cancelar</button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td>
-                        <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
-                      </td>
-                      <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
-                      <td className="td-number">{fmt$2(m.monto)}</td>
-                      <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad ?? '—'}</td>
-                      <td style={{ display: 'flex', gap: 4 }}>
-                        {canEdit && (
-                          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditMov(m)}>
-                            <IcoEdit />
-                          </button>
-                        )}
-                        {canDelete && (
-                          <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
-                            <IcoTrash />
-                          </button>
-                        )}
-                      </td>
-                    </>
-                  )}
-                </tr>
-            )}
-          />
-        </div>
-      )}
-      {(!caja.movimientos || caja.movimientos.length === 0) && !addingMov && (
-        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin movimientos</div>
-      )}
-
-      {canEdit && addingMov && <form onSubmit={handleAddMov}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Tipo</label>
-            <div className="form-input-wrap">
-              <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov({ ...newMov, tipo })} />
-            </div>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Método</label>
-            <div className="form-input-wrap">
-              <select value={newMov.id_metodo} onChange={e => setNewMov({ ...newMov, id_metodo: e.target.value })}>
-                <option value="">Sin método</option>
-                {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Monto *</label>
-            <div className="form-input-wrap">
-              <input type="number" step="0.01" min="0" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
-            </div>
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Cantidad</label>
-            <div className="form-input-wrap">
-              <input type="number" min="1" step="1" placeholder="Opcional" value={newMov.cantidad} onChange={e => setNewMov({ ...newMov, cantidad: e.target.value })} />
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="submit" className="btn btn-primary" disabled={saving || !newMov.monto}>
-            {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : <><IcoPlus /> Agregar</>}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setAddingMov(false)}>✕</button>
-        </div>
-      </form>}
-      </>)}
-
-      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>
-      <div className="table-wrap" style={{ marginBottom: '1rem' }}>
-        <table className="data-table">
-          <thead>
-            <tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Observación</th></tr>
-          </thead>
-          <tbody>
-            {loadingHistory ? (
-              <tr><td colSpan={4}><span className="skel" style={{ width: '60%' }} /></td></tr>
-            ) : auditHistory.length === 0 ? (
-              <tr><td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: 'var(--t3)' }}>Sin eventos de auditoría</td></tr>
-            ) : (
-              auditHistory.map((ev) => (
-                <tr key={ev.id}>
-                  <td className="td-muted">{fmtDT(ev.fecha)}</td>
-                  <td>{ev.user?.nombre ?? '—'}</td>
-                  <td>
-                    <span className={`badge ${ev.accion === 'auditado' ? 'badge-green' : 'badge-amber'}`}>
-                      {ev.accion === 'auditado' ? 'Auditado' : 'Desauditado'}
-                    </span>
-                  </td>
-                  <td className="td-muted">{ev.observaciones || '—'}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
+// El detalle en el drawer se elimino: el listado navega a /cajas/:id
+// (CajaVer.jsx), que es la unica pantalla de detalle. Convivian dos: esta
+// quedo huerfana --nada llamaba a setPanelOpen(true)-- y era la que seguia
+// mostrando el diseno viejo.
 
 export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
   const notify      = useUiStore((s) => s.notify)
@@ -892,11 +276,16 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
     [origin, form?.total, form?.efectivo, detalles, movimientos]
   )
 
+  // Publica el cuadre a la pantalla que envuelve este formulario, que lo muestra
+  // en su columna sticky. Es un efecto del RENDER: había quedado escrito dentro
+  // del `.then` de loadRelacionales, así que solo se ejecutaba al llegar la
+  // respuesta y con un valor viejo — el panel de la pantalla de edición nunca
+  // se dibujaba.
+  useEffect(() => { onCuadre?.(cuadreVivo) }, [cuadreVivo, onCuadre])
+
   const loadRelacionales = (idLocal) => {
     cajasApi.get(cajaId).then(({ data }) => {
       setDetalles(data.detalles || [])
-
-  useEffect(() => { onCuadre?.(cuadreVivo) }, [cuadreVivo, onCuadre])
       setMovimientos(data.movimientos || [])
     }).catch(() => notify('Error al cargar detalles/movimientos', 'error'))
     detallesApi.tipos(idLocal)
@@ -959,6 +348,9 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
       clasificacion: normalizarClasificacion(clasificacionDeDetalle(d)),
       nombre:        d.detalle_tipo?.nombre || d.nombre || '',
       monto:         String(d.monto),
+      // Sin esto, editar un detalle de TapTap le vaciaba el campo en pantalla y
+      // lo mandaba en blanco: se perdian los groupCount de las lineas migradas.
+      cantidad:      d.cantidad != null ? String(d.cantidad) : '',
       observaciones: d.observaciones || '',
       // La cuenta a la que ya estaba cargado. El objeto entero y no solo el id: el
       // combobox necesita el nombre para abrir con lo que habia.
@@ -971,7 +363,7 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
     if (!editDetForm.monto) return
     setSavingDetEdit(true)
     try {
-      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, clasificacion: editDetForm.clasificacion || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), observaciones: editDetForm.observaciones || null, id_cliente: editDetForm.id_cliente || null })
+      await detallesApi.update(detId, { id_tipo: editDetForm.id_tipo || null, clasificacion: editDetForm.clasificacion || null, nombre: editDetForm.id_tipo ? null : (editDetForm.nombre || null), monto: parseFloat(editDetForm.monto), cantidad: editDetForm.cantidad ? parseInt(editDetForm.cantidad) : null, observaciones: editDetForm.observaciones || null, id_cliente: editDetForm.id_cliente || null })
       notify('Detalle actualizado', 'success')
       setEditingDetId(null)
       loadRelacionales(form?.id_local)
@@ -1067,17 +459,26 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fecha Inicio</label>
-          <div className="form-input-wrap">
-            <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
+        {/* Mismo bloque que el alta: las dos fechas juntas y una sola pista
+            abajo con la duración y el cruce de día. Editar una caja es
+            justamente donde se corrige una fecha mal cargada, así que el aviso
+            de "el cierre es anterior a la apertura" importa más acá. */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Abrió el turno</label>
+              <div className="form-input-wrap">
+                <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Cerró el turno</label>
+              <div className="form-input-wrap">
+                <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fecha Cierre</label>
-          <div className="form-input-wrap">
-            <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
-          </div>
+          <PistaTurno inicio={form.fecha_inicio} cierre={form.fecha_cierre} />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nro Turno</label>
@@ -1128,6 +529,7 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
           <div className="form-input-wrap">
             <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
           </div>
+          <PistaPromedio total={form.total} comensales={form.comensales} />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Tickets</label>
@@ -1164,7 +566,7 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
       {detalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '1rem' }}>
           <table className="data-table">
-            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Cuenta</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Cuenta</th><th title="Cantidad de operaciones que componen la línea">Cant.</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {detalles.map((d) => (
                 <tr key={d.id}>
@@ -1196,6 +598,9 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
                         />
                       </td>
                       <td>
+                        <input type="number" min="1" step="1" placeholder="—" style={{ maxWidth: 70 }} value={editDetForm.cantidad ?? ''} onChange={e => setEditDetForm(f => ({ ...f, cantidad: e.target.value }))} />
+                      </td>
+                      <td>
                         <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td style={{ display: 'flex', gap: 4 }}>
@@ -1217,6 +622,7 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
                           </span>
                         ) : '—'}
                       </td>
+                      <td className="td-number td-muted">{d.cantidad || '—'}</td>
                       <td className="td-number">{fmt$2(d.monto)}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditDet(d)}>
@@ -1439,9 +845,6 @@ export default function CajaList() {
   const [total,      setTotal]      = useState(0)
   const [page,       setPage]       = useState(1)
   const [loading,    setLoading]    = useState(true)
-  const [panelOpen,  setPanelOpen]  = useState(false)
-  const [panelMode,  setPanelMode]  = useState('create')
-  const [selectedId, setSelectedId] = useState(null)
   const [sortField,  setSortField]  = useState('fecha_inicio')
   const [sortDir,    setSortDir]    = useState('desc')
   const FILTER_INIT_CAJAS = { desde: '', hasta: '', audit: '', tipo_turno: [] }
@@ -1683,17 +1086,6 @@ export default function CajaList() {
   const openCreate = () => navigate('/cajas/nueva')
   const openDetail = (id) => navigate(`/cajas/${id}`)
   const openEdit   = (id) => navigate(`/cajas/${id}/editar`)
-  const backToDetail = ()  => { setPanelMode('detail') }
-  const closePanel = () => setPanelOpen(false)
-
-  const selectedCaja = cajas.find(c => c.id === selectedId)
-  const selectedLabel = selectedCaja?.nro_turno ? `TRN ${selectedCaja.nro_turno}` : 'Detalle de Caja'
-
-  const drawerTitle = panelMode === 'create'
-    ? 'Nueva Caja'
-    : panelMode === 'edit'
-      ? `Editar — ${selectedLabel}`
-      : selectedLabel
 
   const SortTh = ({ field, children }) => (
     <th className={`sortable${sortField === field ? ' active' : ''}`} onClick={() => toggleSort(field)}>
@@ -1947,38 +1339,6 @@ export default function CajaList() {
         </div>
       )}
 
-      <DrawerPanel open={panelOpen} onClose={closePanel} title={drawerTitle} width={560}>
-        {panelMode === 'create' && (
-          <CajaCreatePanel
-            activeLocal={activeLocal}
-            locales={locales}
-            onCreated={(newId) => {
-              load()
-              if (newId) { setSelectedId(newId); setPanelMode('detail') }
-              else closePanel()
-            }}
-            onClose={closePanel}
-          />
-        )}
-        {panelMode === 'detail' && (
-          <CajaDetailPanel
-            cajaId={selectedId}
-            onRefreshList={load}
-            canEdit={canEdit}
-            canDelete={canDelete}
-            canAuditDc={canAuditDc}
-            onEdit={() => openEdit(selectedId)}
-            onDelete={handleDelete}
-          />
-        )}
-        {panelMode === 'edit' && (
-          <CajaEditPanel
-            cajaId={selectedId}
-            onSaved={() => { load(); backToDetail() }}
-            onBack={backToDetail}
-          />
-        )}
-      </DrawerPanel>
     </div>
   )
 }
