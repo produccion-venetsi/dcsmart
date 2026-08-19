@@ -216,7 +216,7 @@ const CAJA_CSV_COLUMNS = [
 // de lib/desgloses.js — la misma que suma los grupos, para que el total de la
 // tabla y la suma de sus grupos no puedan divergir.
 
-function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
+export function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc, onEdit, onDelete }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const showPrompt  = useUiStore((s) => s.showPrompt)
@@ -685,7 +685,10 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
         </div>
       </form>}
 
-      {/* ── MOVIMIENTOS ──────────────────────────────────────────────────── */}
+      {/* ── MOVIMIENTOS (solo cajas viejas sin convertir) ─────────────────
+          En el modelo simple los movimientos no existen mas: todo es un
+          detalle de tres tipos. La seccion queda para el historico. */}
+      {(caja.movimientos?.length ?? 0) > 0 && (<>
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({caja.movimientos?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -799,6 +802,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <button type="button" className="btn btn-secondary" onClick={() => setAddingMov(false)}>✕</button>
         </div>
       </form>}
+      </>)}
 
       <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>
       <div className="table-wrap" style={{ marginBottom: '1rem' }}>
@@ -832,7 +836,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
   )
 }
 
-function CajaEditPanel({ cajaId, onSaved, onBack }) {
+export function CajaEditPanel({ cajaId, onSaved, onBack }) {
   const notify      = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
   const [form,   setForm]   = useState(null)
@@ -1275,7 +1279,8 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         </div>
       )}
 
-      {/* ── Movimientos ──────────────────────────────────────────────────── */}
+      {/* ── Movimientos (solo cajas viejas sin convertir) ────────────────── */}
+      {movimientos.length > 0 && (<>
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Movimientos ({movimientos.length})</span>
         {!addingMov && (
@@ -1384,6 +1389,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
           </div>
         </div>
       )}
+      </>)}
 
       <div className="form-actions" style={{ marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
@@ -1660,9 +1666,11 @@ export default function CajaList() {
     load()
   }
 
-  const openCreate = () => { setPanelMode('create'); setPanelOpen(true) }
-  const openDetail = (id) => { setSelectedId(id); setPanelMode('detail'); setPanelOpen(true) }
-  const openEdit   = (id) => { setSelectedId(id); setPanelMode('edit');   setPanelOpen(true) }
+  // Pantalla completa como flujo principal (pedido del usuario): crear, ver y
+  // editar dejan de vivir en el drawer y navegan a su propia pagina.
+  const openCreate = () => navigate('/cajas/nueva')
+  const openDetail = (id) => navigate(`/cajas/${id}`)
+  const openEdit   = (id) => navigate(`/cajas/${id}/editar`)
   const backToDetail = ()  => { setPanelMode('detail') }
   const closePanel = () => setPanelOpen(false)
 

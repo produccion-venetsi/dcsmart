@@ -24,7 +24,7 @@ export default function CajaNueva() {
   const volver = (nuevoId) => {
     const home = homeDeRol(role)
     if (home !== HOME_POR_DEFECTO) { navigate(home); return }
-    navigate(nuevoId ? `/cajas?caja=${nuevoId}` : '/cajas')
+    navigate(nuevoId ? `/cajas/${nuevoId}` : '/cajas')
   }
 
   return (

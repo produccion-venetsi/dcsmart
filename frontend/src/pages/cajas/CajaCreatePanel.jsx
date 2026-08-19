@@ -368,65 +368,9 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
         </button>
       </div>
 
-      <div className="drawer-section-title">Movimientos (opcional)</div>
-      {pendingMovimientos.length > 0 && (
-        <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
-          <table className="data-table">
-            <thead><tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr></thead>
-            <tbody>
-              {pendingMovimientos.map(m => (
-                <tr key={m._key}>
-                  <td>
-                    <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
-                  </td>
-                  <td className="td-muted">{metodos.find(x => x.id === m.id_metodo)?.nombre || '—'}</td>
-                  <td className="td-number">{fmt$2(m.monto)}</td>
-                  <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad || '—'}</td>
-                  <td>
-                    <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingMovimiento(m._key)}>
-                      <IcoTrash />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <div onKeyDown={enterEjecuta(addPendingMovimiento)} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Tipo</label>
-          <div className="form-input-wrap">
-            <TipoMovimientoSelect value={movForm.tipo} onChange={(tipo) => setMovForm(f => ({ ...f, tipo }))} />
-          </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Método</label>
-          <div className="form-input-wrap">
-            <select value={movForm.id_metodo} onChange={e => setMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
-              <option value="">Sin método</option>
-              {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Monto</label>
-          <div className="form-input-wrap">
-            <input type="number" step="0.01" min="0" placeholder="0.00" value={movForm.monto} onChange={e => setMovForm(f => ({ ...f, monto: e.target.value }))} />
-          </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Cantidad</label>
-          <div className="form-input-wrap">
-            <input type="number" min="1" step="1" placeholder="Opcional" value={movForm.cantidad} onChange={e => setMovForm(f => ({ ...f, cantidad: e.target.value }))} />
-          </div>
-        </div>
-      </div>
-      <div style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
-        <button type="button" className="btn btn-secondary" onClick={addPendingMovimiento} disabled={!movForm.monto}>
-          <IcoPlus /> Agregar
-        </button>
-      </div>
+      {/* La seccion de Movimientos se elimino: en el modelo simple todo se
+          carga como detalle de tres tipos (cobro / gasto / informativo). El
+          fondo inicial, un retiro o un vaciado se anotan como informativos. */}
       <div className="form-actions" style={{ marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : 'Crear Caja'}
