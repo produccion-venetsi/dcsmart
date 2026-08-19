@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { proveedoresApi } from '../../api/proveedores.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
+import { fmtDateArg } from '../../lib/dates.js'
+import { labelTipoLocal } from '../../lib/tiposLocal.js'
+
+const fmt$ = (n) => (n == null ? '—' : `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`)
+const fmtDate = (v) => (v ? fmtDateArg(v) : '—')
 
 function IcoPlus() {
   return (
@@ -48,6 +53,226 @@ function IcoProvEmpty() {
       <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
       <polyline points="9 22 9 12 15 12 15 22"/>
     </svg>
+  )
+}
+
+// Ficha del proveedor. Antes eran diez filas que ademas se ocultaban si venian
+// vacias: un proveedor con solo nombre y CUIT mostraba dos lineas y la ficha
+// parecia rota. Ahora los datos van agrupados y SIEMPRE se ven (los que faltan,
+// en gris), y debajo va la actividad real -- que es lo que se viene a mirar:
+// cuanto se le pago, desde cuando, en que locales y las ultimas ordenes.
+function DetalleProveedor({ p, onEditar }) {
+  const notify = useUiStore((s) => s.notify)
+  const [res, setRes] = useState(null)
+  const [loadingRes, setLoadingRes] = useState(true)
+
+  useEffect(() => {
+    const ctrl = new AbortController()
+    setLoadingRes(true)
+    setRes(null)
+    proveedoresApi.resumen(p.id, ctrl.signal)
+      .then(({ data }) => setRes(data))
+      .catch((err) => {
+        if (ctrl.signal.aborted) return
+        // Sin app activa el backend pide X-App-Id: no es un error que valga un
+        // toast rojo, simplemente no hay actividad que recortar por locales.
+        if (err.response?.status !== 400) notify('No se pudo cargar la actividad del proveedor', 'info')
+      })
+      .finally(() => { if (!ctrl.signal.aborted) setLoadingRes(false) })
+    return () => ctrl.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.id])
+
+  const rubcat = p.rubcat
+    ? [p.rubcat.rubro?.nombre, p.rubcat.categoria?.nombre].filter(Boolean).join(' / ') || p.id_rubcat
+    : null
+
+  const grupos = [
+    ['Identificación', [
+      ['Nombre', p.nombre],
+      ['Razón social', p.razon_social],
+      ['CUIT', p.cuit],
+    ]],
+    ['Contacto', [
+      ['Teléfono', p.telefono],
+      ['Mail contacto', p.mail_contacto],
+      ['Mail envío', p.mail_envio],
+      ['Dirección', p.detalle_direc],
+    ]],
+    ['Datos bancarios', [
+      ['Banco', p.banco],
+      ['CBU', p.cbu],
+      ['Alias', p.alias],
+    ]],
+    ['Comercial', [
+      ['Rubro / categoría', rubcat],
+      ['Plazo de pago', p.plazo != null ? `${p.plazo} día${p.plazo === 1 ? '' : 's'}` : null],
+      ['Cuenta', p.cuenta],
+      ['Tipo', p.tipo],
+      ['Tag', p.tag],
+    ]],
+  ]
+
+  const faltantes = grupos.flatMap(([, filas]) => filas).filter(([, v]) => !v).length
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button className="btn btn-secondary" onClick={onEditar}><IcoEdit /> Editar</button>
+        <span className={`badge ${p.activo ? 'badge-green' : 'badge-muted'}`} style={{ display: 'flex', alignItems: 'center' }}>
+          {p.activo ? 'Activo' : 'Inactivo'}
+        </span>
+        {p.es_general && (
+          <span className="badge badge-gold" style={{ display: 'flex', alignItems: 'center' }} title="Sirve a cualquier tipo de local">
+            General
+          </span>
+        )}
+        {(p.tipos_afines ?? []).map((t) => (
+          <span key={t} className="badge badge-muted" style={{ display: 'flex', alignItems: 'center' }}>
+            {labelTipoLocal(t)}
+          </span>
+        ))}
+      </div>
+
+      {/* ── Actividad ── va primero: es el dato que se viene a buscar ── */}
+      <div className="drawer-section-title">Actividad</div>
+      {loadingRes ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}><span className="spinner" /></div>
+      ) : !res ? (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>
+          Elegí un grupo para ver la actividad de este proveedor en tus locales.
+        </div>
+      ) : res.pagos === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>
+          Sin pagos cargados a este proveedor en tus locales.
+        </div>
+      ) : (
+        <>
+          <div className="drawer-detail">
+            <div className="drawer-detail-row">
+              <span className="drawer-detail-key">Total pagado</span>
+              <span className="drawer-detail-val">{fmt$(res.total)} <span className="td-muted" style={{ fontSize: 11 }}>en {res.pagos} orden{res.pagos === 1 ? '' : 'es'}</span></span>
+            </div>
+            {res.pendientes > 0 && (
+              <div className="drawer-detail-row">
+                <span className="drawer-detail-key">Sin pagar</span>
+                <span className="drawer-detail-val" style={{ color: 'var(--amber)' }}>
+                  {fmt$(res.total_pendiente)} <span className="td-muted" style={{ fontSize: 11 }}>en {res.pendientes} orden{res.pendientes === 1 ? '' : 'es'}</span>
+                </span>
+              </div>
+            )}
+            <div className="drawer-detail-row">
+              <span className="drawer-detail-key">Última orden</span>
+              <span className="drawer-detail-val">{fmtDate(res.ultimo_pago)}</span>
+            </div>
+            <div className="drawer-detail-row">
+              <span className="drawer-detail-key">Primera orden</span>
+              <span className="drawer-detail-val">{fmtDate(res.primer_pago)}</span>
+            </div>
+          </div>
+
+          {res.por_local.length > 0 && (
+            <>
+              <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Dónde se le compra</div>
+              <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+                <table className="data-table">
+                  <thead><tr><th>Local</th><th style={{ textAlign: 'right' }}>Órdenes</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
+                  <tbody>
+                    {res.por_local.slice(0, 8).map((l) => (
+                      <tr key={l.id_local}>
+                        <td>
+                          {l.local}
+                          {l.grupo && <div style={{ fontSize: 10.5, color: 'var(--t4)' }}>{l.grupo}</div>}
+                        </td>
+                        <td className="td-muted" style={{ textAlign: 'right' }}>{l.pagos}</td>
+                        <td className="td-number" style={{ textAlign: 'right' }}>{fmt$(l.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {res.por_local.length > 8 && (
+                <p style={{ fontSize: 11, color: 'var(--t3)', marginTop: -6 }}>
+                  Se muestran los 8 locales de mayor monto, de {res.por_local.length}.
+                </p>
+              )}
+            </>
+          )}
+
+          {res.ultimos.length > 0 && (
+            <>
+              <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Últimas órdenes</div>
+              <div className="table-wrap" style={{ marginBottom: '1rem' }}>
+                <table className="data-table">
+                  <thead><tr><th>OP</th><th>Fecha</th><th>Local</th><th style={{ textAlign: 'right' }}>Importe</th></tr></thead>
+                  <tbody>
+                    {res.ultimos.map((o) => (
+                      <tr key={o.id}>
+                        <td>
+                          {o.nro_ord != null ? `OP-${o.nro_ord}` : '—'}
+                          {!o.pagado && <span className="badge badge-amber" style={{ marginLeft: 6 }}>sin pagar</span>}
+                        </td>
+                        <td className="td-muted">{fmtDate(o.fecha)}</td>
+                        <td className="td-muted">{o.local || '—'}</td>
+                        <td className="td-number" style={{ textAlign: 'right' }}>{fmt$(o.importe)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── Datos ── siempre completos: lo que falta se ve como "—" ── */}
+      {grupos.map(([titulo, filas]) => (
+        <div key={titulo}>
+          <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>{titulo}</div>
+          <div className="drawer-detail">
+            {filas.map(([k, v]) => (
+              <div key={k} className="drawer-detail-row">
+                <span className="drawer-detail-key">{k}</span>
+                <span className="drawer-detail-val" style={{ wordBreak: 'break-word', fontSize: 12, color: v ? undefined : 'var(--t4)' }}>
+                  {v || '—'}
+                </span>
+              </div>
+            ))}
+            {titulo === 'Contacto' && p.direccion_url && (
+              <div className="drawer-detail-row">
+                <span className="drawer-detail-key">Mapa</span>
+                <span className="drawer-detail-val">
+                  <a href={p.direccion_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    Ver ubicación <IcoLink />
+                  </a>
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {p.observaciones && (
+        <>
+          <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Observaciones</div>
+          <div style={{
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, lineHeight: 1.55,
+            color: 'var(--t2)', background: 'var(--bg-input)', border: '1px solid var(--glass-border)',
+            borderRadius: 12, padding: '10px 13px',
+          }}>
+            {p.observaciones}
+          </div>
+        </>
+      )}
+
+      {/* Cuantos datos faltan, en una linea: con los campos vacios visibles ya
+          se ve cuales, pero el numero dice si vale la pena completar la ficha. */}
+      {faltantes > 0 && (
+        <p style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: '1rem' }}>
+          Faltan {faltantes} dato{faltantes === 1 ? '' : 's'} por cargar en esta ficha.
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -236,52 +461,7 @@ export default function ProveedorList() {
         title={selectedProv?.nombre || 'Proveedor'}
         width={500}
       >
-        {selectedProv && (() => {
-          const p = selectedProv
-          const rows = [
-            ['Razón Social',      p.razon_social],
-            ['CUIT',              p.cuit],
-            ['Banco',             p.banco],
-            ['CBU',               p.cbu],
-            ['Alias',             p.alias],
-            ['Teléfono',          p.telefono],
-            ['Mail Contacto',     p.mail_contacto],
-            ['Mail Envío',        p.mail_envio],
-            ['Tag',               p.tag],
-            ['Detalle Dirección', p.detalle_direc],
-          ]
-          return (
-            <div>
-              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                <button className="btn btn-secondary" onClick={() => { closePanel(); navigate(`/proveedores/${p.id}/editar`) }}>
-                  <IcoEdit /> Editar
-                </button>
-                <span className={`badge ${p.activo ? 'badge-green' : 'badge-muted'}`} style={{ display: 'flex', alignItems: 'center' }}>
-                  {p.activo ? 'Activo' : 'Inactivo'}
-                </span>
-              </div>
-
-              <div className="drawer-detail">
-                {rows.filter(([, v]) => v).map(([k, v]) => (
-                  <div key={k} className="drawer-detail-row">
-                    <span className="drawer-detail-key">{k}</span>
-                    <span className="drawer-detail-val" style={{ wordBreak: 'break-all', fontSize: 12 }}>{v}</span>
-                  </div>
-                ))}
-                {p.direccion_url && (
-                  <div className="drawer-detail-row">
-                    <span className="drawer-detail-key">Dirección</span>
-                    <span className="drawer-detail-val">
-                      <a href={p.direccion_url} target="_blank" rel="noreferrer" style={{ color: 'var(--gold-bright)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        Ver mapa <IcoLink />
-                      </a>
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })()}
+        {selectedProv && <DetalleProveedor p={selectedProv} onEditar={() => { closePanel(); navigate(`/proveedores/${selectedProv.id}/editar`) }} />}
       </DrawerPanel>
     </div>
   )
