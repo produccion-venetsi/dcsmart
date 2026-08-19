@@ -1771,6 +1771,14 @@ export default function CajaList() {
               {exporting ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <IcoDownload />} Exportar Excel
             </button>
           )}
+          {/* El drawer sirve para cargar rápido; la pantalla completa es para
+              cuando hay que entender lo que se está cargando: tiene la guía al
+              costado y el cuadre no compite con el listado por el espacio. */}
+          {canCreate && (
+            <button className="btn btn-secondary" onClick={() => navigate('/cajas/nueva')} title="Abrir el alta en pantalla completa, con la guía al costado">
+              <IcoPlus /> Nueva caja (pantalla completa)
+            </button>
+          )}
           {canCreate && (
             <button className="btn btn-primary" onClick={openCreate}>
               <IcoPlus /> Nueva Caja

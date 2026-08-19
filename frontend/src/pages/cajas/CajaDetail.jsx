@@ -13,6 +13,7 @@ import TablaDesglose from '../../components/TablaDesglose.jsx'
 import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
 import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
+import { explicarDiferencia } from '../../lib/explicarCuadre.js'
 
 function IcoBack() {
   return (
@@ -194,6 +195,7 @@ export default function CajaDetail() {
   if (!caja)   return <div className="page-loading" style={{ color: 'var(--red)' }}>Caja no encontrada</div>
 
   const cuadre = caja.cuadre ?? {}
+  const explicacion = explicarDiferencia(cuadre)
   const hayDescuadre = cuadre.cuadra === false
   const descuadre = cuadre.diferencia
 
@@ -273,14 +275,25 @@ export default function CajaDetail() {
                 </div>
               ))}
             </div>
-            {hayDescuadre && (
-              <div
-                className="badge badge-red"
-                style={{ marginTop: '0.75rem', display: 'inline-block' }}
-                title={`Total declarado ${fmt$(cuadre.total)} vs. efectivo ${fmt$(cuadre.efectivo)} + cobros ${fmt$(cuadre.cobros)}${cuadre.gastos ? ` − gastos ${fmt$(cuadre.gastos)}` : ''} = ${fmt$(cuadre.esperado)}. Los cobros salen de los ${cuadre.fuente} de esta caja.`}
-              >
-                ⚠ Diferencia: {fmt$(Math.abs(descuadre))} {descuadre > 0 ? '(sobra)' : '(falta)'}
+            {/* El descuadre explicado, no un badge con la formula escondida en
+                un title: dice la cuenta que se hizo y que conviene mirar. Es la
+                misma explicacion que da el alta (lib/explicarCuadre.js). */}
+            {explicacion.estado !== 'cuadra' && explicacion.estado !== 'incompleta' && (
+              <div style={{ marginTop: '0.9rem', padding: '11px 13px', borderRadius: 12, background: 'var(--red-bg)', border: '1px solid var(--red-border)' }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--red)' }}>{explicacion.titulo}</div>
+                <div style={{ fontSize: 11.5, lineHeight: 1.55, color: 'var(--t2)', marginTop: 5 }}>{explicacion.cuenta}</div>
+                {explicacion.sospechas.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--t1)', marginTop: 8 }}>Qué mirar:</div>
+                    <ul style={{ margin: '3px 0 0', paddingLeft: 16, fontSize: 11, lineHeight: 1.5, color: 'var(--t2)' }}>
+                      {explicacion.sospechas.map((sp) => <li key={sp} style={{ marginBottom: 2 }}>{sp}</li>)}
+                    </ul>
+                  </>
+                )}
               </div>
+            )}
+            {explicacion.estado === 'cuadra' && (
+              <div className="badge badge-green" style={{ marginTop: '0.75rem', display: 'inline-block' }}>✓ La caja cuadra</div>
             )}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import CajaCreatePanel from './CajaCreatePanel.jsx'
+import GuiaCaja from '../../components/GuiaCaja.jsx'
 import { useAppStore } from '../../store/appStore.js'
 import { homeDeRol, HOME_POR_DEFECTO } from '../../lib/roles.js'
 
@@ -36,14 +37,22 @@ export default function CajaNueva() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-body">
-          <CajaCreatePanel
-            activeLocal={activeLocal}
-            locales={locales}
-            onCreated={volver}
-            onClose={() => volver(null)}
-          />
+      {/* Dos columnas en pantalla ancha: el formulario a la izquierda y la guía
+          al costado, siempre a la vista. En celular la guía baja al final, que
+          es donde molesta menos: ahí la referencia es el "?" de cada campo. */}
+      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div className="card" style={{ flex: '3 1 min(560px, 100%)' }}>
+          <div className="card-body">
+            <CajaCreatePanel
+              activeLocal={activeLocal}
+              locales={locales}
+              onCreated={volver}
+              onClose={() => volver(null)}
+            />
+          </div>
+        </div>
+        <div style={{ flex: '1 1 min(280px, 100%)', maxWidth: 360 }}>
+          <GuiaCaja />
         </div>
       </div>
     </div>
