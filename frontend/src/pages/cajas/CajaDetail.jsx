@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
+import { metodosApi } from '../../api/metodospago.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAppStore } from '../../store/appStore.js'
 import { fmtDateTimeArg, fmtDateArg } from '../../lib/dates.js'
-import { puedeBorrarMovimientos } from '../../lib/roles.js'
+import { puedeBorrarMovimientos, puedeCargarMovimientos, puedeEditar } from '../../lib/roles.js'
+import { opcionesMetodos } from '../../lib/metodosSelect.js'
+import { mensajeCatalogo } from '../../lib/catalogos.js'
 import TablaDesglose from '../../components/TablaDesglose.jsx'
 import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import { agruparMovimientos, sumaMontos } from '../../lib/desgloses.js'
@@ -69,14 +72,19 @@ export default function CajaDetail() {
   // El backend exige caja_movimientos.delete; mostrar el botón a quien no lo
   // tiene sólo lleva a un 403 que acá se ve como "Error al eliminar".
   const canDeleteMov = puedeBorrarMovimientos(role)
+  // El backend exige caja_movimientos.create para agregar y .edit para
+  // modificar; mostrar los controles a quien no los tiene solo lleva a un 403.
+  const canAddMov  = puedeCargarMovimientos(role)
+  const canEditMov = puedeEditar(role)
   const [auditandoDc, setAuditandoDc] = useState(false)
 
   const [caja,    setCaja]    = useState(null)
   const [loading, setLoading] = useState(true)
+  const [metodos, setMetodos] = useState([])
   const [newMov,  setNewMov]  = useState({ tipo: 'INGRESO', monto: '', id_metodo: '' })
   const [saving,  setSaving]  = useState(false)
   const [editingMovId, setEditingMovId] = useState(null)
-  const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', monto: '' })
+  const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', monto: '', id_metodo: '' })
   const [savingMovEdit, setSavingMovEdit] = useState(false)
   const [auditando, setAuditando] = useState(false)
   const [auditHistory, setAuditHistory] = useState([])
@@ -100,11 +108,17 @@ export default function CajaDetail() {
 
   useEffect(() => { load(); loadAuditHistory() }, [id])
 
+  useEffect(() => {
+    metodosApi.list()
+      .then(r => setMetodos(r.data || []))
+      .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
+  }, [notify])
+
   const handleAddMovimiento = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      await movimientosApi.create({ ...newMov, monto: parseFloat(newMov.monto), id_caja: id })
+      await movimientosApi.create({ ...newMov, id_metodo: newMov.id_metodo || null, monto: parseFloat(newMov.monto), id_caja: id })
       notify('Movimiento agregado', 'success')
       setNewMov({ tipo: 'INGRESO', monto: '', id_metodo: '' })
       load()
@@ -123,14 +137,14 @@ export default function CajaDetail() {
 
   const handleEditMov = (m) => {
     setEditingMovId(m.id)
-    setEditMovForm({ tipo: m.tipo, monto: String(m.monto) })
+    setEditMovForm({ tipo: m.tipo, monto: String(m.monto), id_metodo: m.id_metodo || '' })
   }
 
   const handleSaveMov = async (movId) => {
     if (!editMovForm.monto) return
     setSavingMovEdit(true)
     try {
-      await movimientosApi.update(movId, { tipo: editMovForm.tipo, monto: parseFloat(editMovForm.monto) })
+      await movimientosApi.update(movId, { tipo: editMovForm.tipo, monto: parseFloat(editMovForm.monto), id_metodo: editMovForm.id_metodo || null })
       notify('Movimiento actualizado', 'success')
       setEditingMovId(null)
       load()
@@ -296,7 +310,12 @@ export default function CajaDetail() {
                             onChange={(tipo) => setEditMovForm(f => ({ ...f, tipo }))}
                           />
                         </td>
-                        <td className="td-muted">{m.metodo_pago?.nombre || '—'}</td>
+                        <td>
+                          <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
+                            <option value="">Sin método</option>
+                            {opcionesMetodos(metodos, editMovForm.id_metodo, m.metodo_pago?.nombre).map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                          </select>
+                        </td>
                         <td>
                           <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
                         </td>
@@ -317,9 +336,11 @@ export default function CajaDetail() {
                         <td className="td-number">{fmt$(m.monto)}</td>
                         <td className="td-muted">{m.cantidad ?? '—'}</td>
                         <td style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditMov(m)}>
-                            <IcoEdit />
-                          </button>
+                          {canEditMov && (
+                            <button className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditMov(m)}>
+                              <IcoEdit />
+                            </button>
+                          )}
                           {canDeleteMov && (
                             <button className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteMov(m.id)}>
                               <IcoTrash />
@@ -340,6 +361,7 @@ export default function CajaDetail() {
           </div>
 
           {/* Add movement form */}
+          {canAddMov && (
           <form className="form-panel" onSubmit={handleAddMovimiento}>
             <div className="form-panel-title"><IcoPlus /> Agregar Movimiento</div>
             <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
@@ -347,6 +369,15 @@ export default function CajaDetail() {
                 <label className="form-label">Tipo</label>
                 <div className="form-input-wrap">
                   <TipoMovimientoSelect value={newMov.tipo} onChange={(tipo) => setNewMov({ ...newMov, tipo })} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Método</label>
+                <div className="form-input-wrap">
+                  <select value={newMov.id_metodo} onChange={e => setNewMov({ ...newMov, id_metodo: e.target.value })}>
+                    <option value="">Sin método</option>
+                    {opcionesMetodos(metodos, newMov.id_metodo).map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                  </select>
                 </div>
               </div>
               <div className="form-group">
@@ -362,6 +393,7 @@ export default function CajaDetail() {
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
 
