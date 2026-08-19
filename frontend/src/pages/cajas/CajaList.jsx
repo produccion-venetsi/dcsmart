@@ -5,6 +5,7 @@ import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { opcionesMetodos } from '../../lib/metodosSelect.js'
+import { mensajeCatalogo } from '../../lib/catalogos.js'
 import { puedeEditar, puedeBorrarCajas, puedeCrearCajas } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -261,7 +262,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     loadAuditHistory()
     metodosApi.list()
       .then(r => setMetodos(r.data || []))
-      .catch(() => {})
+      .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
   }, [cajaId])
 
   // El catálogo se pide con o sin local. GET /caja-detalles/tipos ya devuelve los
@@ -913,9 +914,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       })
       setDetalles(data.detalles || [])
       setMovimientos(data.movimientos || [])
-      detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(() => {})
+      detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(err => notify(mensajeCatalogo(err, 'los nombres de detalle'), 'error'))
     }).catch(() => notify('Error al cargar caja', 'error'))
-    metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
+    metodosApi.list().then(r => setMetodos(r.data || [])).catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
   }, [cajaId])
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))

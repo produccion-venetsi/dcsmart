@@ -5,6 +5,7 @@ import CuadreVivo from '../../components/CuadreVivo.jsx'
 import { calcularCuadre } from '../../lib/cuadreCaja.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { mensajeCatalogo } from '../../lib/catalogos.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
@@ -122,8 +123,8 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   useEffect(() => {
     metodosApi.list()
       .then(r => setMetodos(r.data || []))
-      .catch(() => {})
-  }, [])
+      .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
+  }, [notify])
 
   const addPendingDetalle = () => {
     if (!detForm.monto) return
