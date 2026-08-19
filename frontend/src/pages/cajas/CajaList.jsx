@@ -1598,12 +1598,20 @@ export default function CajaList() {
 
   const bulkCancel = () => setSelectedIds(new Set())
 
+  // Mientras corre una operación masiva, los tres botones se deshabilitan:
+  // auditar es un TOGGLE en el backend, así que un doble click auditaba y
+  // desauditaba la misma tanda (la segunda pasada corría sobre la selección
+  // vieja). Y el estado ademas muestra que algo está corriendo.
+  const [bulking, setBulking] = useState(false)
+
   const toggleSelectionMode = () => {
     setSelectionMode(m => !m)
     setSelectedIds(new Set())
   }
 
   const bulkAuditar = async () => {
+    if (bulking) return
+    setBulking(true)
     const targets = selectedCajas.filter(c => !c.audit)
     let ok = 0, fail = 0
     for (const c of targets) {
@@ -1612,10 +1620,13 @@ export default function CajaList() {
     }
     notify(fail === 0 ? `${ok} cajas auditadas` : `${ok}/${targets.length} auditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
     setSelectedIds(new Set())
+    setBulking(false)
     load()
   }
 
   const bulkDesauditar = async () => {
+    if (bulking) return
+    setBulking(true)
     const targets = selectedCajas.filter(c => c.audit)
     let ok = 0, fail = 0
     for (const c of targets) {
@@ -1624,6 +1635,7 @@ export default function CajaList() {
     }
     notify(fail === 0 ? `${ok} cajas desauditadas` : `${ok}/${targets.length} desauditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
     setSelectedIds(new Set())
+    setBulking(false)
     load()
   }
 
@@ -1635,6 +1647,8 @@ export default function CajaList() {
       { title: `Eliminar ${selectedCajas.length} cajas`, placeholder: 'Por qué se eliminan (opcional)' }
     )
     if (motivoMasivo === null) return
+    if (bulking) return
+    setBulking(true)
     let ok = 0, fail = 0
     for (const c of selectedCajas) {
       try { await cajasApi.remove(c.id, motivoMasivo); ok++ }
@@ -1642,6 +1656,7 @@ export default function CajaList() {
     }
     notify(fail === 0 ? `${ok} cajas eliminadas` : `${ok}/${selectedCajas.length} eliminadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
     setSelectedIds(new Set())
+    setBulking(false)
     load()
   }
 
@@ -1787,13 +1802,13 @@ export default function CajaList() {
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-bright)' }}>
             {selectedIds.size} seleccionados
           </span>
-          <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit}>
+          <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit || bulking}>
             Auditar
           </button>
-          <button className="btn btn-sm btn-secondary" onClick={bulkDesauditar} disabled={!canBulkDesaudit}>
+          <button className="btn btn-sm btn-secondary" onClick={bulkDesauditar} disabled={!canBulkDesaudit || bulking}>
             Desauditar
           </button>
-          <button className="btn btn-sm btn-danger" onClick={bulkEliminar}>
+          <button className="btn btn-sm btn-danger" onClick={bulkEliminar} disabled={bulking}>
             Eliminar
           </button>
           <button className="btn btn-sm btn-secondary" onClick={bulkCancel} style={{ marginLeft: 'auto' }}>
