@@ -58,7 +58,10 @@ function fmtSize(bytes) {
 // - onFileSelected(file): se llama al elegir o soltar un archivo nuevo
 // - onRemove(): se llama al quitar el archivo actual (value o file)
 // - uploading: true mientras se está subiendo (deshabilita quitar/reemplazar)
-export default function AdjuntoUpload({ label, accept, value, file, onFileSelected, onRemove, uploading }) {
+// - cargarContenido: async () => objectURL del adjunto YA GUARDADO (edición).
+//   Con esto el contenido se ve dentro del mismo cuadro; sin la prop, el
+//   guardado se muestra como antes (nombre + thumb chico).
+export default function AdjuntoUpload({ label, accept, value, file, onFileSelected, onRemove, uploading, cargarContenido }) {
   const inputRef = useRef(null)
   const cameraInputRef = useRef(null)
   const [dragOver, setDragOver] = useState(false)
@@ -76,9 +79,23 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
     return () => URL.revokeObjectURL(url)
   }, [file])
 
+  // Contenido del adjunto guardado (edición): se trae una sola vez por URL.
+  const [contenidoUrl, setContenidoUrl] = useState(null)
+  useEffect(() => {
+    if (file || !value || !cargarContenido) { setContenidoUrl(null); return }
+    let vivo = true
+    let obtenida = null
+    cargarContenido()
+      .then((u) => { if (vivo) { obtenida = u; setContenidoUrl(u) } else if (u) URL.revokeObjectURL(u) })
+      .catch(() => {}) // sin preview no se rompe nada: queda el thumb de siempre
+    return () => { vivo = false; if (obtenida) URL.revokeObjectURL(obtenida) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, value])
+
   const previewSrc = file
     ? fileBlobUrl
-    : (isImage && value && !value.startsWith('gs://') ? value : null)
+    : contenidoUrl || (isImage && value && !value.startsWith('gs://') ? value : null)
+  const esPdfConContenido = !isImage && Boolean(file ? fileBlobUrl : contenidoUrl)
   const displayName = file ? file.name : value?.split('/').pop()
 
   const openGallery = () => inputRef.current?.click()
@@ -144,6 +161,17 @@ export default function AdjuntoUpload({ label, accept, value, file, onFileSelect
             </button>
           )}
         </div>
+      )}
+      {/* El contenido, en el mismo cuadro: la imagen entera (click = abrir en
+          pestaña nueva) o el PDF embebido. Vale tanto para el archivo recién
+          elegido como para el guardado en edición. */}
+      {hasContent && isImage && previewSrc && (
+        <a href={previewSrc} target="_blank" rel="noreferrer" title="Ver en tamaño completo">
+          <img className="adjunto-preview" src={previewSrc} alt={`Contenido de ${label}`} />
+        </a>
+      )}
+      {hasContent && esPdfConContenido && (
+        <iframe className="adjunto-preview adjunto-preview-pdf" src={file ? fileBlobUrl : contenidoUrl} title={`Contenido de ${label}`} />
       )}
       {hasContent && !uploading && (
         <span className="adjunto-replace" onClick={openPicker}>Reemplazar archivo</span>

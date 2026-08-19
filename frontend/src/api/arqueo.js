@@ -8,4 +8,10 @@ export const arqueoApi = {
   remove:  (id)                => client.delete(`/arqueo/${id}`),
   preview: (id_local, fecha)   => client.get('/arqueo/preview', { params: { id_local, fecha } }),
   audit:   (id, data)          => client.patch(`/arqueo/${id}/audit`, data),
+
+  // Disponibilidades del ultimo arqueo de cada local del grupo activo
+  disponibilidades: (signal)   => client.get('/arqueo/disponibilidades', { signal }),
+  // Cajas y pagos en efectivo de un periodo: sin id_arqueo, desde el ultimo
+  // arqueo hasta ahora; con id_arqueo, el periodo de ese arqueo.
+  movimientos: (params, signal) => client.get('/arqueo/movimientos', { params, signal }),
 }

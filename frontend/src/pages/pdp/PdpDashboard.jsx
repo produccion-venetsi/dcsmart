@@ -242,6 +242,7 @@ function PdpColumn({
   selectable = false, selected, onToggleOne, onToggleGroup,
   actionLabel, actionIcon, onAction,
   secondaryActionLabel, secondaryActionIcon, onSecondaryAction,
+  onAuditar, auditables = 0,
   working,
   onGenerateReport, generatingReport,
 }) {
@@ -330,6 +331,18 @@ function PdpColumn({
                 {textoSeleccionarTodo(estadoSel)}
               </button>
             )}
+            {/* Auditar en lote, igual que la tabla de Pagos: opera sobre las
+                seleccionadas que todavia no estan auditadas, sin abrir cada OP. */}
+            {onAuditar && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={onAuditar}
+                disabled={auditables === 0 || working}
+                title={auditables === 0 ? 'Ninguna seleccionada sin auditar' : `Auditar ${auditables} seleccionada${auditables !== 1 ? 's' : ''}`}
+              >
+                ✓ Auditar{auditables > 0 ? ` (${auditables})` : ''}
+              </button>
+            )}
             {onSecondaryAction && (
               <button
                 className="btn btn-sm btn-secondary"
@@ -400,7 +413,10 @@ function PdpColumn({
                           onClick={(e) => e.stopPropagation()}
                         />
                       )}
-                      <span className="pdp-row-ord">{p.nro_ord != null ? `OP-${p.nro_ord}` : '—'}</span>
+                      <span className="pdp-row-ord">
+                        {p.nro_ord != null ? `OP-${p.nro_ord}` : '—'}
+                        {p.audit && <span title="Auditada" style={{ color: 'var(--green)', marginLeft: 4 }}>✓</span>}
+                      </span>
                       {/* Tipo de comprobante (A, B, STK, etc.): antes solo se veía
                           al abrir el detalle del pago. Mismo badge de color que
                           la tabla de Pagos y su detalle (TIPO_BADGE). */}
@@ -475,6 +491,24 @@ export default function PdpDashboard() {
 
   const patchPago = (id, fields) => {
     setSelectedPago(prev => prev?.id === id ? { ...prev, ...fields } : prev)
+    load()
+  }
+
+  // Auditar en lote las seleccionadas de una columna, sin abrir cada OP:
+  // mismo recorrido secuencial que bulkAuditar en PagoList, con el mismo
+  // resumen de exitos/fallas. Solo las que todavia no estan auditadas.
+  const handleAuditarLote = async (lista, seleccion, setSeleccion) => {
+    const targets = lista.filter(p => seleccion.has(p.id) && !p.audit)
+    if (!targets.length) return
+    setWorking(true)
+    let ok = 0, fail = 0
+    for (const p of targets) {
+      try { await pagosApi.audit(p.id); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `${ok} pagos auditados` : `${ok}/${targets.length} auditados, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSeleccion(new Set())
+    setWorking(false)
     load()
   }
 
@@ -687,6 +721,8 @@ export default function PdpDashboard() {
           actionLabel="Mandar a PDP"
           actionIcon={<IcoArrow />}
           onAction={handleMandar}
+          onAuditar={() => handleAuditarLote(deuda, selDeuda, setSelDeuda)}
+          auditables={deuda.filter(p => selDeuda.has(p.id) && !p.audit).length}
           working={working}
         />
 
@@ -707,6 +743,8 @@ export default function PdpDashboard() {
           actionLabel="Pagar"
           actionIcon={<IcoMoney />}
           onAction={() => setPagarOpen(true)}
+          onAuditar={() => handleAuditarLote(pagar, selPagar, setSelPagar)}
+          auditables={pagar.filter(p => selPagar.has(p.id) && !p.audit).length}
           working={working}
           onGenerateReport={handleGenerarReporte}
           generatingReport={generatingReport}

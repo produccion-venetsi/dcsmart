@@ -9,6 +9,7 @@ import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import client from '../../api/client.js'
 import CargaIA from '../../components/CargaIA.jsx'
 import Combobox from '../../components/Combobox.jsx'
 import { nombreCliente } from '../../lib/clientes.js'
@@ -159,7 +160,9 @@ export default function PagoForm() {
   const [editingImpId,  setEditingImpId]  = useState(null)
   const [editImpForm,   setEditImpForm]   = useState({ tipo: 'IVA21', monto: '' })
   const [impForm,    setImpForm]    = useState({ tipo: 'IVA21', monto: '' })
-  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
+  // Sin PERCEPCION: se cargan separadas como PERC_IVA / PERC_IIBB. El tipo
+  // viejo sigue existiendo en la base por los pagos historicos.
+  const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERC_IVA', 'PERC_IIBB', 'IMP_INTERNOS']
 
   // multimoneda (solo al crear — un único registro por pago)
   const [mmForm,  setMmForm]  = useState({ tipo: 'USD', tdc: '', monto: '' })
@@ -270,6 +273,12 @@ export default function PagoForm() {
       contexto: pideContexto ? pagosApi.contextoLocal(activeLocal.id, ctrl.signal) : null,
     })
       .then(async ({ metodos: mets, pago: d, contexto, fallas }) => {
+        // Una carga abortada no es una falla que haya que avisar: cargarArranquePago
+        // usa allSettled, asi que la peticion cancelada vuelve como `rejected` y
+        // marcaba fallas.contexto. Al remontarse el formulario (StrictMode en dev,
+        // o cualquier desmontaje) salia el aviso azul "revisá proveedor y descuento"
+        // de la ejecucion abortada mientras la buena precargaba el proveedor bien.
+        if (ctrl.signal.aborted) return
         setMetodos(mets)
         draftReadyRef.current = true
         // Editar sin los datos del pago es peor que no abrir el formulario: se
@@ -331,9 +340,12 @@ export default function PagoForm() {
           // El nombre del cliente viene en el include del pago: sin esto el
           // combobox abriría vacío y parecería que la op perdió el cliente.
           if (d.cliente) setCliSelected(d.cliente)
-        } else if (contexto?.id_proveedor) {
-          // Carga Avión y MovStock facturan contra el proveedor del propio
-          // local (la sociedad que factura por él), así que viene precargado.
+        } else if (contexto?.id_proveedor && modoRapido) {
+          // SOLO en los modos rápidos: Carga Avión y MovStock facturan contra
+          // el proveedor del propio local (la sociedad que factura por él),
+          // así que viene precargado. En el "nuevo pago" común ese default
+          // metía la razón social del local en pagos de cualquier proveedor
+          // cuando nadie tocaba el campo.
           const { data: prov } = await proveedoresApi.get(contexto.id_proveedor, ctrl.signal)
           setLocalProveedor(prov)
           setProvSelected(prov)
@@ -1634,6 +1646,12 @@ export default function PagoForm() {
               onFileSelected={setFotoFile}
               onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null); setFallaLectura(null) }}
               uploading={uploadingFoto || leyendoTipo === 'foto'}
+              // En edición el adjunto guardado se trae por el endpoint firmado
+              // (la url cruda del bucket no es accesible) y se ve en el cuadro.
+              cargarContenido={isEditing ? async () => {
+                const r = await client.get(`/pagos/${id}/attachment?type=foto`, { responseType: 'blob' })
+                return URL.createObjectURL(r.data)
+              } : undefined}
             />
             <AdjuntoUpload
               label="PDF"
@@ -1643,6 +1661,10 @@ export default function PagoForm() {
               onFileSelected={setPdfFile}
               onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null); setFallaLectura(null) }}
               uploading={uploadingPdf || leyendoTipo === 'pdf'}
+              cargarContenido={isEditing ? async () => {
+                const r = await client.get(`/pagos/${id}/attachment?type=pdf`, { responseType: 'blob' })
+                return URL.createObjectURL(r.data)
+              } : undefined}
             />
           </div>
         </div>

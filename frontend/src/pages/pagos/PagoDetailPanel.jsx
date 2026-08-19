@@ -16,7 +16,10 @@ import { nombreProveedor, razonSocialExtra } from '../../lib/proveedorLabel.js'
 import { ESTADO_OP_LABEL, ESTADO_OP_BADGE } from '../../lib/estadoOp.js'
 
 const ESTADO_BADGE = ESTADO_OP_BADGE
-const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERCEPCION', 'IMP_INTERNOS']
+// Sin PERCEPCION en el alta: se reemplazo por PERC_IVA / PERC_IIBB. Al editar
+// un impuesto historico que ya es PERCEPCION, la opcion se agrega para que el
+// select no muestre otra cosa que la guardada.
+const TIPOS_IMP = ['IVA21', 'IVA27', 'IVA10', 'RETENCION', 'PERC_IVA', 'PERC_IIBB', 'IMP_INTERNOS']
 
 function IcoPlus() {
   return (
@@ -579,7 +582,7 @@ export default function PagoDetailPanel({ pago, navigate, onDelete, onAudit, onP
                         <td>
                           <div className="form-input-wrap" style={{ margin: 0 }}>
                             <select value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
-                              {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                              {(TIPOS_IMP.includes(editImpForm.tipo) ? TIPOS_IMP : [...TIPOS_IMP, editImpForm.tipo]).map(t => <option key={t}>{t}</option>)}
                             </select>
                           </div>
                         </td>

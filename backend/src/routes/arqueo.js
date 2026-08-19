@@ -206,6 +206,131 @@ export default async function arqueoRoutes(fastify) {
     return { total_ultimo_arqueo: totalUltimoArqueo, fecha_ultimo_arqueo: fechaDesde, ingresos, gastos }
   })
 
+  // ── GET /disponibilidades ─────────────────────────────────────────────
+  // Las disponibilidades del ULTIMO arqueo de cada local del grupo activo:
+  // una fila por local con sus lineas (MP Hoy, BBVA, Amex...) y el total.
+  // Los locales sin arqueos tambien van (con ultimo=null): que falte un
+  // arqueo es un dato, y esconder el local lo taparia.
+  fastify.get('/disponibilidades', { preHandler: viewHandler }, async (request, reply) => {
+    const ids = request.allowedLocalIds
+    if (!ids.length) return { data: [] }
+
+    const [locales, ultimos] = await Promise.all([
+      fastify.db.local.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, nombre: true },
+        orderBy: { nombre: 'asc' }
+      }),
+      // distinct + orderBy fecha desc = el arqueo mas reciente de cada local
+      fastify.db.arqueo.findMany({
+        where: { id_local: { in: ids } },
+        orderBy: { fecha: 'desc' },
+        distinct: ['id_local'],
+        include: { detalles: { include: { detalle_tipo: true } } }
+      })
+    ])
+
+    const porLocal = new Map(ultimos.map(a => [a.id_local, a]))
+    const data = locales.map(l => {
+      const a = porLocal.get(l.id)
+      return {
+        id_local: l.id,
+        local: l.nombre,
+        ultimo: a ? {
+          id: a.id,
+          fecha: a.fecha,
+          total: Number(a.total),
+          disponibilidades: a.detalles.map(d => ({
+            nombre: d.detalle_tipo?.nombre || d.nombre || 'Sin tipo',
+            monto: Number(d.monto)
+          }))
+        } : null
+      }
+    })
+    return { data }
+  })
+
+  // ── GET /movimientos ──────────────────────────────────────────────────
+  // Las filas que componen los ingresos y gastos de un periodo de arqueo:
+  // las cajas (su efectivo) y los pagos en efectivo del local.
+  //
+  //   ?id_local=X            -> desde el ultimo arqueo hasta AHORA (lo que
+  //                             deberia haber en la caja para el proximo conteo)
+  //   ?id_local=X&id_arqueo= -> el periodo de ESE arqueo (entre el anterior y el)
+  //
+  // Mismas condiciones que calcularIngresos/calcularGastos: la suma de estas
+  // filas ES el numero de la comprobacion, no una version parecida.
+  fastify.get('/movimientos', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local, id_arqueo } = request.query
+    if (!id_local || !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a ese local' })
+    }
+
+    let desde = null, hasta = new Date()
+    if (id_arqueo) {
+      const arqueo = await fastify.db.arqueo.findUnique({ where: { id: id_arqueo } })
+      if (!arqueo || arqueo.id_local !== id_local) {
+        return reply.code(404).send({ error: 'Arqueo no encontrado' })
+      }
+      hasta = arqueo.fecha
+      const anterior = await getArqueoAnterior(fastify, id_local, arqueo.fecha)
+      desde = anterior ? anterior.fecha : null
+    } else {
+      const ultimo = await fastify.db.arqueo.findFirst({
+        where: { id_local },
+        orderBy: { fecha: 'desc' }
+      })
+      desde = ultimo ? ultimo.fecha : null
+    }
+
+    const rangoCaja = { ...(desde ? { gt: desde } : {}), lte: hasta }
+    const metodoEfectivo = await fastify.db.metodoPago.findFirst({
+      where: { nombre: { equals: 'Efectivo', mode: 'insensitive' } }
+    })
+    const wherePagos = metodoEfectivo ? {
+      id_local, pagado: true, ingresa_egreso: false,
+      id_metodo: metodoEfectivo.id, fecha_pago: rangoCaja
+    } : null
+
+    // Cap de filas para el primer arqueo (sin `desde` el rango es todo el
+    // historial); los totales van con aggregate aparte para que sigan siendo
+    // los completos aunque la lista este recortada.
+    const CAP = 300
+    const [cajas, pagos, aggCajas, aggPagos, totalCajas, totalPagos] = await Promise.all([
+      fastify.db.caja.findMany({
+        where: { id_local, fecha_inicio: rangoCaja },
+        select: { id: true, fecha_inicio: true, tipo_turno: true, efectivo: true },
+        orderBy: { fecha_inicio: 'desc' },
+        take: CAP
+      }),
+      wherePagos ? fastify.db.pago.findMany({
+        where: wherePagos,
+        select: { id: true, nro_ord: true, fecha_pago: true, importe: true, proveedor: { select: { nombre: true, razon_social: true } } },
+        orderBy: { fecha_pago: 'desc' },
+        take: CAP
+      }) : [],
+      fastify.db.caja.aggregate({ where: { id_local, fecha_inicio: rangoCaja }, _sum: { efectivo: true } }),
+      wherePagos ? fastify.db.pago.aggregate({ where: wherePagos, _sum: { importe: true } }) : null,
+      fastify.db.caja.count({ where: { id_local, fecha_inicio: rangoCaja } }),
+      wherePagos ? fastify.db.pago.count({ where: wherePagos }) : 0,
+    ])
+
+    return {
+      desde, hasta,
+      ingresos: Number(aggCajas._sum.efectivo ?? 0),
+      gastos: Number(aggPagos?._sum.importe ?? 0),
+      cajas: cajas.map(c => ({ ...c, efectivo: Number(c.efectivo ?? 0) })),
+      pagos: pagos.map(pg => ({
+        id: pg.id, nro_ord: pg.nro_ord, fecha_pago: pg.fecha_pago,
+        importe: Number(pg.importe ?? 0),
+        proveedor: pg.proveedor?.nombre || pg.proveedor?.razon_social || null
+      })),
+      total_cajas: totalCajas,
+      total_pagos: totalPagos,
+      truncado: totalCajas > CAP || totalPagos > CAP
+    }
+  })
+
   // ── POST / ────────────────────────────────────────────────────────────
   // body: { id_local, fecha, caja_fuerte, cofre, adicion, detalles?: [{id_tipo?, nombre?, monto}] }
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
