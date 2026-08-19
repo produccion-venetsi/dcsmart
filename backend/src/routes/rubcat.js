@@ -160,11 +160,17 @@ export default async function rubcatRoutes(fastify) {
   fastify.put('/:id', {
     preHandler: [fastify.authenticate, fastify.can('rubros', 'edit')]
   }, async (request, reply) => {
-    const { cuenta, tipo, costo, clasificacion } = request.body
+    const { cuenta, tipo, costo, clasificacion, tipos_afines, es_general } = request.body
     try {
       const rubcat = await fastify.db.rubCat.update({
         where: { id: request.params.id },
-        data: { cuenta, tipo, costo, clasificacion },
+        // tipos_afines/es_general estaban solo en el create: un rubcat ya
+        // creado no se podia asignar a un tipo de local nunca.
+        data: {
+          cuenta, tipo, costo, clasificacion,
+          tipos_afines: sanearTiposAfines(tipos_afines),
+          ...(es_general != null ? { es_general: es_general === true } : {})
+        },
         include: { rubro: true, categoria: true }
       })
       return rubcat

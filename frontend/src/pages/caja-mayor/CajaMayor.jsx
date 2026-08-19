@@ -21,7 +21,7 @@ import {
 } from '../../lib/cajaMayor.js'
 import MovimientoForm from './MovimientoForm.jsx'
 import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
-import { dividirPorDireccion, proporcion } from '../../lib/cajaMayorVista.js'
+import { dividirPorEstado, proporcion } from '../../lib/cajaMayorVista.js'
 import { MODOS_ALTA, tieneOp, etiquetaOp, rutaDeLaOp, resolverAlta } from '../../lib/altaCajaMayor.js'
 import { resolverApertura, mensajeDeCambio } from '../../lib/destinoAviso.js'
 
@@ -237,7 +237,7 @@ export default function CajaMayor() {
   // `vista.neto` reemplaza al viejo `totalConsolidado`: la suma de los saldos por
   // local es, por definición, enviado menos recibido. Era el mismo número calculado
   // dos veces.
-  const vista = useMemo(() => dividirPorDireccion(saldos), [saldos])
+  const vista = useMemo(() => dividirPorEstado(saldos), [saldos])
 
   // Título del resumen: el local si hay uno elegido, si no el grupo, si no nada.
   const nombreSeleccion = idLocal
@@ -407,29 +407,25 @@ export default function CajaMayor() {
             </div>
           )}
 
-          {/* ── La vista partida en dos, por DIRECCION ───────────────────────
+          {/* ── La vista partida en dos, por ESTADO ──────────────────────────
+              Pedido del dueño del producto (Trello "CM. Estado"): el primer corte
+              es ENVIADA/RECIBIDA — ¿la caja mayor ya confirmó la plata o sigue en
+              camino? — y la dirección (depositado/extraído) va como desglose
+              ADENTRO de cada lado, con su flecha y su color. Antes el corte era
+              por dirección; si esto vuelve a discutirse, las dos preguntas están
+              explicadas en lib/cajaMayorVista.js.
+
               Los DOS lados listan los mismos locales en el mismo orden, incluso con
               cero de un lado: leer las dos columnas a la misma altura es lo que
-              permite comparar, y filtrar los ceros desalinearia las filas.
-
-              Los titulos son DEPOSITADO / EXTRAIDO y no "enviado/recibido" a
-              proposito: esas dos palabras son los valores del estado
-              (ENVIADA/RECIBIDA), y usarlas para la direccion hacia que un movimiento
-              en estado RECIBIDA apareciera bajo la columna "enviadas" -- que es
-              exactamente lo que se reporto de ADA. El estado va aparte, en la columna
-              "Sin confirmar".
-
-              Ojo con el dato: `ingresos` y `egresos` vienen desde la CAJA MAYOR, y un
-              egreso del local es un ingreso a la caja mayor. Leerlo al derecho
-              invierte los dos totales y los numeros igual parecen correctos. */}
+              permite comparar, y filtrar los ceros desalinearia las filas. */}
           <div className="cm-split">
             {[
-              { clave: 'depositado', pend: 'pendiente_depositado', ops: 'ops_depositado',
-                titulo: 'Depositado en caja mayor', ayuda: 'Plata que el local puso',
-                color: 'var(--green)', total: vista.totalDepositado },
-              { clave: 'extraido', pend: 'pendiente_extraido', ops: 'ops_extraido',
-                titulo: 'Extraído de caja mayor', ayuda: 'Plata que el local sacó',
-                color: 'var(--red)', total: vista.totalExtraido },
+              { clave: 'enviada_total', dep: 'enviada_depositado', ext: 'enviada_extraido', ops: 'ops_enviada',
+                titulo: 'Enviadas — sin confirmar', ayuda: 'La caja mayor todavía no las confirmó',
+                color: 'var(--amber)', total: vista.totalEnviada },
+              { clave: 'recibida_total', dep: 'recibida_depositado', ext: 'recibida_extraido', ops: 'ops_recibida',
+                titulo: 'Recibidas — confirmadas', ayuda: 'La caja mayor ya las confirmó',
+                color: 'var(--green)', total: vista.totalRecibida },
             ].map((lado) => (
               <div key={lado.clave} className="cm-split-panel">
                 <div className="cm-split-head">
@@ -479,12 +475,17 @@ export default function CajaMayor() {
                             <div style={{ color: f[lado.clave] ? lado.color : 'var(--t4)' }}>
                               {fmtMonto(f[lado.clave], f.moneda)}
                             </div>
-                            {/* Lo que de ese monto todavía no confirmó la caja mayor. Va
-                                debajo del número y no en otra columna: es una aclaración
-                                del mismo importe, no un dato aparte. */}
-                            {f[lado.pend] > 0 && (
-                              <div style={{ fontSize: 10.5, color: 'var(--amber)' }}>
-                                {fmtMonto(f[lado.pend], f.moneda)} sin confirmar
+                            {/* La dirección, como desglose del mismo importe: cuánto de
+                                este lado fue plata que el local puso (↑) y cuánto que
+                                sacó (↓). Solo las que existen, para no llenar de ceros. */}
+                            {f[lado.dep] > 0 && (
+                              <div style={{ fontSize: 10.5, color: 'var(--green)' }}>
+                                ↑ {fmtMonto(f[lado.dep], f.moneda)} depositado
+                              </div>
+                            )}
+                            {f[lado.ext] > 0 && (
+                              <div style={{ fontSize: 10.5, color: 'var(--red)' }}>
+                                ↓ {fmtMonto(f[lado.ext], f.moneda)} extraído
                               </div>
                             )}
                             <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(var(--velo-rgb), 0.07)' }}>

@@ -878,8 +878,12 @@ enum TipoImpuesto {
   IVA27
   IVA10
   RETENCION
+  // PERCEPCION queda por los datos historicos (las migraciones de AppSheet
+  // juntaban Perc. IVA y Perc. IIBB en un solo tipo); el alta ya no lo ofrece.
   PERCEPCION
   IMP_INTERNOS
+  PERC_IVA
+  PERC_IIBB
 
   @@map("tipo_impuesto")
 }

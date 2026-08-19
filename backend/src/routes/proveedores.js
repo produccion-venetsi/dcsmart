@@ -125,7 +125,11 @@ export default async function proveedoresRoutes(fastify) {
           nombre, razon_social, cuit, banco, cbu, alias,
           direccion_url, detalle_direc, telefono, mail_contacto,
           mail_envio, tag, cuenta, observaciones, tipo_local, tipo,
-          id_rubcat,
+          // `|| null` igual que en el create: el formulario manda '' cuando no
+          // hay rubro elegido, y '' contra la FK da P2003 (no existe un rubcat
+          // con id vacio). Sin esto, editar un proveedor sin rubro --o quitarle
+          // el que tenia-- no se podia guardar.
+          id_rubcat: id_rubcat || null,
           plazo: plazo != null ? parseInt(plazo) : null,
           activo,
           tipos_afines: sanearTiposAfines(tipos_afines),

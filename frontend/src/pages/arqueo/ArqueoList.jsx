@@ -118,7 +118,7 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
         </div>
       </div>
 
-      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Detalles (opcional)</div>
+      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Disponibilidades</div>
       {pendingDetalles.map(d => (
         <div key={d._key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
           <span>{tipos.find(t => t.id === d.id_tipo)?.nombre || 'Sin tipo'}: {fmt$(d.monto)}</span>
@@ -292,7 +292,7 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
         </div>
       </div>
 
-      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Detalles (opcional)</div>
+      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Disponibilidades</div>
       {detalles.map(d => (
         <div key={d._key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
           <span>{tipos.find(t => t.id === d.id_tipo)?.nombre || 'Sin tipo'}: {fmt$(d.monto)}</span>
@@ -438,7 +438,7 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
 
       {arqueo.detalles?.length > 0 && (
         <>
-          <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Detalles</div>
+          <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Disponibilidades</div>
           {arqueo.detalles.map(d => (
             <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
               <span>{d.detalle_tipo?.nombre || d.nombre || 'Sin tipo'}</span>
@@ -447,6 +447,12 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
           ))}
         </>
       )}
+
+      {/* Las cajas y pagos que respaldan los ingresos/gastos de ESTE arqueo:
+          el período entre el anterior y este. Antes solo estaban los totales
+          y no había forma de discutir el número sin ir a buscar las filas. */}
+      <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Movimientos del período</div>
+      <MovimientosPeriodo idLocal={arqueo.id_local} idArqueo={arqueo.id} compacto />
 
       {(canEdit || canDelete) && (
         <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
@@ -467,6 +473,160 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ── disponibilidades por local ──
+   El último arqueo de cada local del grupo, con sus líneas (MP Hoy, MP
+   Disponible, BBVA, Amex...) pivotadas en columnas. Las columnas son la unión
+   de los nombres que aparecen: cada grupo usa sus propios tipos y una lista
+   fija dejaría celdas eternamente vacías. */
+function TablaDisponibilidades({ activeApp, activeLocal }) {
+  const notify = useUiStore((s) => s.notify)
+  const [filas, setFilas] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!activeApp?.app?.id) { setFilas([]); setLoading(false); return }
+    const ctrl = new AbortController()
+    setLoading(true)
+    arqueoApi.disponibilidades(ctrl.signal)
+      .then(({ data }) => setFilas(data.data))
+      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar las disponibilidades', 'error') })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
+    return () => ctrl.abort()
+  }, [activeApp?.app?.id])
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '1.5rem' }}><span className="spinner" /></div>
+  if (!filas.length) return null
+
+  const columnas = [...new Set(
+    filas.flatMap(f => (f.ultimo?.disponibilidades ?? []).map(d => d.nombre))
+  )].sort((a, b) => a.localeCompare(b, 'es'))
+
+  const montoDe = (f, col) =>
+    (f.ultimo?.disponibilidades ?? []).filter(d => d.nombre === col).reduce((a, d) => a + d.monto, 0)
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <div className="drawer-section-title">Disponibilidades por local (último arqueo)</div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Local</th>
+              {/* El efectivo contado del arqueo es una disponibilidad más: va
+                  como primera columna, y el TOTAL de la fila lo incluye. Sin
+                  esto, "Total" mostraba el total del arqueo y no cerraba con
+                  la suma de las columnas visibles. */}
+              <th style={{ textAlign: 'right' }}>Efectivo</th>
+              {columnas.map(c => <th key={c} style={{ textAlign: 'right' }}>{c}</th>)}
+              <th style={{ textAlign: 'right' }}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map(f => {
+              const sumaDisp = (f.ultimo?.disponibilidades ?? []).reduce((a, d) => a + d.monto, 0)
+              return (
+              <tr key={f.id_local} style={f.id_local === activeLocal?.id ? { background: 'var(--bg-input)' } : undefined}>
+                <td>
+                  {f.local}
+                  <div style={{ fontSize: 10.5, color: f.ultimo ? 'var(--t4)' : 'var(--amber)' }}>
+                    {f.ultimo ? fmtDateTime(f.ultimo.fecha) : 'sin arqueos'}
+                  </div>
+                </td>
+                <td className="td-number" style={{ textAlign: 'right' }}>
+                  {f.ultimo ? fmt$(f.ultimo.total) : <span className="td-muted">—</span>}
+                </td>
+                {columnas.map(c => {
+                  const m = montoDe(f, c)
+                  return (
+                    <td key={c} className="td-number" style={{ textAlign: 'right' }}>
+                      {m ? fmt$(m) : <span className="td-muted">—</span>}
+                    </td>
+                  )
+                })}
+                <td className="td-number" style={{ textAlign: 'right', fontWeight: 700 }}>
+                  {f.ultimo ? fmt$(f.ultimo.total + sumaDisp) : <span className="td-muted">—</span>}
+                </td>
+              </tr>
+            )})}
+          </tbody>
+        </table>
+      </div>
+      {columnas.length === 0 && (
+        <p style={{ fontSize: 11.5, color: 'var(--t3)', marginTop: 6 }}>
+          Ningún arqueo tiene disponibilidades cargadas todavía: se agregan al crear o editar un arqueo.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ── cajas y pagos de un período de arqueo ──
+   Las filas que componen los ingresos y gastos: sin id_arqueo es "desde el
+   último arqueo hasta ahora" (lo que debería haber en la caja para el próximo
+   conteo); con id_arqueo, el período de ese arqueo. La suma de estas filas ES
+   el número de la comprobación: mismas condiciones que el backend. */
+function MovimientosPeriodo({ idLocal, idArqueo = null, compacto = false }) {
+  const notify = useUiStore((s) => s.notify)
+  const [datos, setDatos] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!idLocal) return
+    const ctrl = new AbortController()
+    setLoading(true)
+    arqueoApi.movimientos({ id_local: idLocal, ...(idArqueo ? { id_arqueo: idArqueo } : {}) }, ctrl.signal)
+      .then(({ data }) => setDatos(data))
+      .catch(() => { if (!ctrl.signal.aborted) notify('Error al cargar los movimientos del período', 'error') })
+      .finally(() => { if (!ctrl.signal.aborted) setLoading(false) })
+    return () => ctrl.abort()
+  }, [idLocal, idArqueo])
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}><span className="spinner" /></div>
+  if (!datos) return null
+
+  const tablas = [
+    { titulo: `Cajas (efectivo) — ${fmt$(datos.ingresos)}`, filas: datos.cajas, total: datos.total_cajas,
+      cab: ['Fecha', 'Turno', 'Efectivo'],
+      fila: (c) => [fmtDateTime(c.fecha_inicio), c.tipo_turno || '—', fmt$(c.efectivo)] },
+    { titulo: `Pagos en efectivo — ${fmt$(datos.gastos)}`, filas: datos.pagos, total: datos.total_pagos,
+      cab: ['OP', 'Fecha de pago', 'Proveedor', 'Importe'],
+      fila: (pg) => [pg.nro_ord != null ? `OP-${pg.nro_ord}` : '—', fmtDateTime(pg.fecha_pago), pg.proveedor || '—', fmt$(pg.importe)] },
+  ]
+
+  return (
+    <div style={compacto ? undefined : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '1rem' }}>
+      {tablas.map(t => (
+        <div key={t.titulo} style={compacto ? { marginBottom: '1rem' } : undefined}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--t2)', margin: '0 0 6px' }}>{t.titulo}</div>
+          {t.filas.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--t3)' }}>Sin movimientos en el período.</div>
+          ) : (
+            <div className="table-wrap" style={{ maxHeight: compacto ? 220 : 320, overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead><tr>{t.cab.map(h => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {t.filas.map(f => (
+                    <tr key={f.id}>
+                      {t.fila(f).map((celda, i) => (
+                        <td key={i} className={i === t.cab.length - 1 ? 'td-number' : undefined}>{celda}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {t.total > t.filas.length && (
+            <p style={{ fontSize: 11, color: 'var(--t3)', marginTop: 4 }}>
+              Se muestran {t.filas.length} de {t.total}; el total de arriba cuenta todos.
+            </p>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -519,6 +679,8 @@ export default function ArqueoList() {
           </button>
         </div>
       </div>
+
+      <TablaDisponibilidades activeApp={activeApp} activeLocal={activeLocal} />
 
       {!activeLocal ? (
         <div className="pdp-empty">Seleccioná un local para ver su historial de arqueos.</div>
@@ -580,6 +742,16 @@ export default function ArqueoList() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Lo acumulado desde el último arqueo hasta ahora: es lo que debería
+          haber en la caja cuando se haga el próximo conteo. La key fuerza el
+          refetch cuando se crea/borra un arqueo (load() cambia arqueos). */}
+      {activeLocal && !loading && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <div className="drawer-section-title">Desde el último arqueo hasta ahora — {activeLocal.nombre}</div>
+          <MovimientosPeriodo key={arqueos[0]?.id ?? 'sin'} idLocal={activeLocal.id} />
         </div>
       )}
 

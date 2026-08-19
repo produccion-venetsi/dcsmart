@@ -117,3 +117,36 @@ export function proporcion(monto, total) {
   if (!t) return 0
   return Math.min(100, (Math.abs(num(monto)) / t) * 100)
 }
+
+// ── División por ESTADO ──────────────────────────────────────────────────────
+//
+// La partición que pidió el dueño del producto (Trello "CM. Estado"): el primer
+// corte es enviada/recibida — ¿la caja mayor ya confirmó la plata o sigue en
+// camino? — y la dirección (depositado/extraído) va ADENTRO de cada lado. Es la
+// inversa de dividirPorDireccion, que queda para los totales del encabezado.
+export function dividirPorEstado(saldos) {
+  const base = dividirPorDireccion(saldos)
+  const filas = base.filas.map((f) => {
+    const enviadaDep = f.pendiente_depositado
+    const enviadaExt = f.pendiente_extraido
+    const recibidaDep = f.depositado - enviadaDep
+    const recibidaExt = f.extraido - enviadaExt
+    return {
+      ...f,
+      enviada_depositado: enviadaDep,
+      enviada_extraido: enviadaExt,
+      enviada_total: enviadaDep + enviadaExt,
+      ops_enviada: f.sin_recibir,
+      recibida_depositado: recibidaDep,
+      recibida_extraido: recibidaExt,
+      recibida_total: recibidaDep + recibidaExt,
+      ops_recibida: f.ops - f.sin_recibir,
+    }
+  })
+  return {
+    ...base,
+    filas,
+    totalEnviada: filas.reduce((a, f) => a + f.enviada_total, 0),
+    totalRecibida: filas.reduce((a, f) => a + f.recibida_total, 0),
+  }
+}
