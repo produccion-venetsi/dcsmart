@@ -17,6 +17,7 @@ import ClasificacionSelect from '../../components/ClasificacionSelect.jsx'
 import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import PistaTurno, { PistaPromedio } from '../../components/PistaTurno.jsx'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
 
 // Alta de caja: el turno con sus detalles y sus movimientos.
@@ -231,17 +232,25 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
             </div>
           </div>
         )}
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fecha Inicio *</label>
-          <div className="form-input-wrap">
-            <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
+        {/* Las dos fechas ocupan la fila entera y comparten una sola pista
+            debajo: la duración y el cruce de día son una propiedad del PAR,
+            no de cada campo suelto. */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Abrió el turno *</label>
+              <div className="form-input-wrap">
+                <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Cerró el turno</label>
+              <div className="form-input-wrap">
+                <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fecha Cierre</label>
-          <div className="form-input-wrap">
-            <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
-          </div>
+          <PistaTurno inicio={form.fecha_inicio} cierre={form.fecha_cierre} />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nro Turno</label>
@@ -291,6 +300,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           <div className="form-input-wrap">
             <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
           </div>
+          <PistaPromedio total={form.total} comensales={form.comensales} />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Tickets</label>
@@ -321,12 +331,13 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
       {pendingDetalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">
-            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th title="Cantidad de operaciones">Cant.</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {pendingDetalles.map(d => (
                 <tr key={d._key}>
                   <td className="td-muted">{clasificacionLabel(d.clasificacion)}</td>
                   <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || d.nombre || '—'}</td>
+                  <td className="td-number td-muted">{d.cantidad || '—'}</td>
                   <td className="td-number">{fmt$2(d.monto)}</td>
                   <td>
                     <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingDetalle(d._key)}>
