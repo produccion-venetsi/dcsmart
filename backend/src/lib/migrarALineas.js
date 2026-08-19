@@ -20,6 +20,7 @@
 //     INFORMATIVO, que es el default seguro: no suma en ninguna cuenta.
 
 import { esEfectivo } from './cuadreCaja.js'
+import { esResumenDeMovimientos } from './cuadreVenta.js'
 
 // Tipo de movimiento -> categoría. EGRESO es el histórico de GASTO.
 const POR_TIPO_MOVIMIENTO = {
@@ -56,12 +57,18 @@ export function nombreDeDetalle(d) {
 // La categoría de un detalle. El nombre gana sobre la clasificación cuando
 // identifica un concepto que el cuadre trata distinto: una "Cta Cte" es venta
 // fiada aunque venga marcada como informativa, que es como la manda TapTap.
-export function categoriaDeDetalle(detalle) {
+export function categoriaDeDetalle(detalle, { sumaMovsNoEfectivo = 0 } = {}) {
   const nombre = nombreDeDetalle(detalle)
   if (RE_FIADO.test(nombre)) return 'FIADO'
   if (RE_DIFERENCIA.test(nombre)) return 'DIFERENCIA'
   const clasif = detalle?.tipo ?? detalle?.detalle_tipo?.clasificacion ?? null
-  return POR_CLASIFICACION[clasif] ?? 'INFORMATIVO'
+  const cat = POR_CLASIFICACION[clasif] ?? 'INFORMATIVO'
+  // Un detalle-cobro que es el RESUMEN de los movimientos de la misma caja
+  // (el "Tarjetas" de DON ALDO) migra como informativo: su plata ya esta en
+  // las lineas que vienen de los movimientos. Sin esto, la caja migrada
+  // duplicaba el cobro y descuadraba por exactamente ese monto.
+  if (cat === 'COBRO' && esResumenDeMovimientos(detalle, sumaMovsNoEfectivo)) return 'INFORMATIVO'
+  return cat
 }
 
 export function categoriaDeMovimiento(mov) {
@@ -95,10 +102,14 @@ export function lineasDeCaja(caja) {
     })
   }
 
+  const sumaMovsNoEfectivo = (caja.movimientos ?? [])
+    .filter((m) => m.tipo === 'COBRO' && !esEfectivo(m.metodo_pago?.nombre))
+    .reduce((a, m) => a + num(m.monto), 0)
+
   for (const d of caja.detalles ?? []) {
     lineas.push({
       id_caja: caja.id,
-      categoria: categoriaDeDetalle(d),
+      categoria: categoriaDeDetalle(d, { sumaMovsNoEfectivo }),
       monto: num(d.monto),
       id_metodo: null,
       cantidad: null,
@@ -119,8 +130,11 @@ export function lineasDeCaja(caja) {
   )
   const efectivoDeclarado = num(caja.efectivo)
   if (!hayCobroEfectivo && efectivoDeclarado !== 0) {
+    // Solo los gastos que vienen de un DETALLE: son los del flujo manual, donde
+    // el cajero resta el gasto antes de contar. Los gastos por movimiento no
+    // salieron del efectivo declarado (medido en LOS GALGOS).
     const gastos = lineas
-      .filter((l) => l.categoria === 'GASTO')
+      .filter((l) => l.categoria === 'GASTO' && String(l.migrada_de).startsWith('detalle:'))
       .reduce((a, l) => a + l.monto, 0)
     lineas.push({
       id_caja: caja.id,

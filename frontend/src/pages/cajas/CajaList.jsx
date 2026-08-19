@@ -5,6 +5,8 @@ import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
 import { metodosApi } from '../../api/metodospago.js'
 import { opcionesMetodos } from '../../lib/metodosSelect.js'
+import { lineasApi } from '../../api/lineas.js'
+import LineasCaja from '../../components/LineasCaja.jsx'
 import { mensajeCatalogo } from '../../lib/catalogos.js'
 import { enterEjecuta } from '../../lib/formularios.js'
 import { puedeEditar, puedeBorrarCajas, puedeCrearCajas } from '../../lib/roles.js'
@@ -548,6 +550,23 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
       {/* El total ya no vive acá: está arriba, en "Datos del turno". Lo que se
           muestra en la tabla son los totales por grupo, que es lo que se venía
           sumando a mano. */}
+      {/* Con la estructura unificada, la caja se lee como UNA lista de lineas
+          agrupadas por lo que le hacen a la cuenta. Las cajas sin migrar
+          siguen mostrando Detalles y Movimientos como siempre. */}
+      {hayLineas && (
+        <>
+          <div className="drawer-section-title">Líneas de la caja ({caja.lineas.length})</div>
+          <LineasCaja
+            lineas={caja.lineas}
+            metodos={metodos}
+            readOnly={!canEdit}
+            onAgregar={agregarLinea}
+            onBorrar={borrarLinea}
+          />
+        </>
+      )}
+
+      {!hayLineas && (<>
       <div className="drawer-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Detalles ({caja.detalles?.length || 0})</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -800,6 +819,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <button type="button" className="btn btn-secondary" onClick={() => setAddingMov(false)}>✕</button>
         </div>
       </form>}
+      </>)}
 
       <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Historial de auditoría</div>
       <div className="table-wrap" style={{ marginBottom: '1rem' }}>
@@ -922,6 +942,25 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
   }, [cajaId])
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const hayLineas = Array.isArray(caja?.lineas) && caja.lineas.length > 0
+
+  const agregarLinea = async (data) => {
+    try {
+      await lineasApi.create({ ...data, id_caja: cajaId })
+      notify('Línea agregada', 'success')
+      load(); onRefreshList?.()
+    } catch (err) { notify(err.response?.data?.error || 'No se pudo agregar la línea', 'error') }
+  }
+
+  const borrarLinea = async (idLinea) => {
+    if (!(await showConfirm('¿Borrar esta línea?'))) return
+    try {
+      await lineasApi.remove(idLinea)
+      notify('Línea borrada', 'success')
+      load(); onRefreshList?.()
+    } catch (err) { notify(err.response?.data?.error || 'No se pudo borrar la línea', 'error') }
+  }
 
   const handleAddDet = async (e) => {
     e.preventDefault()

@@ -188,3 +188,50 @@ test('el cajon no queda negativo cuando el cobro en efectivo no es un movimiento
   assert.equal(r.queda, 50000)
   assert.ok(r.queda >= 0)
 })
+
+// El caso DON ALDO: los cobros van por movimiento y ADEMAS hay un detalle
+// "Tarjetas" clasificado como cobro por el catalogo, que es el RESUMEN de esos
+// mismos movimientos. Sumarlo duplicaba 1.072.720 por caja.
+test('un detalle-resumen de los movimientos no se cuenta dos veces', () => {
+  const r = calcularCuadreVenta({
+    total: 2011765, efectivo: 939045, origin: 'TAPTAP',
+    movimientos: [
+      mov('COBRO', 939045, 'Efectivo'),
+      mov('COBRO', 500000, 'MP Point'),
+      mov('COBRO', 572720, 'PedidosYa'),
+    ],
+    detalles: [{ monto: 1072720, tipo: 'medio_pago', nombre: null, detalle_tipo: { nombre: 'Tarjetas', clasificacion: 'medio_pago' } }],
+  })
+  assert.equal(r.cobros_no_efectivo, 1072720)
+  assert.equal(r.cuadra, true)
+})
+
+// El caso LOS GALGOS: los gastos van por MOVIMIENTO y el efectivo declarado NO
+// los tiene descontados. Devolverselos inventaba un sobrante de 269.000.
+test('los gastos por movimiento no se devuelven al efectivo declarado', () => {
+  const r = calcularCuadreVenta({
+    total: 3579540, efectivo: 974240, origin: 'DCSMART',
+    movimientos: [mov('GASTO', 69000, 'Efectivo'), mov('GASTO', 200000, 'Efectivo'), mov('RETIRO', 151500, 'Efectivo')],
+    detalles: [
+      det(996000, 'cobro', 'MP POINT DEBITO'), det(724199.98, 'cobro', 'MP POINT CREDITO'),
+      det(281200, 'cobro', 'PREPAGA'), det(603900, 'cobro', 'MP QR'),
+      det(10500, 'informativo', 'Invitaciones'),
+    ],
+  })
+  assert.equal(Math.abs(r.diferencia) <= 1, true)
+})
+
+// El caso CAPRICCHIO (Fudo): los cobros estan como detalles y el unico
+// movimiento es un INGRESO de compensacion. El motor por-origen los ignoraba
+// enteros y marcaba una falta de 3.804.100.
+test('una caja fudo cargada por detalles cuadra por sus detalles', () => {
+  const r = calcularCuadreVenta({
+    total: 4864930, efectivo: 1060830, origin: 'FFUDO',
+    movimientos: [mov('INGRESO', 3804100, 'Compensacion')],
+    detalles: [
+      det(1406425, 'cobro', 'MP POINT CREDITO'), det(1012375, 'cobro', 'MP POINT DEBITO'),
+      det(1066000, 'cobro', 'MP QR'), det(259300, 'cobro', 'Rappi'), det(60000, 'cobro', 'Transferencia'),
+    ],
+  })
+  assert.equal(Math.abs(r.diferencia) <= 1, true)
+})

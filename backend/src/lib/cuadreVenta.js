@@ -63,6 +63,17 @@ export function nombreDeDetalle(detalle) {
 
 const detalleEsNoCobrado = (d) => esVentaNoCobrada(nombreDeDetalle(d))
 
+// ¿Este detalle es el RESUMEN de los cobros que ya estan como movimientos?
+// "Tarjetas" / "Total Tarjetas" es el resumen clasico de TapTap; y cualquier
+// detalle-cobro cuyo monto sea exactamente la suma de los movimientos de cobro
+// no-efectivo tambien lo es, tenga el nombre que tenga.
+const RE_RESUMEN = /^(total\s+)?tarjetas?$/i
+export function esResumenDeMovimientos(detalle, sumaMovsNoEfectivo) {
+  if (RE_RESUMEN.test(nombreDeDetalle(detalle).trim())) return true
+  if (sumaMovsNoEfectivo > 0 && Math.abs(num(detalle?.monto) - sumaMovsNoEfectivo) <= 1) return true
+  return false
+}
+
 const movs = (caja) => caja?.movimientos ?? []
 const dets = (caja) => caja?.detalles ?? []
 
@@ -72,9 +83,13 @@ function efectivoCobrado(caja) {
   if (porMovimiento > 0) return porMovimiento
   // El origen no informa el cobro en efectivo: el campo trae lo que quedó, así
   // que se le devuelven los gastos que salieron de esa misma plata.
-  const gastosEnEfectivo =
-    suma(movs(caja), (m) => m.tipo === 'GASTO' && esEfectivo(m.metodo_pago?.nombre)) +
-    suma(dets(caja), (d) => rolDeDetalle(d) === 'gasto')
+  //
+  // SOLO los gastos cargados por detalle: son los del flujo de carga manual,
+  // donde el cajero resta el gasto antes de contar. Un gasto cargado por
+  // MOVIMIENTO no participa -- medido en LOS GALGOS: sus gastos van por
+  // movimiento y el efectivo declarado NO los tiene descontados; devolverlos
+  // inventaba un sobrante de exactamente su suma (269.000).
+  const gastosEnEfectivo = suma(dets(caja), (d) => rolDeDetalle(d) === 'gasto')
   return num(caja?.efectivo) + gastosEnEfectivo
 }
 
@@ -85,10 +100,17 @@ export function calcularCuadreVenta(caja) {
   const efectivo = efectivoCobrado(caja)
 
   // Los cobros que no son en efectivo llegan como movimiento (TapTap/Fudo) o
-  // como detalle (carga manual). Se suman los dos: un local puede usar ambos y
-  // hasta ahora se ignoraba uno entero según el origen.
+  // como detalle (carga manual). Se suman los dos, PERO sin contar dos veces
+  // lo mismo: algunos locales guardan ademas un detalle-RESUMEN de sus propios
+  // movimientos ("Tarjetas" en DON ALDO, clasificado medio_pago por el
+  // catalogo). Se descarta un detalle-cobro cuando es ese resumen: por nombre
+  // conocido, o porque su monto coincide con la suma de los movimientos de
+  // cobro no-efectivo (que es la definicion de "resumen de tarjetas").
   const noEfectivoMovs = suma(movs(caja), (m) => m.tipo === 'COBRO' && !esEfectivo(m.metodo_pago?.nombre))
-  const noEfectivoDets = suma(dets(caja), (d) => rolDeDetalle(d) === 'cobro' && !detalleEsNoCobrado(d))
+  const noEfectivoDets = suma(
+    dets(caja),
+    (d) => rolDeDetalle(d) === 'cobro' && !detalleEsNoCobrado(d) && !esResumenDeMovimientos(d, noEfectivoMovs)
+  )
   const cobrosNoEfectivo = noEfectivoMovs + noEfectivoDets
 
   const noCobrado = suma(dets(caja), detalleEsNoCobrado)
