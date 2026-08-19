@@ -657,6 +657,9 @@ model CajaDetalle {
   id            String   @id @default(uuid())
   id_caja       String
   tipo          String?
+  // Cantidad de operaciones que componen la linea (los groupCount de TapTap:
+  // 23 cobros con Credito). Vino de los movimientos al unificar; opcional.
+  cantidad      Int?
   id_tipo       String?
   // A qué cuenta corriente se le cargó esta línea. Es el equivalente en caja del
   // `id_cliente` de Pago: una venta que en vez de cobrarse quedó anotada en la cuenta

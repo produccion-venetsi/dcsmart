@@ -33,13 +33,20 @@ const RE_POS = /\(POS\)$/
 const nombreDe = (d) => d?.nombre ?? d?.detalle_tipo?.nombre ?? 'Sin nombre'
 
 // Una línea como tarjeta, con el estilo del grupo al que pertenece.
-function Linea({ nombre, monto, tinte, badge }) {
+function Linea({ nombre, monto, cantidad, tinte, badge }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '6px 13px',
       borderRadius: 10, background: tinte.bg, border: `1px solid ${tinte.border}`,
     }}>
-      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: tinte.texto ?? 'var(--t1)' }}>{nombre}</span>
+      <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: tinte.texto ?? 'var(--t1)' }}>
+        {nombre}
+        {/* Cuantas operaciones componen la linea (los groupCount de TapTap):
+            23 cobros con Credito. Sutil, al lado del nombre. */}
+        {cantidad != null && cantidad > 0 && (
+          <span style={{ marginLeft: 7, fontSize: 10.5, fontWeight: 700, color: 'var(--t3)' }}>x {cantidad}</span>
+        )}
+      </span>
       {badge && (
         <span className={`badge ${badge.clase}`}>{badge.texto}</span>
       )}
@@ -176,7 +183,7 @@ export default function CajaVer() {
               {cobros.map((d) => {
                 const fiado = RE_FIADO.test(nombreDe(d))
                 return (
-                  <Linea key={d.id} nombre={nombreDe(d)} monto={d.monto}
+                  <Linea key={d.id} nombre={nombreDe(d)} monto={d.monto} cantidad={d.cantidad}
                     tinte={fiado ? TINTE_FIADO : TINTE_COBRO}
                     badge={fiado ? { clase: 'badge-blue', texto: 'A cobrar' } : null} />
                 )
@@ -192,7 +199,7 @@ export default function CajaVer() {
                 <strong style={{ fontSize: 13.5, color: 'var(--red)' }}>{fmt$(suma(gastos))}</strong>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {gastos.map((d) => <Linea key={d.id} nombre={nombreDe(d)} monto={d.monto} tinte={TINTE_GASTO} />)}
+                {gastos.map((d) => <Linea key={d.id} nombre={nombreDe(d)} monto={d.monto} cantidad={d.cantidad} tinte={TINTE_GASTO} />)}
               </div>
               <p className="form-hint" style={{ margin: '8px 0 0' }}>No cambian lo que vendiste: es plata que salió del cajón.</p>
             </div></div>
@@ -206,7 +213,7 @@ export default function CajaVer() {
                   const esPos = RE_POS.test(nombreDe(d))
                   return (
                     <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0', color: esPos ? 'var(--amber)' : undefined }}>
-                      <span style={{ color: esPos ? 'var(--amber)' : 'var(--t2)' }}>{nombreDe(d)}</span>
+                      <span style={{ color: esPos ? 'var(--amber)' : 'var(--t2)' }}>{nombreDe(d)}{d.cantidad != null && d.cantidad > 0 ? ` x ${d.cantidad}` : ''}</span>
                       <span style={{ fontWeight: esPos ? 700 : 600 }}>{fmt$(d.monto)}</span>
                     </div>
                   )

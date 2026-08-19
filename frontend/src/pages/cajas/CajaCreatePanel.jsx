@@ -76,7 +76,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   // Mismos campos que el alta de detalle del drawer: acá faltaban `clasificacion`
   // y `nombre`, así que al crear una caja no se podía cargar "Mostrador -
   // informativo" ni un nombre que no estuviera en el catálogo del local.
-  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
 
   const [pendingMovimientos, setPendingMovimientos] = useState([])
   const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
@@ -134,7 +134,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   const addPendingDetalle = () => {
     if (!detForm.monto) return
     setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
-    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
   }
   const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
 
@@ -179,7 +179,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
             nombre: d.id_tipo ? null : (d.nombre || null),
             monto: parseFloat(d.monto),
             observaciones: d.observaciones || null
-          })
+          , cantidad: d.cantidad ? parseInt(d.cantidad) : null })
           detOk++
         } catch { detFail++ }
       }
@@ -361,6 +361,12 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           <label className="form-label">Monto</label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" min="0" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Cant.</label>
+          <div className="form-input-wrap">
+            <input type="number" min="1" step="1" placeholder="Opcional" value={detForm.cantidad} onChange={e => setDetForm(f => ({ ...f, cantidad: e.target.value }))} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>

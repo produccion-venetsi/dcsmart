@@ -231,14 +231,14 @@ export function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, can
   const [newMov,     setNewMov]    = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [saving,     setSaving]    = useState(false)
   const [addingMov,  setAddingMov] = useState(false)
-  const [newDet,     setNewDet]    = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
+  const [newDet,     setNewDet]    = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
   const [savingDet,  setSavingDet] = useState(false)
   const [addingDet,  setAddingDet] = useState(false)
   const [editingMovId, setEditingMovId] = useState(null)
   const [editMovForm,  setEditMovForm]  = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
   const [savingMovEdit, setSavingMovEdit] = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
-  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
   const [savingDetEdit, setSavingDetEdit] = useState(false)
   const [auditando,  setAuditando] = useState(false)
   const [auditandoDc, setAuditandoDc] = useState(false)
@@ -319,7 +319,7 @@ export function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, can
         id_cliente:    newDet.id_cliente    || null
       })
       notify('Detalle agregado', 'success')
-      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
+      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
       setAddingDet(false)
       load()
     } catch { notify('Error al agregar detalle', 'error') }
@@ -854,10 +854,10 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
   const [metodos,     setMetodos]     = useState([])
 
   const [addingDet,  setAddingDet]  = useState(false)
-  const [newDet,     setNewDet]     = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
+  const [newDet,     setNewDet]     = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
   const [savingDet,  setSavingDet]  = useState(false)
   const [editingDetId, setEditingDetId] = useState(null)
-  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [editDetForm,  setEditDetForm]  = useState({ id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
   const [savingDetEdit, setSavingDetEdit] = useState(false)
 
   const [addingMov,  setAddingMov]  = useState(false)
@@ -937,9 +937,9 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
     if (!newDet.monto) return
     setSavingDet(true)
     try {
-      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, clasificacion: newDet.clasificacion || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null, id_cliente: newDet.id_cliente || null })
+      await detallesApi.create({ id_caja: cajaId, id_tipo: newDet.id_tipo || null, clasificacion: newDet.clasificacion || null, nombre: newDet.id_tipo ? null : (newDet.nombre || null), monto: parseFloat(newDet.monto), observaciones: newDet.observaciones || null, id_cliente: newDet.id_cliente || null , cantidad: newDet.cantidad ? parseInt(newDet.cantidad) : null })
       notify('Detalle agregado', 'success')
-      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '', id_cliente: '', cliente: null })
+      setNewDet({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
       setAddingDet(false)
       loadRelacionales(form?.id_local)
     } catch (err) { notify(err.response?.data?.error || 'Error al agregar detalle', 'error') }
@@ -1267,6 +1267,12 @@ export function CajaEditPanel({ cajaId, onSaved, onBack, onCuadre }) {
               <label className="form-label">Monto *</label>
               <div className="form-input-wrap">
                 <input type="number" step="0.01" min="0" placeholder="0.00" value={newDet.monto} onChange={e => setNewDet(f => ({ ...f, monto: e.target.value }))} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Cant.</label>
+              <div className="form-input-wrap">
+                <input type="number" min="1" step="1" placeholder="Opcional" value={newDet.cantidad ?? ''} onChange={e => setNewDet(f => ({ ...f, cantidad: e.target.value }))} />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
