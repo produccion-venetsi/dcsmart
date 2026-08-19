@@ -6,6 +6,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import { toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateTimeArg } from '../../lib/dates.js'
 import { totalContado, calcularComprobacion, describirComprobacion } from '../../lib/cuadreArqueo.js'
+import { motivoDesactualizado, resultadoRecalculado, textoDesactualizado } from '../../lib/arqueoDesactualizado.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -332,6 +333,7 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [auditando, setAuditando] = useState(false)
+  const [recalculando, setRecalculando] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -384,6 +386,18 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
     } finally { setAuditando(false) }
   }
 
+  const handleRecalcular = async () => {
+    setRecalculando(true)
+    try {
+      const { data } = await arqueoApi.recalcular(arqueo.id)
+      setArqueo(a => ({ ...a, ingresos: data.ingresos, gastos: data.gastos, comprobacion: data.comprobacion, recalculo: null }))
+      notify('Arqueo actualizado con las cajas que faltaban', 'success')
+      onChanged()
+    } catch (err) {
+      notify(err.response?.data?.error || 'No se pudo actualizar el arqueo', 'error')
+    } finally { setRecalculando(false) }
+  }
+
   return (
     <div>
       <div className="drawer-detail">
@@ -413,6 +427,34 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
           </span>
         </div>
       </div>
+
+      {/* El número de arriba quedó viejo porque llegaron cajas del período
+          después de cerrar el arqueo (el sync de TapTap/Fudo trae los cierres
+          del día a la mañana siguiente). No se corrige solo: se explica qué
+          pasó, cuánto daría hoy, y se deja el botón. */}
+      {arqueo.recalculo?.difiere && (
+        <div style={{ marginTop: '1rem', padding: '0.9rem 1rem', borderRadius: 12, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 6 }}>
+            Este arqueo quedó desactualizado
+          </div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--t2)' }}>
+            {motivoDesactualizado(arqueo.recalculo)}{' '}
+            La diferencia que corresponde hoy es <strong style={{ color: 'var(--t1)' }}>{resultadoRecalculado(arqueo.recalculo)}</strong>,
+            no la que figura arriba.
+          </div>
+          <div style={{ marginTop: 10 }}>
+            {arqueo.audit ? (
+              <span style={{ fontSize: 11.5, color: 'var(--t3)' }}>
+                Está auditado: para actualizarlo hay que desauditarlo primero.
+              </span>
+            ) : (
+              <button className="btn btn-sm btn-primary" onClick={handleRecalcular} disabled={recalculando}>
+                {recalculando ? 'Actualizando…' : 'Actualizar el arqueo'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Las observaciones van en su propia seccion y no como fila clave/valor:
           .drawer-detail-row es flex con la clave fija en 110px, asi que un
@@ -724,6 +766,18 @@ export default function ArqueoList() {
                       >
                         {d.monto == null ? d.texto : cuadra ? 'Cuadra' : `${d.texto} ${fmt$(d.monto)}`}
                       </span>
+                      {/* El número guardado quedó viejo: aparecieron cajas del
+                          período después de cerrar el arqueo. No se corrige
+                          solo -- se avisa y se decide desde el detalle. */}
+                      {a.recalculo?.difiere && (
+                        <span
+                          className="badge badge-amber"
+                          style={{ marginLeft: 6 }}
+                          title={textoDesactualizado(a.recalculo)}
+                        >
+                          Desactualizado
+                        </span>
+                      )}
                     </td>
                     {/* El truncado va en un span inline-block y no en el td:
                         .data-table es width 100% sin table-layout fixed, y el

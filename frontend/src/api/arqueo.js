@@ -8,6 +8,9 @@ export const arqueoApi = {
   remove:  (id)                => client.delete(`/arqueo/${id}`),
   preview: (id_local, fecha)   => client.get('/arqueo/preview', { params: { id_local, fecha } }),
   audit:   (id, data)          => client.patch(`/arqueo/${id}/audit`, data),
+  // Aplica el número que le corresponde hoy al arqueo (cuando llegaron cajas
+  // del período después de cerrarlo). No toca lo que se contó a mano.
+  recalcular: (id)             => client.post(`/arqueo/${id}/recalcular`),
 
   // Disponibilidades del ultimo arqueo de cada local del grupo activo
   disponibilidades: (signal)   => client.get('/arqueo/disponibilidades', { signal }),

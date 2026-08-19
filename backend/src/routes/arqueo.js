@@ -5,6 +5,7 @@
 
 import { totalContado, calcularComprobacion, describirComprobacion } from '../lib/cuadreArqueo.js'
 import { whereCajasCandidatas, sumarEfectivoDelPeriodo, cajaEnPeriodo } from '../lib/periodoArqueo.js'
+import { evaluarArqueos } from '../lib/arqueoDesactualizado.js'
 
 // Busca el arqueo anterior de un local (el más reciente con fecha < la nueva).
 // Devuelve null si es el primer arqueo del local.
@@ -28,11 +29,16 @@ async function calcularIngresos(fastify, id_local, fechaDesde, fechaHasta) {
   return sumarEfectivoDelPeriodo(cajas, fechaDesde, fechaHasta)
 }
 
-// Suma Pago.importe del local, pagado=true, en efectivo, egreso real, en (fechaDesde, fechaHasta].
-async function calcularGastos(fastify, id_local, fechaDesde, fechaHasta) {
-  const metodoEfectivo = await fastify.db.metodoPago.findFirst({
+// El método con el que se pagan los gastos que salen del efectivo del local.
+function getMetodoEfectivo(fastify) {
+  return fastify.db.metodoPago.findFirst({
     where: { nombre: { equals: 'Efectivo', mode: 'insensitive' } }
   })
+}
+
+// Suma Pago.importe del local, pagado=true, en efectivo, egreso real, en (fechaDesde, fechaHasta].
+async function calcularGastos(fastify, id_local, fechaDesde, fechaHasta) {
+  const metodoEfectivo = await getMetodoEfectivo(fastify)
   if (!metodoEfectivo) return 0
   const pagos = await fastify.db.pago.findMany({
     where: {
@@ -48,6 +54,37 @@ async function calcularGastos(fastify, id_local, fechaDesde, fechaHasta) {
     select: { importe: true }
   })
   return pagos.reduce((acc, p) => acc + Number(p.importe ?? 0), 0)
+}
+
+// Evalúa qué arqueos del local quedaron desactualizados. `arqueos` puede venir
+// en cualquier orden: se ordena acá porque el cálculo depende del anterior.
+//
+// Trae las cajas y los pagos desde el PRIMER arqueo del local, que es el
+// arranque del período más viejo que se puede comparar. El primer arqueo no se
+// evalúa (ver evaluarArqueos), así que no hace falta el historial completo.
+async function evaluarDesactualizados(fastify, id_local, arqueos) {
+  if (!arqueos?.length) return new Map()
+  const ordenados = [...arqueos].sort((a, b) => a.fecha - b.fecha)
+  const desde = ordenados[0].fecha
+  const hasta = ordenados[ordenados.length - 1].fecha
+  if (desde >= hasta) return new Map()
+
+  const metodoEfectivo = await getMetodoEfectivo(fastify)
+  const [cajas, pagos] = await Promise.all([
+    fastify.db.caja.findMany({
+      where: whereCajasCandidatas(id_local, desde, hasta),
+      select: { efectivo: true, fecha_inicio: true, fecha_cierre: true, created_at: true }
+    }),
+    metodoEfectivo ? fastify.db.pago.findMany({
+      where: {
+        id_local, pagado: true, ingresa_egreso: false,
+        id_metodo: metodoEfectivo.id, fecha_pago: { gt: desde, lte: hasta }
+      },
+      select: { importe: true, fecha_pago: true }
+    }) : []
+  ])
+
+  return evaluarArqueos(ordenados, cajas, pagos)
 }
 
 // El estado de auditoría de un arqueo se guarda en la tabla `audits`
@@ -84,6 +121,12 @@ export default async function arqueoRoutes(fastify) {
       orderBy: { fecha: 'desc' }
     })
     const auditedSet = await getAuditedArqueoSet(fastify, arqueos.map(a => a.id))
+
+    // Recálculo en vivo para avisar cuáles quedaron desactualizados (cajas que
+    // el sync trajo después de cerrar el arqueo). Se traen las cajas y los
+    // pagos del local UNA vez y se evalúan todos los períodos en memoria: una
+    // query por recurso en vez de una por arqueo.
+    const desactualizados = await evaluarDesactualizados(fastify, id_local, arqueos)
     // La etiqueta viaja calculada: la pantalla no tiene que saber de qué lado
     // está el signo ni cuál es la tolerancia.
     //
@@ -95,7 +138,8 @@ export default async function arqueoRoutes(fastify) {
       ...a,
       audit: auditedSet.has(a.id),
       es_primero: a.id === idPrimero,
-      comprobacion_detalle: describirComprobacion(a.comprobacion, { esPrimero: a.id === idPrimero })
+      comprobacion_detalle: describirComprobacion(a.comprobacion, { esPrimero: a.id === idPrimero }),
+      recalculo: desactualizados.get(a.id) ?? null
     }))
     return { data }
   })
@@ -119,13 +163,69 @@ export default async function arqueoRoutes(fastify) {
     const anterior = await getArqueoAnterior(fastify, arqueo.id_local, arqueo.fecha)
     const esPrimero = !anterior
 
+    // Mismo aviso que en el listado: si aparecieron cajas del período después
+    // de cerrarlo, el número de abajo ya no es el que corresponde.
+    const evaluados = esPrimero
+      ? new Map()
+      : await evaluarDesactualizados(fastify, arqueo.id_local, [anterior, arqueo])
+
     return {
       ...arqueo,
       es_primero: esPrimero,
       comprobacion_detalle: describirComprobacion(arqueo.comprobacion, { esPrimero }),
+      recalculo: evaluados.get(arqueo.id) ?? null,
       audit:      auditRow?.accion === 'auditado',
       audit_by:   auditRow?.user?.nombre ?? null,
       audit_date: auditRow?.fecha ?? null,
+    }
+  })
+
+  // ── POST /:id/recalcular ───────────────────────────────────────────────
+  // Aplica al arqueo el número que le corresponde HOY. Existe porque el arqueo
+  // guarda su resultado congelado y las cajas del sync llegan después: sin
+  // esto, la única forma de corregirlo era abrir el arqueo y volver a
+  // guardarlo, que además pisa los montos contados si el usuario se equivoca.
+  //
+  // No toca lo que el usuario contó (caja_fuerte/cofre/adicion/total): solo
+  // ingresos, gastos y comprobación, que son lo que el sistema calcula.
+  fastify.post('/:id/recalcular', { preHandler: editHandler }, async (request, reply) => {
+    const arqueo = await fastify.db.arqueo.findUnique({ where: { id: request.params.id } })
+    if (!arqueo) return reply.code(404).send({ error: 'Arqueo no encontrado' })
+    if (!request.allowedLocalIds.includes(arqueo.id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso' })
+    }
+
+    // Auditar es firmar: el número de un arqueo auditado no cambia por atrás.
+    const auditRow = await fastify.db.audit.findFirst({
+      where: { tabla: 'arqueos', id_registro: arqueo.id, vigente: true, audit_dc: false }
+    })
+    if (auditRow?.accion === 'auditado') {
+      return reply.code(409).send({ error: 'El arqueo está auditado: hay que desauditarlo antes de actualizarlo' })
+    }
+
+    const anterior = await getArqueoAnterior(fastify, arqueo.id_local, arqueo.fecha)
+    if (!anterior) {
+      return reply.code(400).send({ error: 'El primer arqueo del local es la línea de base: no se recalcula' })
+    }
+
+    const fechaDesde = anterior.fecha
+    const ingresos = await calcularIngresos(fastify, arqueo.id_local, fechaDesde, arqueo.fecha)
+    const gastos = await calcularGastos(fastify, arqueo.id_local, fechaDesde, arqueo.fecha)
+    const comprobacion = calcularComprobacion({
+      ingresos, gastos,
+      contado: Number(arqueo.total),
+      contadoAnterior: Number(anterior.total)
+    })
+
+    const actualizado = await fastify.db.arqueo.update({
+      where: { id: arqueo.id },
+      data: { ingresos: String(ingresos), gastos: String(gastos), comprobacion: String(comprobacion) }
+    })
+
+    return {
+      ...actualizado,
+      comprobacion_detalle: describirComprobacion(actualizado.comprobacion, { esPrimero: false }),
+      anterior: { ingresos: Number(arqueo.ingresos), gastos: Number(arqueo.gastos), comprobacion: Number(arqueo.comprobacion) }
     }
   })
 
