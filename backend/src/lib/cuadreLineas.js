@@ -67,9 +67,17 @@ export function calcularCuadre(caja) {
   const venta = cuadreDeVenta(caja)
   const efectivo_fisico = circuitoDeEfectivo(caja)
   return {
+    estructura: 'lineas',
     venta,
     efectivo_fisico,
     informativos: sumaCat(caja.lineas, 'INFORMATIVO', 'DIFERENCIA'),
+    // los mismos nombres que lee la pantalla, para que no le importe de qué
+    // estructura salió el número
+    efectivo: efectivo_fisico.cobrado,
+    cobros: venta.cobrado - efectivo_fisico.cobrado,
+    no_cobrado: venta.fiado,
+    gastos: efectivo_fisico.gastos,
+    esperado: venta.esperado,
     total: venta.total,
     diferencia: venta.diferencia,
     cuadra: venta.cuadra,

@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { lineasApi } from '../../api/lineas.js'
+import LineasCaja from '../../components/LineasCaja.jsx'
 import { useUiStore } from '../../store/uiStore.js'
 import { useAppStore } from '../../store/appStore.js'
 import { fmtDateTimeArg, fmtDateArg } from '../../lib/dates.js'
@@ -115,6 +117,23 @@ export default function CajaDetail() {
       .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
   }, [notify])
 
+  const agregarLinea = async (data) => {
+    try {
+      await lineasApi.create({ ...data, id_caja: id })
+      notify('Línea agregada', 'success')
+      load()
+    } catch (err) { notify(err.response?.data?.error || 'No se pudo agregar la línea', 'error') }
+  }
+
+  const borrarLinea = async (idLinea) => {
+    if (!(await showConfirm('¿Borrar esta línea?'))) return
+    try {
+      await lineasApi.remove(idLinea)
+      notify('Línea borrada', 'success')
+      load()
+    } catch (err) { notify(err.response?.data?.error || 'No se pudo borrar la línea', 'error') }
+  }
+
   const handleAddMovimiento = async (e) => {
     e.preventDefault()
     setSaving(true)
@@ -196,6 +215,7 @@ export default function CajaDetail() {
 
   const cuadre = caja.cuadre ?? {}
   const explicacion = explicarDiferencia(cuadre)
+  const hayLineas = Array.isArray(caja.lineas) && caja.lineas.length > 0
   const hayDescuadre = cuadre.cuadra === false
   const descuadre = cuadre.diferencia
 
@@ -300,7 +320,26 @@ export default function CajaDetail() {
 
         {/* Movements column */}
         <div style={{ flex: 1, minWidth: 'min(320px, 100%)' }}>
+          {/* Con la estructura unificada la caja se lee como UNA lista de
+              lineas agrupadas por lo que le hacen a la cuenta. Las cajas que
+              todavia no se migraron siguen mostrando la tabla de movimientos. */}
+          {hayLineas && (
+            <div className="table-wrap" style={{ marginBottom: '1.25rem', padding: '1rem 1.25rem' }}>
+              <div className="card-title" style={{ marginBottom: 10 }}>
+                Líneas de la caja ({caja.lineas.length})
+              </div>
+              <LineasCaja
+                lineas={caja.lineas}
+                metodos={metodos}
+                readOnly={!canEditMov}
+                onAgregar={agregarLinea}
+                onBorrar={borrarLinea}
+              />
+            </div>
+          )}
+
           {/* Movimientos table */}
+          {!hayLineas && (
           <div className="table-wrap" style={{ marginBottom: '1.25rem' }}>
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="card-title" style={{ margin: 0 }}>
@@ -372,9 +411,10 @@ export default function CajaDetail() {
               </div>
             )}
           </div>
+          )}
 
           {/* Add movement form */}
-          {canAddMov && (
+          {canAddMov && !hayLineas && (
           <form className="form-panel" onSubmit={handleAddMovimiento}>
             <div className="form-panel-title"><IcoPlus /> Agregar Movimiento</div>
             <div className="form-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>

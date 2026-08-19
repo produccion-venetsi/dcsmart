@@ -14,6 +14,7 @@ import usersRoutes from './routes/users.js'
 import cajaRoutes from './routes/caja.js'
 import cajaMoveRoutes from './routes/caja_movimientos.js'
 import cajaDetallesRoutes from './routes/caja_detalles.js'
+import cajaLineasRoutes from './routes/caja_lineas.js'
 import detalleTiposRoutes from './routes/detalle_tipos.js'
 import pagosRoutes from './routes/pagos.js'
 import pdpRoutes from './routes/pdp.js'
@@ -92,6 +93,7 @@ await app.register(usersRoutes, { prefix: '/api/users' })
 await app.register(cajaRoutes, { prefix: '/api/cajas' })
 await app.register(cajaMoveRoutes, { prefix: '/api/caja-movimientos' })
 await app.register(cajaDetallesRoutes, { prefix: '/api/caja-detalles' })
+await app.register(cajaLineasRoutes,   { prefix: '/api/caja-lineas' })
 await app.register(detalleTiposRoutes, { prefix: '/api/detalle-tipos' })
 await app.register(pagosRoutes, { prefix: '/api/pagos' })
 await app.register(pdpRoutes, { prefix: '/api/pdp' })

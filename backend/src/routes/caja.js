@@ -2,7 +2,7 @@ import multipart from '@fastify/multipart'
 import { Storage } from '@google-cloud/storage'
 import { toTipoTurnoEnum, fromTipoTurnoEnum, toTipoTurnoEnumList } from '../lib/tipoTurno.js'
 import { parseCsvParam } from '../lib/queryParams.js'
-import { calcularCuadre } from '../lib/cuadreVenta.js'
+import { calcularCuadre } from '../lib/cuadreAuto.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
 import { parseMonto, parseEntero } from '../lib/montos.js'
 import { avisarDesauditado } from '../lib/avisos.js'
@@ -100,7 +100,9 @@ export default async function cajaRoutes(fastify) {
           // no venian y por eso la diferencia solo se podia ver abriendo cada
           // caja, sin forma de filtrar o listar las descuadradas.
           movimientos: { select: { tipo: true, monto: true, metodo_pago: { select: { nombre: true } } } },
-          detalles:    { select: { monto: true, tipo: true, detalle_tipo: { select: { clasificacion: true } } } }
+          detalles:    { select: { monto: true, tipo: true, nombre: true, detalle_tipo: { select: { nombre: true, clasificacion: true } } } },
+          // Las cajas migradas cuadran por acá (ver lib/cuadreAuto.js).
+          lineas:      { select: { categoria: true, monto: true, id_metodo: true, metodo_pago: { select: { nombre: true } } } }
         },
         orderBy: { [orderField]: orderDir },
         skip,
@@ -110,13 +112,13 @@ export default async function cajaRoutes(fastify) {
     ])
 
     const auditedSet = await getAuditedCajaSet(fastify, cajas.map(c => c.id))
-    const data = cajas.map(({ movimientos, detalles, ...c }) => ({
+    const data = cajas.map(({ movimientos, detalles, lineas, ...c }) => ({
       ...c,
       tipo_turno: fromTipoTurnoEnum(c.tipo_turno),
       audit: auditedSet.has(c.id),
       // Se devuelve el cuadre calculado y no las colecciones crudas: la lista no
       // las muestra y son varios miles de filas al serializar.
-      cuadre: calcularCuadre({ ...c, movimientos, detalles }),
+      cuadre: calcularCuadre({ ...c, movimientos, detalles, lineas }),
       // Suma cruda de los detalles, para la columna "Total Det." del listado.
       // No sale del cuadre: ahi cobros/gastos/informativos salen de los
       // movimientos cuando el local carga por movimientos (origen TAPTAP), asi
@@ -186,6 +188,16 @@ export default async function cajaRoutes(fastify) {
             // A qué cuenta corriente se le cargó el detalle. Hace falta el nombre y no solo
             // el id: el formulario de edición abre el combobox con lo que ya estaba, y con
             // solo el id abriría vacío y parecería que el detalle perdió la cuenta.
+            cliente:      { select: { id: true, nombre: true, razon_social: true } }
+          },
+          orderBy: { created_at: 'asc' }
+        },
+        // La estructura unificada. Cuando la caja las tiene, el cuadre sale de
+        // acá y la pantalla muestra una sola lista en vez de dos.
+        lineas: {
+          include: {
+            metodo_pago:  { select: { id: true, nombre: true } },
+            detalle_tipo: { select: { id: true, nombre: true, clasificacion: true } },
             cliente:      { select: { id: true, nombre: true, razon_social: true } }
           },
           orderBy: { created_at: 'asc' }
