@@ -4,6 +4,9 @@ import { cajasApi } from '../../api/cajas.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { detallesApi } from '../../api/detalles.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { opcionesMetodos } from '../../lib/metodosSelect.js'
+import { mensajeCatalogo } from '../../lib/catalogos.js'
+import { enterEjecuta } from '../../lib/formularios.js'
 import { puedeEditar, puedeBorrarCajas, puedeCrearCajas } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
@@ -260,7 +263,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
     loadAuditHistory()
     metodosApi.list()
       .then(r => setMetodos(r.data || []))
-      .catch(() => {})
+      .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
   }, [cajaId])
 
   // El catálogo se pide con o sin local. GET /caja-detalles/tipos ya devuelve los
@@ -590,7 +593,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                         />
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button className="btn btn-sm btn-primary" disabled={savingDetEdit} onClick={() => handleSaveDet(d.id)}>Guardar</button>
@@ -664,7 +667,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
-              <input type="number" step="0.01" required placeholder="0.00" value={newDet.monto} onChange={e => setNewDet({ ...newDet, monto: e.target.value })} />
+              <input type="number" step="0.01" min="0" required placeholder="0.00" value={newDet.monto} onChange={e => setNewDet({ ...newDet, monto: e.target.value })} />
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -714,11 +717,11 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
-                          {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                          {opcionesMetodos(metodos, editMovForm.id_metodo, m.metodo_pago?.nombre).map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td>
                         <input type="number" min="1" step="1" style={{ maxWidth: 70 }} value={editMovForm.cantidad} onChange={e => setEditMovForm(f => ({ ...f, cantidad: e.target.value }))} />
@@ -779,7 +782,7 @@ function CajaDetailPanel({ cajaId, onRefreshList, canEdit, canDelete, canAuditDc
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Monto *</label>
             <div className="form-input-wrap">
-              <input type="number" step="0.01" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
+              <input type="number" step="0.01" min="0" required placeholder="0.00" value={newMov.monto} onChange={e => setNewMov({ ...newMov, monto: e.target.value })} />
             </div>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
@@ -912,9 +915,9 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
       })
       setDetalles(data.detalles || [])
       setMovimientos(data.movimientos || [])
-      detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(() => {})
+      detallesApi.tipos(data.id_local).then(r => setTipos(r.data || [])).catch(err => notify(mensajeCatalogo(err, 'los nombres de detalle'), 'error'))
     }).catch(() => notify('Error al cargar caja', 'error'))
-    metodosApi.list().then(r => setMetodos(r.data || [])).catch(() => {})
+    metodosApi.list().then(r => setMetodos(r.data || [])).catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
   }, [cajaId])
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -1183,7 +1186,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                         />
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editDetForm.monto} onChange={e => setEditDetForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button type="button" className="btn btn-sm btn-primary" disabled={savingDetEdit} onClick={() => handleSaveDet(d.id)}>Guardar</button>
@@ -1225,7 +1228,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin detalles</div>
       )}
       {addingDet && (
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1.5rem' }} onKeyDown={enterEjecuta(() => handleAddDet({ preventDefault: () => {} }))}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Clasificación *</label>
@@ -1253,7 +1256,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
               <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={newDet.monto} onChange={e => setNewDet(f => ({ ...f, monto: e.target.value }))} />
+                <input type="number" step="0.01" min="0" placeholder="0.00" value={newDet.monto} onChange={e => setNewDet(f => ({ ...f, monto: e.target.value }))} />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1301,11 +1304,11 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
                       <td>
                         <select className="filter-select" style={{ width: '100%' }} value={editMovForm.id_metodo} onChange={e => setEditMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
                           <option value="">Sin método</option>
-                          {metodos.map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
+                          {opcionesMetodos(metodos, editMovForm.id_metodo, m.metodo_pago?.nombre).map(mp => <option key={mp.id} value={mp.id}>{mp.nombre}</option>)}
                         </select>
                       </td>
                       <td>
-                        <input type="number" step="0.01" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
+                        <input type="number" step="0.01" min="0" style={{ maxWidth: 100 }} value={editMovForm.monto} onChange={e => setEditMovForm(f => ({ ...f, monto: e.target.value }))} />
                       </td>
                       <td>
                         <input type="number" min="1" step="1" style={{ maxWidth: 70 }} value={editMovForm.cantidad} onChange={e => setEditMovForm(f => ({ ...f, cantidad: e.target.value }))} />
@@ -1343,7 +1346,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
         <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: '1rem' }}>Sin movimientos</div>
       )}
       {addingMov && (
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1.5rem' }} onKeyDown={enterEjecuta(() => handleAddMov({ preventDefault: () => {} }))}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Tipo</label>
@@ -1363,7 +1366,7 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Monto *</label>
               <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={newMov.monto} onChange={e => setNewMov(f => ({ ...f, monto: e.target.value }))} />
+                <input type="number" step="0.01" min="0" placeholder="0.00" value={newMov.monto} onChange={e => setNewMov(f => ({ ...f, monto: e.target.value }))} />
               </div>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1595,12 +1598,20 @@ export default function CajaList() {
 
   const bulkCancel = () => setSelectedIds(new Set())
 
+  // Mientras corre una operación masiva, los tres botones se deshabilitan:
+  // auditar es un TOGGLE en el backend, así que un doble click auditaba y
+  // desauditaba la misma tanda (la segunda pasada corría sobre la selección
+  // vieja). Y el estado ademas muestra que algo está corriendo.
+  const [bulking, setBulking] = useState(false)
+
   const toggleSelectionMode = () => {
     setSelectionMode(m => !m)
     setSelectedIds(new Set())
   }
 
   const bulkAuditar = async () => {
+    if (bulking) return
+    setBulking(true)
     const targets = selectedCajas.filter(c => !c.audit)
     let ok = 0, fail = 0
     for (const c of targets) {
@@ -1609,10 +1620,13 @@ export default function CajaList() {
     }
     notify(fail === 0 ? `${ok} cajas auditadas` : `${ok}/${targets.length} auditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
     setSelectedIds(new Set())
+    setBulking(false)
     load()
   }
 
   const bulkDesauditar = async () => {
+    if (bulking) return
+    setBulking(true)
     const targets = selectedCajas.filter(c => c.audit)
     let ok = 0, fail = 0
     for (const c of targets) {
@@ -1621,6 +1635,7 @@ export default function CajaList() {
     }
     notify(fail === 0 ? `${ok} cajas desauditadas` : `${ok}/${targets.length} desauditadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
     setSelectedIds(new Set())
+    setBulking(false)
     load()
   }
 
@@ -1632,6 +1647,8 @@ export default function CajaList() {
       { title: `Eliminar ${selectedCajas.length} cajas`, placeholder: 'Por qué se eliminan (opcional)' }
     )
     if (motivoMasivo === null) return
+    if (bulking) return
+    setBulking(true)
     let ok = 0, fail = 0
     for (const c of selectedCajas) {
       try { await cajasApi.remove(c.id, motivoMasivo); ok++ }
@@ -1639,6 +1656,7 @@ export default function CajaList() {
     }
     notify(fail === 0 ? `${ok} cajas eliminadas` : `${ok}/${selectedCajas.length} eliminadas, ${fail} falló`, fail === 0 ? 'success' : 'error')
     setSelectedIds(new Set())
+    setBulking(false)
     load()
   }
 
@@ -1784,13 +1802,13 @@ export default function CajaList() {
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-bright)' }}>
             {selectedIds.size} seleccionados
           </span>
-          <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit}>
+          <button className="btn btn-sm btn-secondary" onClick={bulkAuditar} disabled={!canBulkAudit || bulking}>
             Auditar
           </button>
-          <button className="btn btn-sm btn-secondary" onClick={bulkDesauditar} disabled={!canBulkDesaudit}>
+          <button className="btn btn-sm btn-secondary" onClick={bulkDesauditar} disabled={!canBulkDesaudit || bulking}>
             Desauditar
           </button>
-          <button className="btn btn-sm btn-danger" onClick={bulkEliminar}>
+          <button className="btn btn-sm btn-danger" onClick={bulkEliminar} disabled={bulking}>
             Eliminar
           </button>
           <button className="btn btn-sm btn-secondary" onClick={bulkCancel} style={{ marginLeft: 'auto' }}>
