@@ -142,16 +142,30 @@ test('funciona sin efectivo cargado (null o cero)', () => {
 
 // ── Cuadre por movimientos (origen TAPTAP) ──────────────────────────────────
 
-test('con origin TAPTAP se valida por movimientos, sin importar los detalles', () => {
+// MODELO SIMPLE (DEV-82): una caja se lee SIEMPRE por sus detalles, sin
+// importar el origen. Los movimientos se convirtieron en detalles de 3 tipos.
+test('una caja convertida cuadra por sus detalles aunque el origen sea TAPTAP', () => {
   const r = calcularCuadre({
     total: 1000, efectivo: 300, origin: 'TAPTAP',
-    detalles: [det(999999, 'informativo')],
+    detalles: [det(700, 'cobro'), det(999999, 'informativo')],
+    movimientos: []
+  })
+  assert.equal(r.fuente, 'detalles')
+  assert.equal(r.cobros, 700)
+  assert.equal(r.esperado, 1000)
+  assert.equal(r.cuadra, true)
+})
+
+// Compatibilidad: una caja vieja sin convertir (movimientos y CERO detalles)
+// sigue cuadrando por movimientos para no mostrar cero cobros.
+test('una caja sin convertir cae al fallback por movimientos', () => {
+  const r = calcularCuadre({
+    total: 1000, efectivo: 300, origin: 'TAPTAP',
+    detalles: [],
     movimientos: [mov('COBRO', 300, 'Efectivo'), mov('COBRO', 700, 'Mercado Pago')]
   })
   assert.equal(r.fuente, 'movimientos')
-  // El cobro en efectivo NO se suma: ya esta en caja.efectivo
   assert.equal(r.cobros, 700)
-  assert.equal(r.esperado, 1000)
   assert.equal(r.cuadra, true)
 })
 
@@ -166,11 +180,9 @@ test('el fondo inicial y los vaciados no afectan la diferencia', () => {
   assert.equal(conRuido.cuadra, true)
 })
 
-test('con origin distinto de TAPTAP se valida por detalles, aunque haya movimientos cargados', () => {
-  // Caso real: ATTE 04/08/2026 turno 1 (origin DCSMART) tenia un gasto suelto
-  // cargado como movimiento ademas de los cobros por detalle. Antes, ese
-  // movimiento activaba la fuente 'movimientos' e ignoraba los detalles
-  // enteros. Ahora la fuente depende solo del origin.
+test('si hay detalles, mandan los detalles aunque queden movimientos sueltos', () => {
+  // Caso real: ATTE 04/08/2026 turno 1 tenia un gasto suelto cargado como
+  // movimiento ademas de los cobros por detalle. Los detalles mandan.
   const r = calcularCuadre({
     total: 500, efectivo: 100,
     detalles: [det(400, 'cobro')],
@@ -200,17 +212,15 @@ test('los gastos en movimientos restan siempre, incluso en efectivo', () => {
 
 // ── Cuadre por movimientos (origen FFUDO) ───────────────────────────────────
 
-test('con origin FFUDO se valida por movimientos, igual que TapTap', () => {
-  // El job de Fudo escribe los cobros como CajaMovimiento (uno por metodo de pago); los
-  // detalles que escribe son informativos (canales de venta). Si la fuente fuera
-  // 'detalles', cobros daria 0 y toda caja de Fudo descuadraria por el total menos el
-  // efectivo.
+test('una caja FFUDO convertida cuadra por sus detalles de tres tipos', () => {
+  // Tras la conversion, los cobros de Fudo son detalles tipo cobro y los
+  // canales quedan informativos.
   const r = calcularCuadre({
     total: 30000, efectivo: 10000, origin: 'FFUDO',
-    detalles: [det(30000, 'informativo')],
-    movimientos: [mov('COBRO', 10000, 'Efectivo'), mov('COBRO', 20000, 'Mercado Pago')]
+    detalles: [det(20000, 'cobro'), det(30000, 'informativo')],
+    movimientos: []
   })
-  assert.equal(r.fuente, 'movimientos')
+  assert.equal(r.fuente, 'detalles')
   assert.equal(r.cobros, 20000)
   assert.equal(r.esperado, 30000)
   assert.equal(r.cuadra, true)

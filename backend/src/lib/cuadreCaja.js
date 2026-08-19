@@ -109,9 +109,16 @@ export function calcularCuadre(caja) {
   const detalles = caja.detalles ?? []
   const movimientos = caja.movimientos ?? []
 
-  // La fuente la define como carga el local (origin), no lo que esta caja
-  // puntual tenga cargado. Ver el comentario de arriba.
-  const fuente = ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS.includes(caja.origin) ? 'movimientos' : 'detalles'
+  // MODELO SIMPLE (DEV-82): una caja se lee por sus DETALLES, siempre. Los
+  // movimientos dejaron de existir como concepto: al convertir los datos, cada
+  // movimiento paso a ser un detalle con uno de los tres tipos (cobro / gasto /
+  // informativo). La fuente por origen desaparece porque era la que obligaba a
+  // elegir una tabla y descartar la otra.
+  //
+  // El fallback por movimientos queda SOLO para cajas viejas sin convertir
+  // (tienen movimientos y ningun detalle): asi una caja historica no muestra
+  // cero cobros mientras conviven ambas formas.
+  const fuente = detalles.length === 0 && movimientos.length > 0 ? 'movimientos' : 'detalles'
 
   let cobros = 0
   let gastos = 0

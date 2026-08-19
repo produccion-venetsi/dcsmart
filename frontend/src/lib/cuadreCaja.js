@@ -96,7 +96,7 @@ export function calcularCuadre(caja) {
 
   const detalles = caja.detalles ?? []
   const movimientos = caja.movimientos ?? []
-  const fuente = ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS.includes(caja.origin) ? 'movimientos' : 'detalles'
+  const fuente = (caja.detalles ?? []).length === 0 && (caja.movimientos ?? []).length > 0 ? 'movimientos' : 'detalles' // modelo simple DEV-82: siempre detalles; movimientos solo como fallback legacy
 
   let cobros = 0
   let gastos = 0
