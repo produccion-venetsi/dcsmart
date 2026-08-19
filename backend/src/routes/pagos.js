@@ -268,7 +268,7 @@ async function buildPagosWhere(fastify, request, query) {
     ...auditFilter,
     ...proveedorFilter,
     ...qFilter,
-    ...(nro_ord        ? { nro_ord: parseInt(nro_ord) }                  : {}),
+    ...(nro_ord && !Number.isNaN(parseInt(nro_ord)) ? { nro_ord: parseInt(nro_ord) } : {}),
     ...(tipoIds.length   ? { id_tipo:   { in: tipoIds } }                 : {}),
     ...(metodoIds.length ? { id_metodo: { in: metodoIds } }               : {}),
     ...(pagado         !== undefined ? { pagado:         pagado         === 'true' } : {}),
@@ -663,9 +663,12 @@ export default async function pagosRoutes(fastify) {
           id_tipo:        id_tipo        || null,
           pv:             pv             ? (parseInt(pv) || null)    : null,
           nro:            nro            ? BigInt(nro)              : null,
-          importe_neto:   importe_neto   ? parseFloat(importe_neto) : null,
-          descuento:      descuento      ? parseFloat(descuento)    : null,
-          importe:        importe        ? parseFloat(importe)      : null,
+          // toFloatOrNull y no truthiness: el propio archivo ya lo explica en
+          // el PUT -- un importe/descuento 0 es un valor, no un vacío. El POST
+          // validó arriba que importe 0 es válido y acá lo pisaba con null.
+          importe_neto:   toFloatOrNull(importe_neto),
+          descuento:      toFloatOrNull(descuento),
+          importe:        toFloatOrNull(importe),
           id_metodo,
           cashflow:       cashflow       ? new Date(cashflow)       : null,
           observaciones,
@@ -1067,6 +1070,13 @@ export default async function pagosRoutes(fastify) {
     if (!id_metodo) {
       return reply.code(400).send({ error: 'Forma de pago requerida' })
     }
+    // Un id_metodo inexistente explotaba recién en el updateMany con un P2003
+    // sin traducir; una fecha no parseable, ídem con Invalid Date.
+    const metodo = await fastify.db.metodoPago.findUnique({ where: { id: id_metodo }, select: { id: true } })
+    if (!metodo) return reply.code(400).send({ error: 'La forma de pago seleccionada no existe' })
+    if (fecha_pago && Number.isNaN(new Date(fecha_pago).getTime())) {
+      return reply.code(400).send({ error: 'Fecha de pago inválida' })
+    }
 
     // Se leen antes para decidir el estado de cada uno y para devolverle al
     // frontend que ids quedaron en CAJA (asi no duplica la regla).
@@ -1153,7 +1163,7 @@ export default async function pagosRoutes(fastify) {
   })
 
   // ── POST /upload ───────────────────────────────────────────────────────────
-  fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
+  fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'create')] }, async (request, reply) => {
     const { id_local } = request.query
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a ese local' })
@@ -1189,7 +1199,7 @@ export default async function pagosRoutes(fastify) {
   // guarda nada: devuelve campos sueltos y la persona los revisa y confirma.
   // Quien quiera guardar el archivo lo sube aparte por /upload, como cualquier
   // otro adjunto.
-  fastify.post('/leer-factura', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
+  fastify.post('/leer-factura', { preHandler: [fastify.authenticate, fastify.appContext, fastify.can('pagos', 'create')] }, async (request, reply) => {
     const data = await request.file()
     if (!data) return reply.code(400).send({ error: 'No se recibió archivo' })
 
