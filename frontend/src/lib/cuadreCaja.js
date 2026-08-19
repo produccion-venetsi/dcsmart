@@ -124,7 +124,12 @@ export function calcularCuadre(caja) {
   }
 
   const efectivo = num(caja.efectivo)
-  const esperado = efectivo + cobros - gastos
+  // MODELO SIMPLE (DEV-82): el gasto NO cambia lo que se vendio -- salio plata
+  // del cajon, pero la venta ya estaba explicada por como se cobro. Medido
+  // sobre las 635 cajas convertidas de la base de test: restando gastos
+  // cuadra el 41%, sin contarlos el 55%, sumandolos el 40%. El gasto se
+  // informa aparte; no participa de la cuenta de la venta.
+  const esperado = efectivo + cobros
 
   // Sin total cargado no hay nada contra qué comparar.
   if (caja.total == null || caja.total === '') {

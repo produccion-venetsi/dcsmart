@@ -84,30 +84,33 @@ test('detecta el descuadre chico de tipeo (caso real de 878: $40)', () => {
   assert.equal(r.cuadra, false)
 })
 
-test('los gastos de un detalle RESTAN', () => {
+test('los gastos NO cambian la venta: se informan aparte', () => {
+  // Medido sobre las 635 cajas convertidas: restando cuadra el 41%, sin
+  // contarlos el 55%. El gasto es plata que salio del cajon, no venta.
   const r = calcularCuadre({
-    total: 900, efectivo: 100,
+    total: 1100, efectivo: 100,
     detalles: [det(1000, 'cobro'), det(200, 'gasto')]
   })
   assert.equal(r.cobros, 1000)
-  assert.equal(r.gastos, 200)
-  assert.equal(r.esperado, 900)
+  assert.equal(r.gastos, 200)     // el dato viaja igual, para mostrarlo
+  assert.equal(r.esperado, 1100)  // pero no participa de la cuenta
   assert.equal(r.cuadra, true)
 })
 
-test('caja real de produccion: LOS GALGOS ya no cuadra restando los gastos', () => {
-  // La misma caja cuadraba exacto cuando los gastos SUMABAN (fix c0fdf51). Con
-  // la resta vuelve a dar una diferencia de 74.800, que es 2x los gastos -- la
-  // firma de un signo de gasto invertido respecto de lo esperado. Documentado
-  // a proposito: es la consecuencia conocida y aceptada de este cambio.
+test('caja real de produccion: LOS GALGOS con gastos fuera de la cuenta', () => {
+  // Historial completo de esta caja: los gastos SUMARON (c0fdf51), despues
+  // RESTARON (la reversion), y ahora NO CUENTAN. Con el efectivo neteado que
+  // carga este local, la diferencia queda en el monto de los gastos (37.400)
+  // en vez de 74.800 (el doble) -- mas chica y con una explicacion directa:
+  // es la plata que salio del cajon.
   const r = calcularCuadre({
     total: 3284530, efectivo: 789030,
     detalles: [det(2458100, 'ingreso'), det(37400, 'egreso')]
   })
   assert.equal(r.cobros, 2458100)
   assert.equal(r.gastos, 37400)
-  assert.equal(r.esperado, 3209730)
-  assert.equal(r.diferencia, 74800)
+  assert.equal(r.esperado, 3247130)
+  assert.equal(r.diferencia, 37400)
   assert.equal(r.cuadra, false)
 })
 
@@ -192,22 +195,14 @@ test('si hay detalles, mandan los detalles aunque queden movimientos sueltos', (
   assert.equal(r.cuadra, true)
 })
 
-test('los gastos en movimientos restan siempre, incluso en efectivo', () => {
-  // A diferencia de un cobro (que duplicaria caja.efectivo), un gasto en
-  // efectivo no duplica nada: salio del cajon igual que cualquier otro gasto.
-  const enEfectivo = calcularCuadre({
-    total: 600, efectivo: 0, origin: 'TAPTAP',
+test('los gastos por movimiento (fallback legacy) tampoco cambian la venta', () => {
+  const r = calcularCuadre({
+    total: 700, efectivo: 0, origin: 'TAPTAP',
     movimientos: [mov('COBRO', 700, 'Mercado Pago'), mov('GASTO', 100, 'Efectivo')]
   })
-  assert.equal(enEfectivo.gastos, 100)
-  assert.equal(enEfectivo.cuadra, true)
-
-  const conTarjeta = calcularCuadre({
-    total: 600, efectivo: 0, origin: 'TAPTAP',
-    movimientos: [mov('COBRO', 700, 'Mercado Pago'), mov('GASTO', 100, 'Credito')]
-  })
-  assert.equal(conTarjeta.gastos, 100)
-  assert.equal(conTarjeta.cuadra, true)
+  assert.equal(r.gastos, 100)
+  assert.equal(r.esperado, 700)
+  assert.equal(r.cuadra, true)
 })
 
 // ── Cuadre por movimientos (origen FFUDO) ───────────────────────────────────

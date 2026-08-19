@@ -39,10 +39,10 @@ test('una diferencia de dos pesos ya es descuadre', () => {
   assert.equal(r.absoluto, 2)
 })
 
-test('el descuadre tiene en cuenta cobros y gastos de los detalles', () => {
-  // Por detalles los gastos restan: esperado = 500 + 300 - 100 = 700.
+test('el descuadre cuenta los cobros; los gastos no cambian la venta', () => {
+  // Modelo simple: esperado = 500 + 300 = 800; el gasto va aparte.
   const c = {
-    total: 700, efectivo: 500, movimientos: [],
+    total: 800, efectivo: 500, movimientos: [],
     detalles: [
       { tipo: 'cobro', monto: 300, detalle_tipo: { nombre: 'MP QR', clasificacion: 'cobro' } },
       { tipo: 'gasto', monto: 100, detalle_tipo: { nombre: 'Fletes', clasificacion: 'gasto' } },

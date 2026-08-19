@@ -26,11 +26,14 @@ export default function CuadreVivo({ cuadre, origin }) {
 
   return (
     <div className={`cuadre-vivo cuadre-vivo-sticky cuadre-${estado}`}>
+      {/* Modelo simple: la venta se explica con efectivo + cobros. El gasto no
+          cambia lo vendido (salió plata del cajón, no venta), así que se
+          muestra aparte y no dentro de la suma. */}
       <div className="cuadre-vivo-cuentas">
         <span>Efectivo <strong>{fmtMonto(cuadre.efectivo)}</strong></span>
         <span>+ Cobros <strong>{fmtMonto(cuadre.cobros)}</strong></span>
-        {cuadre.gastos > 0 && <span>− Gastos <strong>{fmtMonto(cuadre.gastos)}</strong></span>}
         <span className="cuadre-vivo-igual">= <strong>{fmtMonto(cuadre.esperado)}</strong></span>
+        {cuadre.gastos > 0 && <span style={{ opacity: 0.75 }}>· gastos aparte <strong>{fmtMonto(cuadre.gastos)}</strong></span>}
       </div>
       {/* El estado, en grande y con el color del semaforo: verde cuadra, ROJO no cuadra.
           El monto que falta va PEGADO al texto y en el mismo tamano -- "faltan $1.000" dice
