@@ -326,7 +326,9 @@ export default async function cajaRoutes(fastify) {
   })
 
   // ── POST /upload ───────────────────────────────────────────────────────
-  fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext] }, async (request, reply) => {
+  // Sube adjuntos de caja: exige el mismo permiso que crear la caja. Antes
+  // cualquier autenticado con acceso a la app podía subir archivos al bucket.
+  fastify.post('/upload', { preHandler: [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')] }, async (request, reply) => {
     const { id_local } = request.query
     if (id_local && !request.allowedLocalIds.includes(id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a ese local' })
@@ -621,10 +623,14 @@ export default async function cajaRoutes(fastify) {
       fastify.log.error({ err, id: existing.id }, 'No se pudo registrar la eliminación de la caja')
     }
 
-    // Eliminar registros dependientes antes que la caja (FK constraints)
-    await fastify.db.cajaMovimiento.deleteMany({ where: { id_caja: request.params.id } })
-    await fastify.db.cajaDetalle.deleteMany({ where: { id_caja: request.params.id } })
-    await fastify.db.caja.delete({ where: { id: request.params.id } })
+    // Dependientes antes que la caja (FK), y TODO en una transacción: si el
+    // delete de la caja falla (timeout, FK nueva), no puede quedar una caja
+    // vaciada de movimientos y detalles con el snapshot como único respaldo.
+    await fastify.db.$transaction([
+      fastify.db.cajaMovimiento.deleteMany({ where: { id_caja: request.params.id } }),
+      fastify.db.cajaDetalle.deleteMany({ where: { id_caja: request.params.id } }),
+      fastify.db.caja.delete({ where: { id: request.params.id } })
+    ])
     return reply.code(204).send()
   })
 }
