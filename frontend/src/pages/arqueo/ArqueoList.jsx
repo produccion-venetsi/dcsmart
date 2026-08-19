@@ -589,9 +589,18 @@ function MovimientosPeriodo({ idLocal, idArqueo = null, compacto = false }) {
   if (!datos) return null
 
   const tablas = [
+    // Se muestran las dos fechas porque el período se corta por el CIERRE: la
+    // plata del turno entra al cofre cuando cierra, no cuando abre. Sin la
+    // columna de cierre, un turno que arrancó el día anterior parece estar en
+    // el período equivocado.
     { titulo: `Cajas (efectivo) — ${fmt$(datos.ingresos)}`, filas: datos.cajas, total: datos.total_cajas,
-      cab: ['Fecha', 'Turno', 'Efectivo'],
-      fila: (c) => [fmtDateTime(c.fecha_inicio), c.tipo_turno || '—', fmt$(c.efectivo)] },
+      cab: ['Apertura', 'Cierre', 'Turno', 'Efectivo'],
+      fila: (c) => [
+        fmtDateTime(c.fecha_inicio),
+        c.fecha_cierre ? fmtDateTime(c.fecha_cierre) : 'sin cierre',
+        c.tipo_turno || '—',
+        fmt$(c.efectivo)
+      ] },
     { titulo: `Pagos en efectivo — ${fmt$(datos.gastos)}`, filas: datos.pagos, total: datos.total_pagos,
       cab: ['OP', 'Fecha de pago', 'Proveedor', 'Importe'],
       fila: (pg) => [pg.nro_ord != null ? `OP-${pg.nro_ord}` : '—', fmtDateTime(pg.fecha_pago), pg.proveedor || '—', fmt$(pg.importe)] },
