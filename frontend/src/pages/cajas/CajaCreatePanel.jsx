@@ -17,7 +17,8 @@ import ClasificacionSelect from '../../components/ClasificacionSelect.jsx'
 import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
-import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
+import { AYUDA_EFECTIVO } from '../../lib/ayudaCaja.js'
+import AyudaCampo from '../../components/AyudaCampo.jsx'
 
 // Alta de caja: el turno con sus detalles y sus movimientos.
 //
@@ -214,6 +215,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
       {/* Pegado al tope del drawer: se ve mientras se carga todo lo de abajo. */}
       <CuadreVivo cuadre={cuadreVivo} origin="DCSMART" />
 
+      <div className="drawer-section-title">Lo que vendiste</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
@@ -260,35 +262,35 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Total</label>
+          <label className="form-label"><AyudaCampo campo="total">Total</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={form.total} onChange={e => setF('total', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Efectivo</label>
+          <label className="form-label"><AyudaCampo campo="efectivo">Efectivo</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={form.efectivo} onChange={e => setF('efectivo', e.target.value)} />
           </div>
           {/* No es un dato informativo: el arqueo del local lo suma como el efectivo
-              del periodo. El texto vive en lib/camposCaja.js porque el mismo campo se
+              del periodo. El texto vive en lib/ayudaCaja.js porque el mismo campo se
               carga en el alta y en la edicion. */}
           <p className="form-hint" style={{ margin: '4px 0 0' }}>{AYUDA_EFECTIVO}</p>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fiscal</label>
+          <label className="form-label"><AyudaCampo campo="fiscal">Fiscal</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={form.fiscal} onChange={e => setF('fiscal', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Comensales</label>
+          <label className="form-label"><AyudaCampo campo="comensales">Comensales</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Tickets</label>
+          <label className="form-label"><AyudaCampo campo="tickets">Tickets</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
@@ -309,7 +311,12 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </div>
         </div>
       </div>
-      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Detalles (opcional)</div>
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>
+        <AyudaCampo campo="cobro">Cómo te lo pagaron</AyudaCampo>
+      </div>
+      <p className="form-hint" style={{ margin: '0 0 0.6rem' }}>
+        Cada forma de pago que no fue efectivo, y lo que quedó fiado. Sumado al efectivo tiene que dar el total.
+      </p>
       {pendingDetalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">
@@ -368,7 +375,12 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
         </button>
       </div>
 
-      <div className="drawer-section-title">Movimientos (opcional)</div>
+      <div className="drawer-section-title">
+        <AyudaCampo campo="movimiento">Qué pasó con la plata del cajón</AyudaCampo>
+      </div>
+      <p className="form-hint" style={{ margin: '0 0 0.6rem' }}>
+        El fondo con el que abriste, los gastos que pagaste de la caja, los retiros y vaciados. No cambian lo que vendiste.
+      </p>
       {pendingMovimientos.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">

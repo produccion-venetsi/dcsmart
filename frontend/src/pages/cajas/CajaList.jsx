@@ -32,7 +32,8 @@ import MultiSelect from '../../components/MultiSelect.jsx'
 import CajaCreatePanel from './CajaCreatePanel.jsx'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
 import { multiParam } from '../../lib/filtros.js'
-import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
+import { AYUDA_EFECTIVO } from '../../lib/ayudaCaja.js'
+import AyudaCampo from '../../components/AyudaCampo.jsx'
 // describirCuadre / colorCuadre / faltaParaCuadrar se fueron a components/CuadreVivo.jsx,
 // que es el unico que pinta el cuadre ahora.
 import { calcularCuadre } from '../../lib/cuadreVenta.js'
@@ -1091,36 +1092,36 @@ function CajaEditPanel({ cajaId, onSaved, onBack }) {
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Total</label>
+          <label className="form-label"><AyudaCampo campo="total">Total</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={form.total} onChange={e => setF('total', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Efectivo</label>
+          <label className="form-label"><AyudaCampo campo="efectivo">Efectivo</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={form.efectivo} onChange={e => setF('efectivo', e.target.value)} />
           </div>
           {/* No es un dato informativo: el arqueo del local lo suma como el efectivo
-              del periodo. El texto vive en lib/camposCaja.js porque el mismo campo se
+              del periodo. El texto vive en lib/ayudaCaja.js porque el mismo campo se
               carga en el alta y en la edicion. */}
           <p className="form-hint" style={{ margin: '4px 0 0' }}>{AYUDA_EFECTIVO}</p>
         </div>
 
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fiscal</label>
+          <label className="form-label"><AyudaCampo campo="fiscal">Fiscal</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" step="0.01" placeholder="0.00" value={form.fiscal} onChange={e => setF('fiscal', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Comensales</label>
+          <label className="form-label"><AyudaCampo campo="comensales">Comensales</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Tickets</label>
+          <label className="form-label"><AyudaCampo campo="tickets">Tickets</AyudaCampo></label>
           <div className="form-input-wrap">
             <input type="number" placeholder="0" value={form.tickets} onChange={e => setF('tickets', e.target.value)} />
           </div>
