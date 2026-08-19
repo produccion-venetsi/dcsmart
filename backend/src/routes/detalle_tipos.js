@@ -2,6 +2,17 @@
 // al cargar un detalle se propone esta y el usuario puede cambiarla.
 import { CLASIFICACIONES, normalizarClasificacion } from '../lib/clasificaciones.js'
 
+// Quién puede tocar un tipo existente. Los del grupo entero (id_local null)
+// solo los tocan los roles que operan todo el grupo: un cajero con caja:edit
+// podía renombrar o desactivar un tipo app-wide y hacerlo desaparecer del
+// combo de TODOS los locales. Los de un local puntual exigen acceso a ese
+// local, igual que el POST ya lo exigía al crearlos.
+const ROLES_GRUPO = ['super_admin', 'dcsmart', 'admin', 'externo']
+function puedeTocarTipo(existing, request) {
+  if (!existing.id_local) return ROLES_GRUPO.includes(request.activeRole)
+  return request.allowedLocalIds.includes(existing.id_local)
+}
+
 export default async function detalleTiposRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
@@ -56,6 +67,9 @@ export default async function detalleTiposRoutes(fastify) {
     const existing = await fastify.db.detalleTipo.findUnique({ where: { id: request.params.id } })
     if (!existing) return reply.code(404).send({ error: 'Tipo no encontrado' })
     if (existing.id_app !== request.activeAppId) return reply.code(403).send({ error: 'Sin acceso' })
+    if (!puedeTocarTipo(existing, request)) {
+      return reply.code(403).send({ error: 'Sin acceso a este tipo de detalle' })
+    }
 
     const { nombre, activo, clasificacion } = request.body
     let clasifNueva
@@ -86,6 +100,9 @@ export default async function detalleTiposRoutes(fastify) {
     })
     if (!existing) return reply.code(404).send({ error: 'Tipo no encontrado' })
     if (existing.id_app !== request.activeAppId) return reply.code(403).send({ error: 'Sin acceso' })
+    if (!puedeTocarTipo(existing, request)) {
+      return reply.code(403).send({ error: 'Sin acceso a este tipo de detalle' })
+    }
 
     if (existing._count.detalles > 0) {
       await fastify.db.detalleTipo.update({ where: { id: request.params.id }, data: { activo: false } })
