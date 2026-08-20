@@ -21,6 +21,8 @@
 import { PrismaClient } from '@prisma/client'
 import { resolverMetodo } from './taptap/metodos.js'
 import { mapTurno, esTurnoAbierto } from './taptap/mapping.js'
+import { movimientoADetalle } from '../lib/movimientoADetalle.js'
+import { ROL_POR_CLASIFICACION } from '../lib/cuadreCaja.js'
 
 const prisma = new PrismaClient()
 const API_BASE_URL = 'https://function-gethisto-679004960826.southamerica-east1.run.app'
@@ -68,32 +70,38 @@ async function obtenerMaxId(id_local) {
   return maxid != null ? String(maxid) : '0'
 }
 
-// Resuelve (o crea) el MetodoPago para un monedaname de TapTap, cacheando
-// en memoria durante la corrida para no repetir queries.
-async function resolverMetodoId(monedaname, cacheMetodos) {
+// Resuelve el NOMBRE canónico del método para un monedaname de TapTap ("Transfer"
+// -> "Transferencia"). En el modelo simple el método ya no es una FK del detalle:
+// es su nombre. Se sigue creando la entrada en MetodoPago porque el catálogo lo
+// usa el módulo de Pagos, pero el detalle solo se lleva el string.
+async function resolverMetodoNombre(monedaname, cacheMetodos) {
   if (cacheMetodos.has(monedaname)) return cacheMetodos.get(monedaname)
   const existentes = await prisma.metodoPago.findMany({ select: { id: true, nombre: true } })
   const { nombre, existenteId } = resolverMetodo(monedaname, existentes)
-  let id = existenteId
-  if (!id) {
-    const creado = await prisma.metodoPago.upsert({ where: { nombre }, create: { nombre }, update: {} })
-    id = creado.id
+  if (!existenteId) {
+    await prisma.metodoPago.upsert({ where: { nombre }, create: { nombre }, update: {} })
   }
-  cacheMetodos.set(monedaname, id)
-  return id
+  cacheMetodos.set(monedaname, nombre)
+  return nombre
 }
 
 // Resuelve (o crea) el DetalleTipo para un nombre, scopeado por id_app.
-async function resolverDetalleTipoId(nombre, id_app, cacheDetalleTipos) {
+// Devuelve también el TIPO explícito que le corresponde al detalle: en el
+// modelo simple cada fila lleva cobro/gasto/informativo escrito, así que el rol
+// que antes se calculaba al LEER (clasificación del catálogo, o cobro si no
+// hay) ahora se fija al ESCRIBIR — misma regla, otro momento.
+async function resolverDetalleTipo(nombre, id_app, cacheDetalleTipos) {
   const key = `${id_app}|${nombre}`
   if (cacheDetalleTipos.has(key)) return cacheDetalleTipos.get(key)
   const dt = await prisma.detalleTipo.upsert({
     where: { nombre_id_app: { nombre, id_app } },
     create: { nombre, id_app },
     update: {},
+    select: { id: true, clasificacion: true },
   })
-  cacheDetalleTipos.set(key, dt.id)
-  return dt.id
+  const resuelto = { id: dt.id, tipo: ROL_POR_CLASIFICACION[dt.clasificacion] ?? 'cobro' }
+  cacheDetalleTipos.set(key, resuelto)
+  return resuelto
 }
 
 async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
@@ -133,17 +141,23 @@ async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
     const { caja, movimientos, detallesSiempre, detallesSiOcurren } = mapTurno(turno)
     if (!caja.fecha_inicio) continue // turno sin fecha válida, no se puede crear
 
-    const movimientosConMetodo = []
+    // MODELO SIMPLE (DEV-82): los movimientos de TapTap ya no se escriben como
+    // CajaMovimiento — nacen directamente como detalles de tres tipos, con la
+    // MISMA regla que convirtió los históricos (lib/movimientoADetalle.js). El
+    // método de pago deja de ser una FK: es el nombre del detalle. La cantidad
+    // (el groupCount: 23 cobros con Crédito) viaja igual.
+    const detallesDeMovimientos = []
     for (const m of movimientos) {
-      const id_metodo = await resolverMetodoId(m.monedaname, cacheMetodos)
-      movimientosConMetodo.push({ tipo: m.tipo, id_metodo, monto: String(m.monto), cantidad: m.cantidad })
+      const metodo = await resolverMetodoNombre(m.monedaname, cacheMetodos)
+      const c = movimientoADetalle({ tipo: m.tipo, metodo })
+      detallesDeMovimientos.push({ tipo: c.tipo, nombre: c.nombre, monto: String(m.monto), cantidad: m.cantidad })
     }
 
     const detalles = [...detallesSiempre, ...detallesSiOcurren]
     const detallesConTipo = []
     for (const d of detalles) {
-      const id_tipo = await resolverDetalleTipoId(d.nombre, local_db.id_app, cacheDetalleTipos)
-      detallesConTipo.push({ id_tipo, nombre: d.nombre, monto: String(d.monto) })
+      const { id: id_tipo, tipo } = await resolverDetalleTipo(d.nombre, local_db.id_app, cacheDetalleTipos)
+      detallesConTipo.push({ id_tipo, tipo, nombre: d.nombre, monto: String(d.monto) })
     }
 
     await prisma.caja.create({
@@ -151,8 +165,7 @@ async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
         ...caja,
         id_local: local.id_local,
         origin: 'TAPTAP',
-        movimientos: { create: movimientosConMetodo },
-        detalles: { create: detallesConTipo },
+        detalles: { create: [...detallesDeMovimientos, ...detallesConTipo] },
       },
     })
     turnosNuevos++
