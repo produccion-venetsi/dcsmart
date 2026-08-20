@@ -15,12 +15,16 @@ function puedeTocarTipo(existing, request) {
 
 export default async function detalleTiposRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
+  // El CATÁLOGO de nombres es de apoyo a la carga: alcanza con poder crear.
+  // data_entry no tiene `view` de caja y abría el alta con el combo vacío y un
+  // error en pantalla, aunque la caja después se creara igual.
+  const catalogoHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', ['view', 'create'])]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
   const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'edit')]
   const deleteHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'delete')]
 
   // ── GET / — lista todos los tipos de la app activa ─────────────────────
-  fastify.get('/', { preHandler: viewHandler }, async (request) => {
+  fastify.get('/', { preHandler: catalogoHandler }, async (request) => {
     return fastify.db.detalleTipo.findMany({
       where: { id_app: request.activeAppId },
       include: { local: { select: { id: true, nombre: true } } },
