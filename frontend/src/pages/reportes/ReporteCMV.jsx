@@ -149,6 +149,23 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
   // tarjeta de fórmula de arriba, no como KPI suelto.
   const kpisCat = kpis.filter(k => k.label !== 'CMV Total')
 
+  // Desglose consolidado: TODAS las categorías juntas, rankeadas, con su peso
+  // dentro del CMV y sobre las ventas. Las tablas por grupo muestran cada una
+  // en su caja; acá se responde "¿qué categoría me está comiendo el margen?"
+  // sin comparar tres tablas a ojo.
+  const GRUPO = { alimentos: 'Alimentos', bebidas: 'Bebidas', movstock: 'MovStock' }
+  const categorias = [
+    ...alimentos.map(r => ({ ...r, grupo: 'alimentos' })),
+    ...bebidas.map(r => ({ ...r, grupo: 'bebidas' })),
+    ...movstock.map(r => ({ ...r, grupo: 'movstock' })),
+  ]
+    .sort((a, b) => b.val - a.val)
+    .map(r => ({
+      ...r,
+      pctCmv: cmvMonto > 0 ? ((r.val / cmvMonto) * 100).toFixed(1) : '0.0',
+      pctVentas: ventasTotal > 0 ? ((r.val / ventasTotal) * 100).toFixed(2) : '0.00',
+    }))
+
   const skel = loading || !data
 
   return (
@@ -248,6 +265,52 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
           <CostChart title="Alimentos" items={alimentos} barColor="#4CAF7D" />
           <CostChart title="Bebidas" items={bebidas} barColor="#C9B086" />
           <CostChart title="MovStock" items={movstock} barColor="#5FA8D9" />
+        </div>
+      )}
+
+      {/* ── Desglose de categorías: todas juntas, rankeadas ── */}
+      {!skel && categorias.length > 0 && (
+        <div className="rep-chart-card" style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Desglose de categorías</span>
+            <span style={{ fontSize: 11, color: 'rgba(var(--velo-rgb), .4)' }}>peso en el CMV y sobre las ventas</span>
+          </div>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Categoría</th>
+                  <th>Grupo</th>
+                  <th className="num">Monto</th>
+                  <th className="num" title="Qué parte del CMV total es esta categoría">% del CMV</th>
+                  <th className="num" title="Cuánto pesa sobre las ventas del período (los KPI de arriba suman estos)">% s/ Ventas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categorias.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t2)' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 2, background: CAT_COLORS[r.grupo].bar }} />
+                        {GRUPO[r.grupo]}
+                      </span>
+                    </td>
+                    <td className="num td-number">{fmt(r.val)}</td>
+                    <td className="num">{r.pctCmv}%</td>
+                    <td className="num td-muted">{r.pctVentas}%</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700 }}>
+                  <td>Total</td>
+                  <td></td>
+                  <td className="num td-number">{fmt(cmvMonto)}</td>
+                  <td className="num">100%</td>
+                  <td className="num">{cmvPct}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </>
