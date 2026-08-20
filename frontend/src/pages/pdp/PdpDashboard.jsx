@@ -243,6 +243,7 @@ function PdpColumn({
   actionLabel, actionIcon, onAction,
   secondaryActionLabel, secondaryActionIcon, onSecondaryAction,
   onAuditar, auditables = 0,
+  onAuditarDc, auditablesDc = 0,
   working,
   onGenerateReport, generatingReport,
 }) {
@@ -343,6 +344,21 @@ function PdpColumn({
                 ✓ Auditar{auditables > 0 ? ` (${auditables})` : ''}
               </button>
             )}
+            {/* La segunda firma (equipo DC), tambien en lote. Solo llega como
+                prop para los roles DC -- pedido del usuario 2026-08-20: se
+                podia dar Audit DC desde el drawer de cada OP pero no desde
+                las columnas, y son decenas por dia. */}
+            {onAuditarDc && (
+              <button
+                className="btn btn-sm btn-secondary"
+                onClick={onAuditarDc}
+                disabled={auditablesDc === 0 || working}
+                style={{ color: 'var(--purple)' }}
+                title={auditablesDc === 0 ? 'Ninguna seleccionada sin Audit DC' : `Audit DC a ${auditablesDc} seleccionada${auditablesDc !== 1 ? 's' : ''}`}
+              >
+                ✓ Audit DC{auditablesDc > 0 ? ` (${auditablesDc})` : ''}
+              </button>
+            )}
             {onSecondaryAction && (
               <button
                 className="btn btn-sm btn-secondary"
@@ -416,6 +432,7 @@ function PdpColumn({
                       <span className="pdp-row-ord">
                         {p.nro_ord != null ? `OP-${p.nro_ord}` : '—'}
                         {p.audit && <span title="Auditada" style={{ color: 'var(--green)', marginLeft: 4 }}>✓</span>}
+                        {p.audit_dc && <span title="Audit DC" style={{ color: 'var(--purple)', marginLeft: 2 }}>✓</span>}
                       </span>
                       {/* Tipo de comprobante (A, B, STK, etc.): antes solo se veía
                           al abrir el detalle del pago. Mismo badge de color que
@@ -507,6 +524,23 @@ export default function PdpDashboard() {
       catch { fail++ }
     }
     notify(fail === 0 ? `${ok} pagos auditados` : `${ok}/${targets.length} auditados, ${fail} falló`, fail === 0 ? 'success' : 'error')
+    setSeleccion(new Set())
+    setWorking(false)
+    load()
+  }
+
+  // La segunda firma en lote, mismo recorrido que handleAuditarLote pero
+  // contra el circuito DC. Solo la ven los roles DC (ver props de PdpColumn).
+  const handleAuditarDcLote = async (lista, seleccion, setSeleccion) => {
+    const targets = lista.filter(p => seleccion.has(p.id) && !p.audit_dc)
+    if (!targets.length) return
+    setWorking(true)
+    let ok = 0, fail = 0
+    for (const p of targets) {
+      try { await pagosApi.auditDc(p.id); ok++ }
+      catch { fail++ }
+    }
+    notify(fail === 0 ? `Audit DC a ${ok} pagos` : `${ok}/${targets.length} con Audit DC, ${fail} falló`, fail === 0 ? 'success' : 'error')
     setSeleccion(new Set())
     setWorking(false)
     load()
@@ -723,6 +757,8 @@ export default function PdpDashboard() {
           onAction={handleMandar}
           onAuditar={() => handleAuditarLote(deuda, selDeuda, setSelDeuda)}
           auditables={deuda.filter(p => selDeuda.has(p.id) && !p.audit).length}
+          onAuditarDc={esRolDc(role) ? () => handleAuditarDcLote(deuda, selDeuda, setSelDeuda) : undefined}
+          auditablesDc={deuda.filter(p => selDeuda.has(p.id) && !p.audit_dc).length}
           working={working}
         />
 
@@ -745,6 +781,8 @@ export default function PdpDashboard() {
           onAction={() => setPagarOpen(true)}
           onAuditar={() => handleAuditarLote(pagar, selPagar, setSelPagar)}
           auditables={pagar.filter(p => selPagar.has(p.id) && !p.audit).length}
+          onAuditarDc={esRolDc(role) ? () => handleAuditarDcLote(pagar, selPagar, setSelPagar) : undefined}
+          auditablesDc={pagar.filter(p => selPagar.has(p.id) && !p.audit_dc).length}
           working={working}
           onGenerateReport={handleGenerarReporte}
           generatingReport={generatingReport}
