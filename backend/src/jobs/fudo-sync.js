@@ -10,8 +10,10 @@ import { PrismaClient } from '@prisma/client'
 import { crearCliente } from './fudo/api.js'
 import { diasAProcesar, ventanaDia } from './fudo/dias.js'
 import { resolverMetodos } from './fudo/metodos.js'
-import { mapDia, esMovimientoDelJob, DETALLES_SIEMPRE } from './fudo/mapping.js'
+import { mapDia, DETALLES_SIEMPRE } from './fudo/mapping.js'
 import { CATALOGO_ESTANDAR_DETALLE_TIPOS } from '../lib/detalleTiposEstandar.js'
+import { movimientoADetalle, NOMBRE_EFECTIVO_INFORMATIVO } from '../lib/movimientoADetalle.js'
+import { ROL_POR_CLASIFICACION } from '../lib/cuadreCaja.js'
 
 // Clasificacion que le corresponde a cada nombre segun el catalogo estandar
 // (el que se siembra a toda app nueva). Si el nombre no esta en el catalogo
@@ -64,8 +66,25 @@ function credenciales(local) {
   return { apiKey, apiSecret }
 }
 
+// Busca (SIN crear) la entrada del catalogo para un nombre convertido de
+// movimiento: si existe, su clasificacion le gana a la regla estatica -- es
+// como la calibracion le dice al sync "este nombre aca no es un cobro" (el
+// caso real: "Metodo desconocido" es informativo en ACUARIO). Cachea tambien
+// los "no esta" para no repetir queries.
+async function catalogoDe(nombre, id_app, cacheCatalogo) {
+  const key = `${id_app}|${nombre}`
+  if (cacheCatalogo.has(key)) return cacheCatalogo.get(key)
+  const dt = await prisma.detalleTipo.findUnique({
+    where: { nombre_id_app: { nombre, id_app } },
+    select: { id: true, clasificacion: true },
+  })
+  const resuelto = dt ? { id: dt.id, tipo: ROL_POR_CLASIFICACION[dt.clasificacion] ?? 'cobro' } : null
+  cacheCatalogo.set(key, resuelto)
+  return resuelto
+}
+
 // Crea la caja del dia, o la actualiza conservando lo que cargo el encargado.
-async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre }) {
+async function escribirCaja({ local, id_app, armado, metodosPorCode, tiposPorNombre, turnoFudo, cacheCatalogo }) {
   const { caja, movimientos, detalles } = armado
 
   const previa = await prisma.caja.findFirst({
@@ -73,17 +92,42 @@ async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre }) {
     select: { id: true },
   })
 
-  const datosMovimientos = movimientos.map((m) => ({
-    tipo: m.tipo,
-    id_metodo: metodosPorCode.get(m.code),
-    monto: m.monto,
-    cantidad: m.cantidad,
-  }))
-  const datosDetalles = detalles.map((d) => ({
-    id_tipo: tiposPorNombre.get(d.nombre),
-    nombre: d.nombre,
-    monto: d.monto,
-  }))
+  // MODELO SIMPLE (DEV-82): los cobros y gastos del dia ya no se escriben como
+  // CajaMovimiento -- nacen como detalles de tres tipos, con la MISMA regla que
+  // convirtio los historicos (lib/movimientoADetalle.js). El metodo de pago
+  // deja de ser una FK: es el nombre del detalle.
+  const detallesDeMovimientos = []
+  for (const m of movimientos) {
+    const metodo = metodosPorCode.get(m.code)?.nombre ?? null
+    const c = movimientoADetalle({ tipo: m.tipo, metodo })
+    const enCatalogo = await catalogoDe(c.nombre, id_app, cacheCatalogo)
+    detallesDeMovimientos.push({
+      tipo: enCatalogo?.tipo ?? c.tipo,
+      id_tipo: enCatalogo?.id ?? null,
+      nombre: c.nombre,
+      monto: m.monto,
+      cantidad: m.cantidad,
+    })
+  }
+  const datosDetalles = [
+    ...detallesDeMovimientos,
+    ...detalles.map((d) => ({
+      id_tipo: tiposPorNombre.get(d.nombre)?.id,
+      tipo: tiposPorNombre.get(d.nombre)?.tipo,
+      nombre: d.nombre,
+      monto: d.monto,
+    })),
+  ]
+
+  // El turno real de Fudo (/cash-counts), si se pudo leer: el numero que el
+  // local VE en su sistema, y las horas reales de apertura y cierre en vez de
+  // la ventana artificial de 06:00 a 06:00.
+  const datosTurno = {}
+  if (turnoFudo) {
+    datosTurno.nro_turno = turnoFudo.nro_turno
+    if (turnoFudo.fecha_inicio) datosTurno.fecha_inicio = turnoFudo.fecha_inicio
+    if (turnoFudo.fecha_cierre) datosTurno.fecha_cierre = turnoFudo.fecha_cierre
+  }
 
   if (!previa) {
     await prisma.caja.create({
@@ -92,37 +136,39 @@ async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre }) {
         id_local: local.id_local,
         fecha_inicio: new Date(caja.fecha_inicio),
         fecha_cierre: new Date(caja.fecha_cierre),
-        movimientos: { create: datosMovimientos },
+        ...datosTurno,
         detalles: { create: datosDetalles },
       },
     })
     return 'nueva'
   }
 
-  // Reproceso: se reemplaza SOLO lo que escribe el job. INICIAL/RETIRO/VACIADO
-  // (y tambien INGRESO) sobreviven porque Fudo no los expone -- son la carga
-  // manual del encargado. OJO: la proteccion es por TIPO, no por quien lo
-  // creo. Si alguien carga a mano un COBRO o un GASTO en una caja de Fudo, el
-  // reproceso se lo lleva igual: no hay forma de distinguir su origen.
-  const existentes = await prisma.cajaMovimiento.findMany({
-    where: { id_caja: previa.id },
-    select: { id: true, tipo: true },
-  })
-  const aBorrar = existentes.filter((m) => esMovimientoDelJob(m.tipo)).map((m) => m.id)
-
+  // Reproceso: se reemplaza SOLO lo que escribe el job. Los informativos del
+  // encargado (Fondo inicial, Retiro, Vaciado...) sobreviven porque Fudo no
+  // los expone -- son carga manual. OJO: la proteccion es por TIPO y NOMBRE,
+  // no por quien lo creo. Si alguien carga a mano un cobro o un gasto en una
+  // caja de Fudo, el reproceso se lo lleva igual: no hay forma de distinguir
+  // su origen (mismo caveat que tenia la version por movimientos).
   await prisma.$transaction([
-    // Cinturon y tirantes: el filtro por tipo va tambien en la clausula del
-    // deleteMany, para que un refactor del findMany de arriba no lo convierta
-    // en un borrado sin techo.
+    // Los movimientos legacy del job (cajas de antes de la conversion): el
+    // reproceso los levanta y los reescribe como detalles, asi las cajas
+    // Fudo recientes se convierten solas en la ventana de 4 dias.
     prisma.cajaMovimiento.deleteMany({
-      where: { id: { in: aBorrar }, id_caja: previa.id, tipo: { in: ['COBRO', 'GASTO'] } },
+      where: { id_caja: previa.id, tipo: { in: ['COBRO', 'GASTO'] } },
     }),
-    // Igual que con los movimientos: solo se tocan los detalles que escribe
-    // el job (DETALLES_SIEMPRE). Un CajaDetalle puede llevar id_cliente y ser
-    // una linea de cuenta corriente -- plata anotada en la cuenta de alguien
-    // -- y borrar todos los detalles de la caja la haria desaparecer sin
-    // rastro en la proxima corrida.
-    prisma.cajaDetalle.deleteMany({ where: { id_caja: previa.id, nombre: { in: DETALLES_SIEMPRE } } }),
+    prisma.cajaDetalle.deleteMany({
+      where: {
+        id_caja: previa.id,
+        OR: [
+          // Lo que el job escribe hoy: cobros y gastos convertidos...
+          { tipo: { in: ['cobro', 'gasto'] } },
+          // ...el cobro en efectivo, que se convierte a informativo...
+          { nombre: NOMBRE_EFECTIVO_INFORMATIVO },
+          // ...y los detalles fijos de siempre (canales, Tarjetas, Cta Cte).
+          { nombre: { in: DETALLES_SIEMPRE } },
+        ],
+      },
+    }),
     prisma.caja.update({
       where: { id: previa.id },
       data: {
@@ -133,7 +179,7 @@ async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre }) {
         tickets: caja.tickets,
         cajero: caja.cajero,
         observaciones: caja.observaciones,
-        movimientos: { create: datosMovimientos },
+        ...datosTurno,
         detalles: { create: datosDetalles },
       },
     }),
@@ -141,7 +187,32 @@ async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre }) {
   return 'actualizada'
 }
 
+// Busca el cierre de caja de Fudo (/cash-counts) que corresponde al dia
+// comercial. Devuelve null si no hay ninguno o no se pudo leer: el turno es un
+// dato lindo de tener, no una condicion para que la caja exista.
+async function turnoDelDia(cliente, { desde, hasta }, etiqueta) {
+  try {
+    const { data } = await cliente.cierresDelPeriodo({ desde, hasta })
+    const validos = (data || []).filter((c) => !c.attributes?.canceled)
+    if (!validos.length) return null
+    // Normalmente hay UNO por dia comercial (verificado contra 3MONOS). Si el
+    // local abrio y cerro la caja varias veces, se toma el primero y los datos
+    // horarios se dejan como estan: la caja del dia agrupa a todos.
+    const principal = validos[0]
+    const unico = validos.length === 1
+    return {
+      nro_turno: Number(principal.id) || null,
+      fecha_inicio: unico && principal.attributes.openedAt ? new Date(principal.attributes.openedAt) : null,
+      fecha_cierre: unico && principal.attributes.closedAt ? new Date(principal.attributes.closedAt) : null,
+    }
+  } catch (err) {
+    console.warn(`[${etiqueta}] cash-counts no disponible: ${err.message}`)
+    return null
+  }
+}
+
 async function procesarLocal(local) {
+  const cacheCatalogo = new Map()
   const local_db = await prisma.local.findUnique({ where: { id: local.id_local }, select: { id_app: true } })
   if (!local_db) throw new Error(`Local ${local.id_local} no existe en la base`)
 
@@ -194,11 +265,18 @@ async function procesarLocal(local) {
           where: { nombre_id_app: { nombre: d.nombre, id_app: local_db.id_app } },
           create: { nombre: d.nombre, id_app: local_db.id_app, clasificacion: clasificacionDe(d.nombre) },
           update: {},
+          select: { id: true, clasificacion: true },
         })
-        tiposPorNombre.set(d.nombre, dt.id)
+        // El tipo explicito que lleva cada fila en el modelo simple: el rol de
+        // la clasificacion del catalogo (la misma regla que antes se aplicaba
+        // al LEER). Asi una reclasificacion del catalogo -- "Metodo
+        // desconocido" es informativo en ACUARIO -- moldea los proximos syncs.
+        tiposPorNombre.set(d.nombre, { id: dt.id, tipo: ROL_POR_CLASIFICACION[dt.clasificacion] ?? 'cobro' })
       }
 
-      const r = await escribirCaja({ local, armado, metodosPorCode: porCode, tiposPorNombre })
+      const turnoFudo = await turnoDelDia(cliente, { desde, hasta }, `${local.nombre} ${fecha}`)
+
+      const r = await escribirCaja({ local, id_app: local_db.id_app, armado, metodosPorCode: porCode, tiposPorNombre, turnoFudo, cacheCatalogo })
       if (r === 'nueva') nuevas++
       else actualizadas++
     } catch (err) {

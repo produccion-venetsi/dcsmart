@@ -33,7 +33,7 @@ const StartChoice   = lazyWithReload(() => import('./pages/StartChoice.jsx'))
 const AppSelector   = lazyWithReload(() => import('./pages/AppSelector.jsx'))
 const Dashboard     = lazyWithReload(() => import('./pages/Dashboard.jsx'))
 const CajaList      = lazyWithReload(() => import('./pages/cajas/CajaList.jsx'))
-const CajaDetail    = lazyWithReload(() => import('./pages/cajas/CajaDetail.jsx'))
+const CajaVer       = lazyWithReload(() => import('./pages/cajas/CajaVer.jsx'))
 const PagoList      = lazyWithReload(() => import('./pages/pagos/PagoList.jsx'))
 const PagoForm      = lazyWithReload(() => import('./pages/pagos/PagoForm.jsx'))
 const PdpDashboard  = lazyWithReload(() => import('./pages/pdp/PdpDashboard.jsx'))
@@ -58,6 +58,7 @@ const ArqueoList    = lazyWithReload(() => import('./pages/arqueo/ArqueoList.jsx
 const Avisos        = lazyWithReload(() => import('./pages/avisos/Avisos.jsx'))
 const Cargar        = lazyWithReload(() => import('./pages/cargar/Cargar.jsx'))
 const CajaNueva     = lazyWithReload(() => import('./pages/cajas/CajaNueva.jsx'))
+const CajaEditar    = lazyWithReload(() => import('./pages/cajas/CajaEditar.jsx'))
 
 function PageFallback() {
   return (
@@ -156,7 +157,9 @@ export default function App() {
           {/* `cajas/nueva` va ANTES de `cajas/:id`: si no, :id la captura y se
               intenta abrir una caja con id "nueva". */}
           <Route path="cajas/nueva"                element={<Guard roles={CARGAN}><CajaNueva /></Guard>} />
-          <Route path="cajas/:id"                  element={<OperativeGuard><CajaDetail /></OperativeGuard>} />
+          {/* `editar` antes de `:id` por el mismo motivo que `nueva`. */}
+          <Route path="cajas/:id/editar"           element={<OperativeGuard><CajaEditar /></OperativeGuard>} />
+          <Route path="cajas/:id"                  element={<OperativeGuard><CajaVer /></OperativeGuard>} />
           <Route path="pagos"                      element={<OperativeGuard><PagoList /></OperativeGuard>} />
           <Route path="pagos/nuevo"                element={<Guard roles={CARGAN}><PagoForm /></Guard>} />
           <Route path="cargar"                     element={<Guard roles={[ROLES.DATA_ENTRY]}><Cargar /></Guard>} />

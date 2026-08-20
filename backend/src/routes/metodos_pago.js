@@ -1,8 +1,15 @@
 export default async function metodosRoutes(fastify) {
   const viewHandler = [fastify.authenticate, fastify.can('metodos_pago', 'view')]
 
-  fastify.get('/', { preHandler: viewHandler }, async () => {
-    return fastify.db.metodoPago.findMany({ orderBy: { nombre: 'asc' } })
+  // Por defecto solo los activos: es lo que consumen los combos de cajas y
+  // pagos, donde un método dado de baja no tiene que ser elegible. La pantalla
+  // de administración pide ?all=1 para ver (y reactivar) los inactivos.
+  fastify.get('/', { preHandler: viewHandler }, async (request) => {
+    const all = request.query.all === '1' || request.query.all === 'true'
+    return fastify.db.metodoPago.findMany({
+      where: all ? {} : { activo: true },
+      orderBy: { nombre: 'asc' }
+    })
   })
 
   fastify.post('/', {
@@ -43,6 +50,9 @@ export default async function metodosRoutes(fastify) {
       return reply.code(204).send()
     } catch (err) {
       if (err.code === 'P2025') return reply.code(404).send({ error: 'Método no encontrado' })
+      if (err.code === 'P2003') {
+        return reply.code(409).send({ error: 'El método está en uso por pagos o movimientos: desactivalo en vez de borrarlo' })
+      }
       throw err
     }
   })

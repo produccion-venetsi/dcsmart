@@ -41,13 +41,15 @@ test('CONTRATO: los roles por tipo de movimiento coinciden', () => {
 })
 
 test('CONTRATO: la formula del esperado es la misma', () => {
-  assert.ok(BACK.includes('efectivo + cobros - gastos'), 'el backend cambio la formula del esperado')
+  // Modelo simple: los gastos no participan de la cuenta de la venta.
+  assert.ok(BACK.includes('const esperado = efectivo + cobros'), 'el backend cambio la formula del esperado')
 })
 
-test('CONTRATO: la fuente se elige por origin, no por lo que tenga cargado', () => {
-  // Elegirla mirando "si tiene movimientos" fue un bug real: una caja no-TapTap con un
-  // gasto suelto por movimiento hacia ignorar $3.559.398 en detalles.
-  assert.ok(/ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS\.includes\(caja\.origin\)/.test(BACK))
+test('CONTRATO: la fuente es SIEMPRE detalles, con fallback legacy por movimientos', () => {
+  // Modelo simple (DEV-82): los movimientos se convirtieron en detalles de
+  // tres tipos, asi que la fuente por origen desaparecio. El fallback existe
+  // solo para cajas viejas sin convertir (movimientos y cero detalles).
+  assert.ok(/detalles\.length === 0 && movimientos\.length > 0/.test(BACK))
 })
 
 test('CONTRATO: los origenes que cuadran por movimientos coinciden', () => {
@@ -68,12 +70,13 @@ test('CONTRATO: los origenes que cuadran por movimientos coinciden', () => {
 const detalle = (monto, clasificacion) => ({ monto, tipo: clasificacion })
 const mov = (tipo, monto, metodo) => ({ tipo, monto, metodo_pago: metodo ? { nombre: metodo } : null })
 
-test('por detalles: cuadra cuando el total es efectivo + cobros - gastos', () => {
+test('por detalles: cuadra cuando el total es efectivo + cobros (los gastos van aparte)', () => {
   const c = calcularCuadre({
-    origin: 'DCSMART', efectivo: 1000, total: 1400,
+    origin: 'DCSMART', efectivo: 1000, total: 1500,
     detalles: [detalle(500, 'cobro'), detalle(100, 'gasto')],
   })
-  assert.equal(c.esperado, 1400)
+  assert.equal(c.esperado, 1500)
+  assert.equal(c.gastos, 100)
   assert.equal(c.diferencia, 0)
   assert.equal(c.cuadra, true)
   assert.equal(c.fuente, 'detalles')
@@ -96,14 +99,24 @@ test('una diferencia de un peso todavia cuadra', () => {
   assert.equal(calcularCuadre({ origin: 'DCSMART', efectivo: 0, total: 2, detalles: [] }).cuadra, false)
 })
 
-test('en TAPTAP la fuente son los movimientos', () => {
+test('en TAPTAP convertida, la fuente son los detalles', () => {
+  const c = calcularCuadre({
+    origin: 'TAPTAP', efectivo: 1000, total: 1500,
+    movimientos: [],
+    detalles: [detalle(500, 'cobro')],
+  })
+  assert.equal(c.fuente, 'detalles')
+  assert.equal(c.esperado, 1500)
+  assert.equal(c.cuadra, true)
+})
+
+test('una caja TAPTAP sin convertir cae al fallback por movimientos', () => {
   const c = calcularCuadre({
     origin: 'TAPTAP', efectivo: 1000, total: 1500,
     movimientos: [mov('COBRO', 500, 'Mercado Pago')],
-    detalles: [detalle(99999, 'cobro')], // se ignoran
+    detalles: [],
   })
   assert.equal(c.fuente, 'movimientos')
-  assert.equal(c.esperado, 1500)
   assert.equal(c.cuadra, true)
 })
 
@@ -118,14 +131,15 @@ test('en TAPTAP un cobro en EFECTIVO no se suma dos veces', () => {
   assert.equal(c.cuadra, true)
 })
 
-test('en TAPTAP un gasto en efectivo SI resta', () => {
-  // No duplica nada: salio del cajon igual que cualquier gasto, y no restarlo lo esconde.
+test('un gasto no cambia la venta: el efectivo de TapTap es lo cobrado en bruto', () => {
+  // Medido en LUCERO: efectivo + cobros daba el total EXACTO y restar los
+  // gastos inventaba una diferencia de 455.328. El gasto se informa aparte.
   const c = calcularCuadre({
-    origin: 'TAPTAP', efectivo: 1000, total: 900,
+    origin: 'TAPTAP', efectivo: 1000, total: 1000,
     movimientos: [mov('GASTO', 100, 'Efectivo')],
   })
   assert.equal(c.gastos, 100)
-  assert.equal(c.esperado, 900)
+  assert.equal(c.esperado, 1000)
   assert.equal(c.cuadra, true)
 })
 
@@ -138,17 +152,14 @@ test('el fondo inicial, los retiros y los vaciados no cambian la venta', () => {
   assert.equal(c.cuadra, true)
 })
 
-test('en FFUDO la fuente tambien son los movimientos, igual que TapTap', () => {
-  // El job de Fudo escribe los cobros como CajaMovimiento (uno por metodo de pago) y los
-  // detalles son solo informativos (canales de venta). Si la fuente fuera 'detalles', el
-  // cuadre daria cobros = 0 y toda caja de Fudo descuadraria por el total menos el efectivo.
+test('en FFUDO convertida, los detalles de tres tipos hacen la cuenta', () => {
   const c = calcularCuadre({
     origin: 'FFUDO', efectivo: 10000, total: 30000,
-    movimientos: [mov('COBRO', 10000, 'Efectivo'), mov('COBRO', 20000, 'Mercado Pago')],
-    detalles: [detalle(30000, 'informativo')], // canales de venta, se ignoran
+    movimientos: [],
+    detalles: [detalle(20000, 'cobro'), detalle(30000, 'informativo')],
   })
-  assert.equal(c.fuente, 'movimientos')
-  assert.equal(c.cobros, 20000) // el cobro en efectivo no se suma, ya esta en caja.efectivo
+  assert.equal(c.fuente, 'detalles')
+  assert.equal(c.cobros, 20000)
   assert.equal(c.esperado, 30000)
   assert.equal(c.cuadra, true)
 })

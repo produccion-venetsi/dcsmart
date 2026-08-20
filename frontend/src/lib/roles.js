@@ -63,6 +63,12 @@ export const puedeBorrarMovimientos = (rol) => incluye(ROLES_BORRAN, rol)
 export const ROLES_CREAN_CAJAS = [...ROLES_TODOS, ROLES.DATA_ENTRY]
 export const puedeCrearCajas = (rol) => incluye(ROLES_CREAN_CAJAS, rol)
 
+// Agregar movimientos a una caja. El cajero carga su turno (el backend le da
+// caja_movimientos view+create), así que entra junto con los operativos;
+// data_entry no toca movimientos. Espeja la matriz del seed, igual que el
+// resto de este archivo: decide qué se muestra, no qué se puede.
+export const puedeCargarMovimientos = (rol) => incluye(ROLES_TODOS, rol)
+
 // Exportar la tabla de pagos (Excel y Google Sheets). Incluye a `externo` -- el rol
 // de la gente de afuera que ordena la carga y necesita la planilla -- y a `admin`,
 // que es dueño o gerente del local y pidió poder bajarse sus propios pagos. No

@@ -87,5 +87,20 @@ export function crearCliente({ apiKey, apiSecret, fetchImpl = fetch, ahora = () 
       `&fields[expense]=amount,canceled,date,description,status,useInCashCount,paymentMethod,provider` +
       `&include=paymentMethod,provider`)
 
-  return { token, listar, ventasDelDia, gastosDelDia }
+  // Los cierres de caja de Fudo (el turno que el local VE en su sistema, con
+  // su numero). Contra lo que decia la nota de DEV-69, SI existen en la API:
+  // /cash-counts, con openedAt/closedAt, fondo inicial (init), income,
+  // expenditure y hasta el arqueo real (realLeftover). Verificado contra
+  // 3MONOS el 2026-08-19: un cash-count por dia comercial, id secuencial.
+  //
+  // El filtro exige timestamp completo (con fecha sola devuelve 400) y SOLO
+  // acepta `lte` -- no `lt` como el de ventas. Para mantener la ventana
+  // [desde, hasta) se resta un segundo: un turno abierto exactamente a la hora
+  // de corte pertenece al dia siguiente y no debe matchear dos dias.
+  const cierresDelPeriodo = ({ desde, hasta }) => {
+    const tope = new Date(new Date(hasta).getTime() - 1000).toISOString().replace(/\.\d{3}Z$/, 'Z')
+    return listar(`/cash-counts?filter[openedAt]=and(gte.${desde},lte.${tope})`)
+  }
+
+  return { token, listar, ventasDelDia, gastosDelDia, cierresDelPeriodo }
 }

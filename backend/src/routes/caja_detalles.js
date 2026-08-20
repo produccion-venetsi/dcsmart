@@ -1,5 +1,6 @@
 import { CLASIFICACIONES, normalizarClasificacion } from '../lib/clasificaciones.js'
 import { validarClienteDetalle } from '../lib/cuentaCorrienteCaja.js'
+import { parseMonto, parseEntero } from '../lib/montos.js'
 
 export default async function cajaDetallesRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
@@ -54,11 +55,16 @@ export default async function cajaDetallesRoutes(fastify) {
 
   // ── POST / ────────────────────────────────────────────────────────────
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
-    const { id_caja, id_tipo, nombre, monto, observaciones, clasificacion, id_cliente } = request.body
+    const { id_caja, id_tipo, nombre, monto, cantidad, observaciones, clasificacion, id_cliente } = request.body
 
-    if (!id_caja || monto === undefined) {
+    if (!id_caja) {
       return reply.code(400).send({ error: 'id_caja y monto son requeridos' })
     }
+    // Positivo por regla del proyecto: la dirección la da la clasificación.
+    const rMonto = parseMonto(monto, { requerido: true, positivo: true })
+    if (!rMonto.ok) return reply.code(400).send({ error: rMonto.error })
+    const rCant = parseEntero(cantidad, { campo: 'cantidad' })
+    if (!rCant.ok) return reply.code(400).send({ error: rCant.error })
 
     const caja = await fastify.db.caja.findUnique({
       where: { id: id_caja },
@@ -76,8 +82,11 @@ export default async function cajaDetallesRoutes(fastify) {
     let tipo = null
     let nombreFinal = nombre || null
     if (id_tipo) {
-      const dt = await fastify.db.detalleTipo.findUnique({
-        where: { id: id_tipo },
+      // findFirst con id_app: un tipo de OTRO grupo no es válido acá. Sin este
+      // recorte, un id ajeno (cache entre grupos, bug del cliente) quedaba
+      // guardado y el combo de edición después aparecía "vacío".
+      const dt = await fastify.db.detalleTipo.findFirst({
+        where: { id: id_tipo, id_app: request.activeAppId },
         select: { clasificacion: true, nombre: true }
       })
       if (!dt) return reply.code(400).send({ error: 'Tipo de detalle inexistente' })
@@ -109,7 +118,8 @@ export default async function cajaDetallesRoutes(fastify) {
         id_tipo:       id_tipo       || null,
         id_cliente:    id_cliente    || null,
         nombre:        nombreFinal,
-        monto:         parseFloat(monto),
+        monto:         rMonto.value,
+        cantidad:      rCant.value,
         observaciones: observaciones || null
       },
       include: {
@@ -132,8 +142,15 @@ export default async function cajaDetallesRoutes(fastify) {
       return reply.code(403).send({ error: 'Sin acceso' })
     }
 
-    const { id_tipo, nombre, monto, observaciones, clasificacion, id_cliente } = request.body
-    if (monto === undefined) return reply.code(400).send({ error: 'El monto es requerido' })
+    const { id_tipo, nombre, monto, cantidad, observaciones, clasificacion, id_cliente } = request.body
+    const rMonto = parseMonto(monto, { requerido: true, positivo: true })
+    if (!rMonto.ok) return reply.code(400).send({ error: rMonto.error })
+    let cantVal
+    if (cantidad !== undefined) {
+      const r = parseEntero(cantidad, { campo: 'cantidad' })
+      if (!r.ok) return reply.code(400).send({ error: r.error })
+      cantVal = r.value
+    }
 
     // Cambiar el tipo re-propone su clasificación, igual que en la creación
     // (ver POST /). Si además vino una clasificación explícita, esa gana: es la
@@ -142,8 +159,9 @@ export default async function cajaDetallesRoutes(fastify) {
     let nombreFinal = nombre !== undefined ? (nombre || null) : existing.nombre
     if (id_tipo !== undefined) {
       if (id_tipo) {
-        const dt = await fastify.db.detalleTipo.findUnique({
-          where: { id: id_tipo },
+        // Mismo recorte por grupo que en el POST.
+        const dt = await fastify.db.detalleTipo.findFirst({
+          where: { id: id_tipo, id_app: request.activeAppId },
           select: { clasificacion: true, nombre: true }
         })
         if (!dt) return reply.code(400).send({ error: 'Tipo de detalle inexistente' })
@@ -181,7 +199,8 @@ export default async function cajaDetallesRoutes(fastify) {
         id_cliente:    clienteResultante,
         tipo,
         nombre:        nombreFinal,
-        monto:         parseFloat(monto),
+        monto:         rMonto.value,
+        cantidad:      cantVal,
         observaciones: observaciones !== undefined ? (observaciones || null) : undefined
       },
       include: {

@@ -5,6 +5,8 @@ import CuadreVivo from '../../components/CuadreVivo.jsx'
 import { calcularCuadre } from '../../lib/cuadreCaja.js'
 import { movimientosApi } from '../../api/movimientos.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { mensajeCatalogo } from '../../lib/catalogos.js'
+import { enterEjecuta } from '../../lib/formularios.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
@@ -15,6 +17,7 @@ import ClasificacionSelect from '../../components/ClasificacionSelect.jsx'
 import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
+import PistaTurno, { PistaPromedio } from '../../components/PistaTurno.jsx'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
 
 // Alta de caja: el turno con sus detalles y sus movimientos.
@@ -59,7 +62,7 @@ function IcoTrash() {
   )
 }
 
-export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClose }) {
+export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClose, onCuadre }) {
   const notify = useUiStore((s) => s.notify)
   const [form,      setForm]    = useState(EMPTY_CAJA)
   const [localId,   setLocalId] = useState(activeLocal?.id || '')
@@ -74,7 +77,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   // Mismos campos que el alta de detalle del drawer: acá faltaban `clasificacion`
   // y `nombre`, así que al crear una caja no se podía cargar "Mostrador -
   // informativo" ni un nombre que no estuviera en el catálogo del local.
-  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
 
   const [pendingMovimientos, setPendingMovimientos] = useState([])
   const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
@@ -105,6 +108,10 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
     })),
   }), [form.total, form.efectivo, pendingDetalles, pendingMovimientos, metodos])
 
+  // El padre (la pantalla completa B+C) pinta el panel de cuadre en su propia
+  // columna: se le publica el calculo en vez de duplicarlo.
+  useEffect(() => { onCuadre?.(cuadreVivo) }, [cuadreVivo, onCuadre])
+
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const targetLocalId = activeLocal?.id || localId
@@ -122,13 +129,13 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   useEffect(() => {
     metodosApi.list()
       .then(r => setMetodos(r.data || []))
-      .catch(() => {})
-  }, [])
+      .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
+  }, [notify])
 
   const addPendingDetalle = () => {
     if (!detForm.monto) return
     setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
-    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', observaciones: '' })
+    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
   }
   const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
 
@@ -173,7 +180,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
             nombre: d.id_tipo ? null : (d.nombre || null),
             monto: parseFloat(d.monto),
             observaciones: d.observaciones || null
-          })
+          , cantidad: d.cantidad ? parseInt(d.cantidad) : null })
           detOk++
         } catch { detFail++ }
       }
@@ -210,8 +217,9 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   return (
     <form onSubmit={handleCreate}>
       {/* Pegado al tope del drawer: se ve mientras se carga todo lo de abajo. */}
-      <CuadreVivo cuadre={cuadreVivo} origin="DCSMART" />
+      {!onCuadre && <CuadreVivo cuadre={cuadreVivo} origin="DCSMART" />}
 
+      <div className="drawer-section-title">1 · Lo que vendiste</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {!activeLocal && (
           <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
@@ -224,17 +232,25 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
             </div>
           </div>
         )}
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fecha Inicio *</label>
-          <div className="form-input-wrap">
-            <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
+        {/* Las dos fechas ocupan la fila entera y comparten una sola pista
+            debajo: la duración y el cruce de día son una propiedad del PAR,
+            no de cada campo suelto. */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Abrió el turno *</label>
+              <div className="form-input-wrap">
+                <input type="datetime-local" required value={form.fecha_inicio} onChange={e => setF('fecha_inicio', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Cerró el turno</label>
+              <div className="form-input-wrap">
+                <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Fecha Cierre</label>
-          <div className="form-input-wrap">
-            <input type="datetime-local" value={form.fecha_cierre} onChange={e => setF('fecha_cierre', e.target.value)} />
-          </div>
+          <PistaTurno inicio={form.fecha_inicio} cierre={form.fecha_cierre} />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Nro Turno</label>
@@ -271,7 +287,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           {/* No es un dato informativo: el arqueo del local lo suma como el efectivo
               del periodo. El texto vive en lib/camposCaja.js porque el mismo campo se
               carga en el alta y en la edicion. */}
-          <p className="form-hint" style={{ margin: '4px 0 0' }}>{AYUDA_EFECTIVO}</p>
+          <p className="form-hint" style={{ margin: '4px 0 0' }}>Solo billetes: tarjetas y apps van abajo como cobros. {AYUDA_EFECTIVO}</p>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Fiscal</label>
@@ -284,6 +300,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           <div className="form-input-wrap">
             <input type="number" placeholder="0" value={form.comensales} onChange={e => setF('comensales', e.target.value)} />
           </div>
+          <PistaPromedio total={form.total} comensales={form.comensales} />
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Tickets</label>
@@ -307,16 +324,20 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </div>
         </div>
       </div>
-      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>Detalles (opcional)</div>
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>2 · Cómo te lo pagaron, gastos y demás</div>
+      <p className="form-hint" style={{ margin: '0 0 0.6rem' }}>
+        Una línea por cada cosa: elegí la clasificación (cobro, gasto o informativo) y el monto. La suma de efectivo + cobros tiene que dar el total.
+      </p>
       {pendingDetalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">
-            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th title="Cantidad de operaciones">Cant.</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {pendingDetalles.map(d => (
                 <tr key={d._key}>
                   <td className="td-muted">{clasificacionLabel(d.clasificacion)}</td>
                   <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || d.nombre || '—'}</td>
+                  <td className="td-number td-muted">{d.cantidad || '—'}</td>
                   <td className="td-number">{fmt$2(d.monto)}</td>
                   <td>
                     <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingDetalle(d._key)}>
@@ -329,7 +350,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </table>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+      <div onKeyDown={enterEjecuta(addPendingDetalle)} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Clasificación *</label>
           <ClasificacionSelect
@@ -350,7 +371,13 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Monto</label>
           <div className="form-input-wrap">
-            <input type="number" step="0.01" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
+            <input type="number" step="0.01" min="0" placeholder="0.00" value={detForm.monto} onChange={e => setDetForm(f => ({ ...f, monto: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Cant.</label>
+          <div className="form-input-wrap">
+            <input type="number" min="1" step="1" placeholder="Opcional" value={detForm.cantidad} onChange={e => setDetForm(f => ({ ...f, cantidad: e.target.value }))} />
           </div>
         </div>
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
@@ -366,65 +393,9 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
         </button>
       </div>
 
-      <div className="drawer-section-title">Movimientos (opcional)</div>
-      {pendingMovimientos.length > 0 && (
-        <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
-          <table className="data-table">
-            <thead><tr><th>Tipo</th><th>Método</th><th>Monto</th><th>Cant.</th><th></th></tr></thead>
-            <tbody>
-              {pendingMovimientos.map(m => (
-                <tr key={m._key}>
-                  <td>
-                    <span className={`badge ${claseBadgeMovimiento(m.tipo)}`}>{m.tipo}</span>
-                  </td>
-                  <td className="td-muted">{metodos.find(x => x.id === m.id_metodo)?.nombre || '—'}</td>
-                  <td className="td-number">{fmt$2(m.monto)}</td>
-                  <td className="td-muted" style={{ textAlign: 'right' }}>{m.cantidad || '—'}</td>
-                  <td>
-                    <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => removePendingMovimiento(m._key)}>
-                      <IcoTrash />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Tipo</label>
-          <div className="form-input-wrap">
-            <TipoMovimientoSelect value={movForm.tipo} onChange={(tipo) => setMovForm(f => ({ ...f, tipo }))} />
-          </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Método</label>
-          <div className="form-input-wrap">
-            <select value={movForm.id_metodo} onChange={e => setMovForm(f => ({ ...f, id_metodo: e.target.value }))}>
-              <option value="">Sin método</option>
-              {metodos.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Monto</label>
-          <div className="form-input-wrap">
-            <input type="number" step="0.01" placeholder="0.00" value={movForm.monto} onChange={e => setMovForm(f => ({ ...f, monto: e.target.value }))} />
-          </div>
-        </div>
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Cantidad</label>
-          <div className="form-input-wrap">
-            <input type="number" min="1" step="1" placeholder="Opcional" value={movForm.cantidad} onChange={e => setMovForm(f => ({ ...f, cantidad: e.target.value }))} />
-          </div>
-        </div>
-      </div>
-      <div style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
-        <button type="button" className="btn btn-secondary" onClick={addPendingMovimiento} disabled={!movForm.monto}>
-          <IcoPlus /> Agregar
-        </button>
-      </div>
+      {/* La seccion de Movimientos se elimino: en el modelo simple todo se
+          carga como detalle de tres tipos (cobro / gasto / informativo). El
+          fondo inicial, un retiro o un vaciado se anotan como informativos. */}
       <div className="form-actions" style={{ marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Guardando...</> : 'Crear Caja'}

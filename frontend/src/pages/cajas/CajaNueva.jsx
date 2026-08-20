@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import CajaCreatePanel from './CajaCreatePanel.jsx'
+import PanelCuadre from '../../components/PanelCuadre.jsx'
 import { useAppStore } from '../../store/appStore.js'
 import { homeDeRol, HOME_POR_DEFECTO } from '../../lib/roles.js'
 
@@ -10,6 +12,7 @@ import { homeDeRol, HOME_POR_DEFECTO } from '../../lib/roles.js'
 // de los roles. Usa el MISMO componente que el listado, no una copia.
 export default function CajaNueva() {
   const navigate = useNavigate()
+  const [cuadre, setCuadre] = useState(null)
   const activeApp   = useAppStore((s) => s.activeApp)
   const activeLocal = useAppStore((s) => s.activeLocal)
   const role        = useAppStore((s) => s.activeApp?.role)
@@ -24,7 +27,7 @@ export default function CajaNueva() {
   const volver = (nuevoId) => {
     const home = homeDeRol(role)
     if (home !== HOME_POR_DEFECTO) { navigate(home); return }
-    navigate(nuevoId ? `/cajas?caja=${nuevoId}` : '/cajas')
+    navigate(nuevoId ? `/cajas/${nuevoId}` : '/cajas')
   }
 
   return (
@@ -36,14 +39,23 @@ export default function CajaNueva() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-body">
-          <CajaCreatePanel
-            activeLocal={activeLocal}
-            locales={locales}
-            onCreated={volver}
-            onClose={() => volver(null)}
-          />
+      {/* El layout del diseño B+C: formulario a la izquierda, el cuadre
+          SIEMPRE visible en su columna sticky. En celular (ver .bc-* en
+          app.css) el panel pasa arriba como banner compacto. */}
+      <div className="bc-grid">
+        <div className="card bc-form">
+          <div className="card-body">
+            <CajaCreatePanel
+              activeLocal={activeLocal}
+              locales={locales}
+              onCreated={volver}
+              onClose={() => volver(null)}
+              onCuadre={setCuadre}
+            />
+          </div>
+        </div>
+        <div className="bc-lado">
+          <PanelCuadre cuadre={cuadre} />
         </div>
       </div>
     </div>

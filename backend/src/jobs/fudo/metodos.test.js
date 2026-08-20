@@ -57,21 +57,21 @@ test('resuelve los metodos contra los que ya existen en la base', () => {
     [{ code: 'cash', name: 'Efectivo' }, { code: 'mp', name: 'Mp' }],
     existentes,
   )
-  assert.equal(porCode.get('cash'), 'id-efectivo')
-  assert.equal(porCode.get('mp'), 'id-mp')
+  assert.equal(porCode.get('cash')?.id, 'id-efectivo')
+  assert.equal(porCode.get('mp')?.id, 'id-mp')
   assert.deepEqual(sinResolver, [])
 })
 
 test('el matching ignora mayusculas y acentos', () => {
   const existentes = [{ id: 'id-cc', nombre: 'CUENTA CTE.' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'house-account', name: 'Cuenta Corriente' }], existentes)
-  assert.equal(porCode.get('house-account'), 'id-cc')
+  assert.equal(porCode.get('house-account')?.id, 'id-cc')
 })
 
 test('normaliza acentos reales: credit-card matchea Crédito en la base', () => {
   const existentes = [{ id: 'id-credito', nombre: 'Crédito' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'credit-card', name: 'Tarjeta de crédito' }], existentes)
-  assert.equal(porCode.get('credit-card'), 'id-credito')
+  assert.equal(porCode.get('credit-card')?.id, 'id-credito')
 })
 
 test('un metodo sin equivalente cae en "Metodo desconocido" y queda informado en sinResolver', () => {
@@ -80,8 +80,8 @@ test('un metodo sin equivalente cae en "Metodo desconocido" y queda informado en
     [{ code: 'cash', name: 'Efectivo' }, { code: 'obra-condarco', name: 'obra condarco 2026' }],
     existentes,
   )
-  assert.equal(porCode.get('cash'), 'id-efectivo')
-  assert.equal(porCode.get('obra-condarco'), 'id-desconocido')
+  assert.equal(porCode.get('cash')?.id, 'id-efectivo')
+  assert.equal(porCode.get('obra-condarco')?.id, 'id-desconocido')
   assert.deepEqual(sinResolver, [{ code: 'obra-condarco', name: 'obra condarco 2026' }])
 })
 
@@ -101,7 +101,20 @@ test('no crea metodos nuevos: nunca hay un id que no venga de "existentes"', () 
   const existentes = [{ id: 'id-efectivo', nombre: 'Efectivo' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'cash', name: 'Efectivo' }, { code: 'raro', name: 'Raro' }], existentes)
   const idsValidos = new Set(existentes.map((m) => m.id))
-  for (const id of porCode.values()) assert.ok(idsValidos.has(id))
+  for (const metodo of porCode.values()) assert.ok(idsValidos.has(metodo.id))
+})
+
+// El modelo simple usa el NOMBRE del metodo, no su id: el detalle convertido
+// se llama como el metodo canonico de la base ("Cuenta Cte.", no "Cta. Cte.").
+test('porCode trae el nombre canonico junto al id', () => {
+  const existentes = [{ id: 'id-cc', nombre: 'Cuenta Cte.' }, ...CON_DESCONOCIDO]
+  const { porCode } = resolverMetodos([{ code: 'x', name: 'Cta. Cte.' }], existentes)
+  assert.deepEqual(porCode.get('x'), { id: 'id-cc', nombre: 'Cuenta Cte.' })
+})
+
+test('el metodo sin equivalente trae el nombre "Metodo desconocido"', () => {
+  const { porCode } = resolverMetodos([{ code: 'raro', name: 'Raro' }], CON_DESCONOCIDO)
+  assert.equal(porCode.get('raro')?.nombre, 'Metodo desconocido')
 })
 
 // --- Tabla de alias por nombre, fila por fila ---
@@ -109,37 +122,37 @@ test('no crea metodos nuevos: nunca hay un id que no venga de "existentes"', () 
 test('alias: Cta. Cte. -> Cuenta Cte.', () => {
   const existentes = [{ id: 'id-cc', nombre: 'Cuenta Cte.' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'cta-cte-local', name: 'Cta. Cte.' }], existentes)
-  assert.equal(porCode.get('cta-cte-local'), 'id-cc')
+  assert.equal(porCode.get('cta-cte-local')?.id, 'id-cc')
 })
 
 test('alias: Tarj. Débito -> Tarjeta débito', () => {
   const existentes = [{ id: 'id-td', nombre: 'Tarjeta débito' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'tarj-deb', name: 'Tarj. Débito' }], existentes)
-  assert.equal(porCode.get('tarj-deb'), 'id-td')
+  assert.equal(porCode.get('tarj-deb')?.id, 'id-td')
 })
 
 test('alias: Echeq -> E-Cheque', () => {
   const existentes = [{ id: 'id-echeq', nombre: 'E-Cheque' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'echeq-local', name: 'Echeq' }], existentes)
-  assert.equal(porCode.get('echeq-local'), 'id-echeq')
+  assert.equal(porCode.get('echeq-local')?.id, 'id-echeq')
 })
 
 test('alias: Qr -> MP QR', () => {
   const existentes = [{ id: 'id-qr', nombre: 'MP QR' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'qr-local', name: 'Qr' }], existentes)
-  assert.equal(porCode.get('qr-local'), 'id-qr')
+  assert.equal(porCode.get('qr-local')?.id, 'id-qr')
 })
 
 test('alias: Transferencia banco galicia -> Transferencia', () => {
   const existentes = [{ id: 'id-transf', nombre: 'Transferencia' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'transf-galicia', name: 'Transferencia banco galicia' }], existentes)
-  assert.equal(porCode.get('transf-galicia'), 'id-transf')
+  assert.equal(porCode.get('transf-galicia')?.id, 'id-transf')
 })
 
 test('alias: FudoPagos -> FudoPagos', () => {
   const existentes = [{ id: 'id-fudopagos', nombre: 'FudoPagos' }, ...CON_DESCONOCIDO]
   const { porCode } = resolverMetodos([{ code: 'fudo_payments', name: 'FudoPagos' }], existentes)
-  assert.equal(porCode.get('fudo_payments'), 'id-fudopagos')
+  assert.equal(porCode.get('fudo_payments')?.id, 'id-fudopagos')
 })
 
 test('alias de los locales de agosto: Mercardo Pago (typo), Pedido Ya y MP', () => {
@@ -156,7 +169,7 @@ test('alias de los locales de agosto: Mercardo Pago (typo), Pedido Ya y MP', () 
   ]
   for (const { code, name, esperado } of casos) {
     const { porCode, sinResolver } = resolverMetodos([{ code, name }], existentes)
-    assert.equal(porCode.get(code), esperado, name)
+    assert.equal(porCode.get(code)?.id, esperado, name)
     assert.deepEqual(sinResolver, [], name)
   }
 })
@@ -170,7 +183,7 @@ test('los alias se comparan normalizados: Cta. Cte., CTA CTE y cta.cte. caen tod
   const existentes = [{ id: 'id-cc', nombre: 'Cuenta Cte.' }, ...CON_DESCONOCIDO]
   for (const variante of ['Cta. Cte.', 'CTA CTE', 'cta.cte.', 'Cta Cte']) {
     const { porCode } = resolverMetodos([{ code: 'x', name: variante }], existentes)
-    assert.equal(porCode.get('x'), 'id-cc', variante)
+    assert.equal(porCode.get('x')?.id, 'id-cc', variante)
   }
 })
 
@@ -190,7 +203,7 @@ test('Efectivo, Tarjeta y Nota de credito matchean solos por nombre normalizado,
   ]
   for (const { code, name, esperado } of casos) {
     const { porCode, sinResolver } = resolverMetodos([{ code, name }], existentes)
-    assert.equal(porCode.get(code), esperado, name)
+    assert.equal(porCode.get(code)?.id, esperado, name)
     assert.deepEqual(sinResolver, [], name)
   }
 })

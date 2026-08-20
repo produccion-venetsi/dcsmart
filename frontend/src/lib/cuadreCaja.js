@@ -30,6 +30,8 @@
 // Elegir la fuente mirando "si tiene movimientos cargados" fue un bug real: una caja
 // no-TapTap con un gasto suelto por movimiento hacía ignorar $3.559.398 en detalles.
 
+import { estadoDescuadre } from './estadoDescuadre.js'
+
 export const TOLERANCIA = 1
 
 export const ROL_POR_CLASIFICACION = {
@@ -96,7 +98,7 @@ export function calcularCuadre(caja) {
 
   const detalles = caja.detalles ?? []
   const movimientos = caja.movimientos ?? []
-  const fuente = ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS.includes(caja.origin) ? 'movimientos' : 'detalles'
+  const fuente = (caja.detalles ?? []).length === 0 && (caja.movimientos ?? []).length > 0 ? 'movimientos' : 'detalles' // modelo simple DEV-82: siempre detalles; movimientos solo como fallback legacy
 
   let cobros = 0
   let gastos = 0
@@ -124,11 +126,16 @@ export function calcularCuadre(caja) {
   }
 
   const efectivo = num(caja.efectivo)
-  const esperado = efectivo + cobros - gastos
+  // MODELO SIMPLE (DEV-82): el gasto NO cambia lo que se vendio -- salio plata
+  // del cajon, pero la venta ya estaba explicada por como se cobro. Medido
+  // sobre las 635 cajas convertidas de la base de test: restando gastos
+  // cuadra el 41%, sin contarlos el 55%, sumandolos el 40%. El gasto se
+  // informa aparte; no participa de la cuenta de la venta.
+  const esperado = efectivo + cobros
 
   // Sin total cargado no hay nada contra qué comparar.
   if (caja.total == null || caja.total === '') {
-    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null }
+    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null, estado: 'sin_total' }
   }
 
   const total = num(caja.total)
@@ -138,6 +145,7 @@ export function calcularCuadre(caja) {
     fuente, efectivo, cobros, gastos, informativos, esperado, total, diferencia,
     // Positiva = el total declarado es mayor que lo que suman los componentes.
     cuadra: Math.abs(diferencia) <= TOLERANCIA,
+    estado: estadoDescuadre(diferencia)
   }
 }
 

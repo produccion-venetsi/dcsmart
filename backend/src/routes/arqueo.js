@@ -4,6 +4,7 @@
 // la fórmula completa.
 
 import { totalContado, calcularComprobacion, describirComprobacion } from '../lib/cuadreArqueo.js'
+import { whereCajasCandidatas, sumarEfectivoDelPeriodo, cajaEnPeriodo } from '../lib/periodoArqueo.js'
 
 // Busca el arqueo anterior de un local (el más reciente con fecha < la nueva).
 // Devuelve null si es el primer arqueo del local.
@@ -15,18 +16,16 @@ async function getArqueoAnterior(fastify, id_local, fecha) {
 }
 
 // Suma Caja.efectivo del local en (fechaDesde, fechaHasta] -- fechaDesde exclusivo, fechaHasta inclusivo.
+//
+// La caja entra por la fecha en que su plata llegó al cofre: el cierre del
+// turno cuando está cargado, la apertura cuando no. Ver lib/periodoArqueo.js
+// para por qué no alcanza con filtrar por fecha_cierre.
 async function calcularIngresos(fastify, id_local, fechaDesde, fechaHasta) {
   const cajas = await fastify.db.caja.findMany({
-    where: {
-      id_local,
-      fecha_inicio: {
-        ...(fechaDesde ? { gt: fechaDesde } : {}),
-        lte: fechaHasta
-      }
-    },
-    select: { efectivo: true }
+    where: whereCajasCandidatas(id_local, fechaDesde, fechaHasta),
+    select: { efectivo: true, fecha_inicio: true, fecha_cierre: true }
   })
-  return cajas.reduce((acc, c) => acc + Number(c.efectivo ?? 0), 0)
+  return sumarEfectivoDelPeriodo(cajas, fechaDesde, fechaHasta)
 }
 
 // Suma Pago.importe del local, pagado=true, en efectivo, egreso real, en (fechaDesde, fechaHasta].
@@ -293,15 +292,17 @@ export default async function arqueoRoutes(fastify) {
     } : null
 
     // Cap de filas para el primer arqueo (sin `desde` el rango es todo el
-    // historial); los totales van con aggregate aparte para que sigan siendo
-    // los completos aunque la lista este recortada.
+    // historial); los totales se calculan sobre el conjunto completo para que
+    // sigan siendo los completos aunque la lista este recortada.
     const CAP = 300
-    const [cajas, pagos, aggCajas, aggPagos, totalCajas, totalPagos] = await Promise.all([
+    const [candidatas, pagos, aggPagos, totalPagos] = await Promise.all([
+      // Las cajas se filtran en JS por su fecha efectiva (mismo criterio que
+      // calcularIngresos): Prisma no puede comparar fecha_cierre con
+      // fecha_inicio dentro del where.
       fastify.db.caja.findMany({
-        where: { id_local, fecha_inicio: rangoCaja },
-        select: { id: true, fecha_inicio: true, tipo_turno: true, efectivo: true },
-        orderBy: { fecha_inicio: 'desc' },
-        take: CAP
+        where: whereCajasCandidatas(id_local, desde, hasta),
+        select: { id: true, fecha_inicio: true, fecha_cierre: true, tipo_turno: true, efectivo: true },
+        orderBy: { fecha_inicio: 'desc' }
       }),
       wherePagos ? fastify.db.pago.findMany({
         where: wherePagos,
@@ -309,15 +310,17 @@ export default async function arqueoRoutes(fastify) {
         orderBy: { fecha_pago: 'desc' },
         take: CAP
       }) : [],
-      fastify.db.caja.aggregate({ where: { id_local, fecha_inicio: rangoCaja }, _sum: { efectivo: true } }),
       wherePagos ? fastify.db.pago.aggregate({ where: wherePagos, _sum: { importe: true } }) : null,
-      fastify.db.caja.count({ where: { id_local, fecha_inicio: rangoCaja } }),
       wherePagos ? fastify.db.pago.count({ where: wherePagos }) : 0,
     ])
 
+    const delPeriodo = candidatas.filter(c => cajaEnPeriodo(c, desde, hasta))
+    const totalCajas = delPeriodo.length
+    const cajas = delPeriodo.slice(0, CAP)
+
     return {
       desde, hasta,
-      ingresos: Number(aggCajas._sum.efectivo ?? 0),
+      ingresos: sumarEfectivoDelPeriodo(delPeriodo, desde, hasta),
       gastos: Number(aggPagos?._sum.importe ?? 0),
       cajas: cajas.map(c => ({ ...c, efectivo: Number(c.efectivo ?? 0) })),
       pagos: pagos.map(pg => ({

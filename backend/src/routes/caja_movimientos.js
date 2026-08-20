@@ -1,12 +1,6 @@
-const TIPOS_MOVIMIENTO = ['INICIAL', 'INGRESO', 'GASTO', 'COBRO', 'RETIRO', 'VACIADO']
+import { parseMonto, parseEntero } from '../lib/montos.js'
 
-// parseInt(null)/parseInt('') dan NaN -- cantidad es opcional (Int?), se
-// guarda null cuando el campo viene vacío en vez de romper con NaN.
-function toIntOrNull(v) {
-  if (v === null || v === '') return null
-  const n = parseInt(v, 10)
-  return Number.isNaN(n) ? null : n
-}
+const TIPOS_MOVIMIENTO = ['INICIAL', 'INGRESO', 'GASTO', 'COBRO', 'RETIRO', 'VACIADO']
 
 export default async function cajaMoveRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja_movimientos', 'view')]
@@ -55,6 +49,13 @@ export default async function cajaMoveRoutes(fastify) {
       return reply.code(400).send({ error: `tipo inválido. Use: ${TIPOS_MOVIMIENTO.join(', ')}` })
     }
 
+    // El monto de un movimiento es siempre positivo: la dirección la da el
+    // tipo (regla del proyecto). Lo no numérico es 400, no NaN → 500.
+    const rMonto = parseMonto(monto, { requerido: true, positivo: true })
+    if (!rMonto.ok) return reply.code(400).send({ error: rMonto.error })
+    const rCant = parseEntero(cantidad, { campo: 'cantidad' })
+    if (!rCant.ok) return reply.code(400).send({ error: rCant.error })
+
     const caja = await fastify.db.caja.findUnique({
       where: { id: id_caja },
       select: { id_local: true }
@@ -69,9 +70,9 @@ export default async function cajaMoveRoutes(fastify) {
       data: {
         tipo,
         id_metodo: id_metodo || null,
-        monto:     parseFloat(monto),
+        monto:     rMonto.value,
         id_caja,
-        cantidad:  cantidad ? parseInt(cantidad) : null
+        cantidad:  rCant.value
       },
       include: { metodo_pago: true }
     })
@@ -94,13 +95,27 @@ export default async function cajaMoveRoutes(fastify) {
     if (tipo !== undefined && !TIPOS_MOVIMIENTO.includes(tipo)) {
       return reply.code(400).send({ error: `tipo inválido. Use: ${TIPOS_MOVIMIENTO.join(', ')}` })
     }
+    let montoVal
+    if (monto !== undefined) {
+      const r = parseMonto(monto, { requerido: true, positivo: true })
+      if (!r.ok) return reply.code(400).send({ error: r.error })
+      montoVal = r.value
+    }
+    let cantVal
+    if (cantidad !== undefined) {
+      const r = parseEntero(cantidad, { campo: 'cantidad' })
+      if (!r.ok) return reply.code(400).send({ error: r.error })
+      cantVal = r.value
+    }
     const mov = await fastify.db.cajaMovimiento.update({
       where: { id: request.params.id },
       data: {
         tipo,
-        id_metodo: id_metodo !== undefined ? id_metodo : undefined,
-        monto:     monto     !== undefined ? parseFloat(monto) : undefined,
-        cantidad:  cantidad  !== undefined ? toIntOrNull(cantidad) : undefined
+        // '' significa "sacar el método": va como null, no como FK inválida
+        // (antes el string vacío explotaba con P2003 → 500).
+        id_metodo: id_metodo !== undefined ? (id_metodo || null) : undefined,
+        monto:     montoVal,
+        cantidad:  cantVal
       },
       include: { metodo_pago: true }
     })

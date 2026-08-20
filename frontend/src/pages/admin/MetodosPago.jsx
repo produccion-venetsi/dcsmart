@@ -37,7 +37,7 @@ export default function MetodosPago() {
 
   const load = () => {
     setLoading(true)
-    metodosApi.list()
+    metodosApi.listAll()
       .then(({ data }) => setMetodos(data))
       .catch(() => notify('Error al cargar métodos', 'error'))
       .finally(() => setLoading(false))
