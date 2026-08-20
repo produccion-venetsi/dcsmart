@@ -117,24 +117,42 @@ export default async function reportesRoutes(fastify) {
       payTipoClause = `AND c.tipo_turno::text IN (${ph})`
     }
 
-    // LEFT JOIN (no INNER) -- un movimiento COBRO sin id_metodo asignado no
-    // debe desaparecer silenciosamente de la suma, solo queda sin nombre.
+    // MODELO SIMPLE (DEV-82/83): los cobros ya no viven en caja_movimientos
+    // (la tabla quedó vacía con la migración del 2026-08-19) sino como
+    // detalles con tipo='cobro', cuyo NOMBRE es el método. Esto además arregla
+    // un sesgo histórico: antes este gráfico solo veía TapTap/Fudo (los únicos
+    // que escribían movimientos); ahora entran también las cajas manuales.
+    //
+    // El efectivo se suma como línea propia desde el campo cajas.efectivo --
+    // el conteo real del cajón. El detalle "Efectivo (ya contado...)" que dejó
+    // la conversión es informativo y NO entra (sumaría esa plata dos veces).
+    //
     // Se agrupa TAMBIÉN por turno y el total del período se reconstruye
     // sumando, en vez de correr dos consultas que agrupan distinto: así el
     // desglose por turno no puede quedar desalineado con el total de arriba.
     const payRows = await fastify.db.$queryRawUnsafe(`
-      SELECT c.tipo_turno::text AS turno,
-             COALESCE(mp.nombre, 'Sin especificar') AS nombre,
-             SUM(cm.monto) AS total
-      FROM caja_movimientos cm
-      JOIN cajas c ON cm.id_caja = c.id
-      LEFT JOIN metodos_pago mp ON cm.id_metodo = mp.id
-      WHERE c.id_local IN (${localPlaceholders})
-        AND c.fecha_inicio >= $${localIds.length + 1}
-        AND c.fecha_inicio <= $${localIds.length + 2}
-        AND cm.tipo = 'COBRO'
-        ${payTipoClause}
-      GROUP BY c.tipo_turno, COALESCE(mp.nombre, 'Sin especificar')
+      SELECT turno, nombre, SUM(total) AS total FROM (
+        SELECT c.tipo_turno::text AS turno,
+               TRIM(COALESCE(cd.nombre, dt.nombre, 'Sin especificar')) AS nombre,
+               cd.monto AS total
+        FROM caja_detalles cd
+        JOIN cajas c ON cd.id_caja = c.id
+        LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
+        WHERE c.id_local IN (${localPlaceholders})
+          AND c.fecha_inicio >= $${localIds.length + 1}
+          AND c.fecha_inicio <= $${localIds.length + 2}
+          AND cd.tipo = 'cobro'
+          ${payTipoClause}
+        UNION ALL
+        SELECT c.tipo_turno::text, 'Efectivo', c.efectivo
+        FROM cajas c
+        WHERE c.id_local IN (${localPlaceholders})
+          AND c.fecha_inicio >= $${localIds.length + 1}
+          AND c.fecha_inicio <= $${localIds.length + 2}
+          AND c.efectivo IS NOT NULL AND c.efectivo <> 0
+          ${payTipoClause}
+      ) x
+      GROUP BY turno, nombre
       ORDER BY total DESC
     `, ...payParams)
 
@@ -189,14 +207,14 @@ export default async function reportesRoutes(fastify) {
       total: Number(r.total)
     }))
 
-    // "Desglose de detalles": los caja_detalles cargados a mano (ej. "MP Point
-    // Crédito", "MP QR", "Transferencia", "Rappi") son la forma real en que
-    // las cajas DCSMART registran sus cobros -- mucho más útil que agrupar por
-    // la clasificación genérica (canal/medio_pago/calculo/otro/legacy
-    // ingreso-egreso), que no dice nada de qué medio fue. Se agrupa por el
-    // nombre real del detalle (el de su tipo si tiene uno asignado, si no el
-    // nombre libre cargado en el propio detalle).
-    const detParams = [...localIds, desdeDate, hastaDate, request.activeAppId]
+    // "Gastos del período": la plata que salió de la caja, por nombre. Antes
+    // acá había un "desglose de detalles" que existía para ver los cobros de
+    // las cajas manuales -- eso hoy vive en `payments` (todos los cobros son
+    // detalles). Sumar TODOS los detalles ahora mezclaría cobros con sus
+    // espejos informativos (los "Vaciado · X", el efectivo ya contado) y daría
+    // un total sin sentido; lo que faltaba contar en el reporte es el gasto,
+    // que en el modelo simple NO resta de la venta y se informa aparte.
+    const detParams = [...localIds, desdeDate, hastaDate]
     let detTipoClause = ''
     if (tipoTurnoLabels.length) {
       const ph = tipoTurnoLabels.map((_, i) => `$${detParams.length + i + 1}`).join(', ')
@@ -206,10 +224,7 @@ export default async function reportesRoutes(fastify) {
     const detRows = await fastify.db.$queryRawUnsafe(`
       SELECT
         c.tipo_turno::text AS turno,
-        COALESCE(dt.nombre, cd.nombre, 'Sin nombre') AS nombre,
-        -- 'gasto' es el valor vigente; 'egreso' es el anterior y sigue en cajas
-        -- historicas, asi que se aceptan los dos.
-        BOOL_OR(dt.clasificacion IN ('gasto', 'egreso')) AS egreso,
+        TRIM(COALESCE(cd.nombre, dt.nombre, 'Sin nombre')) AS nombre,
         SUM(cd.monto) AS total
       FROM caja_detalles cd
       JOIN cajas c ON cd.id_caja = c.id
@@ -217,25 +232,48 @@ export default async function reportesRoutes(fastify) {
       WHERE c.id_local IN (${localPlaceholders})
         AND c.fecha_inicio >= $${localIds.length + 1}
         AND c.fecha_inicio <= $${localIds.length + 2}
-        AND (dt.id_app = $${localIds.length + 3} OR dt.id_app IS NULL)
+        AND cd.tipo = 'gasto'
         ${detTipoClause}
-      GROUP BY c.tipo_turno, COALESCE(dt.nombre, cd.nombre, 'Sin nombre')
+      GROUP BY c.tipo_turno, TRIM(COALESCE(cd.nombre, dt.nombre, 'Sin nombre'))
       ORDER BY total DESC
     `, ...detParams)
 
-    const conEgreso = (r) => ({ egreso: Boolean(r.egreso) })
+    // Los informativos del período, agregados por nombre. El frontend los
+    // agrupa en familias con la MISMA lib que usa el detalle de caja
+    // (gruposInformativos): canales de venta, movimientos del cajón, ajustes
+    // del POS, resúmenes. Acá solo se suman -- la semántica vive en un lugar.
+    const infoRows = await fastify.db.$queryRawUnsafe(`
+      SELECT
+        TRIM(COALESCE(cd.nombre, dt.nombre, 'Sin nombre')) AS nombre,
+        SUM(cd.monto) AS monto,
+        SUM(cd.cantidad) AS cantidad
+      FROM caja_detalles cd
+      JOIN cajas c ON cd.id_caja = c.id
+      LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
+      WHERE c.id_local IN (${localPlaceholders})
+        AND c.fecha_inicio >= $${localIds.length + 1}
+        AND c.fecha_inicio <= $${localIds.length + 2}
+        AND cd.tipo = 'informativo'
+        ${detTipoClause}
+      GROUP BY TRIM(COALESCE(cd.nombre, dt.nombre, 'Sin nombre'))
+      ORDER BY monto DESC
+    `, ...detParams)
+    const informativos = infoRows
+      .map((r) => ({ nombre: r.nombre, monto: Number(r.monto), cantidad: r.cantidad != null ? Number(r.cantidad) : null }))
+      .filter((r) => r.monto !== 0)
+
     const DET_COLORS = ['#3FA9DE', '#7FD49B', '#EF6F8E', '#4BC4CC', '#F4C152', '#F08A5D', '#B98CD8', '#9b958c', '#E0938C', '#5FA8D9']
-    const detTotales = totalizarPorNombre(detRows, conEgreso)
-    const detallesTotal = detTotales.reduce((s, r) => s + r.val, 0)
-    const detalles = detTotales
+    const detTotales = totalizarPorNombre(detRows)
+    const gastosTotal = detTotales.reduce((s, r) => s + r.val, 0)
+    const gastos = detTotales
       .filter(r => r.val !== 0)
       .map((r, i) => ({
         ...r,
-        pct: detallesTotal > 0 ? ((r.val / detallesTotal) * 100).toFixed(1) : '0.0',
+        pct: gastosTotal > 0 ? ((r.val / gastosTotal) * 100).toFixed(1) : '0.0',
         color: DET_COLORS[i % DET_COLORS.length]
       }))
-    const colorPorDetalle = new Map(detalles.map(d => [d.name, d.color]))
-    const detPorTurno = desglosarPorTurno(detRows, conEgreso)
+    const colorPorGasto = new Map(gastos.map(d => [d.name, d.color]))
+    const gastosPorTurno = desglosarPorTurno(detRows)
 
     const pctZ      = totalVentas > 0 ? ((totalFiscal / totalVentas) * 100).toFixed(0) : '0'
     const pctNoFisc = totalVentas > 0 ? ((noFiscal / totalVentas) * 100).toFixed(0) : '0'
@@ -272,9 +310,9 @@ export default async function reportesRoutes(fastify) {
         // Cada turno se lleva su propio desglose para poder abrirlo sin pedir
         // nada más al servidor.
         payments: (payPorTurno.get(turno) ?? []).map(p => ({ ...p, color: colorPorMetodo.get(p.name) })),
-        detalles: (detPorTurno.get(turno) ?? [])
+        gastos: (gastosPorTurno.get(turno) ?? [])
           .filter(d => d.val !== 0)
-          .map(d => ({ ...d, color: colorPorDetalle.get(d.name) })),
+          .map(d => ({ ...d, color: colorPorGasto.get(d.name) })),
       }
     }))
 
@@ -300,8 +338,9 @@ export default async function reportesRoutes(fastify) {
       fiscal: { fiscal: totalFiscal, no_fiscal: noFiscal, digital },
       payments,
       pay_total: payTotal,
-      detalles,
-      detalles_total: detallesTotal,
+      gastos,
+      gastos_total: gastosTotal,
+      informativos,
       descuadre,
       desglose_detalles: desgloseDetalles
     }
@@ -387,8 +426,10 @@ export default async function reportesRoutes(fastify) {
     let pendImpuestos = 0, pendSueldos = 0, pendProveedores = 0
     let totalImpuestos = 0, totalSueldos = 0
     for (const p of pagosEnRango) {
-      if (p.ingresa_egreso === true) continue // no es gasto
-      const importe = Number(p.importe ?? 0)
+      // Los ingresos RESTAN en vez de saltearse: una nota de crédito de CMV es
+      // mercadería devuelta y baja el CMV; una impositiva baja Impuestos.
+      // Ignorarlas inflaba los gastos con plata que volvió (bug 2026-08-20).
+      const importe = Number(p.importe ?? 0) * (p.ingresa_egreso === true ? -1 : 1)
       const rubroNombre = p.rubcat?.rubro?.nombre || ''
       const esCmv = /^CMV/i.test(rubroNombre)
 
@@ -397,9 +438,9 @@ export default async function reportesRoutes(fastify) {
       if (rubroNombre === 'Impositivo') totalImpuestos += importe
       else if (rubroNombre === 'Sueldos') totalSueldos += importe
 
-      // Los ingresos ya salieron del loop en el `continue` de arriba, y el
-      // total los descuenta en deudaNeta: acá alcanza con mirar `pagado`.
-      if (!p.pagado) {
+      // Pendientes: solo egresos impagos, como siempre — la deuda neta de los
+      // ingresos impagos ya la descuenta deudaNeta en total_adeudado.
+      if (!p.pagado && p.ingresa_egreso !== true) {
         if (rubroNombre === 'Impositivo') pendImpuestos += importe
         else if (rubroNombre === 'Sueldos') pendSueldos += importe
         else if (!esCmv) pendProveedores += importe
@@ -464,7 +505,7 @@ export default async function reportesRoutes(fastify) {
 
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
-      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00', mes_desde: rango.mesDesde, mes_hasta: rango.mesHasta }
+      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00', modo: rango.modo, mes_desde: rango.mesDesde, mes_hasta: rango.mesHasta, dia_desde: rango.diaDesde, dia_hasta: rango.diaHasta }
     }
 
     // Las fechas salen todas de resolverRangoCmv: fecha_inicio (Caja) es un
@@ -496,7 +537,9 @@ export default async function reportesRoutes(fastify) {
       SELECT
         r.nombre AS rubro,
         c.nombre AS categoria,
-        SUM(COALESCE(p.importe, 0)) AS total
+        -- Firmado: una nota de crédito de CMV (ingreso) resta — es mercadería
+        -- que volvió, no costo.
+        SUM(CASE WHEN p.ingresa_egreso THEN -COALESCE(p.importe, 0) ELSE COALESCE(p.importe, 0) END) AS total
       FROM pagos p
       JOIN rubcat rc ON p.id_rubcat = rc.id
       JOIN rubros r ON rc.id_rub = r.id
@@ -549,11 +592,15 @@ export default async function reportesRoutes(fastify) {
     const mMax = movstock.length ? Math.max(...movstock.map(m => m.val)) : 1
 
     return {
-      // Qué meses se leyeron realmente. Si entró un rango de días se redondeó a
-      // meses completos, y la pantalla tiene que poder decirlo en vez de dar por
-      // buenos los días que pidió el usuario.
+      // Qué se leyó realmente y en qué modo: 'periodo' (contable, meses
+      // completos) o 'fecha' (rango de días parcial, por fecha de carga del
+      // pago). La pantalla lo dice en vez de dejar que el usuario crea que un
+      // rango de una semana midió el mes.
+      modo: rango.modo,
       mes_desde: mesDesde,
       mes_hasta: mesHasta,
+      dia_desde: rango.diaDesde,
+      dia_hasta: rango.diaHasta,
       ventas_total: ventasTotal,
       cmv_total_monto: totalGeneral,
       cmv_total_pct: cmvTotal.toFixed(2),
@@ -580,6 +627,67 @@ export default async function reportesRoutes(fastify) {
       total_bebidas: totalBebidas,
       total_general: totalGeneral
     }
+  })
+
+  // ── GET /cmv/detalle ─────────────────────────────────────────────────────
+  // La composición de UNA categoría del CMV ("Carnes", "Vinos"): qué
+  // proveedores la forman y por cuánto, en el mismo rango que el reporte.
+  // Alimenta el drill-down de las tablas por grupo — el número deja de ser
+  // opaco: se clickea y se ve de dónde salió.
+  fastify.get('/cmv/detalle', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local, desde, hasta, mes, mes_desde, mes_hasta, categoria, grupo } = request.query
+
+    if (!categoria) return reply.code(400).send({ error: 'Falta la categoría' })
+    // El mismo resolutor de rango que el reporte: los números del drill-down
+    // tienen que hablar del MISMO tiempo que la fila que se clickeó.
+    const rango = resolverRangoCmv({ mes, mes_desde, mes_hasta, desde, hasta })
+    if (!rango) return reply.code(400).send({ error: 'Rango de fechas inválido' })
+
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+    const localIds = id_local ? [id_local] : request.allowedLocalIds
+    if (!localIds.length) return { proveedores: [], total: 0 }
+
+    const { campoPago, pagoDesde, pagoHasta } = rango
+    if (campoPago !== 'periodo' && campoPago !== 'fecha') {
+      return reply.code(500).send({ error: 'Campo de fecha inválido' })
+    }
+
+    // El mismo reparto en grupos que usa el reporte (movstock gana, después
+    // bebidas, el resto es alimentos): una categoría puede llamarse igual en
+    // dos rubros CMV distintos y el grupo la desambigua.
+    const filtroGrupo = grupo === 'movstock'
+      ? `AND UPPER(r.nombre) LIKE '%MOVSTOCK%'`
+      : grupo === 'bebidas'
+        ? `AND UPPER(r.nombre) LIKE '%BEBIDA%' AND UPPER(r.nombre) NOT LIKE '%MOVSTOCK%'`
+        : grupo === 'alimentos'
+          ? `AND UPPER(r.nombre) NOT LIKE '%BEBIDA%' AND UPPER(r.nombre) NOT LIKE '%MOVSTOCK%'`
+          : ''
+
+    const localPlaceholders = localIds.map((_, i) => `$${i + 1}`).join(', ')
+    const rows = await fastify.db.$queryRawUnsafe(`
+      SELECT
+        COALESCE(pr.nombre, 'Sin proveedor') AS proveedor,
+        COUNT(*)::int AS cantidad,
+        SUM(CASE WHEN p.ingresa_egreso THEN -COALESCE(p.importe, 0) ELSE COALESCE(p.importe, 0) END) AS total
+      FROM pagos p
+      JOIN rubcat rc ON p.id_rubcat = rc.id
+      JOIN rubros r ON rc.id_rub = r.id
+      JOIN categorias c ON rc.id_cat = c.id
+      LEFT JOIN proveedores pr ON p.id_proveedor = pr.id
+      WHERE p.id_local IN (${localPlaceholders})
+        AND p.${campoPago} >= $${localIds.length + 1}
+        AND p.${campoPago} <= $${localIds.length + 2}
+        AND UPPER(r.nombre) LIKE 'CMV%'
+        AND c.nombre = $${localIds.length + 3}
+        ${filtroGrupo}
+      GROUP BY COALESCE(pr.nombre, 'Sin proveedor')
+      ORDER BY total DESC
+    `, ...localIds, pagoDesde, pagoHasta, categoria)
+
+    const proveedores = rows.map((r) => ({ nombre: r.proveedor, cantidad: r.cantidad, total: Number(r.total) }))
+    return { proveedores, total: proveedores.reduce((a, r) => a + r.total, 0) }
   })
 
   // ── GET /balance ───────────────────────────────────────────────────────

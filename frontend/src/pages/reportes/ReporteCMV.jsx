@@ -42,7 +42,35 @@ function KpiCard({ label, val }) {
   )
 }
 
-function CostTable({ title, dotColor, items, total, gradient }) {
+// El detalle de una categoría: qué proveedores la componen. Se pide recién al
+// abrir (una categoría puede no interesar nunca) y se cachea por clave para
+// que cerrar y reabrir no vuelva a pegar.
+function DetalleCategoria({ detalle }) {
+  if (detalle === 'cargando') {
+    return <div style={{ padding: '8px 12px' }}><span className="skel" style={{ width: '70%', display: 'inline-block' }} /></div>
+  }
+  if (detalle === 'error') {
+    return <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--red)' }}>No se pudo cargar el detalle.</div>
+  }
+  if (!detalle?.proveedores?.length) {
+    return <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--t3)' }}>Sin pagos en el rango.</div>
+  }
+  return (
+    <div style={{ padding: '6px 4px 10px 18px', borderBottom: '1px solid var(--border)' }}>
+      {detalle.proveedores.map((pr, i) => (
+        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '3px 0' }}>
+          <span style={{ color: 'var(--t2)' }}>
+            {pr.nombre}
+            <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--t4)' }}>x {pr.cantidad}</span>
+          </span>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(pr.total)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CostTable({ title, dotColor, items, total, gradient, onToggle, abierta, detalles }) {
   return (
     <div className="rep-chart-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -51,21 +79,34 @@ function CostTable({ title, dotColor, items, total, gradient }) {
         <span style={{ fontSize: 11, color: 'var(--t3)', marginLeft: 'auto' }}>$</span>
       </div>
       {items.map((r, i) => (
-        <div key={i} style={{
-          display: 'grid', gridTemplateColumns: '1fr 168px', alignItems: 'center',
-          height: 33, borderBottom: '1px solid var(--border)'
-        }}>
-          <span style={{ fontSize: 13, color: 'var(--t2)' }}>{r.name}</span>
-          <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
-            <div style={{
-              position: 'absolute', top: 5, bottom: 5, right: 0,
-              width: `${r.h}%`, background: gradient, borderRadius: 4
-            }} />
-            <span style={{
-              position: 'relative', fontSize: 13, fontWeight: 500,
-              color: 'var(--t1)', paddingRight: 8, fontVariantNumeric: 'tabular-nums'
-            }}>{fmt(r.val)}</span>
+        <div key={i}>
+          {/* La fila abre la composición de la categoría: qué proveedores la
+              forman y por cuánto. El número deja de ser opaco. */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onToggle(r.name)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(r.name) } }}
+            title={abierta === r.name ? 'Cerrar el detalle' : `Ver qué compone ${r.name}`}
+            style={{
+              display: 'grid', gridTemplateColumns: '14px 1fr 168px', alignItems: 'center',
+              height: 33, borderBottom: '1px solid var(--border)', cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontSize: 10, color: 'var(--t4)' }}>{abierta === r.name ? '▾' : '▸'}</span>
+            <span style={{ fontSize: 13, color: 'var(--t2)' }}>{r.name}</span>
+            <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
+              <div style={{
+                position: 'absolute', top: 5, bottom: 5, right: 0,
+                width: `${r.h}%`, background: gradient, borderRadius: 4
+              }} />
+              <span style={{
+                position: 'relative', fontSize: 13, fontWeight: 500,
+                color: 'var(--t1)', paddingRight: 8, fontVariantNumeric: 'tabular-nums'
+              }}>{fmt(r.val)}</span>
+            </div>
           </div>
+          {abierta === r.name && <DetalleCategoria detalle={detalles[r.name]} />}
         </div>
       ))}
       <div style={{
@@ -114,10 +155,10 @@ function CostChart({ title, items, barColor }) {
 export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  // El CMV se lee por período contable (`pago.periodo`): una factura de junio
-  // cargada en julio pertenece a junio. El filtro es "Mes de período" (un mes
-  // puntual) o las fechas Inicio/Fin de siempre, redondeadas a los meses que
-  // tocan -- lo que se haya tocado último (ver Reportes.jsx). Ver
+  // El CMV se lee por período contable (`pago.periodo`) cuando se pide un mes
+  // o meses enteros: una factura de junio cargada en julio pertenece a junio.
+  // Un rango de días PARCIAL (una semana) es otra pregunta y va por fecha de
+  // carga: la respuesta trae `modo` y esta pantalla lo dice. Ver
   // backend/src/lib/rangoCmv.js.
 
   useEffect(() => {
@@ -143,12 +184,43 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
   const ventasTotal = data?.ventas_total ?? 0
   const cmvMonto    = data?.cmv_total_monto ?? 0
   const cmvPct      = data?.cmv_total_pct ?? '0.00'
+  const modoCmv     = data?.modo
 
   // Los KPIs de categoría (Alimentos/Bebidas/MovStock). El CMV Total va en la
   // tarjeta de fórmula de arriba, no como KPI suelto.
   const kpisCat = kpis.filter(k => k.label !== 'CMV Total')
 
+
   const skel = loading || !data
+
+  // Drill-down por categoría: una sola abierta por grupo (clave grupo|nombre),
+  // detalle cacheado para que reabrir no vuelva a pegar. Cambiar el rango o el
+  // local invalida todo: los números tienen que hablar del rango visible.
+  const [abiertaKey, setAbiertaKey] = useState(null)
+  const [detalles, setDetalles] = useState({})
+  useEffect(() => { setAbiertaKey(null); setDetalles({}) }, [modo, mes, desde, hasta, activeLocal?.id])
+
+  const toggleCategoria = (grupo) => (nombre) => {
+    const key = `${grupo}|${nombre}`
+    if (abiertaKey === key) { setAbiertaKey(null); return }
+    setAbiertaKey(key)
+    if (detalles[key]) return
+    setDetalles(prev => ({ ...prev, [key]: 'cargando' }))
+    const local = activeLocal ? { id_local: activeLocal.id } : {}
+    const rangoParams = modo === 'mes' ? { mes } : { desde, hasta }
+    reportesApi.cmvDetalle({ ...rangoParams, ...local, categoria: nombre, grupo })
+      .then((res) => setDetalles(prev => ({ ...prev, [key]: res.data })))
+      .catch(() => setDetalles(prev => ({ ...prev, [key]: 'error' })))
+  }
+  // Cada tabla recibe su vista: la abierta sin el prefijo de grupo, y los
+  // detalles reindexados por nombre pelado.
+  const vistaGrupo = (grupo) => ({
+    abierta: abiertaKey?.startsWith(`${grupo}|`) ? abiertaKey.slice(grupo.length + 1) : null,
+    detalles: Object.fromEntries(Object.entries(detalles)
+      .filter(([k]) => k.startsWith(`${grupo}|`))
+      .map(([k, v]) => [k.slice(grupo.length + 1), v])),
+    onToggle: toggleCategoria(grupo),
+  })
 
   return (
     <>
@@ -160,8 +232,22 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
         </div>
       ) : (
         <div className="rep-chart-card" style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 18 }}>
-            CMV Total
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--t3)' }}>
+              CMV Total
+            </span>
+            {/* Que esta midiendo: contable (por periodo, meses completos) o los
+                dias exactos pedidos (por fecha de carga). Antes una semana se
+                redondeaba al mes en silencio y el numero no era el del rango. */}
+            {modoCmv === 'fecha' ? (
+              <span className="badge badge-amber" title="Rango de días parcial: se suma lo CARGADO en esos días (fecha del pago), no el período contable">
+                por fecha de carga · {data?.dia_desde} → {data?.dia_hasta}
+              </span>
+            ) : modoCmv === 'periodo' ? (
+              <span className="badge badge-muted" title="Lectura contable: pagos por período (una factura de junio cargada en julio pertenece a junio)">
+                período contable · {data?.mes_desde}{data?.mes_hasta !== data?.mes_desde ? ` → ${data?.mes_hasta}` : ''}
+              </span>
+            ) : null}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 28 }}>
             <div>
@@ -219,11 +305,11 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
       ) : (
         <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
           <CostTable title="Alimentos" dotColor="var(--green)" items={alimentos}
-            total={totAlim} gradient={CAT_COLORS.alimentos.gradient} />
+            total={totAlim} gradient={CAT_COLORS.alimentos.gradient} {...vistaGrupo('alimentos')} />
           <CostTable title="Bebidas" dotColor="var(--gold)" items={bebidas}
-            total={totBeb} gradient={CAT_COLORS.bebidas.gradient} />
+            total={totBeb} gradient={CAT_COLORS.bebidas.gradient} {...vistaGrupo('bebidas')} />
           <CostTable title="MovStock" dotColor="#5FA8D9" items={movstock}
-            total={totMovstock} gradient={CAT_COLORS.movstock.gradient} />
+            total={totMovstock} gradient={CAT_COLORS.movstock.gradient} {...vistaGrupo('movstock')} />
         </div>
       )}
 
@@ -235,6 +321,7 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
           <CostChart title="MovStock" items={movstock} barColor="#5FA8D9" />
         </div>
       )}
+
     </>
   )
 }

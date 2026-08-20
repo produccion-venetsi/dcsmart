@@ -98,10 +98,15 @@ export default async function proveedoresRoutes(fastify) {
     if (!proveedor) return reply.code(404).send({ error: 'Proveedor no encontrado' })
 
     const where = { id_proveedor: proveedor.id, id_local: { in: request.allowedLocalIds } }
-    const [agg, ultimos, porLocalRaw, sinPagar] = await Promise.all([
+    const [agg, aggIngresos, ultimos, porLocalRaw, porLocalIngresos, sinPagar, sinPagarIngresos] = await Promise.all([
       fastify.db.pago.aggregate({
         where, _count: { _all: true }, _sum: { importe: true },
         _min: { fecha: true }, _max: { fecha: true },
+      }),
+      // Los ingresos (notas de crédito) para restar de cada total: la ficha
+      // mostraba el movimiento bruto y una NC inflaba lo "pagado" al proveedor.
+      fastify.db.pago.aggregate({
+        where: { ...where, ingresa_egreso: true }, _sum: { importe: true },
       }),
       fastify.db.pago.findMany({
         where, orderBy: { fecha: 'desc' }, take: 5,
@@ -113,8 +118,14 @@ export default async function proveedoresRoutes(fastify) {
       fastify.db.pago.groupBy({
         by: ['id_local'], where, _count: { _all: true }, _sum: { importe: true },
       }),
+      fastify.db.pago.groupBy({
+        by: ['id_local'], where: { ...where, ingresa_egreso: true }, _sum: { importe: true },
+      }),
       fastify.db.pago.aggregate({
         where: { ...where, pagado: false }, _count: { _all: true }, _sum: { importe: true },
+      }),
+      fastify.db.pago.aggregate({
+        where: { ...where, pagado: false, ingresa_egreso: true }, _sum: { importe: true },
       }),
     ])
 
@@ -128,20 +139,27 @@ export default async function proveedoresRoutes(fastify) {
       : []
     const nombreLocal = new Map(locales.map(l => [l.id, l]))
 
+    // Cada total NETO: una nota de crédito (ingreso) resta en vez de inflar lo
+    // "pagado" al proveedor. El bruto ya la sumó una vez, así que para que
+    // quede restando hay que descontarla dos veces:
+    //   neto = egresos − ingresos = (bruto − ingresos) − ingresos = bruto − 2·ingresos
+    const neto = (bruto, ingresos) => Number(bruto ?? 0) - 2 * Number(ingresos ?? 0)
+    const ingresosPorLocal = new Map(porLocalIngresos.map(g => [g.id_local, Number(g._sum.importe ?? 0)]))
+
     return {
       pagos: agg._count._all,
-      total: Number(agg._sum.importe ?? 0),
+      total: neto(agg._sum.importe, aggIngresos._sum.importe),
       primer_pago: agg._min.fecha,
       ultimo_pago: agg._max.fecha,
       pendientes: sinPagar._count._all,
-      total_pendiente: Number(sinPagar._sum.importe ?? 0),
+      total_pendiente: neto(sinPagar._sum.importe, sinPagarIngresos._sum.importe),
       por_local: porLocalRaw
         .map(g => ({
           id_local: g.id_local,
           local: nombreLocal.get(g.id_local)?.nombre ?? '—',
           grupo: nombreLocal.get(g.id_local)?.app?.nombre ?? null,
           pagos: g._count._all,
-          total: Number(g._sum.importe ?? 0),
+          total: neto(g._sum.importe, ingresosPorLocal.get(g.id_local)),
         }))
         .sort((a, b) => b.total - a.total),
       ultimos: ultimos.map(pg => ({

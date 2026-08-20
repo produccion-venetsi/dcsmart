@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import {
   dividirPorDireccion, dividirPorEstado, depositadoPorLocal, extraidoPorLocal, netoDeFila, proporcion,
   pendienteDepositado, pendienteExtraido, tienePendiente, textoEstado,
+  agruparPorGrupo,
 } from './cajaMayorVista.js'
 
 const raiz = (rel) => fileURLToPath(new URL(rel, import.meta.url))
@@ -242,4 +243,51 @@ test('los totales del encabezado se conservan (direccion y neto)', () => {
   assert.equal(v.neto, 70)
   assert.equal(v.totalPendiente, 20)
   assert.equal(v.sinRecibir, 1)
+})
+
+// ── Saldos por lado y agrupación por grupo ──────────────────────────────────
+
+const saldoBase = (extra = {}) => ({
+  id_local: 'L1', local: 'ADA', grupo: 'PERROS', moneda: 'ARS',
+  ingresos: 1000, egresos: 300, pendiente_ingresos: 200, pendiente_egresos: 100,
+  ops: 6, sin_recibir: 2, ops_ingresos: 4, ops_egresos: 2, en_estudio: 0,
+  ...extra,
+})
+
+test('cada lado trae su SALDO (depositado menos extraido), no solo el movimiento', () => {
+  const { filas } = dividirPorEstado([saldoBase()])
+  const f = filas[0]
+  // enviada: dep 200, ext 100 -> saldo 100. recibida: dep 800, ext 200 -> saldo 600.
+  assert.equal(f.enviada_saldo, 100)
+  assert.equal(f.recibida_saldo, 600)
+  // El movimiento (dep+ext) y el saldo (dep-ext) son preguntas distintas.
+  assert.equal(f.recibida_total, 1000)
+})
+
+test('los totales de saldo por lado acompañan a los de movimiento', () => {
+  const vista = dividirPorEstado([saldoBase(), saldoBase({ id_local: 'L2', local: 'UAT' })])
+  assert.equal(vista.saldoRecibida, 1200)
+  assert.equal(vista.saldoEnviada, 200)
+})
+
+test('agruparPorGrupo junta los locales de cada grupo con subtotales', () => {
+  const { filas } = dividirPorEstado([
+    saldoBase(),
+    saldoBase({ id_local: 'L2', local: 'UAT', grupo: 'PERROS' }),
+    saldoBase({ id_local: 'L3', local: 'GRIS', grupo: 'JD', ingresos: 50, egresos: 0, pendiente_ingresos: 0, pendiente_egresos: 0 }),
+  ])
+  const grupos = agruparPorGrupo(filas)
+  assert.equal(grupos.length, 2)
+  // PERROS mueve mas: va primero.
+  assert.equal(grupos[0].grupo, 'PERROS')
+  assert.equal(grupos[0].filas.length, 2)
+  assert.equal(grupos[0].recibida_saldo, 1200)
+  assert.equal(grupos[1].grupo, 'JD')
+  assert.equal(grupos[1].recibida_saldo, 50)
+})
+
+test('un local sin grupo cae en "Sin grupo", no se pierde', () => {
+  const { filas } = dividirPorEstado([saldoBase({ grupo: null })])
+  const grupos = agruparPorGrupo(filas)
+  assert.equal(grupos[0].grupo, 'Sin grupo')
 })

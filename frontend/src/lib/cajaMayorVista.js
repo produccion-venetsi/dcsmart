@@ -140,6 +140,11 @@ export function dividirPorEstado(saldos) {
       recibida_depositado: recibidaDep,
       recibida_extraido: recibidaExt,
       recibida_total: recibidaDep + recibidaExt,
+      // El SALDO de cada lado: depositado menos extraído. `recibida_saldo` es
+      // lo que la caja mayor efectivamente TIENE de ese local (confirmado);
+      // el total del movimiento (dep+ext) dice cuánto se movió, no cuánto hay.
+      enviada_saldo: enviadaDep - enviadaExt,
+      recibida_saldo: recibidaDep - recibidaExt,
       ops_recibida: f.ops - f.sin_recibir,
     }
   })
@@ -148,5 +153,33 @@ export function dividirPorEstado(saldos) {
     filas,
     totalEnviada: filas.reduce((a, f) => a + f.enviada_total, 0),
     totalRecibida: filas.reduce((a, f) => a + f.recibida_total, 0),
+    saldoEnviada: filas.reduce((a, f) => a + f.enviada_saldo, 0),
+    saldoRecibida: filas.reduce((a, f) => a + f.recibida_saldo, 0),
   }
+}
+
+// Las filas agrupadas por grupo (la app del local), con subtotales por lado:
+// la lista plana mezclaba PERROS con JD y el subtotal del grupo se hacía a ojo.
+// El orden de los grupos lo fija su movimiento total (los grandes arriba), y
+// adentro las filas conservan el orden que ya traían.
+export function agruparPorGrupo(filas) {
+  const grupos = new Map()
+  for (const f of filas ?? []) {
+    const clave = f.grupo ?? 'Sin grupo'
+    if (!grupos.has(clave)) {
+      grupos.set(clave, {
+        grupo: clave, filas: [],
+        enviada_total: 0, recibida_total: 0, enviada_saldo: 0, recibida_saldo: 0,
+      })
+    }
+    const g = grupos.get(clave)
+    g.filas.push(f)
+    g.enviada_total += num(f.enviada_total)
+    g.recibida_total += num(f.recibida_total)
+    g.enviada_saldo += num(f.enviada_saldo)
+    g.recibida_saldo += num(f.recibida_saldo)
+  }
+  return [...grupos.values()].sort(
+    (a, b) => (b.enviada_total + b.recibida_total) - (a.enviada_total + a.recibida_total)
+  )
 }
