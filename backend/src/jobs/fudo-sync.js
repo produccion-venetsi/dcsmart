@@ -201,7 +201,8 @@ async function turnoDelDia(cliente, { desde, hasta }, etiqueta) {
     const principal = validos[0]
     const unico = validos.length === 1
     return {
-      nro_turno: Number(principal.id) || null,
+      // nro_turno es String en el schema (igual que los turnos de TapTap).
+      nro_turno: String(principal.id),
       fecha_inicio: unico && principal.attributes.openedAt ? new Date(principal.attributes.openedAt) : null,
       fecha_cierre: unico && principal.attributes.closedAt ? new Date(principal.attributes.closedAt) : null,
     }
