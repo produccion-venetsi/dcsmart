@@ -5,6 +5,7 @@ import { proveedoresApi } from '../../api/proveedores.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import Combobox from '../../components/Combobox.jsx'
+import DisponibilidadesLocal from '../../components/DisponibilidadesLocal.jsx'
 import { TIPOS_LOCAL, labelTipoLocal } from '../../lib/tiposLocal.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT } from '../../lib/descuentoMovstock.js'
 
@@ -673,6 +674,10 @@ export default function Locales() {
                 <span className="checkbox-label">Activo</span>
               </label>
             </div>
+          </Seccion>
+
+          <Seccion titulo="Disponibilidades">
+            <DisponibilidadesLocal localId={selected?.id} />
           </Seccion>
 
           <div className="form-actions" style={{ marginTop: '1.5rem' }}>

@@ -21,6 +21,18 @@ async function permissionsPlugin(fastify) {
     }
   })
 
+  // Guard: roles que OPERAN el grupo (admin para arriba). Espeja
+  // ROLES_OPERATIVOS del frontend (lib/roles.js), que es quien decide qué
+  // secciones se ven; acá se hace valer del lado del servidor para las que
+  // mueven plata entre locales, donde el filtro del menú no alcanza.
+  // Requiere que fastify.appContext haya corrido antes (usa request.activeRole).
+  const ROLES_OPERATIVOS = ['super_admin', 'dcsmart', 'admin', 'externo']
+  fastify.decorate('requireOperativo', async (request, reply) => {
+    if (!ROLES_OPERATIVOS.includes(request.activeRole)) {
+      return reply.code(403).send({ error: 'Necesitás rol de administrador del grupo' })
+    }
+  })
+
   // `can('caja', 'view')` o `can('caja', ['view', 'create'])`: con una lista
   // alcanza con que el usuario tenga UNA de las acciones. Sirve para los
   // catálogos de apoyo (los nombres de detalle, por ejemplo): quien puede

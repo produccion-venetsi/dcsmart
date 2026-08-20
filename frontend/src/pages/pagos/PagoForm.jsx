@@ -6,6 +6,8 @@ import { proveedoresApi } from '../../api/proveedores.js'
 import { clientesApi } from '../../api/clientes.js'
 import { rubcatApi, rubrosApi, categoriasApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { intercompanyApi } from '../../api/intercompany.js'
+import { puedeOperar } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
@@ -132,6 +134,11 @@ export default function PagoForm() {
   const ahoraDateTime = nowDateTimeLocalInput()
 
   const [metodos,         setMetodos]         = useState([])
+  // Intercompany: solo aplica a las STK y solo lo pueden hacer los roles
+  // operativos del grupo. `destinoIc` vacío = no se envía a ningún lado.
+  const [localesIc,       setLocalesIc]       = useState([])
+  const [icActivo,        setIcActivo]        = useState(false)
+  const [destinoIc,       setDestinoIc]       = useState('')
   // Método guardado en el pago que se edita: si quedó inactivo ya no viene en
   // el catálogo y sin esto el select se vería en blanco (ver lib/metodosSelect).
   const [metodoOriginal,  setMetodoOriginal]  = useState(null)
@@ -225,6 +232,13 @@ export default function PagoForm() {
   // comprobante a mano en el formulario común. Antes exigía además el modo
   // rápido, así que elegir MovStock desde el formulario largo no descontaba.
   const esMovStock = form.id_tipo === TIPO_MOVSTOCK
+
+  // Intercompany: mandar esta misma plata a otro local del grupo. Solo se
+  // ofrece al CREAR una op STK y a los roles que operan el grupo — para las ops
+  // ya cargadas está la pantalla de Intercompany, que además permite revertir.
+  const puedeIntercompany = !isEditing && form.id_tipo === 'STK' && puedeOperar(activeApp?.role)
+  const localIcOrigen = activeLocal?.id || form.id_local
+  const destinosIc = localesIc.filter((l) => l.id !== localIcOrigen)
   // Porcentaje del local activo. Se completa cuando llega la ficha del local;
   // hasta entonces vale el general, que es lo que corresponde a casi todos.
   const [pctDescuento, setPctDescuento] = useState(DESCUENTO_MOVSTOCK_DEFAULT)
@@ -643,6 +657,21 @@ export default function PagoForm() {
   const impuestosSum = isEditing
     ? savedImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
     : pendingImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
+  // Los locales a los que se puede enviar. Se piden solo cuando el bloque
+  // puede aparecer: es una consulta de más en cada alta que no es STK.
+  useEffect(() => {
+    // Sin limpiar el estado en el cuerpo del efecto: el bloque se oculta solo
+    // y el payload solo manda el destino si `puedeIntercompany` sigue siendo
+    // cierto, asi que una lista vieja en memoria no puede filtrarse a un pago
+    // que ya no es STK.
+    if (!puedeIntercompany) return
+    const ctrl = new AbortController()
+    intercompanyApi.locales(ctrl.signal)
+      .then(({ data }) => setLocalesIc(data.locales ?? []))
+      .catch(() => {})
+    return () => ctrl.abort()
+  }, [puedeIntercompany])
+
   useEffect(() => {
     const neto = parseFloat(form.importe_neto) || 0
     const descuento = parseFloat(form.descuento) || 0
@@ -934,6 +963,8 @@ export default function PagoForm() {
         // Se marca en el momento de crear -- no se ofrece "Carga con IA" al
         // editar (ver el comentario en Adjuntos), así que solo importa acá.
         ...(!isEditing ? { cargado_con_ia: Boolean(lectura) } : {}),
+        // Intercompany: el backend crea la op espejo después de guardar esta.
+        ...(puedeIntercompany && icActivo && destinoIc ? { id_local_intercompany: destinoIc } : {}),
       }
       if (isEditing) {
         await pagosApi.update(id, payload)
@@ -951,7 +982,17 @@ export default function PagoForm() {
         if (newId && mmForm.tdc && mmForm.monto) {
           await pagosApi.createMM(newId, { tipo: mmForm.tipo, tdc: parseFloat(mmForm.tdc), monto: parseFloat(mmForm.monto) })
         }
-        notify('Pago creado', 'success')
+        // El envío intercompany se hace después de crear: si falló, el pago
+        // igual quedó guardado y hay que decirlo con todas las letras, no
+        // dejar un "Pago creado" que oculte que la otra punta no se creó.
+        const ic = res.data?.intercompany
+        if (ic?.error) {
+          notify(`Pago creado, pero no se pudo enviar al otro local: ${ic.error}. Podés enviarlo desde Intercompany.`, 'error')
+        } else if (ic?.copia) {
+          notify(`Pago creado y enviado a ${ic.copia.local?.nombre ?? 'el otro local'}`, 'success')
+        } else {
+          notify('Pago creado', 'success')
+        }
       }
       clearDraft(draftKey)
       navigate(rutaVolver)
@@ -973,754 +1014,817 @@ export default function PagoForm() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        {/* ── Toggle Ingreso / Egreso ── */}
+        {/* ── Dirección: entra o sale plata ──
+            Era un bloque de 90 px con degradado para una decisión de dos
+            opciones. Sigue siendo lo primero que se ve y sigue teniendo color,
+            pero en una barra fina: el espacio que ocupaba se lo lleva ahora la
+            plata, que es lo que de verdad hay que mirar dos veces. */}
         <div style={{
-          padding: '1rem 1.25rem',
-          borderRadius: 12,
-          marginBottom: '1rem',
-          background: form.ingresa_egreso
-            ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))'
-            : 'linear-gradient(135deg, rgba(239,68,68,0.18), rgba(239,68,68,0.06))',
-          border: `2px solid ${form.ingresa_egreso ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)'}`,
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '8px 12px', borderRadius: 10, marginBottom: '1rem',
+          background: form.ingresa_egreso ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)',
+          border: `1px solid ${form.ingresa_egreso ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)'}`,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{
-              fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em',
-              color: form.ingresa_egreso ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              {form.ingresa_egreso ? <><IcoUp /> INGRESO</> : <><IcoDown /> EGRESO</>}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--t3)' }}>
-              {form.ingresa_egreso ? 'Entra plata al local' : 'Sale plata del local'}
-            </span>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => set('ingresa_egreso', true)}
-              style={{
-                flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, textAlign: 'center',
-                border: form.ingresa_egreso ? '2px solid var(--green, #22c55e)' : '1px solid var(--border)',
-                background: form.ingresa_egreso ? 'rgba(34,197,94,0.2)' : 'transparent',
-                color: form.ingresa_egreso ? 'var(--green, #22c55e)' : 'var(--t3)',
-              }}
-            >
-              Ingreso
-            </button>
-            <button
-              type="button"
-              onClick={() => set('ingresa_egreso', false)}
-              style={{
-                flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
-                fontSize: 13, fontWeight: 700, textAlign: 'center',
-                border: !form.ingresa_egreso ? '2px solid var(--red, #ef4444)' : '1px solid var(--border)',
-                background: !form.ingresa_egreso ? 'rgba(239,68,68,0.2)' : 'transparent',
-                color: !form.ingresa_egreso ? 'var(--red, #ef4444)' : 'var(--t3)',
-              }}
-            >
-              Egreso
-            </button>
+          <span style={{
+            fontSize: 13, fontWeight: 800, letterSpacing: '-0.01em', whiteSpace: 'nowrap',
+            color: form.ingresa_egreso ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            {form.ingresa_egreso ? <><IcoUp /> INGRESO</> : <><IcoDown /> EGRESO</>}
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[[true, 'Entra plata'], [false, 'Sale plata']].map(([valor, texto]) => {
+              const activo = form.ingresa_egreso === valor
+              const color = valor ? 'var(--green, #22c55e)' : 'var(--red, #ef4444)'
+              return (
+                <button
+                  key={String(valor)}
+                  type="button"
+                  onClick={() => set('ingresa_egreso', valor)}
+                  style={{
+                    padding: '5px 14px', borderRadius: 7, cursor: 'pointer',
+                    fontSize: 12, fontWeight: 700,
+                    border: `1px solid ${activo ? color : 'var(--border)'}`,
+                    background: activo ? (valor ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)') : 'transparent',
+                    color: activo ? color : 'var(--t3)',
+                  }}
+                >
+                  {texto}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* ── Información del Pago ── */}
-        <div className="form-panel">
-          <div className="form-panel-title">Información del Pago</div>
-          <div style={{ marginBottom: '0.75rem', fontSize: 13, color: 'var(--t3)' }}>
-            {isEditing
-              ? (form.nro_ord != null && <>N° OP: <strong style={{ color: 'var(--t1)' }}>{form.nro_ord}</strong></>)
-              : (previewNroOrd != null && (
-                <>
-                  N° OP a asignar: <strong style={{ color: 'var(--t1)' }}>{previewNroOrd}</strong>
-                  {' '}<span title="El número final se confirma al guardar; puede variar si se crea otro pago en el mismo local antes de guardar este.">(previsualización)</span>
-                </>
-              ))
-            }
-          </div>
+        {/* ── Dos columnas: el comprobante y la plata ──────────────────
+            A la izquierda de dónde sale el gasto; a la derecha cuánto es.
+            El total y los impuestos que lo componen dejan de estar abajo
+            del pliegue, y la columna de la plata queda pegada mientras se
+            scrollea la otra. En pantalla angosta se apilan (ver .pago-split
+            en app.css). */}
+        <div className="pago-split">
+          <div className="pago-col-datos">
+          {/* ── Información del Pago ── */}
+          <div className="form-panel">
+            <div className="form-panel-title">Información del Pago</div>
+            <div style={{ marginBottom: '0.75rem', fontSize: 13, color: 'var(--t3)' }}>
+              {isEditing
+                ? (form.nro_ord != null && <>N° OP: <strong style={{ color: 'var(--t1)' }}>{form.nro_ord}</strong></>)
+                : (previewNroOrd != null && (
+                  <>
+                    N° OP a asignar: <strong style={{ color: 'var(--t1)' }}>{previewNroOrd}</strong>
+                    {' '}<span title="El número final se confirma al guardar; puede variar si se crea otro pago en el mismo local antes de guardar este.">(previsualización)</span>
+                  </>
+                ))
+              }
+            </div>
 
-          {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
-          <div className="form-grid form-row">
+            {/* fila 1: local (si corresponde) + las 4 fechas juntas */}
+            <div className="form-grid form-row">
 
-            {!activeLocal && locales.length > 0 && (
+              {!activeLocal && locales.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label">Local *</label>
+                  <div className="form-input-wrap">
+                    <select required value={form.id_local} onChange={e => set('id_local', e.target.value)}>
+                      <option value="">Seleccioná un local…</option>
+                      {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
               <div className="form-group">
-                <label className="form-label">Local *</label>
+                <label className="form-label">Fecha Factura *</label>
                 <div className="form-input-wrap">
-                  <select required value={form.id_local} onChange={e => set('id_local', e.target.value)}>
-                    <option value="">Seleccioná un local…</option>
-                    {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-                  </select>
+                  <input type="date" required className={marcadoIA('fecha').trim()} value={form.fecha} onChange={e => set('fecha', e.target.value)} />
                 </div>
               </div>
-            )}
-            <div className="form-group">
-              <label className="form-label">Fecha Factura *</label>
-              <div className="form-input-wrap">
-                <input type="date" required className={marcadoIA('fecha').trim()} value={form.fecha} onChange={e => set('fecha', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Período {isEditing ? '' : '*'}</label>
-              <div className="form-input-wrap">
-                <input type="date" required={!isEditing} value={form.periodo} onChange={e => set('periodo', e.target.value)} />
-              </div>
-              {/* Se avisa acá, al elegir el período, y no solo al guardar: si
-                  aparece recién al final ya cargó toda la factura al lado del
-                  dato equivocado. */}
-              {periodoViejo && (
-                <div className="aviso-periodo-viejo">
-                  <IcoAlerta />
-                  <span>
-                    El período <strong>{fmtMonthUTC(form.periodo)}</strong> cerró hace {diasPeriodo} días.
-                    Se puede guardar igual, pero revisá que sea el correcto.
-                  </span>
+              <div className="form-group">
+                <label className="form-label">Período {isEditing ? '' : '*'}</label>
+                <div className="form-input-wrap">
+                  <input type="date" required={!isEditing} value={form.periodo} onChange={e => set('periodo', e.target.value)} />
                 </div>
-              )}
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="pago-cashflow">Cashflow *</label>
-              <div className="form-input-wrap">
-                <input
-                  id="pago-cashflow"
-                  type="date"
-                  required
-                  value={form.cashflow}
-                  onChange={e => set('cashflow', e.target.value)}
-                  aria-describedby="pago-cashflow-ayuda"
-                  title={cashflowAyuda.titulo}
-                />
-              </div>
-              {/* De dónde salió el valor y cómo volver a lo automático. Sin esto el campo es
-                  una fecha obligatoria sin explicación: quien carga no sabe si el número que
-                  ve lo puso el sistema o lo dejó otra persona. */}
-              <span
-                id="pago-cashflow-ayuda"
-                style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}
-              >
-                {cashflowAyuda.texto}
-                {cashflowAyuda.puedeVolver && (
-                  <button
-                    type="button"
-                    onClick={() => set('cashflow', cashflowAyuda.automatico)}
-                    style={{
-                      background: 'none', border: 'none', padding: 0, marginLeft: 6,
-                      color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
-                      textDecoration: 'underline',
-                    }}
-                    title={`Volver a ${cashflowAyuda.automatico}`}
-                  >
-                    {cashflowAyuda.accion}
-                  </button>
+                {/* Se avisa acá, al elegir el período, y no solo al guardar: si
+                    aparece recién al final ya cargó toda la factura al lado del
+                    dato equivocado. */}
+                {periodoViejo && (
+                  <div className="aviso-periodo-viejo">
+                    <IcoAlerta />
+                    <span>
+                      El período <strong>{fmtMonthUTC(form.periodo)}</strong> cerró hace {diasPeriodo} días.
+                      Se puede guardar igual, pero revisá que sea el correcto.
+                    </span>
+                  </div>
                 )}
-              </span>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Fecha de Pago</label>
-              <div className="form-input-wrap">
-                <input type="datetime-local" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
               </div>
-            </div>
-          </div>
-
-          {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
-          <div className="form-grid form-row">
-            <div className="form-group form-span-2">
-              <label className="form-label">Proveedor</label>
-              <Combobox
-                value={form.id_proveedor}
-                displayValue={nombreProveedor(provSelected)}
-                getKey={p => p.id}
-                getLabel={p => nombreProveedor(p)}
-                getSublabel={p => razonSocialExtra(p)}
-                onSelect={selectProveedor}
-                onClear={clearProveedor}
-                fetchItems={fetchProveedores}
-                onCreate={openProvModal}
-                createLabel="crear proveedor"
-                placeholder="Buscar o crear proveedor…"
-              />
-              {/* En los modos rápidos el proveedor lo pone el local. Si el local
-                  no lo tiene configurado no hay nada que precargar, y sin este
-                  aviso parece que la precarga está rota cuando en realidad
-                  falta el dato. Hoy son 55 de 59 locales. */}
-              {modoRapido && !isEditing && localProveedor === false && (
-                <span className="aviso-periodo-viejo" style={{ marginTop: 7 }}>
-                  <span>
-                    Este local todavía no tiene proveedor asociado, así que hay que elegirlo a mano.
-                    Se configura una sola vez en <strong>Locales → {activeLocal?.nombre || 'el local'} → Proveedor</strong>.
-                  </span>
-                </span>
-              )}
-            </div>
-            <div className="form-group">
-              <label className="form-label">Rubro / Categoría *</label>
-              <Combobox
-                value={form.id_rubcat}
-                displayValue={rubcatSelected ? `${rubcatSelected.rubro?.nombre} / ${rubcatSelected.categoria?.nombre}` : ''}
-                getKey={rc => rc.id}
-                getLabel={rc => `${rc.rubro?.nombre} / ${rc.categoria?.nombre}`}
-                onSelect={rc => { setRubcatSelected(rc); set('id_rubcat', rc.id) }}
-                onClear={() => { setRubcatSelected(null); set('id_rubcat', '') }}
-                fetchItems={fetchRubcats}
-                onCreate={openRubcatModal}
-                createLabel="crear rubro / categoría"
-                placeholder="Buscar o crear rubro / categoría…"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Método de Pago *</label>
-              <div className="form-input-wrap">
-                <select required className={marcadoIA('id_metodo').trim()} value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
-                  <option value="">Seleccioná un método…</option>
-                  {opcionesMetodos(
-                    metodos,
-                    form.id_metodo,
-                    metodoOriginal?.id === form.id_metodo ? metodoOriginal?.nombre : undefined
-                  ).map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
-                </select>
-              </div>
-              {errorMetodos && (
-                <p style={{ color: 'var(--red)', fontSize: '0.8rem', marginTop: 4 }}>
-                  {errorMetodos}{' '}
-                  <button type="button" className="btn btn-sm btn-secondary" onClick={reintentarMetodos}>Reintentar</button>
-                </p>
-              )}
-            </div>
-          </div>
-
-          {duplicado && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.9rem',
-              marginBottom: '0.9rem', borderRadius: 8,
-              background: 'rgba(212,149,42,.12)', border: '1px solid rgba(212,149,42,.35)',
-              color: 'var(--gold-bright)', fontSize: 12.5,
-            }}>
-              ⚠ Ya existe la <strong>OP-{duplicado.nro_ord ?? '—'}</strong> con este proveedor, punto de venta y número de comprobante
-              {duplicado.fecha ? ` (cargada el ${new Date(duplicado.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })})` : ''}. Podés continuar si es correcto.
-            </div>
-          )}
-
-          {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
-          <div className="form-grid form-row">
-            <div className="form-group">
-              <label className="form-label">Punto de Venta{pvNroOpcional ? '' : ' *'}</label>
-              <div className="form-input-wrap">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  required={!pvNroOpcional}
-                  placeholder="00000"
-                  maxLength={5}
-                  value={form.pv}
-                  onChange={e => set('pv', e.target.value.replace(/\D/g, '').slice(0, 5))}
-                  onBlur={e => { if (e.target.value) set('pv', padLeft(e.target.value, 5)) }}
-                  style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Nro Comprobante{pvNroOpcional ? '' : ' *'}</label>
-              <div className="form-input-wrap">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  required={!pvNroOpcional}
-                  placeholder="00000000"
-                  maxLength={8}
-                  value={form.nro}
-                  onChange={e => set('nro', e.target.value.replace(/\D/g, '').slice(0, 8))}
-                  onBlur={e => { if (e.target.value) set('nro', padLeft(e.target.value, 8)) }}
-                  style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Tipo de Comprobante</label>
-              <div className="form-input-wrap">
-                <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
-                  <option value="">—</option>
-                  {/* La lista sale de lib/tiposPago.js: estaba escrita a mano acá y en
-                      PagoList, así que al agregar un tipo uno de los dos quedaba sin él. */}
-                  {TIPOS_PAGO.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Estado</label>
-              <div className="form-input-wrap">
-                <select value={form.estado_op} onChange={e => cambiarEstadoOp(e.target.value)}>
-                  {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              {esCtaCteCliente && !form.id_cliente && (
-                <p className="form-hint form-hint-alerta" style={{ marginTop: 4, marginBottom: 0 }}>
-                  Falta elegir el cliente de la cuenta corriente.
-                </p>
-              )}
-            </div>
-
-            {/* Cliente: solo con estado CTA CTE CLI, y ahí es obligatorio. Aparece
-                recién al elegir el estado porque en el resto de las ops no significa
-                nada -- un cliente con otro estado el backend lo rechaza, y este
-                estado sin cliente sería una deuda a nombre de nadie que no entra en
-                ninguna cuenta corriente (ver lib/cuentaCorriente.js). */}
-            {esCtaCteCliente && (
-              <div className="form-group form-span-2">
-                <label className="form-label">Cliente *</label>
-                <Combobox
-                  value={form.id_cliente}
-                  displayValue={cliSelected ? nombreCliente(cliSelected) : ''}
-                  getKey={c => c.id}
-                  getLabel={nombreCliente}
-                  onSelect={selectCliente}
-                  onClear={clearCliente}
-                  fetchItems={fetchClientes}
-                  placeholder="Buscar cliente…"
-                />
-                <p className="form-hint" style={{ marginTop: 4, marginBottom: 0 }}>
-                  Con quién es la cuenta. Entra a su cuenta corriente <strong>ya</strong>,
-                  sin esperar el pago: como egreso es un gasto pendiente y como ingreso
-                  es plata a cobrar. Al marcarla pagada pasa a gasto o a ingreso, y el
-                  saldo no cambia. Solo se listan los clientes activos; se dan de alta
-                  en <Link to="/clientes">Clientes</Link>.
-                </p>
-              </div>
-            )}
-
-          </div>
-
-          {/* pago periódico: suelto, en su propia card chica */}
-          <label className="periodico-card">
-            <input
-              type="checkbox"
-              checked={form.periodico}
-              onChange={e => set('periodico', e.target.checked)}
-            />
-            <span>Pago periódico (recurrente)</span>
-          </label>
-        </div>
-
-        {/* ── Montos ── */}
-        <div className="form-panel">
-          <div className="form-panel-title">Montos</div>
-          <div className="form-grid">
-            <div className="form-group">
-              <label className="form-label">Importe Neto</label>
-              <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={form.importe_neto} onChange={e => set('importe_neto', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Descuento</label>
-              <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={form.descuento} onChange={e => set('descuento', e.target.value)} />
-              </div>
-              {/* Se dice de dónde salió el número: si no, aparece un descuento
-                  que nadie escribió y no se sabe si está bien. */}
-              {esMovStock && !isEditing && pctDescuento > 0 && (
-                <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
-                  {descuentoManual
-                    ? `Escrito a mano (el automático de este local es ${pctDescuento}%)`
-                    : `${pctDescuento}% automático de este local`}
-                  {!descuentoManual && form.descuento && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="pago-cashflow">Cashflow *</label>
+                <div className="form-input-wrap">
+                  <input
+                    id="pago-cashflow"
+                    type="date"
+                    required
+                    value={form.cashflow}
+                    onChange={e => set('cashflow', e.target.value)}
+                    aria-describedby="pago-cashflow-ayuda"
+                    title={cashflowAyuda.titulo}
+                  />
+                </div>
+                {/* De dónde salió el valor y cómo volver a lo automático. Sin esto el campo es
+                    una fecha obligatoria sin explicación: quien carga no sabe si el número que
+                    ve lo puso el sistema o lo dejó otra persona. */}
+                <span
+                  id="pago-cashflow-ayuda"
+                  style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}
+                >
+                  {cashflowAyuda.texto}
+                  {cashflowAyuda.puedeVolver && (
                     <button
                       type="button"
-                      onClick={() => set('descuento', '')}
+                      onClick={() => set('cashflow', cashflowAyuda.automatico)}
                       style={{
                         background: 'none', border: 'none', padding: 0, marginLeft: 6,
                         color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
                         textDecoration: 'underline',
                       }}
-                      title="Quitar el descuento automático de este pago"
+                      title={`Volver a ${cashflowAyuda.automatico}`}
                     >
-                      quitar
+                      {cashflowAyuda.accion}
                     </button>
                   )}
                 </span>
-              )}
-            </div>
-            <div className="form-group">
-              <label className="form-label" title="Se calcula solo: Neto + Impuestos − Descuento">Importe Total</label>
-              <div className="form-input-wrap">
-                <input type="number" step="0.01" placeholder="0.00" value={form.importe} disabled readOnly style={{ opacity: 0.75 }} />
               </div>
-              {/* El total ya viene descontado, y eso no se ve mirando el número:
-                  quien carga tiene que saber que el local aplicó su descuento,
-                  o va a creer que el sistema le cambió el importe de la factura. */}
-              {esMovStock && Number(form.descuento) > 0 && (
-                <span style={{ fontSize: 11, color: 'var(--gold-bright)', marginTop: 3, display: 'block' }}>
-                  Ya tiene descontados {fmtMoneda(form.descuento)}
-                  {!descuentoManual && pctDescuento > 0 && ` (${pctDescuento}% de este local)`}
-                </span>
-              )}
-            </div>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
-            El importe total se calcula automáticamente (Neto + Impuestos − Descuento).
-          </div>
-          <div style={{ marginTop: '0.5rem' }}>
-            <span className={`badge ${form.pagado ? 'badge-green' : 'badge-muted'}`} style={{ fontSize: 12 }}>
-              {form.pagado ? 'Pagado' : 'Pendiente de pago'}
-            </span>
-          </div>
-        </div>
-
-        {/* ── Impuestos ── */}
-        <div className="form-panel">
-          <div className="form-panel-title">Impuestos</div>
-
-          {/* Tabla de impuestos: al crear son locales (se mandan junto al pago),
-              al editar cada cambio pega directo al backend. */}
-          {isEditing ? (
-            savedImp.length > 0 && (
-              <div style={{ marginBottom: '1rem' }}>
-                <table className="data-table" style={{ marginBottom: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Tipo</th>
-                      <th>Monto</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {savedImp.map((imp) => (
-                      <tr key={imp.id}>
-                        {editingImpId === imp.id ? (
-                          <>
-                            <td>
-                              <select className="filter-select" style={{ width: '100%' }} value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
-                                {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
-                              </select>
-                            </td>
-                            <td>
-                              <input
-                                type="number" step="0.01" style={{ maxWidth: 110 }}
-                                value={editImpForm.monto}
-                                onChange={e => setEditImpForm(f => ({ ...f, monto: e.target.value }))}
-                              />
-                            </td>
-                            <td style={{ display: 'flex', gap: 4 }}>
-                              <button type="button" className="btn btn-sm btn-primary" onClick={() => handleSaveSavedImp(imp.id)}>Guardar</button>
-                              <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditingImpId(null)}>Cancelar</button>
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td><span className="badge badge-blue">{imp.tipo}</span></td>
-                            <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                            <td style={{ display: 'flex', gap: 4 }}>
-                              <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditSavedImp(imp)}>
-                                <IcoEdit />
-                              </button>
-                              <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteSavedImp(imp.id)}>
-                                <IcoTrash />
-                              </button>
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                    <tr>
-                      <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
-                      <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
-                        ${impuestosSum.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )
-          ) : (
-            pendingImp.length > 0 && (
-              <div style={{ marginBottom: '1rem' }}>
-                <table className="data-table" style={{ marginBottom: 0 }}>
-                  <thead>
-                    <tr>
-                      <th>Tipo</th>
-                      <th>Monto</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingImp.map((imp, i) => (
-                      <tr key={i}>
-                        <td><span className="badge badge-blue">{imp.tipo}</span></td>
-                        <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-danger btn-icon"
-                            onClick={() => setPendingImp(prev => prev.filter((_, j) => j !== i))}
-                          >
-                            <IcoTrash />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    <tr>
-                      <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
-                      <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
-                        ${pendingImp.reduce((acc, i) => acc + Number(i.monto), 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )
-          )}
-
-          {/* Formulario para agregar un impuesto */}
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
-              <label className="form-label">Tipo</label>
-              <div className="form-input-wrap">
-                <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
-                  {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
-                </select>
+              <div className="form-group">
+                <label className="form-label">Fecha de Pago</label>
+                <div className="form-input-wrap">
+                  <input type="datetime-local" value={form.fecha_pago} onChange={e => set('fecha_pago', e.target.value)} />
+                </div>
               </div>
             </div>
-            <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
-              <label className="form-label">Monto</label>
-              <div className="form-input-wrap">
-                <input
-                  type="number" step="0.01" placeholder="0.00"
-                  value={impForm.monto}
-                  onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
+
+            {/* fila 2: proveedor, rubro/categoria, metodo de pago */}
+            <div className="form-grid form-row">
+              <div className="form-group form-span-2">
+                <label className="form-label">Proveedor</label>
+                <Combobox
+                  value={form.id_proveedor}
+                  displayValue={nombreProveedor(provSelected)}
+                  getKey={p => p.id}
+                  getLabel={p => nombreProveedor(p)}
+                  getSublabel={p => razonSocialExtra(p)}
+                  onSelect={selectProveedor}
+                  onClear={clearProveedor}
+                  fetchItems={fetchProveedores}
+                  onCreate={openProvModal}
+                  createLabel="crear proveedor"
+                  placeholder="Buscar o crear proveedor…"
+                />
+                {/* En los modos rápidos el proveedor lo pone el local. Si el local
+                    no lo tiene configurado no hay nada que precargar, y sin este
+                    aviso parece que la precarga está rota cuando en realidad
+                    falta el dato. Hoy son 55 de 59 locales. */}
+                {modoRapido && !isEditing && localProveedor === false && (
+                  <span className="aviso-periodo-viejo" style={{ marginTop: 7 }}>
+                    <span>
+                      Este local todavía no tiene proveedor asociado, así que hay que elegirlo a mano.
+                      Se configura una sola vez en <strong>Locales → {activeLocal?.nombre || 'el local'} → Proveedor</strong>.
+                    </span>
+                  </span>
+                )}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Rubro / Categoría *</label>
+                <Combobox
+                  value={form.id_rubcat}
+                  displayValue={rubcatSelected ? `${rubcatSelected.rubro?.nombre} / ${rubcatSelected.categoria?.nombre}` : ''}
+                  getKey={rc => rc.id}
+                  getLabel={rc => `${rc.rubro?.nombre} / ${rc.categoria?.nombre}`}
+                  onSelect={rc => { setRubcatSelected(rc); set('id_rubcat', rc.id) }}
+                  onClear={() => { setRubcatSelected(null); set('id_rubcat', '') }}
+                  fetchItems={fetchRubcats}
+                  onCreate={openRubcatModal}
+                  createLabel="crear rubro / categoría"
+                  placeholder="Buscar o crear rubro / categoría…"
                 />
               </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ whiteSpace: 'nowrap' }}
-              disabled={!impForm.monto || savingImp}
-              onClick={() => {
-                if (isEditing) { handleAddSavedImp(); return }
-                if (!impForm.monto) return
-                setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
-                setImpForm(f => ({ ...f, monto: '' }))
-              }}
-            >
-              {savingImp ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <IcoPlus />} Agregar
-            </button>
-          </div>
-        </div>
-
-        {/* ── Multimoneda (solo al crear) ── */}
-        {!isEditing && (
-          <div className="form-panel">
-            <div className="form-panel-title">Multimoneda</div>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ margin: 0, flex: '0 0 80px' }}>
-                <label className="form-label">Moneda</label>
+              <div className="form-group">
+                <label className="form-label">Método de Pago *</label>
                 <div className="form-input-wrap">
-                  <select value={mmForm.tipo} onChange={e => onMmChange('tipo', e.target.value)}>
-                    {TIPOS_MM.map(t => <option key={t}>{t}</option>)}
+                  <select required className={marcadoIA('id_metodo').trim()} value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
+                    <option value="">Seleccioná un método…</option>
+                    {opcionesMetodos(
+                      metodos,
+                      form.id_metodo,
+                      metodoOriginal?.id === form.id_metodo ? metodoOriginal?.nombre : undefined
+                    ).map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                  </select>
+                </div>
+                {errorMetodos && (
+                  <p style={{ color: 'var(--red)', fontSize: '0.8rem', marginTop: 4 }}>
+                    {errorMetodos}{' '}
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={reintentarMetodos}>Reintentar</button>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {duplicado && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '0.6rem 0.9rem',
+                marginBottom: '0.9rem', borderRadius: 8,
+                background: 'rgba(212,149,42,.12)', border: '1px solid rgba(212,149,42,.35)',
+                color: 'var(--gold-bright)', fontSize: 12.5,
+              }}>
+                ⚠ Ya existe la <strong>OP-{duplicado.nro_ord ?? '—'}</strong> con este proveedor, punto de venta y número de comprobante
+                {duplicado.fecha ? ` (cargada el ${new Date(duplicado.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })})` : ''}. Podés continuar si es correcto.
+              </div>
+            )}
+
+            {/* fila 3: punto de venta, nro comprobante, tipo de comprobante, estado */}
+            <div className="form-grid form-row">
+              <div className="form-group">
+                <label className="form-label">Punto de Venta{pvNroOpcional ? '' : ' *'}</label>
+                <div className="form-input-wrap">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required={!pvNroOpcional}
+                    placeholder="00000"
+                    maxLength={5}
+                    value={form.pv}
+                    onChange={e => set('pv', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                    onBlur={e => { if (e.target.value) set('pv', padLeft(e.target.value, 5)) }}
+                    style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Nro Comprobante{pvNroOpcional ? '' : ' *'}</label>
+                <div className="form-input-wrap">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required={!pvNroOpcional}
+                    placeholder="00000000"
+                    maxLength={8}
+                    value={form.nro}
+                    onChange={e => set('nro', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                    onBlur={e => { if (e.target.value) set('nro', padLeft(e.target.value, 8)) }}
+                    style={{ fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Tipo de Comprobante</label>
+                <div className="form-input-wrap">
+                  <select value={form.id_tipo} onChange={e => set('id_tipo', e.target.value)}>
+                    <option value="">—</option>
+                    {/* La lista sale de lib/tiposPago.js: estaba escrita a mano acá y en
+                        PagoList, así que al agregar un tipo uno de los dos quedaba sin él. */}
+                    {TIPOS_PAGO.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
-                <label className="form-label">TDC</label>
+
+              {/* Intercompany: aparece al elegir STK, en la misma fila que el
+                  tipo. Un check y, al marcarlo, el local al lado — ocupa una
+                  celda como cualquier otro campo, no una barra de ancho completo.
+
+                  Antes esto se marcaba usando "Intercompany" como MÉTODO DE
+                  PAGO, que confundía: el método dice cómo se pagó (efectivo,
+                  transferencia), no qué es la operación. */}
+              {puedeIntercompany && destinosIc.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label">Intercompany</label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <label
+                      className="periodico-card"
+                      style={{ padding: '9px 12px', flexShrink: 0 }}
+                      title="La plata de esta op va a otro local del grupo"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={icActivo}
+                        onChange={(e) => {
+                          setIcActivo(e.target.checked)
+                          // Con un solo destino posible no tiene sentido pedir que
+                          // lo elijan de una lista de uno.
+                          setDestinoIc(e.target.checked && destinosIc.length === 1 ? destinosIc[0].id : '')
+                        }}
+                      />
+                      Enviar
+                    </label>
+                    {icActivo && (
+                      <div className="form-input-wrap" style={{ flex: 1, minWidth: 0 }}>
+                        <select value={destinoIc} onChange={(e) => setDestinoIc(e.target.value)}>
+                          <option value="">¿A qué local?</option>
+                          {destinosIc.map((l) => (
+                            <option key={l.id} value={l.id}>{l.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  {icActivo && (
+                    <p className="form-hint" style={{ margin: '4px 0 0' }}>
+                      {destinoIc
+                        ? `Se crea una op igual en ${destinosIc.find(l => l.id === destinoIc)?.nombre}, como ingreso. Esta no cambia.`
+                        : 'Elegí el local que recibe.'}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="form-group">
+                <label className="form-label">Estado</label>
                 <div className="form-input-wrap">
-                  <input type="number" step="0.0001" placeholder="1000.00" value={mmForm.tdc} onChange={e => onMmChange('tdc', e.target.value)} />
+                  <select value={form.estado_op} onChange={e => cambiarEstadoOp(e.target.value)}>
+                    {ESTADO_OP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                {esCtaCteCliente && !form.id_cliente && (
+                  <p className="form-hint form-hint-alerta" style={{ marginTop: 4, marginBottom: 0 }}>
+                    Falta elegir el cliente de la cuenta corriente.
+                  </p>
+                )}
+              </div>
+
+              {/* Cliente: solo con estado CTA CTE CLI, y ahí es obligatorio. Aparece
+                  recién al elegir el estado porque en el resto de las ops no significa
+                  nada -- un cliente con otro estado el backend lo rechaza, y este
+                  estado sin cliente sería una deuda a nombre de nadie que no entra en
+                  ninguna cuenta corriente (ver lib/cuentaCorriente.js). */}
+              {esCtaCteCliente && (
+                <div className="form-group form-span-2">
+                  <label className="form-label">Cliente *</label>
+                  <Combobox
+                    value={form.id_cliente}
+                    displayValue={cliSelected ? nombreCliente(cliSelected) : ''}
+                    getKey={c => c.id}
+                    getLabel={nombreCliente}
+                    onSelect={selectCliente}
+                    onClear={clearCliente}
+                    fetchItems={fetchClientes}
+                    placeholder="Buscar cliente…"
+                  />
+                  <p className="form-hint" style={{ marginTop: 4, marginBottom: 0 }}>
+                    Con quién es la cuenta. Entra a su cuenta corriente <strong>ya</strong>,
+                    sin esperar el pago: como egreso es un gasto pendiente y como ingreso
+                    es plata a cobrar. Al marcarla pagada pasa a gasto o a ingreso, y el
+                    saldo no cambia. Solo se listan los clientes activos; se dan de alta
+                    en <Link to="/clientes">Clientes</Link>.
+                  </p>
+                </div>
+              )}
+
+            </div>
+
+            {/* pago periódico: suelto, en su propia card chica */}
+            <label className="periodico-card">
+              <input
+                type="checkbox"
+                checked={form.periodico}
+                onChange={e => set('periodico', e.target.checked)}
+              />
+              <span>Pago periódico (recurrente)</span>
+            </label>
+          </div>
+
+          {/* ── Montos ── */}
+          <div className="form-panel pago-adjuntos">
+            <div className="form-panel-title">Adjuntos</div>
+
+            {/* ── Carga con IA ─────────────────────────────────────────────────
+                Fila propia arriba del panel, y no una celda del `form-grid` de
+                abajo: ahi el boton quedaba desalineado contra Foto y PDF, que van
+                envueltos en un form-group CON label, asi que arrancaban 26px mas
+                abajo. Ahora el boton tambien tiene su label y los tres alinean.
+
+                Dos columnas: el boton a la izquierda con su ancho, y los avisos de
+                la lectura a la derecha, ocupando el espacio que antes quedaba
+                vacio. Antes los avisos iban abajo a todo el ancho y empujaban los
+                adjuntos fuera de la pantalla.
+
+                El de duplicado se repite aca a proposito: el original vive arriba,
+                en la seccion del comprobante, y cargando con IA se esta mirando
+                esta parte de la pantalla -- el aviso existia pero no se veia. */}
+            {!isEditing && (
+              <div className="carga-ia-fila">
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Carga con IA</label>
+                  <CargaIA
+                    onArchivo={cargarConIA}
+                    leyendo={leyendoFactura}
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* La columna derecha lleva su propio label, igual que la del boton.
+                    Sin el, el panel arrancaba 21px mas arriba --el alto del label de
+                    la izquierda-- y aunque los dos terminaban a la misma altura, el
+                    escalon de arriba se veia como que uno era mas grande. */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label">Resultado de la lectura</label>
+                  <div className="carga-ia-panel">
+                  {(leyendoFactura || lectura || fallaLectura) && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      {/* El "Leyendo la factura…" NO se repite acá: ya lo dice el
+                          boton de al lado, con su spinner, que es donde la persona
+                          acaba de apretar. Estaba en los dos lugares y se leia como
+                          si fueran dos procesos distintos. Acá se dice lo que el
+                          boton no puede: que va a pasar cuando termine. */}
+                      {leyendoFactura && (
+                        <p className="form-hint" style={{ margin: 0 }}>
+                          Cuando termine, acá van los campos que precargó y los avisos
+                          {leyendoTipo === 'pdf' ? ' (los PDF tardan un poco más)' : ''}.
+                        </p>
+                      )}
+
+                      {/* La lectura falló o el archivo no era legible. Antes salía como
+                          toast arriba y se perdía; el archivo igual quedó adjunto. */}
+                      {!leyendoFactura && fallaLectura && (
+                        <div className={`aviso-lectura ${fallaLectura.tono}`} style={{ marginBottom: 0 }}>
+                          <div>
+                            <strong>{fallaLectura.titulo}</strong> {fallaLectura.detalle}
+                          </div>
+                        </div>
+                      )}
+
+                      {!leyendoFactura && lectura && (
+                        <div className="aviso-lectura" style={{ marginBottom: 0 }}>
+                          <div>
+                            <strong>Leí la factura: {(lectura.marcados ?? []).length} campos precargados.</strong>{' '}
+                            Revisá los que quedaron marcados antes de guardar.
+                            {lectura.proveedor?.estado === 'encontrado' && (
+                              <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
+                            )}
+                            {lectura.proveedor?.estado === 'no_encontrado' && (
+                              <> No hay proveedor con CUIT <strong>{lectura.proveedor.cuit}</strong>
+                                {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
+                                : elegilo o crealo a mano.</>
+                            )}
+                            {/* Si leyó la condición de venta pero no la pudo mapear, se dice
+                                qué decía la factura para que la persona elija con ese dato. */}
+                            {lectura.metodo && !lectura.metodo.id && (
+                              <div style={{ marginTop: 6 }}>
+                                La factura dice <strong>«{lectura.metodo.texto}»</strong> como condición de venta,
+                                pero no coincide con ningún método de pago del sistema: elegilo a mano.
+                              </div>
+                            )}
+                            {/* El total no se precarga (se calcula solo), asi que si la factura
+                                decia otro numero conviene avisarlo: o se leyo mal un importe, o
+                                falta un impuesto. */}
+                            {lectura.aritmetica?.verificable && lectura.aritmetica.cuadra === false && (
+                              <div style={{ marginTop: 6 }}>
+                                ⚠ La factura dice <strong>{fmtMoneda(lectura.totalFactura)}</strong> pero neto + impuestos − descuento
+                                da <strong>{fmtMoneda(lectura.aritmetica.esperado)}</strong>. Revisá los importes.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Duplicado: el mismo estado que el aviso de arriba. */}
+                  {!leyendoFactura && duplicado && (
+                    <div className="aviso-lectura warn" style={{ marginBottom: 0 }}>
+                      <div>
+                        <strong>Ojo: ya existe la OP-{duplicado.nro_ord ?? '—'}</strong> con este proveedor,
+                        punto de venta y número de comprobante
+                        {duplicado.fecha ? ` (cargada el ${new Date(duplicado.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })})` : ''}.
+                        Se puede guardar igual si corresponde.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Si no se pudo mirar el duplicado, se dice: callarse se lee como
+                      "no hay duplicado", y no es lo mismo que "no pude verificar". */}
+                  {!leyendoFactura && lectura && !duplicado && faltaParaDuplicado({
+                    id_proveedor: form.id_proveedor, pv: form.pv, nro: form.nro,
+                  }).length > 0 && (
+                    <div className="aviso-lectura" style={{ marginBottom: 0 }}>
+                      <div>
+                        No pude verificar si está duplicada: falta{' '}
+                        {faltaParaDuplicado({ id_proveedor: form.id_proveedor, pv: form.pv, nro: form.nro }).join(' y ')}.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Estado inicial: el panel no queda como un hueco sin explicar. */}
+                  {!leyendoFactura && !lectura && !fallaLectura && !duplicado && (
+                    <p className="form-hint" style={{ margin: 0 }}>
+                      Elegí una foto o un PDF de la factura y se precargan fecha, tipo,
+                      punto de venta, número, neto, descuento e impuestos. El período queda
+                      igual a la fecha de la factura, y se avisa si la factura ya está cargada.
+                      El archivo queda adjunto igual.
+                    </p>
+                  )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dos columnas parejas y no el auto-fill del form-grid: con el boton de
+                IA fuera de esta grilla quedaban solo dos celdas de 220px pegadas a la
+                izquierda y media seccion vacia, contra la fila de arriba que ocupa
+                todo el ancho. */}
+            <div className="form-grid adjuntos-grid">
+              <AdjuntoUpload
+                label="Foto"
+                accept="image/*"
+                value={form.foto_url}
+                file={fotoFile}
+                onFileSelected={setFotoFile}
+                onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null); setFallaLectura(null) }}
+                uploading={uploadingFoto || leyendoTipo === 'foto'}
+                // En edición el adjunto guardado se trae por el endpoint firmado
+                // (la url cruda del bucket no es accesible) y se ve en el cuadro.
+                cargarContenido={isEditing ? async () => {
+                  const r = await client.get(`/pagos/${id}/attachment?type=foto`, { responseType: 'blob' })
+                  return URL.createObjectURL(r.data)
+                } : undefined}
+              />
+              <AdjuntoUpload
+                label="PDF"
+                accept=".pdf,application/pdf"
+                value={form.pdf_url}
+                file={pdfFile}
+                onFileSelected={setPdfFile}
+                onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null); setFallaLectura(null) }}
+                uploading={uploadingPdf || leyendoTipo === 'pdf'}
+                cargarContenido={isEditing ? async () => {
+                  const r = await client.get(`/pagos/${id}/attachment?type=pdf`, { responseType: 'blob' })
+                  return URL.createObjectURL(r.data)
+                } : undefined}
+              />
+            </div>
+          </div>
+
+          {/* ── Notas ── */}
+          </div>
+
+          <div className="pago-col-plata">
+          <div className="form-panel">
+            <div className="form-panel-title">Montos</div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Importe Neto</label>
+                <div className="form-input-wrap">
+                  <input type="number" step="0.01" placeholder="0.00" value={form.importe_neto} onChange={e => set('importe_neto', e.target.value)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Descuento</label>
+                <div className="form-input-wrap">
+                  <input type="number" step="0.01" placeholder="0.00" value={form.descuento} onChange={e => set('descuento', e.target.value)} />
+                </div>
+                {/* Se dice de dónde salió el número: si no, aparece un descuento
+                    que nadie escribió y no se sabe si está bien. */}
+                {esMovStock && !isEditing && pctDescuento > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--t3)', marginTop: 3, display: 'block' }}>
+                    {descuentoManual
+                      ? `Escrito a mano (el automático de este local es ${pctDescuento}%)`
+                      : `${pctDescuento}% automático de este local`}
+                    {!descuentoManual && form.descuento && (
+                      <button
+                        type="button"
+                        onClick={() => set('descuento', '')}
+                        style={{
+                          background: 'none', border: 'none', padding: 0, marginLeft: 6,
+                          color: 'var(--gold-bright)', cursor: 'pointer', fontSize: 11,
+                          textDecoration: 'underline',
+                        }}
+                        title="Quitar el descuento automático de este pago"
+                      >
+                        quitar
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+              {/* El total ocupa la fila entera y con tipografía grande: es el
+                  dato que todos revisan dos veces, y en la columna de la plata
+                  tiene que leerse de un vistazo mientras se cargan los
+                  impuestos que lo componen. */}
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label" title="Se calcula solo: Neto + Impuestos − Descuento">Importe Total</label>
+                <div className="form-input-wrap">
+                  <input
+                    type="number" step="0.01" placeholder="0.00" value={form.importe} disabled readOnly
+                    style={{
+                      opacity: 1, fontSize: 21, fontWeight: 700, height: 52,
+                      color: 'var(--gold-bright)', fontVariantNumeric: 'tabular-nums',
+                    }}
+                  />
+                </div>
+                {/* El total ya viene descontado, y eso no se ve mirando el número:
+                    quien carga tiene que saber que el local aplicó su descuento,
+                    o va a creer que el sistema le cambió el importe de la factura. */}
+                {esMovStock && Number(form.descuento) > 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--gold-bright)', marginTop: 3, display: 'block' }}>
+                    Ya tiene descontados {fmtMoneda(form.descuento)}
+                    {!descuentoManual && pctDescuento > 0 && ` (${pctDescuento}% de este local)`}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
+              El importe total se calcula automáticamente (Neto + Impuestos − Descuento).
+            </div>
+            <div style={{ marginTop: '0.5rem' }}>
+              <span className={`badge ${form.pagado ? 'badge-green' : 'badge-muted'}`} style={{ fontSize: 12 }}>
+                {form.pagado ? 'Pagado' : 'Pendiente de pago'}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Impuestos ── */}
+          <div className="form-panel">
+            <div className="form-panel-title">Impuestos</div>
+
+            {/* Tabla de impuestos: al crear son locales (se mandan junto al pago),
+                al editar cada cambio pega directo al backend. */}
+            {isEditing ? (
+              savedImp.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <table className="data-table" style={{ marginBottom: 0 }}>
+                    <thead>
+                      <tr>
+                        <th>Tipo</th>
+                        <th>Monto</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedImp.map((imp) => (
+                        <tr key={imp.id}>
+                          {editingImpId === imp.id ? (
+                            <>
+                              <td>
+                                <select className="filter-select" style={{ width: '100%' }} value={editImpForm.tipo} onChange={e => setEditImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                                  {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                                </select>
+                              </td>
+                              <td>
+                                <input
+                                  type="number" step="0.01" style={{ maxWidth: 110 }}
+                                  value={editImpForm.monto}
+                                  onChange={e => setEditImpForm(f => ({ ...f, monto: e.target.value }))}
+                                />
+                              </td>
+                              <td style={{ display: 'flex', gap: 4 }}>
+                                <button type="button" className="btn btn-sm btn-primary" onClick={() => handleSaveSavedImp(imp.id)}>Guardar</button>
+                                <button type="button" className="btn btn-sm btn-secondary" onClick={() => setEditingImpId(null)}>Cancelar</button>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td><span className="badge badge-blue">{imp.tipo}</span></td>
+                              <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                              <td style={{ display: 'flex', gap: 4 }}>
+                                <button type="button" className="btn btn-sm btn-secondary btn-icon" onClick={() => handleEditSavedImp(imp)}>
+                                  <IcoEdit />
+                                </button>
+                                <button type="button" className="btn btn-sm btn-danger btn-icon" onClick={() => handleDeleteSavedImp(imp.id)}>
+                                  <IcoTrash />
+                                </button>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                      <tr>
+                        <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
+                        <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
+                          ${impuestosSum.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : (
+              pendingImp.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <table className="data-table" style={{ marginBottom: 0 }}>
+                    <thead>
+                      <tr>
+                        <th>Tipo</th>
+                        <th>Monto</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingImp.map((imp, i) => (
+                        <tr key={i}>
+                          <td><span className="badge badge-blue">{imp.tipo}</span></td>
+                          <td className="td-number">${Number(imp.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-danger btn-icon"
+                              onClick={() => setPendingImp(prev => prev.filter((_, j) => j !== i))}
+                            >
+                              <IcoTrash />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td style={{ color: 'var(--t3)', fontSize: 11 }}>Total impuestos</td>
+                        <td className="td-number" style={{ fontWeight: 700, color: 'var(--gold-bright)' }}>
+                          ${pendingImp.reduce((acc, i) => acc + Number(i.monto), 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+
+            {/* Formulario para agregar un impuesto */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ margin: 0, flex: '0 0 140px' }}>
+                <label className="form-label">Tipo</label>
+                <div className="form-input-wrap">
+                  <select value={impForm.tipo} onChange={e => setImpForm(f => ({ ...f, tipo: e.target.value }))}>
+                    {TIPOS_IMP.map(t => <option key={t}>{t}</option>)}
+                  </select>
                 </div>
               </div>
               <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
                 <label className="form-label">Monto</label>
                 <div className="form-input-wrap">
-                  <input type="number" step="0.01" placeholder="0.00" value={mmForm.monto} onChange={e => onMmChange('monto', e.target.value)} />
+                  <input
+                    type="number" step="0.01" placeholder="0.00"
+                    value={impForm.monto}
+                    onChange={e => setImpForm(f => ({ ...f, monto: e.target.value }))}
+                  />
                 </div>
               </div>
-              {mmForm.tdc && mmForm.monto && (
-                <div style={{ fontSize: 12, color: 'var(--gold-bright)', fontWeight: 700, alignSelf: 'center', whiteSpace: 'nowrap' }}>
-                  = ${(parseFloat(mmForm.tdc) * parseFloat(mmForm.monto)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                </div>
-              )}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ whiteSpace: 'nowrap' }}
+                disabled={!impForm.monto || savingImp}
+                onClick={() => {
+                  if (isEditing) { handleAddSavedImp(); return }
+                  if (!impForm.monto) return
+                  setPendingImp(prev => [...prev, { tipo: impForm.tipo, monto: impForm.monto }])
+                  setImpForm(f => ({ ...f, monto: '' }))
+                }}
+              >
+                {savingImp ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <IcoPlus />} Agregar
+              </button>
             </div>
           </div>
-        )}
 
-        {/* ── Adjuntos ── */}
-        <div className="form-panel">
-          <div className="form-panel-title">Adjuntos</div>
-
-          {/* ── Carga con IA ─────────────────────────────────────────────────
-              Fila propia arriba del panel, y no una celda del `form-grid` de
-              abajo: ahi el boton quedaba desalineado contra Foto y PDF, que van
-              envueltos en un form-group CON label, asi que arrancaban 26px mas
-              abajo. Ahora el boton tambien tiene su label y los tres alinean.
-
-              Dos columnas: el boton a la izquierda con su ancho, y los avisos de
-              la lectura a la derecha, ocupando el espacio que antes quedaba
-              vacio. Antes los avisos iban abajo a todo el ancho y empujaban los
-              adjuntos fuera de la pantalla.
-
-              El de duplicado se repite aca a proposito: el original vive arriba,
-              en la seccion del comprobante, y cargando con IA se esta mirando
-              esta parte de la pantalla -- el aviso existia pero no se veia. */}
+          {/* ── Multimoneda (solo al crear) ── */}
           {!isEditing && (
-            <div className="carga-ia-fila">
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Carga con IA</label>
-                <CargaIA
-                  onArchivo={cargarConIA}
-                  leyendo={leyendoFactura}
-                  disabled={loading}
-                />
-              </div>
-
-              {/* La columna derecha lleva su propio label, igual que la del boton.
-                  Sin el, el panel arrancaba 21px mas arriba --el alto del label de
-                  la izquierda-- y aunque los dos terminaban a la misma altura, el
-                  escalon de arriba se veia como que uno era mas grande. */}
-              <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label">Resultado de la lectura</label>
-                <div className="carga-ia-panel">
-                {(leyendoFactura || lectura || fallaLectura) && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    {/* El "Leyendo la factura…" NO se repite acá: ya lo dice el
-                        boton de al lado, con su spinner, que es donde la persona
-                        acaba de apretar. Estaba en los dos lugares y se leia como
-                        si fueran dos procesos distintos. Acá se dice lo que el
-                        boton no puede: que va a pasar cuando termine. */}
-                    {leyendoFactura && (
-                      <p className="form-hint" style={{ margin: 0 }}>
-                        Cuando termine, acá van los campos que precargó y los avisos
-                        {leyendoTipo === 'pdf' ? ' (los PDF tardan un poco más)' : ''}.
-                      </p>
-                    )}
-
-                    {/* La lectura falló o el archivo no era legible. Antes salía como
-                        toast arriba y se perdía; el archivo igual quedó adjunto. */}
-                    {!leyendoFactura && fallaLectura && (
-                      <div className={`aviso-lectura ${fallaLectura.tono}`} style={{ marginBottom: 0 }}>
-                        <div>
-                          <strong>{fallaLectura.titulo}</strong> {fallaLectura.detalle}
-                        </div>
-                      </div>
-                    )}
-
-                    {!leyendoFactura && lectura && (
-                      <div className="aviso-lectura" style={{ marginBottom: 0 }}>
-                        <div>
-                          <strong>Leí la factura: {(lectura.marcados ?? []).length} campos precargados.</strong>{' '}
-                          Revisá los que quedaron marcados antes de guardar.
-                          {lectura.proveedor?.estado === 'encontrado' && (
-                            <> Proveedor: <strong>{lectura.proveedor.nombre || lectura.proveedor.razon_social}</strong>.</>
-                          )}
-                          {lectura.proveedor?.estado === 'no_encontrado' && (
-                            <> No hay proveedor con CUIT <strong>{lectura.proveedor.cuit}</strong>
-                              {lectura.proveedor.razon_social ? <> ({lectura.proveedor.razon_social})</> : null}
-                              : elegilo o crealo a mano.</>
-                          )}
-                          {/* Si leyó la condición de venta pero no la pudo mapear, se dice
-                              qué decía la factura para que la persona elija con ese dato. */}
-                          {lectura.metodo && !lectura.metodo.id && (
-                            <div style={{ marginTop: 6 }}>
-                              La factura dice <strong>«{lectura.metodo.texto}»</strong> como condición de venta,
-                              pero no coincide con ningún método de pago del sistema: elegilo a mano.
-                            </div>
-                          )}
-                          {/* El total no se precarga (se calcula solo), asi que si la factura
-                              decia otro numero conviene avisarlo: o se leyo mal un importe, o
-                              falta un impuesto. */}
-                          {lectura.aritmetica?.verificable && lectura.aritmetica.cuadra === false && (
-                            <div style={{ marginTop: 6 }}>
-                              ⚠ La factura dice <strong>{fmtMoneda(lectura.totalFactura)}</strong> pero neto + impuestos − descuento
-                              da <strong>{fmtMoneda(lectura.aritmetica.esperado)}</strong>. Revisá los importes.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+            <div className="form-panel">
+              <div className="form-panel-title">Multimoneda</div>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ margin: 0, flex: '0 0 80px' }}>
+                  <label className="form-label">Moneda</label>
+                  <div className="form-input-wrap">
+                    <select value={mmForm.tipo} onChange={e => onMmChange('tipo', e.target.value)}>
+                      {TIPOS_MM.map(t => <option key={t}>{t}</option>)}
+                    </select>
                   </div>
-                )}
-                {/* Duplicado: el mismo estado que el aviso de arriba. */}
-                {!leyendoFactura && duplicado && (
-                  <div className="aviso-lectura warn" style={{ marginBottom: 0 }}>
-                    <div>
-                      <strong>Ojo: ya existe la OP-{duplicado.nro_ord ?? '—'}</strong> con este proveedor,
-                      punto de venta y número de comprobante
-                      {duplicado.fecha ? ` (cargada el ${new Date(duplicado.fecha).toLocaleDateString('es-AR', { timeZone: 'UTC' })})` : ''}.
-                      Se puede guardar igual si corresponde.
-                    </div>
-                  </div>
-                )}
-
-                {/* Si no se pudo mirar el duplicado, se dice: callarse se lee como
-                    "no hay duplicado", y no es lo mismo que "no pude verificar". */}
-                {!leyendoFactura && lectura && !duplicado && faltaParaDuplicado({
-                  id_proveedor: form.id_proveedor, pv: form.pv, nro: form.nro,
-                }).length > 0 && (
-                  <div className="aviso-lectura" style={{ marginBottom: 0 }}>
-                    <div>
-                      No pude verificar si está duplicada: falta{' '}
-                      {faltaParaDuplicado({ id_proveedor: form.id_proveedor, pv: form.pv, nro: form.nro }).join(' y ')}.
-                    </div>
-                  </div>
-                )}
-
-                {/* Estado inicial: el panel no queda como un hueco sin explicar. */}
-                {!leyendoFactura && !lectura && !fallaLectura && !duplicado && (
-                  <p className="form-hint" style={{ margin: 0 }}>
-                    Elegí una foto o un PDF de la factura y se precargan fecha, tipo,
-                    punto de venta, número, neto, descuento e impuestos. El período queda
-                    igual a la fecha de la factura, y se avisa si la factura ya está cargada.
-                    El archivo queda adjunto igual.
-                  </p>
-                )}
                 </div>
+                <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+                  <label className="form-label">TDC</label>
+                  <div className="form-input-wrap">
+                    <input type="number" step="0.0001" placeholder="1000.00" value={mmForm.tdc} onChange={e => onMmChange('tdc', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-group" style={{ margin: 0, flex: '1 1 120px' }}>
+                  <label className="form-label">Monto</label>
+                  <div className="form-input-wrap">
+                    <input type="number" step="0.01" placeholder="0.00" value={mmForm.monto} onChange={e => onMmChange('monto', e.target.value)} />
+                  </div>
+                </div>
+                {mmForm.tdc && mmForm.monto && (
+                  <div style={{ fontSize: 12, color: 'var(--gold-bright)', fontWeight: 700, alignSelf: 'center', whiteSpace: 'nowrap' }}>
+                    = ${(parseFloat(mmForm.tdc) * parseFloat(mmForm.monto)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Dos columnas parejas y no el auto-fill del form-grid: con el boton de
-              IA fuera de esta grilla quedaban solo dos celdas de 220px pegadas a la
-              izquierda y media seccion vacia, contra la fila de arriba que ocupa
-              todo el ancho. */}
-          <div className="form-grid adjuntos-grid">
-            <AdjuntoUpload
-              label="Foto"
-              accept="image/*"
-              value={form.foto_url}
-              file={fotoFile}
-              onFileSelected={setFotoFile}
-              onRemove={() => { set('foto_url', ''); setFotoFile(null); setLectura(null); setFallaLectura(null) }}
-              uploading={uploadingFoto || leyendoTipo === 'foto'}
-              // En edición el adjunto guardado se trae por el endpoint firmado
-              // (la url cruda del bucket no es accesible) y se ve en el cuadro.
-              cargarContenido={isEditing ? async () => {
-                const r = await client.get(`/pagos/${id}/attachment?type=foto`, { responseType: 'blob' })
-                return URL.createObjectURL(r.data)
-              } : undefined}
-            />
-            <AdjuntoUpload
-              label="PDF"
-              accept=".pdf,application/pdf"
-              value={form.pdf_url}
-              file={pdfFile}
-              onFileSelected={setPdfFile}
-              onRemove={() => { set('pdf_url', ''); setPdfFile(null); setLectura(null); setFallaLectura(null) }}
-              uploading={uploadingPdf || leyendoTipo === 'pdf'}
-              cargarContenido={isEditing ? async () => {
-                const r = await client.get(`/pagos/${id}/attachment?type=pdf`, { responseType: 'blob' })
-                return URL.createObjectURL(r.data)
-              } : undefined}
-            />
-          </div>
-        </div>
-
-        {/* ── Notas ── */}
-        <div className="form-panel">
-          <div className="form-panel-title">Notas</div>
-          <div className="form-group">
-            <label className="form-label">Observaciones</label>
-            <div className="form-input-wrap form-textarea-wrap">
-              <textarea rows={3} placeholder="Notas opcionales..." value={form.observaciones} onChange={e => set('observaciones', e.target.value)} />
+          {/* ── Adjuntos ── */}
+          <div className="form-panel pago-notas">
+            <div className="form-panel-title">Notas</div>
+            <div className="form-group">
+              <label className="form-label">Observaciones</label>
+              <div className="form-input-wrap form-textarea-wrap">
+                <textarea rows={3} placeholder="Notas opcionales..." value={form.observaciones} onChange={e => set('observaciones', e.target.value)} />
+              </div>
             </div>
+          </div>
+
           </div>
         </div>
 

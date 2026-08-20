@@ -64,6 +64,27 @@ viven en libs espejo `backend/src/lib/` ↔ `frontend/src/lib/`, con tests):
   us-central1-docker.pkg.dev/dc-smart-mvp/dcsmart/dcsmart-backend:<sha> --command
   node --args src/jobs/<job>.js --region us-central1 --project dc-smart-mvp`.
 
+## Intercompany (pasar plata entre locales)
+
+Sección propia (`/intercompany`), al lado de PDP. Una op de tipo **STK** del
+local que envía se espeja en el local que recibe como una op NUEVA en sentido
+**ingreso**; las dos quedan unidas por `pagos.id_pago_origen`. La original no
+se modifica: la plata salió de un local y entró en otro, y cada uno tiene que
+verla en su cuenta.
+
+- Reglas en `backend/src/lib/intercompany.js` (con tests): solo STK, con
+  importe y local; una copia recibida **no se reenvía**; el destino tiene que
+  ser otro local **del mismo grupo** (dos grupos son dos contabilidades) y se
+  valida contra los locales del grupo activo en el backend, no en el select.
+- La copia NO arrastra `estado_op`, `id_pdp`, `id_cliente` ni adjuntos: son del
+  circuito del que envió. El `nro_ord` lo asigna el local que recibe, dentro de
+  una transacción.
+- Se revierte borrando la copia, salvo que el otro local ya la haya operado
+  (PDP, estado o auditoría).
+- Acceso: `requireOperativo` (admin, externo, dcsmart, super_admin) — espeja
+  `ROLES_OPERATIVOS` del frontend. El guard del menú no alcanza para algo que
+  mueve plata.
+
 ## Migraciones y scripts de corrección
 
 - **La base de prod se llama `postgres`** (no `dcsmart`) en la instancia
