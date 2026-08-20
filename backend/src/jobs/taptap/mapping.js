@@ -104,6 +104,14 @@ export function mapTurno(turno) {
   if (Number(sales.cobrarmonto) > 0) {
     detallesSiOcurren.push({ nombre: 'A Cobrar', monto: Number(sales.cobrarmonto) })
   }
+  // Los ajustes del POS, como DATO y no solo como texto en observaciones.
+  // TapTap los manda siempre; el sync los tiraba al string y los locales que
+  // descuentan mucho (ROMA) mostraban cobros brutos contra una venta neta:
+  // "sobraban" cobros que eran promos. Mismos nombres que usa el script de
+  // backfill (extraer-descuentos-taptap.js) para que la serie sea continua.
+  if (descuentos) detallesSiOcurren.push({ nombre: 'Descuentos (POS)', monto: Math.abs(Number(descuentos)) })
+  if (contraordenes) detallesSiOcurren.push({ nombre: 'Contraórdenes (POS)', monto: Math.abs(Number(contraordenes)) })
+  if (recargos) detallesSiOcurren.push({ nombre: 'Recargos (POS)', monto: Math.abs(Number(recargos)) })
   for (const c of cash) {
     for (const arrayKey of ARRAYS_INFORMATIVOS) {
       const items = c[arrayKey]

@@ -63,3 +63,22 @@ test('mapTurno arma "A Cobrar" en detallesSiOcurren cuando cobrarmonto > 0, y NO
   const aCobrar = detallesSiOcurren.find((d) => d.nombre === 'A Cobrar')
   assert.equal(aCobrar.monto, 32400)
 })
+
+// Los ajustes del POS como DATO: antes iban solo como texto a observaciones y
+// ROMA "sobraba" cobros que eran promos.
+test('mapTurno arma los ajustes del POS como detalles informativos cuando tienen monto', () => {
+  const conAjustes = structuredClone(turno)
+  conAjustes.info.audit = { descuentos: { monto: 1500 }, contraordenes: { monto: -200 }, recargos: { monto: 0 } }
+  const { detallesSiOcurren } = mapTurno(conAjustes)
+  const nombres = detallesSiOcurren.map((d) => d.nombre)
+  assert.ok(nombres.includes('Descuentos (POS)'))
+  assert.ok(nombres.includes('Contraórdenes (POS)'))
+  assert.ok(!nombres.includes('Recargos (POS)'), 'un recargo en 0 no crea detalle')
+  // El monto va en valor absoluto: la direccion la da el nombre, no el signo.
+  assert.equal(detallesSiOcurren.find((d) => d.nombre === 'Contraórdenes (POS)').monto, 200)
+})
+
+test('mapTurno con audit en cero no inventa ajustes del POS', () => {
+  const { detallesSiOcurren } = mapTurno(turno)
+  assert.ok(!detallesSiOcurren.some((d) => d.nombre.endsWith('(POS)')))
+})
