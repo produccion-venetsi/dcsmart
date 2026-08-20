@@ -18,6 +18,8 @@ import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
 import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import PistaTurno, { PistaPromedio } from '../../components/PistaTurno.jsx'
+import CampoClienteCuenta from '../../components/CampoClienteCuenta.jsx'
+import { nombreCliente } from '../../lib/clientes.js'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
 
 // Alta de caja: el turno con sus detalles y sus movimientos.
@@ -77,7 +79,10 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   // Mismos campos que el alta de detalle del drawer: acá faltaban `clasificacion`
   // y `nombre`, así que al crear una caja no se podía cargar "Mostrador -
   // informativo" ni un nombre que no estuviera en el catálogo del local.
-  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
+  // `id_cliente`/`cliente` desde el ALTA: una venta fiada se anota cuando se
+  // carga la caja, no despues. Sin esto habia que guardar, entrar a editar y
+  // recien ahi aparecia el campo (reportado por el usuario 2026-08-20).
+  const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
 
   const [pendingMovimientos, setPendingMovimientos] = useState([])
   const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
@@ -135,7 +140,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   const addPendingDetalle = () => {
     if (!detForm.monto) return
     setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
-    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '' })
+    setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
   }
   const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
 
@@ -180,7 +185,8 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
             nombre: d.id_tipo ? null : (d.nombre || null),
             monto: parseFloat(d.monto),
             observaciones: d.observaciones || null
-          , cantidad: d.cantidad ? parseInt(d.cantidad) : null })
+          , cantidad: d.cantidad ? parseInt(d.cantidad) : null
+          , id_cliente: d.id_cliente || null })
           detOk++
         } catch { detFail++ }
       }
@@ -331,12 +337,15 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
       {pendingDetalles.length > 0 && (
         <div className="table-wrap" style={{ marginBottom: '0.75rem' }}>
           <table className="data-table">
-            <thead><tr><th>Clasificación</th><th>Nombre</th><th title="Cantidad de operaciones">Cant.</th><th>Monto</th><th></th></tr></thead>
+            <thead><tr><th>Clasificación</th><th>Nombre</th><th>Cuenta</th><th title="Cantidad de operaciones">Cant.</th><th>Monto</th><th></th></tr></thead>
             <tbody>
               {pendingDetalles.map(d => (
                 <tr key={d._key}>
                   <td className="td-muted">{clasificacionLabel(d.clasificacion)}</td>
                   <td>{tipos.find(t => t.id === d.id_tipo)?.nombre || d.nombre || '—'}</td>
+                  {/* A qué cuenta corriente se carga: se ve antes de guardar,
+                      igual que en la edición. */}
+                  <td className="td-muted">{d.cliente ? nombreCliente(d.cliente) : '—'}</td>
                   <td className="td-number td-muted">{d.cantidad || '—'}</td>
                   <td className="td-number">{fmt$2(d.monto)}</td>
                   <td>
@@ -368,6 +377,13 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
             onChange={(id_tipo, nombre) => setDetForm(f => conTipoElegido(f, tipos, id_tipo, nombre))}
           />
         </div>
+        <CampoClienteCuenta
+          clasificacion={detForm.clasificacion}
+          idCliente={detForm.id_cliente}
+          clienteSel={detForm.cliente}
+          onSelect={(c) => setDetForm(f => ({ ...f, id_cliente: c.id, cliente: c }))}
+          onClear={() => setDetForm(f => ({ ...f, id_cliente: '', cliente: null }))}
+        />
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Monto</label>
           <div className="form-input-wrap">

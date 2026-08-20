@@ -19,6 +19,70 @@ Este archivo guía a Claude Code en la construcción completa del proyecto DCSma
 - **Estado del esquema (verificado 2026-07-29)** — La base está **en sync** con `schema.prisma`: `prisma migrate diff --from-schema-datasource --to-schema-datamodel` devuelve una migración vacía. `MultiMoneda` ya estaba aplicado (la advertencia anterior de este archivo era desactualizada). Antes de cualquier `db push`, correr ese mismo `migrate diff` y leer el SQL: **no hay base de dev separada**, esa es la base de producción.
 - **Cuidado al agregar columnas a `Local`** — Prisma pide todas las columnas del modelo en cada `SELECT`, así que una columna declarada en el esquema pero ausente en la base rompe toda ruta que haga `include: { locales }` — incluido `GET /api/auth/my-apps` (`routes/auth.js:181`), que alimenta el selector de grupos y deja la app inutilizable, no solo la pantalla de Locales.
 
+## Cajas: el modelo simple (vigente desde 2026-08-19)
+
+La caja se lee **siempre por sus detalles**, con tres tipos explícitos: `cobro`,
+`gasto`, `informativo`. Los movimientos (`caja_movimientos`) ya no existen como
+concepto: la migración del 2026-08-19 convirtió los 32.391 históricos y la tabla
+quedó en cero (las rutas legacy siguen por compatibilidad). Registro completo de
+la migración: `docs/PLAN-MIGRACION-CAJAS-PROD.md`.
+
+Invariantes que NO hay que romper (cada una salió de un descuadre real medido;
+viven en libs espejo `backend/src/lib/` ↔ `frontend/src/lib/`, con tests):
+
+- **Cuadre** (`cuadreCaja.js`): `esperado = efectivo + cobros`. Los gastos NO
+  participan — se informan aparte. Fallback a movimientos solo si la caja no
+  tiene ningún detalle.
+- **Estados** (`estadoDescuadre.js`): correcto ≤$1 · menor ≤$2.000 · incorrecto.
+- **Conversión** (`movimientoADetalle.js`): el método de pago es el NOMBRE del
+  detalle. El cobro en efectivo va a informativo ("Efectivo (ya contado...)"):
+  su plata ya está en `caja.efectivo`.
+- **`esEfectivo` excluye moneda extranjera**: "Efectivo Reales/dólar" (DON ALDO)
+  es un COBRO, no el efectivo del cajón.
+- **`detalle.cantidad`** preserva el groupCount de TapTap: no perderla al editar.
+- **Dirección de pagos** (`direccionPago.js`): NCA/NCB = ingreso SIEMPRE, NDA =
+  egreso; el backend lo fuerza al crear/editar. Todo agregado de pagos es NETO
+  (el ingreso resta): KPIs, stats, reportes, CMV, ficha de proveedor.
+
+## Integraciones externas (TapTap / Fudo)
+
+- **Ambos syncs escriben DETALLES**, no movimientos. Si el catálogo
+  (`detalle_tipos` por app) tiene el nombre, su clasificación pisa la regla
+  estática — así la calibración moldea los syncs futuros. Sin entrada, la regla
+  manda y NO se crea catálogo.
+- **TapTap** (`src/jobs/taptap-sync.js`, Cloud Run Job 5am): rate limit ~1
+  req/min por credencial; maxid numérico (nunca ordenar id_externo como string);
+  el turno abierto ("Turno Actual") se saltea. Descuentos/contraórdenes/recargos
+  entran como detalles "(POS)".
+- **Fudo** (`src/jobs/fudo-sync.js`, 7am): una cuenta por local (credenciales en
+  tarjetas de Trello y Secret Manager). **`/cash-counts` expone el turno real**
+  (id = nro_turno, horas reales de apertura/cierre); su filtro exige timestamp
+  completo y `lte` (no `lt` como /sales). `nro_turno` es String. Reprocesa 4
+  días y en ese reproceso conserva los informativos manuales del encargado.
+- **Los Cloud Run Jobs NO los actualiza el CI**: tras tocar `src/jobs/*`,
+  re-apuntarlos a mano: `gcloud run jobs update taptap-sync|fudo-sync --image
+  us-central1-docker.pkg.dev/dc-smart-mvp/dcsmart/dcsmart-backend:<sha> --command
+  node --args src/jobs/<job>.js --region us-central1 --project dc-smart-mvp`.
+
+## Migraciones y scripts de corrección
+
+- **La base de prod se llama `postgres`** (no `dcsmart`) en la instancia
+  `dcsmart-mvp-insta`; server Postgres 18 → usar los binarios 18 para
+  pg_dump/pg_restore (los 17 se niegan por versión).
+- Los scripts viven en `backend/scripts/` (gitignored). Convención de guards:
+  por defecto solo `dcsmart_(test|lab)`; producción exige `--prod` +
+  `CONFIRMO_PROD=si` + `PROD_URL` apuntando a `/postgres`. Siempre dry-run por
+  defecto y `--aplicar` explícito.
+- Scripts clave que quedaron: `convertir-a-detalles-simples.js` (idempotente por
+  caja, transaccional, valida sumas), `fix-tarjetas-resumen.js`,
+  `reparar-efectivo-extranjero.js`, `fix-direccion-notas.js`,
+  `backfill-turnos-fudo.js`, `calibrar-cuadre-por-local.js` (greedy, dry-run
+  para aprobar), `medir-cuadre.js` (baseline determinístico: misma foto de
+  datos ⇒ mismos números).
+- Backups de la migración (restore probado):
+  `C:\Users\agusl\Repos\dcsmart-apps\backups\prod-2026-08-19*.dump`. La copia
+  del ensayo quedó en `dcsmart_lab` (misma instancia).
+
 ## Estructura del proyecto
 
 ```

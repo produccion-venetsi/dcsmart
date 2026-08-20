@@ -64,7 +64,10 @@ export function desglosarPorTurno(rows, extra = () => ({})) {
   for (const r of rows) {
     const turno = etiquetaTurno(r.turno)
     if (!porTurno.has(turno)) porTurno.set(turno, [])
-    porTurno.get(turno).push({ name: r.nombre, val: Number(r.total ?? 0), ...extra(r) })
+    // `cant` solo si la fila la trae: cuantas operaciones componen la linea
+    // (los groupCount de TapTap). null y no 0 -- "no sabemos" no es "cero".
+    const cant = r.cantidad != null ? Number(r.cantidad) : null
+    porTurno.get(turno).push({ name: r.nombre, val: Number(r.total ?? 0), cant, ...extra(r) })
   }
 
   for (const [turno, lista] of porTurno) {
@@ -88,14 +91,18 @@ export function totalizarPorNombre(rows, extra = () => ({})) {
   for (const r of rows) {
     const nombre = r.nombre
     const previo = acc.get(nombre)
+    const cant = r.cantidad != null ? Number(r.cantidad) : null
     if (previo) {
       previo.val += Number(r.total ?? 0)
+      // Las cantidades se suman entre turnos; si ninguna fila la trae, la linea
+      // queda sin cantidad en vez de mostrar un cero inventado.
+      if (cant != null) previo.cant = (previo.cant ?? 0) + cant
       // Un mismo nombre marcado como egreso en algún turno lo es siempre: el
       // dato viene de la clasificación del tipo, no de la fila.
       const e = extra(r)
       if (e.egreso) previo.egreso = true
     } else {
-      acc.set(nombre, { name: nombre, val: Number(r.total ?? 0), ...extra(r) })
+      acc.set(nombre, { name: nombre, val: Number(r.total ?? 0), cant, ...extra(r) })
     }
   }
 

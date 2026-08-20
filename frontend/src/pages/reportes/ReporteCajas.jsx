@@ -369,8 +369,10 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                     <th style={{ width: 22 }}></th>
                     <th>Turno</th>
                     <th className="num">Total</th>
-                    <th className="num">Cub</th>
-                    <th className="num">Prom Cub</th>
+                    <th className="num" title="Tickets emitidos en el turno">Tickets</th>
+                    <th className="num" title="Venta dividida por los tickets del turno">Ticket prom.</th>
+                    <th className="num" title="Comensales">Cub</th>
+                    <th className="num" title="Venta dividida por los comensales">Prom Cub</th>
                     <th className="num">% Fiscal</th>
                     <th className="num">Z</th>
                   </tr>
@@ -388,8 +390,10 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                           <td className="td-muted">{tieneDesglose ? (abierto ? '▾' : '▸') : ''}</td>
                           <td style={{ fontWeight: 600 }}>{t.turno}</td>
                           <td className="num td-number">{fmt(t.total)}</td>
-                          {/* Cubiertos y su promedio quedan en — cuando la caja
-                              no los carga: un 0 se leería como dato real. */}
+                          {/* Tickets y cubiertos quedan en — cuando la caja no
+                              los carga: un 0 se leería como dato real. */}
+                          <td className="num">{t.tickets || '—'}</td>
+                          <td className="num">{t.ticket_promedio != null ? fmt(t.ticket_promedio) : '—'}</td>
                           <td className="num">{t.cubiertos || '—'}</td>
                           <td className="num">{t.prom_cubierto != null ? fmt(t.prom_cubierto) : '—'}</td>
                           <td className="num">{t.pct_fiscal != null ? `${t.pct_fiscal}%` : '—'}</td>
@@ -398,7 +402,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                         {abierto && (
                           <tr>
                             <td></td>
-                            <td colSpan={6}>
+                            <td colSpan={8}>
                               <div className="rep-turno-desglose">
                                 {t.payments.length > 0 && (
                                   <div>
@@ -406,7 +410,10 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                                     {t.payments.map((p, i) => (
                                       <div className="rep-pay-row" key={i}>
                                         <span className="rep-pay-dot" style={{ background: p.color }} />
-                                        <span className="rep-pay-name">{p.name}</span>
+                                        <span className="rep-pay-name">
+                                          {p.name}
+                                          {p.cant > 0 && <span className="rep-pay-ops">{p.cant} ops</span>}
+                                        </span>
                                         <span className="rep-pay-amount">{fmt(p.val)}</span>
                                         <span className="rep-pay-pct">{p.pct}%</span>
                                       </div>
@@ -419,7 +426,10 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                                     {t.gastos.map((d, i) => (
                                       <div className="rep-pay-row" key={i}>
                                         <span className="rep-pay-dot" style={{ background: d.color }} />
-                                        <span className="rep-pay-name">{d.name}</span>
+                                        <span className="rep-pay-name">
+                                          {d.name}
+                                          {d.cant > 0 && <span className="rep-pay-ops">{d.cant} ops</span>}
+                                        </span>
                                         <span className="rep-pay-amount">{fmt(d.val)}</span>
                                         <span className="rep-pay-pct">{d.pct}%</span>
                                       </div>
@@ -440,6 +450,8 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                     <td></td>
                     <td>Total</td>
                     <td className="num td-number">{fmt(kpi.total_ventas ?? 0)}</td>
+                    <td className="num">{kpi.total_tickets || '—'}</td>
+                    <td className="num">{kpi.ticket_promedio ? fmt(kpi.ticket_promedio) : '—'}</td>
                     <td className="num">{kpi.cubiertos || '—'}</td>
                     <td className="num">
                       {kpi.cubiertos > 0 ? fmt(Math.round((kpi.total_ventas ?? 0) / kpi.cubiertos)) : '—'}
@@ -502,7 +514,12 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                     {payments.map((p, i) => (
                       <div className="rep-pay-row" key={i}>
                         <span className="rep-pay-dot" style={{ background: p.color }} />
-                        <span className="rep-pay-name">{p.name}</span>
+                        {/* Cuántas operaciones componen el medio: 23 cobros con
+                            Crédito no es lo mismo que uno solo de ese monto. */}
+                        <span className="rep-pay-name">
+                          {p.name}
+                          {p.cant > 0 && <span className="rep-pay-ops">{p.cant} ops</span>}
+                        </span>
                         <span className="rep-pay-amount">{fmt(p.val)}</span>
                         <span className="rep-pay-pct">{p.pct}%</span>
                       </div>
@@ -585,7 +602,10 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
           {gastos.map((d, i) => (
             <div className="rep-pay-row" key={i}>
               <span className="rep-pay-dot" style={{ background: d.color }} />
-              <span className="rep-pay-name">{d.name}</span>
+              <span className="rep-pay-name">
+                {d.name}
+                {d.cant > 0 && <span className="rep-pay-ops">{d.cant} ops</span>}
+              </span>
               <span className="rep-pay-amount">{fmt(d.val)}</span>
               <span className="rep-pay-pct">{d.pct}%</span>
             </div>

@@ -568,6 +568,14 @@
   font-size: 13px;
   color: var(--t2);
 }
+/* Cuantas operaciones componen la linea (los groupCount de TapTap). Sutil, al
+   lado del nombre: es contexto del monto, no un dato que compita con el. */
+.rep-pay-ops {
+  margin-left: 6px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--velo-rgb), .38);
+}
 .rep-pay-amount {
   font-variant-numeric: tabular-nums;
   font-size: 13px;

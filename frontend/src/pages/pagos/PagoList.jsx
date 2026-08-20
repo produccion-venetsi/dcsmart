@@ -17,7 +17,7 @@ import { esRolDc, puedeEditar, puedeBorrarPagos, puedeExportar } from '../../lib
 import { multiParam, normalizarMulti, normalizarRangos } from '../../lib/filtros.js'
 import { downloadExcel, excelBlob } from '../../lib/excel.js'
 import { sheetsDisponible, subirComoSheet, pedirAccessToken, precargarGoogle } from '../../lib/googleSheets.js'
-import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoNotaCredito } from '../../lib/exportPagos.js'
+import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, conSignoIngreso } from '../../lib/exportPagos.js'
 import { todayInputDate, fmtDateArg, fmtDateTimeArg } from '../../lib/dates.js'
 import { TIPO_BADGE } from '../../lib/tipoPagoBadges.js'
 import { nombreProveedor, razonSocialExtra, etiquetaProveedor } from '../../lib/proveedorLabel.js'
@@ -166,8 +166,10 @@ const PAGO_CSV_COLUMNS = [
   { label: 'PV',          get: (p) => p.pv != null ? fmtPV(p.pv) : '' },
   { label: 'Nro',         get: (p) => p.nro != null ? fmtNro(p.nro) : '' },
   { label: 'Neto',        get: (p) => p.importe_neto ?? '', total: true },
-  // Firmado: una nota de crédito exporta negativa, así la planilla suma sola.
-  { label: 'Importe',     get: (p) => p.importe == null ? '' : (p.ingresa_egreso ? -Number(p.importe) : Number(p.importe)), total: true },
+  // El valor CRUDO, positivo: el signo lo pone conSignoIngreso al final, sobre
+  // todas las columnas de plata a la vez. Firmarlo también acá lo negaba dos
+  // veces y la NC salía positiva en el Excel (y en el Sheet).
+  { label: 'Importe',     get: (p) => p.importe ?? '', total: true },
   { label: 'Método',      get: (p) => p.metodo_pago?.nombre || '' },
   { label: 'Observaciones', get: (p) => p.observaciones || '' },
   { label: 'Cashflow',    get: (p) => p.cashflow ? fmtDate(p.cashflow) : '' },
@@ -335,10 +337,11 @@ export default function PagoList() {
     const base = canSeeCreated ? PAGO_CSV_COLUMNS : PAGO_CSV_COLUMNS.filter(c => c.label !== 'Creado')
     // Las columnas de impuesto van entre Neto e Importe.
     const idxImporte = base.findIndex(c => c.label === 'Importe')
-    // conSignoNotaCredito envuelve al final, sobre las columnas ya armadas,
-    // para que las de impuesto entren con el mismo criterio que Neto e
-    // Importe y no haya que acordarse de aplicarlo en cada lado.
-    const columns = conSignoNotaCredito([
+    // conSignoIngreso envuelve al final, sobre las columnas ya armadas, para
+    // que las de impuesto entren con el mismo criterio que Neto e Importe y no
+    // haya que acordarse de aplicarlo en cada lado. Las columnas de adentro
+    // traen el valor crudo: firmar en los dos lados lo negaba dos veces.
+    const columns = conSignoIngreso([
       ...base.slice(0, idxImporte),
       ...columnasImpuesto(tiposImpuestoPresentes(pagos)),
       ...base.slice(idxImporte),
