@@ -17,14 +17,15 @@ model App {
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
-  locales           Local[]
-  user_app_roles    UserAppRole[]
-  detalle_tipos     DetalleTipo[]
-  local_access      UserLocalAccess[]
-  usage             UserAppUsage[]
-  clientes          Cliente[]
-  documentos        Documento[]
-  inspeccion_folios InspeccionFolio[]
+  locales              Local[]
+  user_app_roles       UserAppRole[]
+  disponibilidad_tipos DisponibilidadTipo[]
+  detalle_tipos        DetalleTipo[]
+  local_access         UserLocalAccess[]
+  usage                UserAppUsage[]
+  clientes             Cliente[]
+  documentos           Documento[]
+  inspeccion_folios    InspeccionFolio[]
 
   @@map("apps")
 }
@@ -51,14 +52,15 @@ model Local {
   created_at         DateTime   @default(now())
   updated_at         DateTime   @updatedAt
 
-  app               App               @relation(fields: [id_app], references: [id])
-  proveedor         Proveedor?        @relation(fields: [id_proveedor], references: [id])
+  app               App                   @relation(fields: [id_app], references: [id])
+  proveedor         Proveedor?            @relation(fields: [id_proveedor], references: [id])
   cajas             Caja[]
   pagos             Pago[]
   pdps              Pdp[]
   arqueos           Arqueo[]
   local_access      UserLocalAccess[]
   detalle_tipos     DetalleTipo[]
+  disponibilidades  LocalDisponibilidad[]
   movimientos_cm    MovimientoCM[]
   documentos        Documento[]
   inspeccion_folios InspeccionFolio[]
@@ -599,6 +601,57 @@ model Caja {
   @@map("cajas")
 }
 
+// Las disponibilidades que se cuentan en un arqueo: la plata que el local
+// tiene y NO está en el cajón — Mercado Pago, dólares, la cuenta del banco.
+//
+// Antes salían del catálogo de las cajas (DetalleTipo), que es de otra cosa: el
+// combo ofrecía "Salón", "Rappi" y "Online" como si fueran disponibilidades, y
+// en producción hay arqueos con esos conceptos cargados. Además nada decía qué
+// le corresponde a cada local, así que cada arqueo se armaba de memoria: medido
+// el 2026-08-20, un local carga cuatro conceptos, otro dos, y GRAN-DANZON tiene
+// 19 arqueos con ninguno.
+//
+// El catálogo es POR GRUPO: los bancos y billeteras de un cliente no son los
+// del otro. Qué tiene activo cada local vive en LocalDisponibilidad.
+model DisponibilidadTipo {
+  id      String  @id @default(uuid())
+  id_app  String
+  nombre  String
+  // Para agrupar en la pantalla y en el arqueo: MP, banco, efectivo en otra
+  // moneda, otro. No cambia ningún cálculo, ordena la lectura.
+  familia String  @default("otro")
+  activo  Boolean @default(true)
+  // El orden con que se listan al cargar. Dos conceptos con el mismo número
+  // desempatan por nombre.
+  orden   Int     @default(100)
+
+  app             App                   @relation(fields: [id_app], references: [id])
+  locales         LocalDisponibilidad[]
+  arqueo_detalles ArqueoDetalle[]
+
+  @@unique([nombre, id_app])
+  @@map("disponibilidad_tipos")
+}
+
+// Qué disponibilidades tiene activas un local: es la lista que el arqueo le
+// pide cargar. Se define al dar de alta el local (y se corrige después desde
+// Locales), no al hacer el arqueo — el que cuenta la plata no tiene que
+// acordarse de qué cuentas tiene el local.
+model LocalDisponibilidad {
+  id       String @id @default(uuid())
+  id_local String
+  id_tipo  String
+  // Pisa el orden del catálogo cuando un local quiere el suyo.
+  orden    Int?
+
+  local Local              @relation(fields: [id_local], references: [id], onDelete: Cascade)
+  tipo  DisponibilidadTipo @relation(fields: [id_tipo], references: [id], onDelete: Cascade)
+
+  @@unique([id_local, id_tipo])
+  @@index([id_local])
+  @@map("local_disponibilidades")
+}
+
 model DetalleTipo {
   id            String  @id @default(uuid())
   id_app        String
@@ -640,15 +693,20 @@ model Arqueo {
 }
 
 model ArqueoDetalle {
-  id         String   @id @default(uuid())
-  id_arqueo  String
-  id_tipo    String?
-  nombre     String?
-  monto      Decimal  @db.Decimal(12, 2)
-  created_at DateTime @default(now())
+  id                String   @id @default(uuid())
+  id_arqueo         String
+  id_tipo           String?
+  // La disponibilidad del catálogo nuevo. `id_tipo` (el catálogo de cajas) se
+  // conserva porque los 63 detalles ya cargados apuntan ahí: se lee uno u otro
+  // según cuál tenga la fila, y el histórico no se toca.
+  id_disponibilidad String?
+  nombre            String?
+  monto             Decimal  @db.Decimal(12, 2)
+  created_at        DateTime @default(now())
 
-  arqueo       Arqueo       @relation(fields: [id_arqueo], references: [id])
-  detalle_tipo DetalleTipo? @relation(fields: [id_tipo], references: [id])
+  arqueo         Arqueo              @relation(fields: [id_arqueo], references: [id])
+  detalle_tipo   DetalleTipo?        @relation(fields: [id_tipo], references: [id])
+  disponibilidad DisponibilidadTipo? @relation(fields: [id_disponibilidad], references: [id])
 
   @@map("arqueo_detalles")
 }
