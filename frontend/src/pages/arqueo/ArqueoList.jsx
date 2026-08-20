@@ -6,6 +6,7 @@ import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import { toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateTimeArg } from '../../lib/dates.js'
 import { totalContado, calcularComprobacion, describirComprobacion } from '../../lib/cuadreArqueo.js'
+import { claveLocal } from '../../lib/claveLocal.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -58,7 +59,7 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
 
   const addPendingDetalle = () => {
     if (!detForm.monto) return
-    setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
+    setPendingDetalles(prev => [...prev, { ...detForm, _key: claveLocal() }])
     setDetForm({ id_tipo: '', monto: '' })
   }
   const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
@@ -230,7 +231,7 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
 
   const addDetalle = () => {
     if (!detForm.monto) return
-    setDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
+    setDetalles(prev => [...prev, { ...detForm, _key: claveLocal() }])
     setDetForm({ id_tipo: '', monto: '' })
   }
   const removeDetalle = (key) => setDetalles(prev => prev.filter(d => d._key !== key))
