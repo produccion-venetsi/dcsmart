@@ -51,3 +51,17 @@ test('un tipo desconocido cae en informativo, nunca se pierde', () => {
   assert.deepEqual(movimientoADetalle({ tipo: 'INGRESO' }), { tipo: 'informativo', nombre: 'Ingreso' })
   assert.deepEqual(movimientoADetalle({ tipo: 'LO_QUE_SEA' }), { tipo: 'informativo', nombre: 'Ingreso' })
 })
+
+// Multi-moneda (DON ALDO): "Efectivo Reales" NO es el efectivo del cajon --
+// es un cobro en otra moneda. Tratarlo como efectivo lo hacia desaparecer del
+// cuadre: 172 cajas descuadradas por exactamente esa suma.
+test('el efectivo en moneda extranjera sigue siendo un cobro', () => {
+  assert.deepEqual(
+    movimientoADetalle({ tipo: 'COBRO', metodo: 'Efectivo Reales' }),
+    { tipo: 'cobro', nombre: 'Efectivo Reales' }
+  )
+  assert.deepEqual(
+    movimientoADetalle({ tipo: 'COBRO', metodo: 'Efectivo dólar' }),
+    { tipo: 'cobro', nombre: 'Efectivo dólar' }
+  )
+})
