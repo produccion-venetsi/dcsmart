@@ -252,6 +252,12 @@ test('reconoce el efectivo escrito de cualquier forma', () => {
   assert.equal(esEfectivo('EFECTIVO'), true)
   assert.equal(esEfectivo('efectivo en caja'), true)
   assert.equal(esEfectivo('Mercado Pago'), false)
+  // Multi-moneda (DON ALDO): "Efectivo Reales/dolar" es un COBRO en otra
+  // moneda, no el efectivo del cajon en pesos.
+  assert.equal(esEfectivo('Efectivo Reales'), false)
+  assert.equal(esEfectivo('Efectivo dólar'), false)
+  assert.equal(esEfectivo('Efectivo dolar'), false)
+  assert.equal(esEfectivo('Efectivo USD'), false)
   assert.equal(esEfectivo(null), false)
 })
 
