@@ -65,6 +65,15 @@ function IcoPdp() {
     </svg>
   )
 }
+// Dos flechas cruzadas entre dos puntos: plata que va de un local al otro.
+function IcoIntercompany() {
+  return (
+    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8h13"/><polyline points="14 5 17 8 14 11"/>
+      <path d="M20 16H7"/><polyline points="10 13 7 16 10 19"/>
+    </svg>
+  )
+}
 function IcoArqueo() {
   return (
     <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -267,6 +276,7 @@ const NAV_MAIN = [
   { to: '/cajas',       label: 'Cajas',       Icon: IcoCaja,      roles: ALL },
   { to: '/pagos',       label: 'Pagos',       Icon: IcoPagos,     roles: ALL },
   { to: '/pdp',         label: 'PDP',         Icon: IcoPdp,       roles: ROLES_OPERATIVOS },
+  { to: '/intercompany', label: 'Intercompany', Icon: IcoIntercompany, roles: ROLES_OPERATIVOS },
   { to: '/arqueo',      label: 'Arqueo',      Icon: IcoArqueo,    roles: ALL },
   { to: '/proveedores', label: 'Proveedores', Icon: IcoProveedor, roles: ROLES_OPERATIVOS },
   { to: '/clientes',    label: 'Clientes',    Icon: IcoClientes,  roles: ROLES_OPERATIVOS },

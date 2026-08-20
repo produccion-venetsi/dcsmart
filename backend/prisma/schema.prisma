@@ -9,71 +9,71 @@ datasource db {
 }
 
 model App {
-  id         String   @id @default(uuid())
-  nombre     String
-  slug       String   @unique
-  activo     Boolean  @default(true)
-  solo_super_admin Boolean @default(false)
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id               String   @id @default(uuid())
+  nombre           String
+  slug             String   @unique
+  activo           Boolean  @default(true)
+  solo_super_admin Boolean  @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
-  locales        Local[]
-  user_app_roles UserAppRole[]
-  detalle_tipos  DetalleTipo[]
-  local_access   UserLocalAccess[]
-  usage          UserAppUsage[]
-  clientes       Cliente[]
-  documentos     Documento[]
+  locales           Local[]
+  user_app_roles    UserAppRole[]
+  detalle_tipos     DetalleTipo[]
+  local_access      UserLocalAccess[]
+  usage             UserAppUsage[]
+  clientes          Cliente[]
+  documentos        Documento[]
   inspeccion_folios InspeccionFolio[]
 
   @@map("apps")
 }
 
 model Local {
-  id            String     @id @default(uuid())
-  nombre        String
-  direccion     String?
-  telefono      String?
-  activo        Boolean    @default(true)
-  id_app        String
-  id_proveedor  String?
-  logo_url      String?
-  maps_url      String?
-  menu_url      String?
-  mail_facturas String?
-  tipo_local    TipoLocal?
+  id                 String     @id @default(uuid())
+  nombre             String
+  direccion          String?
+  telefono           String?
+  activo             Boolean    @default(true)
+  id_app             String
+  id_proveedor       String?
+  logo_url           String?
+  maps_url           String?
+  menu_url           String?
+  mail_facturas      String?
+  tipo_local         TipoLocal?
   // Descuento automatico que se aplica al cargar un MovStock, en porcentaje
   // sobre el neto. Es 30% para todos salvo que el local tenga otro pactado, por
   // eso el default vive en la base: los locales que ya existen quedan en 30 sin
   // tener que actualizar nada. NULL nunca deberia darse gracias al default,
   // pero si aparece el codigo lo trata como el 30 general.
-  descuento_movstock Decimal? @default(30) @db.Decimal(5, 2)
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @updatedAt
+  descuento_movstock Decimal?   @default(30) @db.Decimal(5, 2)
+  created_at         DateTime   @default(now())
+  updated_at         DateTime   @updatedAt
 
-  app           App               @relation(fields: [id_app], references: [id])
-  proveedor     Proveedor?        @relation(fields: [id_proveedor], references: [id])
-  cajas         Caja[]
-  pagos         Pago[]
-  pdps          Pdp[]
-  arqueos       Arqueo[]
-  local_access  UserLocalAccess[]
-  detalle_tipos DetalleTipo[]
-  movimientos_cm MovimientoCM[]
-  documentos    Documento[]
+  app               App               @relation(fields: [id_app], references: [id])
+  proveedor         Proveedor?        @relation(fields: [id_proveedor], references: [id])
+  cajas             Caja[]
+  pagos             Pago[]
+  pdps              Pdp[]
+  arqueos           Arqueo[]
+  local_access      UserLocalAccess[]
+  detalle_tipos     DetalleTipo[]
+  movimientos_cm    MovimientoCM[]
+  documentos        Documento[]
   inspeccion_folios InspeccionFolio[]
 
   @@map("locales")
 }
 
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
+  id            String    @id @default(uuid())
+  email         String    @unique
   nombre        String
   password_hash String?
-  google_id     String?  @unique
+  google_id     String?   @unique
   avatar_url    String?
-  activo        Boolean  @default(true)
+  activo        Boolean   @default(true)
   // Ultimo ingreso exitoso. Pasados DIAS_INACTIVIDAD dias (ver lib/inactividad)
   // la contrasena deja de servir y hay que pedir que la reseteen.
   //
@@ -95,30 +95,30 @@ model User {
   // No hay columna de equipo a proposito: con el departamento y el puesto ya se sabe
   // a que equipo pertenece cada uno, y un tercer campo para deducir lo mismo es un
   // campo mas que queda sin cargar.
-  departamento  String?
-  puesto        String?
+  departamento String?
+  puesto       String?
   // Fecha pura, sin hora: un cumpleanos no tiene hora, y guardarlo como timestamp
   // lo corre un dia segun la zona (ya paso con 2076 cajas migradas a medianoche UTC).
-  fecha_nac     DateTime? @db.Date
+  fecha_nac    DateTime? @db.Date
 
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
-  user_app_roles   UserAppRole[]
-  user_permissions UserPermission[]
-  cajas_creadas    Caja[]            @relation("CajaCreatedBy")
-  pagos_creados    Pago[]            @relation("PagoCreatedBy")
-  pdps_creados     Pdp[]             @relation("PdpCreatedBy")
-  arqueos_creados  Arqueo[]          @relation("ArqueoCreatedBy")
-  local_access     UserLocalAccess[]
-  audits           Audit[]           @relation("AuditUser")
-  app_usage        UserAppUsage[]
-  activity_logs    ActivityLog[]     @relation("ActivityLogUser")
-  filtro_presets   FiltroPreset[]    @relation("FiltroPresetUser")
-  notificaciones   Notificacion[]    @relation("NotificacionUser")
-  mov_cm_creados   MovimientoCM[]    @relation("MovimientoCMCreatedBy")
-  mov_cm_recibidos MovimientoCM[]    @relation("MovimientoCMRecibidaBy")
-  documentos_creados Documento[]  @relation("DocumentoCreatedBy")
+  user_app_roles     UserAppRole[]
+  user_permissions   UserPermission[]
+  cajas_creadas      Caja[]            @relation("CajaCreatedBy")
+  pagos_creados      Pago[]            @relation("PagoCreatedBy")
+  pdps_creados       Pdp[]             @relation("PdpCreatedBy")
+  arqueos_creados    Arqueo[]          @relation("ArqueoCreatedBy")
+  local_access       UserLocalAccess[]
+  audits             Audit[]           @relation("AuditUser")
+  app_usage          UserAppUsage[]
+  activity_logs      ActivityLog[]     @relation("ActivityLogUser")
+  filtro_presets     FiltroPreset[]    @relation("FiltroPresetUser")
+  notificaciones     Notificacion[]    @relation("NotificacionUser")
+  mov_cm_creados     MovimientoCM[]    @relation("MovimientoCMCreatedBy")
+  mov_cm_recibidos   MovimientoCM[]    @relation("MovimientoCMRecibidaBy")
+  documentos_creados Documento[]       @relation("DocumentoCreatedBy")
   folios_creados     InspeccionFolio[] @relation("FolioCreatedBy")
   folios_editados    InspeccionFolio[] @relation("FolioUpdatedBy")
 
@@ -258,10 +258,10 @@ model RubCat {
   // NULL y en Postgres `NOT (NULL OR false)` da NULL, asi que el rubro desapareceria de
   // las dos mitades del buscador. Es el bug que ya paso con proveedores (ver
   // lib/afinidadProveedor.js).
-  tipos_afines  TipoLocal[] @default([])
+  tipos_afines TipoLocal[] @default([])
   // Rubros transversales que sirven a cualquier tipo de local (impuestos, bancos,
   // alquileres). Mismo criterio que `Proveedor.es_general`.
-  es_general    Boolean     @default(false)
+  es_general   Boolean     @default(false)
 
   categoria   Categoria   @relation(fields: [id_cat], references: [id])
   rubro       Rubro       @relation(fields: [id_rub], references: [id])
@@ -293,8 +293,8 @@ model Cliente {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  app   App    @relation(fields: [id_app], references: [id])
-  pagos Pago[]
+  app           App           @relation(fields: [id_app], references: [id])
+  pagos         Pago[]
   // La otra mitad de la cuenta corriente: lo que se le cargó a la cuenta desde una
   // caja (una venta que se anotó en su cuenta en vez de cobrarse). Ver
   // lib/cuentaCorrienteCaja.js.
@@ -334,12 +334,12 @@ model TipoDocumento {
 }
 
 model Documento {
-  id      String @id @default(uuid())
-  id_tipo String
+  id           String  @id @default(uuid())
+  id_tipo      String
   // El grupo es obligatorio y el local no: un contrato marco o una habilitacion de
   // sociedad son del grupo entero, no de una sucursal. Sin local = lo ve todo el grupo.
-  id_app  String
-  id_local String?
+  id_app       String
+  id_local     String?
   // Opcional: sirve para encontrar "todo lo que tengo firmado con este proveedor".
   id_proveedor String?
 
@@ -357,12 +357,12 @@ model Documento {
   // Link para compartir SIN login (mandarle una habilitacion a un inspector). Nace en
   // null: existe solo si alguien lo genero, y se revoca volviendolo a null. El token es
   // el secreto, asi que es unico y largo (ver lib/tokenPublico.js).
-  token_publico String? @unique
+  token_publico   String?   @unique
   token_creado_at DateTime?
 
   // Vencimiento (habilitaciones, seguros). Fecha pura, sin hora, por lo mismo que
   // fecha_nac en User: un vencimiento no tiene hora y con hora se corre un dia.
-  vence DateTime? @db.Date
+  vence         DateTime? @db.Date
   // Hasta cuando ya se aviso. Evita repetir el mismo aviso en cada listado; se limpia
   // si cambia la fecha de vencimiento, porque ahi el aviso viejo ya no aplica.
   avisado_hasta DateTime?
@@ -391,18 +391,18 @@ model Documento {
 }
 
 model DocumentoArchivo {
-  id           String @id @default(uuid())
-  id_documento String
+  id              String   @id @default(uuid())
+  id_documento    String
   // gs://bucket/carpeta/archivo.pdf -- se sirve por el proxy de lectura, igual que los
   // adjuntos de pagos. Nunca se expone la URL de GCS.
-  gs_path      String
+  gs_path         String
   // 'foto' o 'pdf': decide si se muestra en el visor de imagenes o se abre el PDF.
-  tipo         String
+  tipo            String
   // Como se llamaba el archivo que subieron. En GCS el nombre es un timestamp, asi que
   // sin esto la lista muestra "1786445361010-x7f2.pdf" y nadie sabe cual es cual.
   nombre_original String?
-  orden        Int      @default(0)
-  created_at   DateTime @default(now())
+  orden           Int      @default(0)
+  created_at      DateTime @default(now())
 
   documento Documento @relation(fields: [id_documento], references: [id], onDelete: Cascade)
 
@@ -456,10 +456,10 @@ model InspeccionFolio {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  app        App   @relation(fields: [id_app], references: [id])
-  local      Local @relation(fields: [id_local], references: [id])
-  created_by User? @relation("FolioCreatedBy", fields: [id_created_by], references: [id])
-  updated_by User? @relation("FolioUpdatedBy", fields: [id_updated_by], references: [id])
+  app        App            @relation(fields: [id_app], references: [id])
+  local      Local          @relation(fields: [id_local], references: [id])
+  created_by User?          @relation("FolioCreatedBy", fields: [id_created_by], references: [id])
+  updated_by User?          @relation("FolioUpdatedBy", fields: [id_updated_by], references: [id])
   archivos   FolioArchivo[]
 
   // La planilla se pide siempre por local y ordenada por folio.
@@ -537,10 +537,10 @@ model Proveedor {
   // proveedor desaparece de las DOS mitades del buscador (ver lib/afinidadProveedor.js,
   // que documenta el bug que eso causó). Se declara acá para que `migrate diff` no
   // proponga quitarlo: Prisma no lo infiere de `TipoLocal[]`.
-  tipos_afines  TipoLocal[] @default([])
-  es_general    Boolean  @default(false) // servicios transversales: Aysa, Metrogas, AFIP, bancos
+  tipos_afines TipoLocal[] @default([])
+  es_general   Boolean     @default(false) // servicios transversales: Aysa, Metrogas, AFIP, bancos
 
-  rubcat     RubCat? @relation(fields: [id_rubcat], references: [id])
+  rubcat     RubCat?     @relation(fields: [id_rubcat], references: [id])
   pagos      Pago[]
   locales    Local[]
   documentos Documento[]
@@ -562,32 +562,31 @@ model MetodoPago {
 }
 
 model Caja {
-  id            String    @id @default(uuid())
+  id            String     @id @default(uuid())
   nro_turno     String?
   tipo_turno    TipoTurno?
   fecha_inicio  DateTime
   fecha_cierre  DateTime?
   id_local      String
   cajero        String?
-  total         Decimal?  @db.Decimal(12, 2)
-  efectivo      Decimal?  @db.Decimal(12, 2)
-  fiscal        Decimal?  @db.Decimal(12, 2)
+  total         Decimal?   @db.Decimal(12, 2)
+  efectivo      Decimal?   @db.Decimal(12, 2)
+  fiscal        Decimal?   @db.Decimal(12, 2)
   comensales    Int?
   tickets       Int?
   observaciones String?
   foto_url      String?
   id_externo    String?
-  origin        Origin    @default(DCSMART)
+  origin        Origin     @default(DCSMART)
   created_by    String?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
 
   local       Local            @relation(fields: [id_local], references: [id])
   creador     User?            @relation("CajaCreatedBy", fields: [created_by], references: [id])
   movimientos CajaMovimiento[]
   detalles    CajaDetalle[]
 
-  @@index([id_local, fecha_inicio])
   // Idempotencia de los syncs (TapTap/Fudo): el mismo turno/día externo no
   // puede existir dos veces para un local+origen. Los syncs ya deduplican por
   // código, pero con 14 locales de Fudo una carrera o un bug lo pasarían por
@@ -596,6 +595,7 @@ model Caja {
   // chocan entre sí. Reemplaza al índice de consulta [id_local, id_externo]:
   // el índice único cubre ese prefijo.
   @@unique([id_local, id_externo, origin])
+  @@index([id_local, fecha_inicio])
   @@map("cajas")
 }
 
@@ -617,19 +617,19 @@ model DetalleTipo {
 }
 
 model Arqueo {
-  id           String   @id @default(uuid())
-  id_local     String
-  fecha        DateTime
-  caja_fuerte  Decimal  @db.Decimal(12, 2)
-  cofre        Decimal  @db.Decimal(12, 2)
-  adicion      Decimal  @db.Decimal(12, 2)
-  total        Decimal  @db.Decimal(12, 2)
-  ingresos     Decimal  @db.Decimal(12, 2)
-  gastos       Decimal  @db.Decimal(12, 2)
-  comprobacion Decimal  @db.Decimal(12, 2)
+  id            String   @id @default(uuid())
+  id_local      String
+  fecha         DateTime
+  caja_fuerte   Decimal  @db.Decimal(12, 2)
+  cofre         Decimal  @db.Decimal(12, 2)
+  adicion       Decimal  @db.Decimal(12, 2)
+  total         Decimal  @db.Decimal(12, 2)
+  ingresos      Decimal  @db.Decimal(12, 2)
+  gastos        Decimal  @db.Decimal(12, 2)
+  comprobacion  Decimal  @db.Decimal(12, 2)
   observaciones String?
-  created_by   String?
-  created_at   DateTime @default(now())
+  created_by    String?
+  created_at    DateTime @default(now())
 
   local    Local           @relation(fields: [id_local], references: [id])
   creador  User?           @relation("ArqueoCreatedBy", fields: [created_by], references: [id])
@@ -788,17 +788,29 @@ model Pago {
   // CUENTA_CTE de proveedores, que significa lo contrario.
   id_cliente String?
 
-  proveedor   Proveedor?    @relation(fields: [id_proveedor], references: [id])
-  rubcat      RubCat?       @relation(fields: [id_rubcat], references: [id])
-  metodo_pago MetodoPago?   @relation(fields: [id_metodo], references: [id])
-  local       Local?        @relation(fields: [id_local], references: [id])
-  creador     User?         @relation("PagoCreatedBy", fields: [created_by], references: [id])
-  pdp         Pdp?          @relation(fields: [id_pdp], references: [id])
-  cliente     Cliente?      @relation(fields: [id_cliente], references: [id])
-  impuestos   Impuesto[]
-  multimoneda MultiMoneda[]
+  // INTERCOMPANY: la op que originó esta copia. Cuando se manda plata de un
+  // local a otro del MISMO grupo, la op original queda como egreso en el local
+  // que envía y acá nace su espejo como ingreso en el que recibe. Tener el
+  // vínculo como FK (y no solo un texto en observaciones) es lo que permite
+  // saber que ya se envió, mostrar de dónde vino y revertir sin adivinar.
+  id_pago_origen String?
+
+  proveedor     Proveedor?    @relation(fields: [id_proveedor], references: [id])
+  rubcat        RubCat?       @relation(fields: [id_rubcat], references: [id])
+  metodo_pago   MetodoPago?   @relation(fields: [id_metodo], references: [id])
+  local         Local?        @relation(fields: [id_local], references: [id])
+  creador       User?         @relation("PagoCreatedBy", fields: [created_by], references: [id])
+  pdp           Pdp?          @relation(fields: [id_pdp], references: [id])
+  cliente       Cliente?      @relation(fields: [id_cliente], references: [id])
+  impuestos     Impuesto[]
+  multimoneda   MultiMoneda[]
   // Solo existe si la op es de tipo CM y alguien la gestionó en Caja Mayor.
   movimiento_cm MovimientoCM?
+
+  // Las dos puntas del envío intercompany. `origen` es la op del local que
+  // mandó; `copias` son los espejos (hoy uno, la relación soporta más).
+  origen Pago?  @relation("PagoIntercompany", fields: [id_pago_origen], references: [id])
+  copias Pago[] @relation("PagoIntercompany")
 
   @@index([id_local, fecha])
   @@index([pagado])
@@ -806,6 +818,9 @@ model Pago {
   // La cuenta corriente de un cliente pide sus pagos ordenados por fecha. Prisma no
   // indexa las FK solo y ya hubo cinco casos de lentitud por eso (ver PR #114).
   @@index([id_cliente, fecha])
+  // Para responder "¿esta op ya se envió?" sin escanear la tabla: es la
+  // pregunta que hace la pantalla de Intercompany por cada fila que lista.
+  @@index([id_pago_origen])
   @@map("pagos")
 }
 
@@ -962,7 +977,7 @@ model TapTapSyncRun {
   id          String    @id @default(uuid())
   started_at  DateTime  @default(now())
   finished_at DateTime?
-  resultado   Json?     // { "kjhggtrer": { turnosNuevos: 3, error: null }, ... } por id_local
+  resultado   Json? // { "kjhggtrer": { turnosNuevos: 3, error: null }, ... } por id_local
   ok          Boolean   @default(true)
 
   @@map("taptap_sync_runs")
@@ -973,7 +988,7 @@ model FudoSyncRun {
   id          String    @id @default(uuid())
   started_at  DateTime  @default(now())
   finished_at DateTime?
-  resultado   Json?     // { "LTRXNBIR": { cajasNuevas: 1, cajasActualizadas: 3 }, ... } por id_local
+  resultado   Json? // { "LTRXNBIR": { cajasNuevas: 1, cajasActualizadas: 3 }, ... } por id_local
   ok          Boolean   @default(true)
 
   @@map("fudo_sync_runs")
@@ -992,7 +1007,7 @@ model FudoSyncRun {
 // mismo motivo: el aviso puede apuntar a un pago o a una caja, y no se le puede
 // poner una FK a las dos. Sirven para armar el link, no para integridad.
 model Notificacion {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   id_user     String
   tipo        String
   titulo      String
@@ -1000,13 +1015,13 @@ model Notificacion {
   tabla       String?
   id_registro String?
   id_local    String?
-  leida       Boolean  @default(false)
+  leida       Boolean   @default(false)
   // `hecha` es distinto de `leida`: leida se marca sola al abrir el aviso, asi que no
   // dice si la tarea se resolvio. Un aviso de desauditoria es alguien pidiendo que
   // revises algo, y eso se cierra cuando lo hiciste, no cuando lo miraste.
-  hecha       Boolean  @default(false)
+  hecha       Boolean   @default(false)
   hecha_at    DateTime?
-  created_at  DateTime @default(now())
+  created_at  DateTime  @default(now())
 
   user User @relation("NotificacionUser", fields: [id_user], references: [id])
 
@@ -1024,7 +1039,7 @@ model Notificacion {
 model FiltroPreset {
   id         String   @id @default(uuid())
   id_user    String
-  modulo     String   // 'pagos' | 'cajas'
+  modulo     String // 'pagos' | 'cajas'
   nombre     String
   filtros    Json
   created_at DateTime @default(now())
@@ -1084,8 +1099,8 @@ enum MonedaCM {
 // de apertura, que allá se cargaba como un movimiento normal con la observación
 // "Saldo Inicial" a mano (6 filas así en el export).
 enum OrigenCM {
-  PAGO     // op de gestión con id_tipo = 'CM'
-  PROPIO   // cargado a mano en el módulo
+  PAGO // op de gestión con id_tipo = 'CM'
+  PROPIO // cargado a mano en el módulo
   APERTURA // saldo inicial del local, uno por local y moneda
 
   @@map("origen_cm")
@@ -1113,7 +1128,7 @@ model MovimientoCM {
   // si alguien la corrige a mano queda `direccion_manual` en true y desde entonces
   // la sincronización no la vuelve a tocar.
   ingreso          Boolean?
-  direccion_manual Boolean @default(false)
+  direccion_manual Boolean  @default(false)
 
   estado           EstadoCM  @default(ENVIADA)
   recibe           String?

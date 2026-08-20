@@ -17,6 +17,7 @@ import cajaDetallesRoutes from './routes/caja_detalles.js'
 import detalleTiposRoutes from './routes/detalle_tipos.js'
 import pagosRoutes from './routes/pagos.js'
 import pdpRoutes from './routes/pdp.js'
+import intercompanyRoutes from './routes/intercompany.js'
 import proveedoresRoutes from './routes/proveedores.js'
 import rubcatRoutes from './routes/rubcat.js'
 import metodosRoutes from './routes/metodos_pago.js'
@@ -95,6 +96,7 @@ await app.register(cajaDetallesRoutes, { prefix: '/api/caja-detalles' })
 await app.register(detalleTiposRoutes, { prefix: '/api/detalle-tipos' })
 await app.register(pagosRoutes, { prefix: '/api/pagos' })
 await app.register(pdpRoutes, { prefix: '/api/pdp' })
+await app.register(intercompanyRoutes, { prefix: '/api/intercompany' })
 await app.register(proveedoresRoutes, { prefix: '/api/proveedores' })
 await app.register(rubcatRoutes,    { prefix: '/api/rubcat' })
 await app.register(metodosRoutes,  { prefix: '/api/metodos-pago' })

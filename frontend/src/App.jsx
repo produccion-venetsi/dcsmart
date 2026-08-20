@@ -37,6 +37,7 @@ const CajaVer       = lazyWithReload(() => import('./pages/cajas/CajaVer.jsx'))
 const PagoList      = lazyWithReload(() => import('./pages/pagos/PagoList.jsx'))
 const PagoForm      = lazyWithReload(() => import('./pages/pagos/PagoForm.jsx'))
 const PdpDashboard  = lazyWithReload(() => import('./pages/pdp/PdpDashboard.jsx'))
+const Intercompany  = lazyWithReload(() => import('./pages/intercompany/Intercompany.jsx'))
 const ProveedorList = lazyWithReload(() => import('./pages/proveedores/ProveedorList.jsx'))
 const ProveedorForm = lazyWithReload(() => import('./pages/proveedores/ProveedorForm.jsx'))
 const ClienteList   = lazyWithReload(() => import('./pages/clientes/ClienteList.jsx'))
@@ -167,6 +168,9 @@ export default function App() {
           <Route path="avisos"                     element={<ProtectedRoute requireApp={false}><Avisos /></ProtectedRoute>} />
           <Route path="pagos/:id/editar"           element={<OperativeGuard><PagoForm /></OperativeGuard>} />
           <Route path="pdp"                        element={<Guard roles={OPERATIVE}><PdpDashboard /></Guard>} />
+          {/* Pasar plata entre locales del mismo grupo: mueve dinero, asi que
+              es de rol operativo para arriba (el backend lo exige tambien). */}
+          <Route path="intercompany"               element={<Guard roles={OPERATIVE}><Intercompany /></Guard>} />
           <Route path="proveedores"                element={<Guard roles={OPERATIVE}><ProveedorList /></Guard>} />
           <Route path="proveedores/nuevo"          element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
           <Route path="proveedores/:id/editar"     element={<Guard roles={OPERATIVE}><ProveedorForm /></Guard>} />
