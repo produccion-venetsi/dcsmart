@@ -21,10 +21,17 @@ async function permissionsPlugin(fastify) {
     }
   })
 
+  // `can('caja', 'view')` o `can('caja', ['view', 'create'])`: con una lista
+  // alcanza con que el usuario tenga UNA de las acciones. Sirve para los
+  // catálogos de apoyo (los nombres de detalle, por ejemplo): quien puede
+  // CREAR una caja necesita leer el catálogo aunque no tenga `view` del módulo
+  // -- es el caso de data_entry, que abría el alta con el combo vacío y un
+  // error en pantalla (2026-08-20).
   fastify.decorate('can', (moduleName, action) => {
+    const acciones = Array.isArray(action) ? action : [action]
     return async (request, reply) => {
       const userId = request.user.id
-      const permKey = `can_${action}`
+      const permKeys = acciones.map((a) => `can_${a}`)
 
       const moduleRecord = await fastify.db.module.findUnique({
         where: { nombre: moduleName }
@@ -63,7 +70,7 @@ async function permissionsPlugin(fastify) {
       const rolePerms = await fastify.db.rolePermission.findMany({
         where: { id_role: { in: roleIds }, id_module: moduleRecord.id }
       })
-      const roleGrants = rolePerms.some(rp => rp[permKey])
+      const roleGrants = rolePerms.some(rp => permKeys.some((k) => rp[k]))
 
       // dcsmart: igual que super_admin, nunca queda bloqueado por un override
       // individual si su rol ya concede el permiso -- solo un override que
@@ -75,7 +82,7 @@ async function permissionsPlugin(fastify) {
         where: { id_user_id_module: { id_user: userId, id_module: moduleRecord.id } }
       })
       if (userPerm) {
-        if (userPerm[permKey]) return
+        if (permKeys.some((k) => userPerm[k])) return
         return reply.code(403).send({ error: 'Acceso denegado' })
       }
 

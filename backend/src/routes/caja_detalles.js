@@ -4,6 +4,10 @@ import { parseMonto, parseEntero } from '../lib/montos.js'
 
 export default async function cajaDetallesRoutes(fastify) {
   const viewHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'view')]
+  // El CATÁLOGO de nombres es de apoyo a la carga: alcanza con poder crear.
+  // data_entry no tiene `view` de caja y abría el alta con el combo vacío y un
+  // error en pantalla, aunque la caja después se creara igual.
+  const catalogoHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', ['view', 'create'])]
   const createHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'create')]
   const editHandler   = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'edit')]
   const deleteHandler = [fastify.authenticate, fastify.appContext, fastify.can('caja', 'delete')]
@@ -19,7 +23,7 @@ export default async function cajaDetallesRoutes(fastify) {
 
   // ── GET /tipos ─────────────────────────────────────────────────────────
   // Acepta id_local opcional y devuelve tipos app-wide + tipos del local específico
-  fastify.get('/tipos', { preHandler: viewHandler }, async (request) => {
+  fastify.get('/tipos', { preHandler: catalogoHandler }, async (request) => {
     const { id_local } = request.query
     return fastify.db.detalleTipo.findMany({
       where: {
