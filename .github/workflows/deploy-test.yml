@@ -8,11 +8,14 @@
 #     backend de test (la URL del servicio se lee después de deployarlo,
 #     porque los canales preview no pasan por el rewrite de firebase.json).
 #
-# OJO — LOS DATOS NO ESTÁN AISLADOS: el backend de test usa el mismo
-# CLOUDRUN_ENV_YAML, o sea la MISMA base de producción. Aísla el código, no
-# los datos. Para aislar datos hace falta una instancia/base aparte y un
-# secret CLOUDRUN_ENV_YAML_TEST propio (este workflow ya lo prefiere si
-# existe, así el upgrade es solo cargar el secret).
+# DATOS AISLADOS: el backend de test corre contra la base `dcsmart_test` de la
+# misma instancia de Cloud SQL, con una copia de los datos reales (las últimas
+# 20 cajas de cada local). Se puede tocar todo sin afectar a nadie. La URL sale
+# del secret DATABASE_URL_TEST; el resto de la configuración se reusa de
+# producción para que no haya dos copias del YAML que se desincronicen.
+#
+# Para refrescar la copia: backend/scripts/copiar-a-lab.js con LAB_URL
+# apuntando a dcsmart_test (ver la nota de la base de laboratorio).
 #
 # Uso: git push origin <mi-branch>:test  (pisa la branch test con lo que quieras probar)
 
@@ -54,13 +57,24 @@ jobs:
         env:
           # Si algún día se carga CLOUDRUN_ENV_YAML_TEST (base de datos de
           # prueba propia), test queda 100% aislado sin tocar este archivo.
-          CLOUDRUN_ENV_YAML: ${{ secrets.CLOUDRUN_ENV_YAML_TEST || secrets.CLOUDRUN_ENV_YAML }}
+          CLOUDRUN_ENV_YAML: ${{ secrets.CLOUDRUN_ENV_YAML }}
+          # La base propia de test: es la UNICA variable que cambia respecto de
+          # produccion, asi no hay dos copias del YAML que se desincronicen.
+          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
           GCS_BUCKET_NAME: ${{ secrets.GCS_BUCKET_NAME }}
           GCS_PROJECT_ID: ${{ secrets.GCS_PROJECT_ID }}
           ANALYTICS_BACKEND_URL: ${{ secrets.ANALYTICS_BACKEND_URL }}
           COSTOS_BACKEND_URL: ${{ secrets.COSTOS_BACKEND_URL }}
         run: |
-          printf '%s\n' "$CLOUDRUN_ENV_YAML" > backend/.env.cloudrun.yaml
+          # Se saca el DATABASE_URL de produccion y se pone el de test: si el
+          # secret no esta cargado el deploy FALLA a proposito, en vez de
+          # levantar test contra la base real.
+          if [ -z "$DATABASE_URL_TEST" ]; then
+            echo "Falta el secret DATABASE_URL_TEST: sin el, test correria contra produccion." >&2
+            exit 1
+          fi
+          printf '%s\n' "$CLOUDRUN_ENV_YAML" | grep -v '^DATABASE_URL' > backend/.env.cloudrun.yaml
+          printf 'DATABASE_URL: %s\n' "$DATABASE_URL_TEST" >> backend/.env.cloudrun.yaml
           printf 'GCS_BUCKET_NAME: %s\n' "$GCS_BUCKET_NAME" >> backend/.env.cloudrun.yaml
           printf 'GCS_PROJECT_ID: %s\n' "$GCS_PROJECT_ID" >> backend/.env.cloudrun.yaml
           printf 'ANALYTICS_BACKEND_URL: %s\n' "$ANALYTICS_BACKEND_URL" >> backend/.env.cloudrun.yaml

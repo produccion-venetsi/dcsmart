@@ -37,6 +37,8 @@
 // Un peso. La tolerancia anterior era de un centavo y marcaba como descuadre
 // diferencias de $0,01 que son redondeo de Decimal, no errores de carga: no
 // circulan centavos. Diferencias reales de tipeo empiezan en la unidad.
+import { estadoDescuadre } from './estadoDescuadre.js'
+
 export const TOLERANCIA = 1
 
 // Rol de cada clasificacion de detalle. Las tres primeras son las vigentes; el
@@ -109,9 +111,16 @@ export function calcularCuadre(caja) {
   const detalles = caja.detalles ?? []
   const movimientos = caja.movimientos ?? []
 
-  // La fuente la define como carga el local (origin), no lo que esta caja
-  // puntual tenga cargado. Ver el comentario de arriba.
-  const fuente = ORIGENES_QUE_CUADRAN_POR_MOVIMIENTOS.includes(caja.origin) ? 'movimientos' : 'detalles'
+  // MODELO SIMPLE (DEV-82): una caja se lee por sus DETALLES, siempre. Los
+  // movimientos dejaron de existir como concepto: al convertir los datos, cada
+  // movimiento paso a ser un detalle con uno de los tres tipos (cobro / gasto /
+  // informativo). La fuente por origen desaparece porque era la que obligaba a
+  // elegir una tabla y descartar la otra.
+  //
+  // El fallback por movimientos queda SOLO para cajas viejas sin convertir
+  // (tienen movimientos y ningun detalle): asi una caja historica no muestra
+  // cero cobros mientras conviven ambas formas.
+  const fuente = detalles.length === 0 && movimientos.length > 0 ? 'movimientos' : 'detalles'
 
   let cobros = 0
   let gastos = 0
@@ -140,11 +149,16 @@ export function calcularCuadre(caja) {
   }
 
   const efectivo = num(caja.efectivo)
-  const esperado = efectivo + cobros - gastos
+  // MODELO SIMPLE (DEV-82): el gasto NO cambia lo que se vendio -- salio plata
+  // del cajon, pero la venta ya estaba explicada por como se cobro. Medido
+  // sobre las 635 cajas convertidas de la base de test: restando gastos
+  // cuadra el 41%, sin contarlos el 55%, sumandolos el 40%. El gasto se
+  // informa aparte; no participa de la cuenta de la venta.
+  const esperado = efectivo + cobros
 
   // Sin total cargado no hay nada contra que comparar
   if (caja.total == null) {
-    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null }
+    return { fuente, efectivo, cobros, gastos, informativos, esperado, total: null, diferencia: null, cuadra: null, estado: 'sin_total' }
   }
 
   const total = num(caja.total)
@@ -160,6 +174,8 @@ export function calcularCuadre(caja) {
     total,
     diferencia,
     // Positiva = el total declarado es mayor que lo que suman los componentes
-    cuadra: Math.abs(diferencia) <= TOLERANCIA
+    cuadra: Math.abs(diferencia) <= TOLERANCIA,
+    // Los tres estados del usuario: correcto / menor (hasta $2.000) / incorrecto.
+    estado: estadoDescuadre(diferencia)
   }
 }

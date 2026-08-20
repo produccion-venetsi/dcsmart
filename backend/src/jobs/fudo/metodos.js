@@ -98,19 +98,22 @@ function resolverUno({ code, name }, porNombreNorm) {
   candidatos.push(name)
 
   for (const candidato of candidatos) {
-    const id = porNombreNorm.get(normalizar(candidato))
-    if (id) return id
+    const metodo = porNombreNorm.get(normalizar(candidato))
+    if (metodo) return metodo
   }
   return null
 }
 
-// Devuelve el id de MetodoPago para cada code visto en el dia, y la lista de
-// los que cayeron en "Metodo desconocido" (solo informativo: el job ya NO
-// aborta el local por esto, la plata tiene que entrar igual).
+// Devuelve el MetodoPago ({id, nombre}) para cada code visto en el dia, y la
+// lista de los que cayeron en "Metodo desconocido" (solo informativo: el job
+// ya NO aborta el local por esto, la plata tiene que entrar igual).
+//
+// El NOMBRE se devuelve junto al id porque en el modelo simple el metodo ya no
+// es una FK del detalle: es su nombre. El id queda para quien todavia lo use.
 export function resolverMetodos(metodos, existentes) {
-  const porNombreNorm = new Map(existentes.map((m) => [normalizar(m.nombre), m.id]))
-  const idDesconocido = porNombreNorm.get(normalizar(METODO_DESCONOCIDO))
-  if (!idDesconocido) {
+  const porNombreNorm = new Map(existentes.map((m) => [normalizar(m.nombre), { id: m.id, nombre: m.nombre }]))
+  const desconocido = porNombreNorm.get(normalizar(METODO_DESCONOCIDO))
+  if (!desconocido) {
     throw new Error(`No existe el metodo de pago "${METODO_DESCONOCIDO}" en la base -- es una precondicion del job, hay que crearlo a mano antes de correrlo.`)
   }
 
@@ -121,11 +124,11 @@ export function resolverMetodos(metodos, existentes) {
   const porCode = new Map()
   const sinResolver = []
   for (const m of vistos.values()) {
-    const id = resolverUno(m, porNombreNorm)
-    if (id) {
-      porCode.set(m.code, id)
+    const metodo = resolverUno(m, porNombreNorm)
+    if (metodo) {
+      porCode.set(m.code, metodo)
     } else {
-      porCode.set(m.code, idDesconocido)
+      porCode.set(m.code, desconocido)
       sinResolver.push({ code: m.code, name: m.name })
     }
   }
