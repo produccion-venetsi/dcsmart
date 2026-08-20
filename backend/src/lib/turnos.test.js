@@ -148,9 +148,27 @@ test('totalizarPorNombre: suma el mismo nombre a traves de los turnos', () => {
   ])
 
   assert.deepEqual(total, [
-    { name: 'Efectivo', val: 150 },
-    { name: 'MP QR', val: 30 },
+    // `cant: null` -- estas filas no traen cantidad, y "no sabemos" no es "cero".
+    { name: 'Efectivo', val: 150, cant: null },
+    { name: 'MP QR', val: 30, cant: null },
   ])
+})
+
+// La cantidad de operaciones de cada linea (los groupCount de TapTap): el
+// reporte muestra "23 ops" al lado del monto del medio de pago.
+test('totalizarPorNombre: suma las cantidades junto con los montos', () => {
+  const total = totalizarPorNombre([
+    { turno: 'Noche', nombre: 'Credito', total: 100, cantidad: 4 },
+    { turno: 'Tarde', nombre: 'Credito', total: 50, cantidad: 3 },
+  ])
+  assert.equal(total[0].cant, 7)
+})
+
+test('desglosarPorTurno: cada turno lleva la cantidad de sus lineas', () => {
+  const porTurno = desglosarPorTurno([
+    { turno: 'Noche', nombre: 'Credito', total: 100, cantidad: 4 },
+  ])
+  assert.equal(porTurno.get('Noche')[0].cant, 4)
 })
 
 test('totalizarPorNombre: ordena por monto descendente', () => {
