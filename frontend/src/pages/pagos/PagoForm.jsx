@@ -6,6 +6,8 @@ import { proveedoresApi } from '../../api/proveedores.js'
 import { clientesApi } from '../../api/clientes.js'
 import { rubcatApi, rubrosApi, categoriasApi } from '../../api/rubcat.js'
 import { metodosApi } from '../../api/metodospago.js'
+import { intercompanyApi } from '../../api/intercompany.js'
+import { puedeOperar } from '../../lib/roles.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
@@ -132,6 +134,10 @@ export default function PagoForm() {
   const ahoraDateTime = nowDateTimeLocalInput()
 
   const [metodos,         setMetodos]         = useState([])
+  // Intercompany: solo aplica a las STK y solo lo pueden hacer los roles
+  // operativos del grupo. `destinoIc` vacío = no se envía a ningún lado.
+  const [localesIc,       setLocalesIc]       = useState([])
+  const [destinoIc,       setDestinoIc]       = useState('')
   // Método guardado en el pago que se edita: si quedó inactivo ya no viene en
   // el catálogo y sin esto el select se vería en blanco (ver lib/metodosSelect).
   const [metodoOriginal,  setMetodoOriginal]  = useState(null)
@@ -225,6 +231,13 @@ export default function PagoForm() {
   // comprobante a mano en el formulario común. Antes exigía además el modo
   // rápido, así que elegir MovStock desde el formulario largo no descontaba.
   const esMovStock = form.id_tipo === TIPO_MOVSTOCK
+
+  // Intercompany: mandar esta misma plata a otro local del grupo. Solo se
+  // ofrece al CREAR una op STK y a los roles que operan el grupo — para las ops
+  // ya cargadas está la pantalla de Intercompany, que además permite revertir.
+  const puedeIntercompany = !isEditing && form.id_tipo === 'STK' && puedeOperar(activeApp?.role)
+  const localIcOrigen = activeLocal?.id || form.id_local
+  const destinosIc = localesIc.filter((l) => l.id !== localIcOrigen)
   // Porcentaje del local activo. Se completa cuando llega la ficha del local;
   // hasta entonces vale el general, que es lo que corresponde a casi todos.
   const [pctDescuento, setPctDescuento] = useState(DESCUENTO_MOVSTOCK_DEFAULT)
@@ -643,6 +656,21 @@ export default function PagoForm() {
   const impuestosSum = isEditing
     ? savedImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
     : pendingImp.reduce((acc, i) => acc + Number(i.monto || 0), 0)
+  // Los locales a los que se puede enviar. Se piden solo cuando el bloque
+  // puede aparecer: es una consulta de más en cada alta que no es STK.
+  useEffect(() => {
+    // Sin limpiar el estado en el cuerpo del efecto: el bloque se oculta solo
+    // y el payload solo manda el destino si `puedeIntercompany` sigue siendo
+    // cierto, asi que una lista vieja en memoria no puede filtrarse a un pago
+    // que ya no es STK.
+    if (!puedeIntercompany) return
+    const ctrl = new AbortController()
+    intercompanyApi.locales(ctrl.signal)
+      .then(({ data }) => setLocalesIc(data.locales ?? []))
+      .catch(() => {})
+    return () => ctrl.abort()
+  }, [puedeIntercompany])
+
   useEffect(() => {
     const neto = parseFloat(form.importe_neto) || 0
     const descuento = parseFloat(form.descuento) || 0
@@ -934,6 +962,8 @@ export default function PagoForm() {
         // Se marca en el momento de crear -- no se ofrece "Carga con IA" al
         // editar (ver el comentario en Adjuntos), así que solo importa acá.
         ...(!isEditing ? { cargado_con_ia: Boolean(lectura) } : {}),
+        // Intercompany: el backend crea la op espejo después de guardar esta.
+        ...(puedeIntercompany && destinoIc ? { id_local_intercompany: destinoIc } : {}),
       }
       if (isEditing) {
         await pagosApi.update(id, payload)
@@ -951,7 +981,17 @@ export default function PagoForm() {
         if (newId && mmForm.tdc && mmForm.monto) {
           await pagosApi.createMM(newId, { tipo: mmForm.tipo, tdc: parseFloat(mmForm.tdc), monto: parseFloat(mmForm.monto) })
         }
-        notify('Pago creado', 'success')
+        // El envío intercompany se hace después de crear: si falló, el pago
+        // igual quedó guardado y hay que decirlo con todas las letras, no
+        // dejar un "Pago creado" que oculte que la otra punta no se creó.
+        const ic = res.data?.intercompany
+        if (ic?.error) {
+          notify(`Pago creado, pero no se pudo enviar al otro local: ${ic.error}. Podés enviarlo desde Intercompany.`, 'error')
+        } else if (ic?.copia) {
+          notify(`Pago creado y enviado a ${ic.copia.local?.nombre ?? 'el otro local'}`, 'success')
+        } else {
+          notify('Pago creado', 'success')
+        }
       }
       clearDraft(draftKey)
       navigate(rutaVolver)
@@ -1246,6 +1286,38 @@ export default function PagoForm() {
                 </select>
               </div>
             </div>
+
+            {/* Intercompany: aparece al elegir STK. Antes esto se marcaba
+                usando "Intercompany" como MÉTODO DE PAGO, que confundía — el
+                método dice cómo se pagó (efectivo, transferencia), no qué es la
+                operación. Ahora se declara acá y el sistema crea solo la op
+                espejo en el otro local. */}
+            {puedeIntercompany && (
+              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                <label className="form-label">Intercompany</label>
+                {destinosIc.length === 0 ? (
+                  <p className="form-hint" style={{ margin: 0 }}>
+                    El grupo no tiene otro local al que enviar.
+                  </p>
+                ) : (
+                  <>
+                    <div className="form-input-wrap">
+                      <select value={destinoIc} onChange={(e) => setDestinoIc(e.target.value)}>
+                        <option value="">No es un envío a otro local</option>
+                        {destinosIc.map((l) => (
+                          <option key={l.id} value={l.id}>Enviar a {l.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="form-hint" style={{ margin: '4px 0 0' }}>
+                      {destinoIc
+                        ? `Al guardar se crea una op igual en ${destinosIc.find(l => l.id === destinoIc)?.nombre}, como INGRESO y con la nota de que vino de acá. Esta op no cambia.`
+                        : 'Si esta plata va a otro local del grupo, elegilo acá: se crea sola la op que lo recibe.'}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Estado</label>
               <div className="form-input-wrap">

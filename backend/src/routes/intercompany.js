@@ -9,9 +9,8 @@
 // — mover plata entre locales no es una tarea de caja. El guard es de rol Y de
 // permiso sobre `pagos`: el módulo no tiene tabla propia, las ops son pagos.
 
-import {
-  TIPO_INTERCOMPANY, motivoNoEnviable, motivoDestinoInvalido, datosCopiaIntercompany,
-} from '../lib/intercompany.js'
+import { TIPO_INTERCOMPANY } from '../lib/intercompany.js'
+import { crearCopiaIntercompany, localesDelGrupo } from '../lib/enviarIntercompany.js'
 
 // Lo que la pantalla necesita de cada op para listarla y decidir.
 const SELECT_OP = {
@@ -26,20 +25,11 @@ export default async function intercompanyRoutes(fastify) {
   const ver    = [fastify.authenticate, fastify.appContext, fastify.requireOperativo, fastify.can('pagos', 'view')]
   const enviar = [fastify.authenticate, fastify.appContext, fastify.requireOperativo, fastify.can('pagos', 'create')]
 
-  // Los locales del grupo activo a los que llega quien pregunta. Es la lista
-  // contra la que se valida el destino: si un local no está acá, o no es del
-  // grupo o el usuario no tiene acceso, y en los dos casos no se puede enviar.
-  async function localesDelGrupo(request) {
-    return fastify.db.local.findMany({
-      where: { id: { in: request.allowedLocalIds }, id_app: request.activeAppId },
-      select: { id: true, nombre: true, id_app: true },
-      orderBy: { nombre: 'asc' },
-    })
-  }
+  const localesDe = (request) => localesDelGrupo(fastify.db, request)
 
   // ── GET /locales ── a qué locales se puede enviar ───────────────────────
   fastify.get('/locales', { preHandler: ver }, async (request) => {
-    return { locales: await localesDelGrupo(request) }
+    return { locales: await localesDe(request) }
   })
 
   // ── GET / ── las ops del grupo, enviadas y por enviar ───────────────────
@@ -49,7 +39,7 @@ export default async function intercompanyRoutes(fastify) {
   // copias. Así los dos lados hablan siempre del mismo conjunto.
   fastify.get('/', { preHandler: ver }, async (request, reply) => {
     const { desde, hasta, id_local } = request.query
-    const locales = await localesDelGrupo(request)
+    const locales = await localesDe(request)
     if (id_local && !locales.some((l) => l.id === id_local)) {
       return reply.code(403).send({ error: 'Sin acceso a ese local' })
     }
@@ -80,54 +70,31 @@ export default async function intercompanyRoutes(fastify) {
   })
 
   // ── POST /enviar ── crear el espejo en el local destino ─────────────────
+  //
+  // Para las ops que YA estaban cargadas. Las nuevas se marcan directamente en
+  // el formulario de Pagos, que llama al mismo helper.
   fastify.post('/enviar', { preHandler: enviar }, async (request, reply) => {
     const { id_pago, id_local_destino } = request.body ?? {}
     if (!id_pago) return reply.code(400).send({ error: 'Falta la op a enviar' })
 
     const pago = await fastify.db.pago.findUnique({
       where: { id: id_pago },
-      select: { ...SELECT_OP, periodo: true, cashflow: true, id_proveedor: true, id_rubcat: true, id_metodo: true, pv: true, nro: true, importe_neto: true, copias: { select: { id: true } } },
+      select: { ...SELECT_OP, periodo: true, cashflow: true, id_proveedor: true, id_rubcat: true, id_metodo: true, pv: true, nro: true, importe_neto: true },
     })
     if (!pago) return reply.code(404).send({ error: 'La op no existe' })
 
-    const locales = await localesDelGrupo(request)
-    // El acceso al local de ORIGEN se valida igual que el de destino: la op
-    // podría ser de otro grupo del mismo usuario.
-    if (!locales.some((l) => l.id === pago.id_local)) {
-      return reply.code(403).send({ error: 'Sin acceso al local que envía' })
-    }
-    const motivo = motivoNoEnviable(pago)
-    if (motivo) return reply.code(400).send({ error: motivo })
-    if (pago.copias.length) {
-      return reply.code(409).send({ error: 'Esta op ya se envió. Revertí el envío si querés cambiar el destino.' })
-    }
-    const motivoDestino = motivoDestinoInvalido(pago, id_local_destino, locales)
-    if (motivoDestino) return reply.code(400).send({ error: motivoDestino })
-
-    const nombreOrigen = locales.find((l) => l.id === pago.id_local)?.nombre ?? 'otro local'
-
-    // La numeración del local que recibe y la copia, en una transacción: dos
-    // envíos simultáneos al mismo local no pueden quedarse con el mismo nro_ord.
-    const copia = await fastify.db.$transaction(async (tx) => {
-      const ultimo = await tx.pago.findFirst({
-        where: { id_local: id_local_destino, nro_ord: { not: null } },
-        orderBy: { nro_ord: 'desc' },
-        select: { nro_ord: true },
+    try {
+      const copia = await crearCopiaIntercompany(fastify.db, {
+        pago,
+        idDestino: id_local_destino,
+        locales: await localesDe(request),
+        userId: request.user.id,
       })
-      return tx.pago.create({
-        data: {
-          ...datosCopiaIntercompany(pago, {
-            idDestino: id_local_destino,
-            nombreOrigen,
-            nroOrd: (ultimo?.nro_ord ?? 0) + 1,
-          }),
-          created_by: request.user.id,
-        },
-        select: SELECT_OP,
-      })
-    })
-
-    return reply.code(201).send({ copia })
+      return reply.code(201).send({ copia })
+    } catch (err) {
+      if (err.statusCode) return reply.code(err.statusCode).send({ error: err.message })
+      throw err
+    }
   })
 
   // ── DELETE /enviar/:id_pago ── revertir el envío ────────────────────────
@@ -142,7 +109,7 @@ export default async function intercompanyRoutes(fastify) {
     })
     if (!copias.length) return reply.code(404).send({ error: 'Esa op no tiene un envío que revertir' })
 
-    const locales = await localesDelGrupo(request)
+    const locales = await localesDe(request)
     for (const c of copias) {
       if (!locales.some((l) => l.id === c.id_local)) {
         return reply.code(403).send({ error: 'Sin acceso al local que recibió' })

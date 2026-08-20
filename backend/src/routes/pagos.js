@@ -8,6 +8,8 @@ import { parseCsvParam } from '../lib/queryParams.js'
 import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
 import { direccionPorTipo } from '../lib/direccionPago.js'
+import { crearCopiaIntercompany, localesDelGrupo } from '../lib/enviarIntercompany.js'
+import { ROLES_OPERATIVOS_IC } from '../lib/intercompany.js'
 import { validarClienteYEstado } from '../lib/cuentaCorriente.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
 import { avisarDesauditado } from '../lib/avisos.js'
@@ -637,7 +639,11 @@ export default async function pagosRoutes(fastify) {
       importe_neto, descuento, importe, id_metodo, cashflow,
       observaciones, pagado, fecha_pago, estado_op, foto_url, pdf_url,
       periodo, ingresa_egreso, periodico, id_local, impuestos, cargado_con_ia,
-      id_cliente
+      id_cliente,
+      // Intercompany: el local que recibe. Viene del formulario cuando se
+      // marca "es un envío a otro local" en una op STK; la copia se crea
+      // después de guardar, con las mismas reglas que la pantalla.
+      id_local_intercompany
     } = request.body
 
     if (!fecha) return reply.code(400).send({ error: 'La fecha de la factura es obligatoria' })
@@ -718,7 +724,31 @@ export default async function pagosRoutes(fastify) {
       })
       // Op de tipo CM: se copia a la caja mayor como ENVIADA.
       await copiarPagoACajaMayor(fastify, pago)
-      return reply.code(201).send(pago)
+
+      // Intercompany: el espejo en el otro local. Va DESPUÉS de crear y
+      // fuera del try de arriba a propósito -- si el envío falla (destino de
+      // otro grupo, sin acceso), el pago ya está guardado y no se pierde la
+      // carga: se avisa y el envío se resuelve desde la pantalla.
+      let intercompany = null
+      if (id_local_intercompany) {
+        if (!ROLES_OPERATIVOS_IC.includes(request.activeRole)) {
+          intercompany = { error: 'Necesitás rol de administrador del grupo para enviar a otro local' }
+        } else {
+          try {
+            const copia = await crearCopiaIntercompany(fastify.db, {
+              pago,
+              idDestino: id_local_intercompany,
+              locales: await localesDelGrupo(fastify.db, request),
+              userId: request.user.id,
+            })
+            intercompany = { copia }
+          } catch (err) {
+            fastify.log.warn({ err, pago: pago.id }, 'intercompany: no se pudo crear la copia')
+            intercompany = { error: err.statusCode ? err.message : 'No se pudo enviar al otro local' }
+          }
+        }
+      }
+      return reply.code(201).send({ ...pago, intercompany })
     } catch (err) {
       return reply.code(400).send({ error: translatePagoError(err) })
     }

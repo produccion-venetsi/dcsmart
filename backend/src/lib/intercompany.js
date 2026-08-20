@@ -1,7 +1,7 @@
 // Intercompany: pasar plata de un local a OTRO DEL MISMO GRUPO.
 //
-// Cómo funciona. Una op cargada en el local que envía (tipo STK, normalmente
-// con el método "Intercompany") se espeja en el local que recibe: nace una op
+// Cómo funciona. Una op de tipo STK cargada en el local que envía se espeja en
+// el local que recibe: nace una op
 // nueva, con el mismo importe y la misma fecha, pero como INGRESO. Las dos
 // quedan unidas por `id_pago_origen`, que es lo que permite saber que una op
 // ya se envió, decir de dónde vino la que se recibió, y revertir el envío sin
@@ -16,11 +16,20 @@
 // plata de dos clientes. Por eso se valida acá y en el backend, no en el
 // select del formulario.
 
-// El tipo de comprobante de una transferencia entre locales. El método
-// ("Intercompany") es la convención con la que el equipo las distingue, pero
-// no todas lo tienen cargado: no se exige, se muestra.
+// Quién puede enviar plata a otro local. Espeja ROLES_OPERATIVOS del frontend;
+// el guard de la ruta usa fastify.requireOperativo, y el POST de pagos lo
+// comprueba con esta lista porque ahí el guard es el de pagos (más amplio).
+export const ROLES_OPERATIVOS_IC = ['super_admin', 'dcsmart', 'admin', 'externo']
+
+// El tipo de comprobante de una transferencia entre locales.
+//
+// Antes el envío se marcaba usando "Intercompany" como MÉTODO DE PAGO. Era
+// confuso: el método dice CÓMO se pagó (efectivo, transferencia) y ese decía
+// QUÉ era la operación, que es justo lo que ya dice el tipo — de hecho el 99%
+// de las STK lo tenían y el 97% de sus usos eran STK, o sea que no agregaba
+// información. Desde 2026-08-20 el método está desactivado (las 17.173 ops que
+// lo tienen lo conservan) y el envío se declara al cargar la op.
 export const TIPO_INTERCOMPANY = 'STK'
-export const METODO_INTERCOMPANY = 'Intercompany'
 
 // Prefijo de la nota que lleva la copia. Se busca por él para no duplicarla si
 // alguien edita las observaciones a mano.
