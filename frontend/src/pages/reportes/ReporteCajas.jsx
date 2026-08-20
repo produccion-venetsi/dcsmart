@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { reportesApi } from '../../api/reportes.js'
 import { multiParam } from '../../lib/filtros.js'
+import { agruparInformativos } from '../../lib/gruposInformativos.js'
 
 const fmtCurrency = new Intl.NumberFormat('es-AR', {
   style: 'currency', currency: 'ARS', maximumFractionDigits: 0
@@ -113,12 +114,18 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
   const fiscal        = data?.fiscal ?? {}
   const payments      = data?.payments ?? []
   const payTotal      = data?.pay_total ?? 0
-  const detalles      = data?.detalles ?? []
-  const detallesTotal = data?.detalles_total ?? 0
+  // MODELO SIMPLE: el segundo bloque pasa de "todos los detalles" (hoy
+  // mezclaria cobros con sus espejos informativos) a GASTOS, que era lo que
+  // el reporte no contaba en ningun lado.
+  const gastos      = data?.gastos ?? []
+  const gastosTotal = data?.gastos_total ?? 0
+  // Agrupados en familias con la MISMA lib que el detalle de caja: canales,
+  // movimientos del cajon, ajustes del POS, resumenes.
+  const gruposInfo  = agruparInformativos(data?.informativos ?? [])
   const descuadre       = data?.descuadre ?? { absoluto: 0, cantidad_cajas: 0, sin_total: 0 }
-  // Agrupado por clasificación (Cobros / Gastos / Informativos). Es distinto del
-  // `detalles` de arriba, que es plano por nombre: este es el que explica el
-  // descuadre, porque los informativos no entran en la diferencia de caja.
+  // Agrupado por clasificación (Cobros / Gastos / Informativos). Es distinto de
+  // `gastos` (plano por nombre): este es el que explica el descuadre, porque
+  // los informativos no entran en la diferencia de caja.
   const desgloseDetalles = data?.desglose_detalles ?? []
   const turnos        = data?.turnos ?? []
 
@@ -127,8 +134,8 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
 
   const skel = loading || !data
 
-  const showMovimientos = skel || payments.length > 0
-  const showDetalles    = skel || detalles.length > 0
+  const showPagos  = skel || payments.length > 0
+  const showGastos = skel || gastos.length > 0
 
   return (
     <>
@@ -199,13 +206,13 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
 
         <div className="rep-kpi">
           <div className="rep-kpi-head">
-            <span className="rep-kpi-label">Total detalles</span>
+            <span className="rep-kpi-label">Gastos</span>
             <span className="rep-kpi-icon" style={{ background: 'rgba(206,172,129,.18)' }}><IcoTicket /></span>
           </div>
           {skel
             ? <div className="rep-skel" style={{ width: '60%', height: 32, marginBottom: 12 }} />
-            : <div className="rep-kpi-value med">{fmt(detallesTotal)}</div>}
-          <div className="rep-kpi-sub">suma de los detalles cargados</div>
+            : <div className="rep-kpi-value med">{fmt(gastosTotal)}</div>}
+          <div className="rep-kpi-sub">plata que salió de la caja; no resta de la venta</div>
         </div>
 
         <div className={'rep-kpi' + ((descuadre.cantidad_cajas ?? 0) > 0 ? ' danger' : '')} style={{ gridColumn: 'span 2' }}>
@@ -340,7 +347,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
         <div className="rep-chart-card" style={{ marginBottom: '1.25rem' }}>
           <div className="rep-chart-title">Desglose por turno</div>
           <div className="rep-chart-sub">
-            Tocá un turno para ver sus medios de cobro y sus detalles
+            Tocá un turno para ver cómo te pagaron y sus gastos
           </div>
           {skel ? (
             Array.from({ length: 3 }).map((_, i) => (
@@ -363,7 +370,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                 <tbody>
                   {turnos.map((t) => {
                     const abierto = turnoAbierto === t.turno
-                    const tieneDesglose = t.payments.length > 0 || t.detalles.length > 0
+                    const tieneDesglose = t.payments.length > 0 || (t.gastos ?? []).length > 0
                     return (
                       <Fragment key={t.turno}>
                         <tr
@@ -398,14 +405,14 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                                     ))}
                                   </div>
                                 )}
-                                {t.detalles.length > 0 && (
+                                {(t.gastos ?? []).length > 0 && (
                                   <div>
-                                    <div className="rep-turno-desglose-tit">Detalles</div>
-                                    {t.detalles.map((d, i) => (
+                                    <div className="rep-turno-desglose-tit">Gastos</div>
+                                    {t.gastos.map((d, i) => (
                                       <div className="rep-pay-row" key={i}>
                                         <span className="rep-pay-dot" style={{ background: d.color }} />
-                                        <span className="rep-pay-name">{d.name}{d.egreso ? ' (egreso)' : ''}</span>
-                                        <span className="rep-pay-amount">{d.egreso ? '-' : ''}{fmt(d.val)}</span>
+                                        <span className="rep-pay-name">{d.name}</span>
+                                        <span className="rep-pay-amount">{fmt(d.val)}</span>
                                         <span className="rep-pay-pct">{d.pct}%</span>
                                       </div>
                                     ))}
@@ -439,17 +446,17 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
         </div>
       )}
 
-      {/* ── Movimientos / Detalles: gráfico + tabla emparejados por bloque,
+      {/* ── Pagos / Gastos: gráfico + tabla emparejados por bloque,
           cada bloque desaparece entero si esa fuente no tiene datos ── */}
-      {(showMovimientos || showDetalles) && (
+      {(showPagos || showGastos) && (
         <div className="rep-charts-row paired"
-          style={{ gridTemplateColumns: showMovimientos && showDetalles ? '1fr 1fr' : '1fr' }}>
+          style={{ gridTemplateColumns: showPagos && showGastos ? '1fr 1fr' : '1fr' }}>
 
-          {showMovimientos && (
+          {showPagos && (
             <div className="rep-paired-col">
               <div className="rep-chart-card">
-                <div className="rep-chart-title">Desglose de movimientos</div>
-                <div className="rep-chart-sub">Monto cobrado por medio en el período</div>
+                <div className="rep-chart-title">Cómo te pagaron</div>
+                <div className="rep-chart-sub">La venta del período por medio de pago; Efectivo es lo contado en caja</div>
                 {skel ? (
                   <div className="rep-skel" style={{ width: '100%', height: 220 }} />
                 ) : (
@@ -474,7 +481,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
 
               <div className="rep-chart-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por movimiento</span>
+                  <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por medio</span>
                   <span style={{ fontSize: 11, color: 'rgba(var(--velo-rgb), .4)' }}>% del total</span>
                 </div>
                 {skel ? (
@@ -501,18 +508,18 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
             </div>
           )}
 
-          {/* Desglose de detalles (caja_detalles cargados a mano: MP Point,
-              MP QR, Transferencia, Rappi, etc. -- no la clasificación genérica) */}
-          {showDetalles && (
+          {/* Gastos del período: lo único que faltaba contar. En el modelo
+              simple el gasto NO resta de la venta, se informa aparte. */}
+          {showGastos && (
             <div className="rep-paired-col">
               <div className="rep-chart-card">
-                <div className="rep-chart-title">Desglose de detalles</div>
-                <div className="rep-chart-sub">Monto por detalle cargado en el período</div>
+                <div className="rep-chart-title">Gastos</div>
+                <div className="rep-chart-sub">Plata que salió de la caja en el período; no resta de la venta</div>
                 {skel ? (
                   <div className="rep-skel" style={{ width: '100%', height: 220 }} />
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={detalles} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+                    <BarChart data={gastos} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
                       <XAxis dataKey="name" tickLine={false} axisLine={false}
                         tick={{ fill: 'rgba(var(--velo-rgb), .4)', fontSize: 9, fontFamily: 'Montserrat' }}
                         interval={0} angle={-20} textAnchor="end" height={50} />
@@ -521,7 +528,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                         tickFormatter={(v) => '$' + (v >= 1000 ? Math.round(v / 1000) + 'k' : v)} />
                       <Tooltip content={<PayTooltip />} cursor={{ fill: 'rgba(var(--velo-rgb), .04)', radius: 6 }} />
                       <Bar dataKey="val" radius={[5, 5, 0, 0]}>
-                        {detalles.map((d, i) => (
+                        {gastos.map((d, i) => (
                           <Cell key={i} fill={d.color} />
                         ))}
                       </Bar>
@@ -532,7 +539,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
 
               <div className="rep-chart-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por tipo</span>
+                  <span className="rep-chart-title" style={{ marginBottom: 0 }}>Detalle por gasto</span>
                   <span style={{ fontSize: 11, color: 'rgba(var(--velo-rgb), .4)' }}>% del total</span>
                 </div>
                 {skel ? (
@@ -541,23 +548,62 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
                   ))
                 ) : (
                   <>
-                    {detalles.map((d, i) => (
+                    {gastos.map((d, i) => (
                       <div className="rep-pay-row" key={i}>
                         <span className="rep-pay-dot" style={{ background: d.color }} />
-                        <span className="rep-pay-name">{d.name}{d.egreso ? ' (egreso)' : ''}</span>
-                        <span className="rep-pay-amount">{d.egreso ? '-' : ''}{fmt(d.val)}</span>
+                        <span className="rep-pay-name">{d.name}</span>
+                        <span className="rep-pay-amount">{fmt(d.val)}</span>
                         <span className="rep-pay-pct">{d.pct}%</span>
                       </div>
                     ))}
                     <div className="rep-pay-total">
-                      <span>Total detalles</span>
-                      <span>{fmt(detallesTotal)}</span>
+                      <span>Total gastos</span>
+                      <span>{fmt(gastosTotal)}</span>
                     </div>
                   </>
                 )}
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Informativo: el desglose de lo que ya está contado, agrupado por
+          familia igual que en el detalle de la caja. No suma en ninguna
+          cuenta del reporte. ── */}
+      {!skel && gruposInfo.length > 0 && (
+        <div className="rep-chart-card" style={{ marginTop: 14 }}>
+          <div className="rep-chart-title">Informativo</div>
+          <div className="rep-chart-sub">No suma en ninguna cuenta: es el desglose de lo que ya está contado</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px 28px' }}>
+            {gruposInfo.map((g) => (
+              <div key={g.id}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, paddingBottom: 5, borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: g.color }}>{g.titulo}</span>
+                  <strong style={{ fontSize: 12.5 }}>{fmt(g.total)}</strong>
+                </div>
+                <p style={{ fontSize: 10.5, lineHeight: 1.45, color: 'var(--t3)', margin: '4px 0 6px' }}>{g.ayuda}</p>
+                {g.lineas.map((l) => (
+                  <div key={l.nombre}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '3px 0' }}>
+                      <span style={{ color: 'var(--t2)', fontWeight: 600 }}>
+                        {l.nombre}
+                        {l.cantidad != null && l.cantidad > 0 && (
+                          <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--t4)' }}>x {l.cantidad}</span>
+                        )}
+                      </span>
+                      <strong>{fmt(l.total)}</strong>
+                    </div>
+                    {l.items.length > 1 && l.items.map((it, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '1px 0 1px 12px', color: 'var(--t3)' }}>
+                        <span>{it.nombre}</span><span>{fmt(it.monto)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </>
