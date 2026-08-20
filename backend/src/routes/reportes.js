@@ -503,7 +503,7 @@ export default async function reportesRoutes(fastify) {
 
     const localIds = id_local ? [id_local] : request.allowedLocalIds
     if (!localIds.length) {
-      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00', mes_desde: rango.mesDesde, mes_hasta: rango.mesHasta }
+      return { kpis: [], alimentos: [], bebidas: [], movstock: [], ventas_total: 0, cmv_total_monto: 0, cmv_total_pct: '0.00', modo: rango.modo, mes_desde: rango.mesDesde, mes_hasta: rango.mesHasta, dia_desde: rango.diaDesde, dia_hasta: rango.diaHasta }
     }
 
     // Las fechas salen todas de resolverRangoCmv: fecha_inicio (Caja) es un
@@ -588,11 +588,15 @@ export default async function reportesRoutes(fastify) {
     const mMax = movstock.length ? Math.max(...movstock.map(m => m.val)) : 1
 
     return {
-      // Qué meses se leyeron realmente. Si entró un rango de días se redondeó a
-      // meses completos, y la pantalla tiene que poder decirlo en vez de dar por
-      // buenos los días que pidió el usuario.
+      // Qué se leyó realmente y en qué modo: 'periodo' (contable, meses
+      // completos) o 'fecha' (rango de días parcial, por fecha de carga del
+      // pago). La pantalla lo dice en vez de dejar que el usuario crea que un
+      // rango de una semana midió el mes.
+      modo: rango.modo,
       mes_desde: mesDesde,
       mes_hasta: mesHasta,
+      dia_desde: rango.diaDesde,
+      dia_hasta: rango.diaHasta,
       ventas_total: ventasTotal,
       cmv_total_monto: totalGeneral,
       cmv_total_pct: cmvTotal.toFixed(2),

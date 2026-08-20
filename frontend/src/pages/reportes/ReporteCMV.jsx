@@ -114,10 +114,10 @@ function CostChart({ title, items, barColor }) {
 export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  // El CMV se lee por período contable (`pago.periodo`): una factura de junio
-  // cargada en julio pertenece a junio. El filtro es "Mes de período" (un mes
-  // puntual) o las fechas Inicio/Fin de siempre, redondeadas a los meses que
-  // tocan -- lo que se haya tocado último (ver Reportes.jsx). Ver
+  // El CMV se lee por período contable (`pago.periodo`) cuando se pide un mes
+  // o meses enteros: una factura de junio cargada en julio pertenece a junio.
+  // Un rango de días PARCIAL (una semana) es otra pregunta y va por fecha de
+  // carga: la respuesta trae `modo` y esta pantalla lo dice. Ver
   // backend/src/lib/rangoCmv.js.
 
   useEffect(() => {
@@ -143,6 +143,7 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
   const ventasTotal = data?.ventas_total ?? 0
   const cmvMonto    = data?.cmv_total_monto ?? 0
   const cmvPct      = data?.cmv_total_pct ?? '0.00'
+  const modoCmv     = data?.modo
 
   // Los KPIs de categoría (Alimentos/Bebidas/MovStock). El CMV Total va en la
   // tarjeta de fórmula de arriba, no como KPI suelto.
@@ -160,8 +161,22 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
         </div>
       ) : (
         <div className="rep-chart-card" style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--t3)', marginBottom: 18 }}>
-            CMV Total
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--t3)' }}>
+              CMV Total
+            </span>
+            {/* Que esta midiendo: contable (por periodo, meses completos) o los
+                dias exactos pedidos (por fecha de carga). Antes una semana se
+                redondeaba al mes en silencio y el numero no era el del rango. */}
+            {modoCmv === 'fecha' ? (
+              <span className="badge badge-amber" title="Rango de días parcial: se suma lo CARGADO en esos días (fecha del pago), no el período contable">
+                por fecha de carga · {data?.dia_desde} → {data?.dia_hasta}
+              </span>
+            ) : modoCmv === 'periodo' ? (
+              <span className="badge badge-muted" title="Lectura contable: pagos por período (una factura de junio cargada en julio pertenece a junio)">
+                período contable · {data?.mes_desde}{data?.mes_hasta !== data?.mes_desde ? ` → ${data?.mes_hasta}` : ''}
+              </span>
+            ) : null}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 28 }}>
             <div>
