@@ -3,26 +3,22 @@ import { cajasApi } from '../../api/cajas.js'
 import { detallesApi } from '../../api/detalles.js'
 import CuadreVivo from '../../components/CuadreVivo.jsx'
 import { calcularCuadre } from '../../lib/cuadreCaja.js'
-import { movimientosApi } from '../../api/movimientos.js'
-import { metodosApi } from '../../api/metodospago.js'
-import { mensajeCatalogo } from '../../lib/catalogos.js'
 import { enterEjecuta } from '../../lib/formularios.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { toUtcIsoFromDateTimeLocal } from '../../lib/dates.js'
 import { TIPOS_TURNO } from '../../lib/tiposTurno.js'
 import { conTipoElegido } from '../../lib/detalleForm.js'
 import { clasificacionLabel } from '../../lib/clasificaciones.js'
-import { claseBadgeMovimiento } from '../../lib/tiposMovimiento.js'
 import ClasificacionSelect from '../../components/ClasificacionSelect.jsx'
 import TipoDetalleCombo from '../../components/TipoDetalleCombo.jsx'
-import TipoMovimientoSelect from '../../components/TipoMovimientoSelect.jsx'
 import AdjuntoUpload from '../../components/AdjuntoUpload.jsx'
 import PistaTurno, { PistaPromedio } from '../../components/PistaTurno.jsx'
 import CampoClienteCuenta from '../../components/CampoClienteCuenta.jsx'
 import { nombreCliente } from '../../lib/clientes.js'
 import { AYUDA_EFECTIVO } from '../../lib/camposCaja.js'
+import { claveLocal } from '../../lib/claveLocal.js'
 
-// Alta de caja: el turno con sus detalles y sus movimientos.
+// Alta de caja: el turno y sus detalles (cobro / gasto / informativo).
 //
 // Vivia dentro de CajaList.jsx, que ya tenia 2000 lineas. Se saco a su propio
 // archivo porque hay DOS pantallas que dan de alta una caja: el listado (en un
@@ -43,7 +39,6 @@ const EMPTY_CAJA = {
 // Formateo de montos para los totales que muestra el panel mientras se carga.
 // Se definen aca igual que en el listado: son de una linea, y en este proyecto cada
 // pantalla define sus propios helpers de display.
-function fmt$(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 0 })}` : '—' }
 function fmt$2(n) { return n != null ? `$${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : '—' }
 
 // Los iconos se definen aca y no se importan: en este proyecto cada pantalla
@@ -72,8 +67,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   const [fotoFile,      setFotoFile]      = useState(null)
   const [uploadingFoto, setUploadingFoto] = useState(false)
 
-  const [tipos,   setTipos]   = useState([])
-  const [metodos, setMetodos] = useState([])
+  const [tipos, setTipos] = useState([])
 
   const [pendingDetalles, setPendingDetalles] = useState([])
   // Mismos campos que el alta de detalle del drawer: acá faltaban `clasificacion`
@@ -84,20 +78,15 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
   // recien ahi aparecia el campo (reportado por el usuario 2026-08-20).
   const [detForm, setDetForm] = useState({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
 
-  const [pendingMovimientos, setPendingMovimientos] = useState([])
-  const [movForm, setMovForm] = useState({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
 
   // ── Cuadre en vivo ─────────────────────────────────────────────────────────
   //
-  // Se recalcula con cada tecla del total y del efectivo y con cada detalle o movimiento
+  // Se recalcula con cada tecla del total y del efectivo y con cada detalle
   // que se agrega, igual que en la edicion. El panel lo pinta pegado arriba
   // (components/CuadreVivo.jsx) para que no se lo coma el scroll.
   //
-  // Dos traducciones necesarias:
-  //   - los detalles pendientes guardan la clasificacion en `clasificacion`, y el calculo
-  //     la lee de `tipo` (que es como se llama la columna en la base).
-  //   - los movimientos necesitan el NOMBRE del metodo, no su id: el calculo distingue el
-  //     efectivo del resto (ver esEfectivo en lib/cuadreCaja.js).
+  // Una traduccion: los detalles pendientes guardan la clasificacion en
+  // `clasificacion` y el calculo la lee de `tipo` (como se llama la columna).
   //
   // `origin: 'DCSMART'` porque una caja que se crea desde la app es de la app; las de
   // TapTap entran por el sync y no pasan por esta pantalla.
@@ -106,12 +95,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
     total: form.total,
     efectivo: form.efectivo,
     detalles: pendingDetalles.map((d) => ({ tipo: d.clasificacion, monto: d.monto })),
-    movimientos: pendingMovimientos.map((m) => ({
-      tipo: m.tipo,
-      monto: m.monto,
-      metodo_pago: { nombre: metodos.find((x) => x.id === m.id_metodo)?.nombre },
-    })),
-  }), [form.total, form.efectivo, pendingDetalles, pendingMovimientos, metodos])
+  }), [form.total, form.efectivo, pendingDetalles])
 
   // El padre (la pantalla completa B+C) pinta el panel de cuadre en su propia
   // columna: se le publica el calculo en vez de duplicarlo.
@@ -131,25 +115,14 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
       .catch(() => notify('No se pudieron cargar los nombres de detalle', 'error'))
   }, [targetLocalId, notify])
 
-  useEffect(() => {
-    metodosApi.list()
-      .then(r => setMetodos(r.data || []))
-      .catch(err => notify(mensajeCatalogo(err, 'los métodos de pago'), 'error'))
-  }, [notify])
 
   const addPendingDetalle = () => {
     if (!detForm.monto) return
-    setPendingDetalles(prev => [...prev, { ...detForm, _key: crypto.randomUUID() }])
+    setPendingDetalles(prev => [...prev, { ...detForm, _key: claveLocal() }])
     setDetForm({ clasificacion: 'cobro', id_tipo: '', nombre: '', monto: '', cantidad: '', observaciones: '', id_cliente: '', cliente: null })
   }
   const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
 
-  const addPendingMovimiento = () => {
-    if (!movForm.monto) return
-    setPendingMovimientos(prev => [...prev, { ...movForm, _key: crypto.randomUUID() }])
-    setMovForm({ tipo: 'INGRESO', id_metodo: '', monto: '', cantidad: '' })
-  }
-  const removePendingMovimiento = (key) => setPendingMovimientos(prev => prev.filter(m => m._key !== key))
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -173,8 +146,12 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
       })
       const nuevoId = res.data?.id
 
-      let detOk = 0, detFail = 0
+      // Los detalles van de a uno. Cuando alguno falla se guarda POR QUÉ y de
+      // cuál: el mensaje viejo decía "3/5 guardados" y hablaba de movimientos
+      // que ya no existen, así que el que cargaba no sabía qué revisar.
+      const fallidos = []
       for (const d of pendingDetalles) {
+        const etiqueta = tipos.find(t => t.id === d.id_tipo)?.nombre || d.nombre || `$${d.monto}`
         try {
           await detallesApi.create({
             id_caja: nuevoId,
@@ -184,32 +161,21 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
             clasificacion: d.clasificacion || null,
             nombre: d.id_tipo ? null : (d.nombre || null),
             monto: parseFloat(d.monto),
-            observaciones: d.observaciones || null
-          , cantidad: d.cantidad ? parseInt(d.cantidad) : null
-          , id_cliente: d.id_cliente || null })
-          detOk++
-        } catch { detFail++ }
-      }
-
-      let movOk = 0, movFail = 0
-      for (const m of pendingMovimientos) {
-        try {
-          await movimientosApi.create({
-            id_caja: nuevoId,
-            tipo: m.tipo,
-            id_metodo: m.id_metodo || null,
-            monto: parseFloat(m.monto),
-            cantidad: m.cantidad ? parseInt(m.cantidad) : null
+            observaciones: d.observaciones || null,
+            cantidad: d.cantidad ? parseInt(d.cantidad) : null,
+            id_cliente: d.id_cliente || null,
           })
-          movOk++
-        } catch { movFail++ }
+        } catch (err) {
+          fallidos.push(`${etiqueta}: ${err.response?.data?.error || 'no se pudo guardar'}`)
+        }
       }
 
-      if (detFail === 0 && movFail === 0) {
+      if (fallidos.length === 0) {
         notify('Caja creada', 'success')
       } else {
         notify(
-          `Caja creada. Detalles: ${detOk}/${pendingDetalles.length} guardados. Movimientos: ${movOk}/${pendingMovimientos.length} guardados. Los que fallaron podés agregarlos manualmente desde el detalle.`,
+          `La caja se creó, pero ${fallidos.length === 1 ? 'una línea no entró' : `${fallidos.length} líneas no entraron`}: ` +
+          `${fallidos.join(' · ')}. Agregalas desde Editar.`,
           'error'
         )
       }
