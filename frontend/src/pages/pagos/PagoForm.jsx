@@ -1390,7 +1390,7 @@ export default function PagoForm() {
           </div>
 
           {/* ── Montos ── */}
-          <div className="form-panel">
+          <div className="form-panel pago-adjuntos">
             <div className="form-panel-title">Adjuntos</div>
 
             {/* ── Carga con IA ─────────────────────────────────────────────────
@@ -1815,7 +1815,7 @@ export default function PagoForm() {
           )}
 
           {/* ── Adjuntos ── */}
-          <div className="form-panel">
+          <div className="form-panel pago-notas">
             <div className="form-panel-title">Notas</div>
             <div className="form-group">
               <label className="form-label">Observaciones</label>

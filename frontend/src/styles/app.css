@@ -1682,9 +1682,29 @@ select.campo-ia {
   align-items: start;
 }
 .pago-col-plata { position: sticky; top: 1rem; }
+
+/* El blur de los paneles se apaga dentro del split. Sobre un fondo SÓLIDO no
+   cambia nada visualmente --el color ya viene compuesto-- pero cada panel
+   borroso es una capa de composición, y con dos columnas pegadas (una de ellas
+   sticky) Chrome dibujaba el borde de esas capas como una línea clara de 1px
+   que aparecía y desaparecía al mover el mouse. */
+.pago-split .form-panel { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
 @media (max-width: 1100px) {
+  /* Apilado: las columnas dejan de existir como caja y sus paneles pasan a ser
+     hijos directos del grid. Eso permite ordenarlos -- si no, se leerían los
+     dos bloques enteros uno después del otro y los adjuntos (que se cargan al
+     final) quedarían antes que los montos. */
   .pago-split { grid-template-columns: 1fr; }
+  .pago-col-datos, .pago-col-plata { display: contents; }
   .pago-col-plata { position: static; }
+  /* El orden en el celular: primero los datos, después la plata, y los
+     adjuntos y las notas al final, que es como se carga de verdad. */
+  /* Misma especificidad que la regla de arriba: con `.pago-adjuntos` a secas
+     perdía contra `.pago-split > * > .form-panel` y el orden no se movía. */
+  .pago-split > * > .form-panel { order: 2; }
+  .pago-split > * > .form-panel.pago-adjuntos { order: 8; }
+  .pago-split > * > .form-panel.pago-notas { order: 9; }
 }
 
 /* Card chica y suelta para un checkbox destacado (ej. "Pago periódico") */
