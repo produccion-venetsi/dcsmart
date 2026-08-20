@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { arqueoApi } from '../../api/arqueo.js'
-import { detallesApi } from '../../api/detalles.js'
+import DisponibilidadesInput, { detallesDesdeValores, valoresDesdeDetalles } from '../../components/DisponibilidadesInput.jsx'
+import { nombreDisponibilidad } from '../../lib/disponibilidades.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
 import DrawerPanel from '../../components/DrawerPanel.jsx'
 import { toDateTimeLocalInput, toUtcIsoFromDateTimeLocal, fmtDateTimeArg } from '../../lib/dates.js'
 import { totalContado, calcularComprobacion, describirComprobacion } from '../../lib/cuadreArqueo.js'
-import { claveLocal } from '../../lib/claveLocal.js'
 
 /* ── helpers ── */
 function fmt$(n) {
@@ -37,14 +37,11 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
   const [preview, setPreview] = useState(null)
   const [loadingPreview, setLoadingPreview] = useState(true)
 
-  const [tipos, setTipos] = useState([])
-  const [pendingDetalles, setPendingDetalles] = useState([])
-  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '' })
+  const [dispValores, setDispValores] = useState({})
 
   const fechaArqueo = new Date()
 
   useEffect(() => {
-    detallesApi.tipos(activeLocal.id).then(r => setTipos(r.data || [])).catch(() => {})
     setLoadingPreview(true)
     arqueoApi.preview(activeLocal.id, fechaArqueo.toISOString())
       .then(({ data }) => setPreview(data))
@@ -57,13 +54,6 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
     ? calcularComprobacion({ ingresos: preview.ingresos, gastos: preview.gastos, contado: total, contadoAnterior: preview.total_ultimo_arqueo })
     : null
 
-  const addPendingDetalle = () => {
-    if (!detForm.monto) return
-    setPendingDetalles(prev => [...prev, { ...detForm, _key: claveLocal() }])
-    setDetForm({ id_tipo: '', monto: '' })
-  }
-  const removePendingDetalle = (key) => setPendingDetalles(prev => prev.filter(d => d._key !== key))
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
@@ -75,10 +65,7 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
         cofre: parseFloat(cofre) || 0,
         adicion: parseFloat(adicion) || 0,
         observaciones: observaciones.trim() || null,
-        detalles: pendingDetalles.map(d => ({
-          id_tipo: d.id_tipo || null,
-          monto: parseFloat(d.monto) || 0
-        }))
+        detalles: detallesDesdeValores(dispValores)
       })
       notify('Arqueo creado', 'success')
       onCreated()
@@ -120,26 +107,7 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
       </div>
 
       <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Disponibilidades</div>
-      {pendingDetalles.map(d => (
-        <div key={d._key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-          <span>{tipos.find(t => t.id === d.id_tipo)?.nombre || 'Sin tipo'}: {fmt$(d.monto)}</span>
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => removePendingDetalle(d._key)}>✕</button>
-        </div>
-      ))}
-      <div style={{ display: 'flex', gap: 8, marginTop: '0.5rem', alignItems: 'flex-start' }}>
-        <div className="form-input-wrap" style={{ flex: 2 }}>
-          <select value={detForm.id_tipo} onChange={e => setDetForm({ ...detForm, id_tipo: e.target.value })}>
-            <option value="">Tipo…</option>
-            {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </div>
-        <div className="form-input-wrap" style={{ flex: 1 }}>
-          <input type="number" step="0.01" placeholder="Monto" value={detForm.monto} onChange={e => setDetForm({ ...detForm, monto: e.target.value })} />
-        </div>
-        <button type="button" className="btn btn-sm btn-secondary" onClick={addPendingDetalle}>
-          <IcoPlus /> Agregar
-        </button>
-      </div>
+      <DisponibilidadesInput idLocal={activeLocal.id} valores={dispValores} onChange={setDispValores} disabled={saving} />
 
       <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Comprobación</div>
       {loadingPreview ? (
@@ -219,22 +187,11 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
   const [cofre,      setCofre]      = useState(String(arqueo.cofre))
   const [adicion,    setAdicion]    = useState(String(arqueo.adicion))
   const [observaciones, setObservaciones] = useState(arqueo.observaciones ?? '')
-  const [detalles,   setDetalles]   = useState(
-    (arqueo.detalles || []).map(d => ({ id_tipo: d.id_tipo || '', monto: String(d.monto), _key: d.id }))
-  )
-  const [tipos, setTipos] = useState([])
-  const [detForm, setDetForm] = useState({ id_tipo: '', monto: '' })
-
-  useEffect(() => {
-    detallesApi.tipos(arqueo.id_local).then(r => setTipos(r.data || [])).catch(() => {})
-  }, [arqueo.id_local])
-
-  const addDetalle = () => {
-    if (!detForm.monto) return
-    setDetalles(prev => [...prev, { ...detForm, _key: claveLocal() }])
-    setDetForm({ id_tipo: '', monto: '' })
-  }
-  const removeDetalle = (key) => setDetalles(prev => prev.filter(d => d._key !== key))
+  // Las líneas del catálogo viejo se separan una sola vez y viajan intactas
+  // hasta el submit: editar la fecha de un arqueo de 2025 no puede borrarle lo
+  // que se contó ese día.
+  const [{ valores: dispIniciales, heredadas }] = useState(() => valoresDesdeDetalles(arqueo.detalles))
+  const [dispValores, setDispValores] = useState(dispIniciales)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -246,7 +203,7 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
         cofre: parseFloat(cofre) || 0,
         adicion: parseFloat(adicion) || 0,
         observaciones: observaciones.trim() || null,
-        detalles: detalles.map(d => ({ id_tipo: d.id_tipo || null, monto: parseFloat(d.monto) || 0 }))
+        detalles: detallesDesdeValores(dispValores, heredadas)
       })
       notify('Arqueo actualizado', 'success')
       onSaved()
@@ -294,26 +251,13 @@ function ArqueoEditPanel({ arqueo, onSaved, onCancel }) {
       </div>
 
       <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Disponibilidades</div>
-      {detalles.map(d => (
-        <div key={d._key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-          <span>{tipos.find(t => t.id === d.id_tipo)?.nombre || 'Sin tipo'}: {fmt$(d.monto)}</span>
-          <button type="button" className="btn btn-sm btn-secondary" onClick={() => removeDetalle(d._key)}>✕</button>
-        </div>
-      ))}
-      <div style={{ display: 'flex', gap: 8, marginTop: '0.5rem', alignItems: 'flex-start' }}>
-        <div className="form-input-wrap" style={{ flex: 2 }}>
-          <select value={detForm.id_tipo} onChange={e => setDetForm({ ...detForm, id_tipo: e.target.value })}>
-            <option value="">Tipo…</option>
-            {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
-          </select>
-        </div>
-        <div className="form-input-wrap" style={{ flex: 1 }}>
-          <input type="number" step="0.01" placeholder="Monto" value={detForm.monto} onChange={e => setDetForm({ ...detForm, monto: e.target.value })} />
-        </div>
-        <button type="button" className="btn btn-sm btn-secondary" onClick={addDetalle}>
-          <IcoPlus /> Agregar
-        </button>
-      </div>
+      <DisponibilidadesInput
+        idLocal={arqueo.id_local}
+        valores={dispValores}
+        onChange={setDispValores}
+        disabled={saving}
+        heredadas={heredadas}
+      />
 
       <div style={{ display: 'flex', gap: 8, marginTop: '1.5rem' }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
@@ -442,7 +386,7 @@ function ArqueoDetailPanel({ arqueoId, canEdit, canDelete, onChanged }) {
           <div className="drawer-section-title" style={{ marginTop: '1.25rem' }}>Disponibilidades</div>
           {arqueo.detalles.map(d => (
             <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-              <span>{d.detalle_tipo?.nombre || d.nombre || 'Sin tipo'}</span>
+              <span>{nombreDisponibilidad(d)}</span>
               <span>{fmt$(d.monto)}</span>
             </div>
           ))}

@@ -5,6 +5,7 @@
 
 import { totalContado, calcularComprobacion, describirComprobacion } from '../lib/cuadreArqueo.js'
 import { whereCajasCandidatas, sumarEfectivoDelPeriodo, cajaEnPeriodo } from '../lib/periodoArqueo.js'
+import { nombreDisponibilidad } from '../lib/disponibilidades.js'
 
 // Busca el arqueo anterior de un local (el más reciente con fecha < la nueva).
 // Devuelve null si es el primer arqueo del local.
@@ -104,7 +105,7 @@ export default async function arqueoRoutes(fastify) {
   fastify.get('/:id', { preHandler: viewHandler }, async (request, reply) => {
     const arqueo = await fastify.db.arqueo.findUnique({
       where: { id: request.params.id },
-      include: { detalles: { include: { detalle_tipo: true } } }
+      include: { detalles: { include: { detalle_tipo: true, disponibilidad: true } } }
     })
     if (!arqueo) return reply.code(404).send({ error: 'Arqueo no encontrado' })
     if (!request.allowedLocalIds.includes(arqueo.id_local)) {
@@ -225,7 +226,7 @@ export default async function arqueoRoutes(fastify) {
         where: { id_local: { in: ids } },
         orderBy: { fecha: 'desc' },
         distinct: ['id_local'],
-        include: { detalles: { include: { detalle_tipo: true } } }
+        include: { detalles: { include: { detalle_tipo: true, disponibilidad: true } } }
       })
     ])
 
@@ -240,7 +241,7 @@ export default async function arqueoRoutes(fastify) {
           fecha: a.fecha,
           total: Number(a.total),
           disponibilidades: a.detalles.map(d => ({
-            nombre: d.detalle_tipo?.nombre || d.nombre || 'Sin tipo',
+            nombre: nombreDisponibilidad(d),
             monto: Number(d.monto)
           }))
         } : null
@@ -334,8 +335,44 @@ export default async function arqueoRoutes(fastify) {
     }
   })
 
+  // Las líneas de disponibilidades que se guardan con el arqueo.
+  //
+  // `id_disponibilidad` es el catálogo nuevo (el que el local tiene activo) e
+  // `id_tipo` el viejo de cajas, que se sigue aceptando porque los arqueos ya
+  // cargados apuntan ahí y editar uno no tiene por qué reescribirle el
+  // concepto. Se copia además el nombre: si mañana alguien borra o renombra la
+  // cuenta, el arqueo tiene que seguir diciendo qué se contó ese día.
+  async function lineasDetalle(idLocal, detalles) {
+    const lineas = (detalles || []).filter((d) => d && (d.id_disponibilidad || d.id_tipo || d.nombre))
+
+    const ids = [...new Set(lineas.map((d) => d.id_disponibilidad).filter(Boolean))]
+    let nombrePorId = new Map()
+    if (ids.length) {
+      // Contra el grupo DEL LOCAL, no contra el que el usuario tenga
+      // seleccionado: un super_admin puede estar cargando el arqueo de otro
+      // cliente.
+      const local = await fastify.db.local.findUnique({ where: { id: idLocal }, select: { id_app: true } })
+      const tipos = await fastify.db.disponibilidadTipo.findMany({
+        where: { id: { in: ids }, id_app: local?.id_app ?? '' },
+        select: { id: true, nombre: true },
+      })
+      // Sin esto se podría colgar de un arqueo la cuenta bancaria de otro cliente.
+      if (tipos.length !== ids.length) {
+        throw Object.assign(new Error('Alguna disponibilidad no es del grupo'), { statusCode: 400 })
+      }
+      nombrePorId = new Map(tipos.map((t) => [t.id, t.nombre]))
+    }
+
+    return lineas.map((d) => ({
+      id_disponibilidad: d.id_disponibilidad || null,
+      id_tipo: d.id_tipo || null,
+      nombre: d.nombre || nombrePorId.get(d.id_disponibilidad) || null,
+      monto: String(d.monto ?? 0),
+    }))
+  }
+
   // ── POST / ────────────────────────────────────────────────────────────
-  // body: { id_local, fecha, caja_fuerte, cofre, adicion, detalles?: [{id_tipo?, nombre?, monto}] }
+  // body: { id_local, fecha, caja_fuerte, cofre, adicion, detalles?: [{id_disponibilidad?, id_tipo?, nombre?, monto}] }
   fastify.post('/', { preHandler: createHandler }, async (request, reply) => {
     const { id_local, fecha, caja_fuerte, cofre, adicion, detalles, observaciones } = request.body
     if (!id_local || !fecha || caja_fuerte == null || cofre == null || adicion == null) {
@@ -368,13 +405,7 @@ export default async function arqueoRoutes(fastify) {
         comprobacion: String(comprobacion),
         observaciones: observaciones?.trim() || null,
         created_by: request.user.id,
-        detalles: {
-          create: (detalles || []).map((d) => ({
-            id_tipo: d.id_tipo || null,
-            nombre: d.nombre || null,
-            monto: String(d.monto ?? 0)
-          }))
-        }
+        detalles: { create: await lineasDetalle(id_local, detalles) }
       },
       include: { detalles: true }
     })
@@ -422,14 +453,7 @@ export default async function arqueoRoutes(fastify) {
         gastos: String(gastos),
         comprobacion: String(comprobacion),
         observaciones: observaciones?.trim() || null,
-        detalles: {
-          deleteMany: {},
-          create: (detalles || []).map((d) => ({
-            id_tipo: d.id_tipo || null,
-            nombre: d.nombre || null,
-            monto: String(d.monto ?? 0)
-          }))
-        }
+        detalles: { deleteMany: {}, create: await lineasDetalle(existente.id_local, detalles) }
       },
       include: { detalles: true }
     })
