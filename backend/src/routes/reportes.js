@@ -727,6 +727,9 @@ export default async function reportesRoutes(fastify) {
       },
       select: {
         id: true, nro_ord: true, fecha: true, id_tipo: true,
+        // `ingresa_egreso` para que la pantalla y el export puedan restar las
+        // notas de crédito: en el libro de IVA compras una NCA acredita.
+        ingresa_egreso: true,
         pv: true, nro: true, importe_neto: true, descuento: true, importe: true,
         proveedor:   { select: { nombre: true, razon_social: true, cuit: true } },
         metodo_pago: { select: { nombre: true } },
