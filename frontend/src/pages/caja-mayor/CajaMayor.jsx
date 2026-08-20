@@ -21,7 +21,7 @@ import {
 } from '../../lib/cajaMayor.js'
 import MovimientoForm from './MovimientoForm.jsx'
 import SelectorGrupoLocal from '../../components/SelectorGrupoLocal.jsx'
-import { dividirPorEstado, proporcion } from '../../lib/cajaMayorVista.js'
+import { dividirPorEstado, agruparPorGrupo, proporcion } from '../../lib/cajaMayorVista.js'
 import { MODOS_ALTA, tieneOp, etiquetaOp, rutaDeLaOp, resolverAlta } from '../../lib/altaCajaMayor.js'
 import { resolverApertura, mensajeDeCambio } from '../../lib/destinoAviso.js'
 
@@ -140,6 +140,20 @@ export default function CajaMayor() {
 
   const recargar = () => cargar()
 
+  // Alternar la auditoría de un movimiento. Solo los que ya tienen fila (id):
+  // una op de gestión sin gestionar todavía no existe en movimientos_cm.
+  const auditar = async (m) => {
+    if (!m.id) { notify('Primero gestionala (Recibir): la auditoría es del movimiento en caja mayor', 'error'); return }
+    setGuardando(m.id)
+    try {
+      const { data } = await cajaMayorApi.audit(m.id)
+      notify(data.audit ? 'Movimiento auditado' : 'Auditoría revertida', 'success')
+      recargar()
+    } catch (err) {
+      notify(err.response?.data?.error || 'No se pudo auditar', 'error')
+    } finally { setGuardando(null) }
+  }
+
   // Cambiar el estado sirve igual para una op de gestión (que puede no tener fila
   // todavía, y entonces va por id_pago) y para un movimiento propio.
   const cambiarEstado = async (mov, nuevoEstado) => {
@@ -238,6 +252,9 @@ export default function CajaMayor() {
   // local es, por definición, enviado menos recibido. Era el mismo número calculado
   // dos veces.
   const vista = useMemo(() => dividirPorEstado(saldos), [saldos])
+  // Agrupado por grupo (la app del local), con subtotales: la lista plana
+  // mezclaba PERROS con JD y el subtotal del grupo se hacia a ojo.
+  const gruposVista = useMemo(() => agruparPorGrupo(vista.filas), [vista])
 
   // Título del resumen: el local si hay uno elegido, si no el grupo, si no nada.
   const nombreSeleccion = idLocal
@@ -453,7 +470,26 @@ export default function CajaMayor() {
                         <tr><td colSpan={3}><div className="table-empty">
                           <p>Sin movimientos en {MONEDAS.find(m => m.valor === moneda)?.label.toLowerCase()} para los filtros aplicados.</p>
                         </div></td></tr>
-                      ) : vista.filas.map(f => (
+                      ) : gruposVista.flatMap(g => [
+                        /* La fila del grupo: nombre + subtotal del lado (y el
+                           saldo confirmado en Recibidas). Agrupar acá y no en
+                           el backend deja las dos columnas alineadas gratis:
+                           los dos lados recorren los mismos grupos. */
+                        <tr key={`g-${g.grupo}-${lado.clave}`} style={{ background: 'rgba(var(--velo-rgb), 0.045)' }}>
+                          <td style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--t3)' }}>
+                            {g.grupo}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: g[lado.clave] ? lado.color : 'var(--t4)' }}>
+                            {fmtMonto(g[lado.clave], moneda)}
+                            {lado.clave === 'recibida_total' && (
+                              <div style={{ fontSize: 10.5, fontWeight: 600 }}>
+                                <Saldo valor={g.recibida_saldo} moneda={moneda} /> <span style={{ color: 'var(--t4)' }}>saldo</span>
+                              </div>
+                            )}
+                          </td>
+                          <td />
+                        </tr>,
+                        ...g.filas.map(f => (
                         <tr
                           key={`${f.id_local}-${f.moneda}-${lado.clave}`}
                           className="row-clickable"
@@ -465,9 +501,8 @@ export default function CajaMayor() {
                           }}
                           title={`Ver los movimientos de ${f.local}`}
                         >
-                          <td>
+                          <td style={{ paddingLeft: 18 }}>
                             {f.local}
-                            {f.grupo && <div style={{ fontSize: 10.5, color: 'var(--t4)' }}>{f.grupo}</div>}
                           </td>
                           {/* La barra dice quien mueve la caja: una lista de numeros
                               obliga a compararlos de memoria. */}
@@ -488,6 +523,14 @@ export default function CajaMayor() {
                                 ↓ {fmtMonto(f[lado.ext], f.moneda)} extraído
                               </div>
                             )}
+                            {/* El SALDO confirmado del local: lo que la caja
+                                mayor efectivamente tiene de él. El monto de
+                                arriba dice cuánto se movió; este, cuánto hay. */}
+                            {lado.clave === 'recibida_total' && (f[lado.dep] > 0 || f[lado.ext] > 0) && (
+                              <div style={{ fontSize: 10.5, fontWeight: 700 }}>
+                                = <Saldo valor={f.recibida_saldo} moneda={f.moneda} /> <span style={{ color: 'var(--t4)', fontWeight: 400 }}>saldo</span>
+                              </div>
+                            )}
                             <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(var(--velo-rgb), 0.07)' }}>
                               <div style={{
                                 height: '100%', borderRadius: 2, background: lado.color,
@@ -502,7 +545,8 @@ export default function CajaMayor() {
                             {f[lado.ops]}
                           </td>
                         </tr>
-                      ))}
+                        )),
+                      ])}
                     </tbody>
                     {!loading && vista.filas.length > 0 && (
                       <tfoot>
@@ -510,6 +554,11 @@ export default function CajaMayor() {
                           <td style={{ fontWeight: 700 }}>Total</td>
                           <td style={{ textAlign: 'right', fontWeight: 700, color: lado.color, whiteSpace: 'nowrap' }}>
                             {fmtMonto(lado.total, moneda)}
+                            {lado.clave === 'recibida_total' && (
+                              <div style={{ fontSize: 11, fontWeight: 700 }}>
+                                = <Saldo valor={vista.saldoRecibida} moneda={moneda} /> <span style={{ color: 'var(--t4)', fontWeight: 400 }}>saldo confirmado</span>
+                              </div>
+                            )}
                           </td>
                           <td />
                         </tr>
@@ -677,6 +726,19 @@ export default function CajaMayor() {
                           >
                             ⇅
                           </button>
+                          {/* Auditar, como en Pagos: la tilde queda en el circuito
+                              append-only de audits. Solo movimientos con fila. */}
+                          {m.id && (
+                            <button
+                              className={`btn btn-sm ${m.audit ? 'btn-secondary' : 'btn-primary'}`}
+                              disabled={ocupado}
+                              onClick={() => auditar(m)}
+                              title={m.audit ? 'Quitar la auditoría' : 'Auditar este movimiento'}
+                              style={m.audit ? { color: 'var(--green)' } : undefined}
+                            >
+                              {m.audit ? '✓ Auditado' : 'Auditar'}
+                            </button>
+                          )}
                           {m.editable && (
                             <>
                               <button className="btn btn-sm btn-secondary" onClick={() => setFormMov(m)} title="Editar">✎</button>

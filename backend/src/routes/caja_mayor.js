@@ -161,6 +161,18 @@ export default async function cajaMayorRoutes(fastify) {
       }),
     ])
 
+    // La marca de auditoría de la página, en una consulta: mismo circuito
+    // append-only de Pagos (tabla audits, vigente=true).
+    const idsPagina = movimientos.map((m) => m.id).filter(Boolean)
+    if (idsPagina.length) {
+      const auditRows = await fastify.db.audit.findMany({
+        where: { tabla: 'movimientos_cm', id_registro: { in: idsPagina }, vigente: true, accion: 'auditado' },
+        select: { id_registro: true },
+      })
+      const auditados = new Set(auditRows.map((r) => r.id_registro))
+      for (const m of movimientos) m.audit = auditados.has(m.id)
+    }
+
     // Se manda con y sin lo pendiente: "cuánto hay" y "cuánto va a haber" son dos
     // preguntas distintas y las dos se miran.
     return {
@@ -391,6 +403,48 @@ export default async function cajaMayorRoutes(fastify) {
       include: MOV_INCLUDE,
     })
     return normalizarMovimiento(guardado)
+  })
+
+  // ── PATCH /:id/audit ── alternar la auditoría ───────────────────────────
+  // El mismo circuito append-only de Pagos: la fila anterior queda vigente=false
+  // y se inserta la acción inversa. Nunca se borra historial.
+  fastify.patch('/:id/audit', { preHandler: editar }, async (request, reply) => {
+    const mov = await fastify.db.movimientoCM.findUnique({
+      where: { id: request.params.id }, select: { id: true, id_local: true },
+    })
+    if (!mov) return reply.code(404).send({ error: 'Movimiento no encontrado' })
+    const allowed = await localesPermitidos(request)
+    if (!puedeTocarLocal(allowed, mov.id_local)) {
+      return reply.code(403).send({ error: FUERA_DE_TUS_LOCALES })
+    }
+    const { observaciones } = request.body ?? {}
+
+    const accion = await fastify.db.$transaction(async (tx) => {
+      const actual = await tx.audit.findFirst({
+        where: { tabla: 'movimientos_cm', id_registro: mov.id, vigente: true },
+      })
+      await tx.audit.updateMany({
+        where: { tabla: 'movimientos_cm', id_registro: mov.id, vigente: true },
+        data: { vigente: false },
+      })
+      const siguiente = actual?.accion === 'auditado' ? 'desauditado' : 'auditado'
+      await tx.audit.create({
+        data: {
+          id_registro:   mov.id,
+          tabla:         'movimientos_cm',
+          tipo:          'auditoria_caja_mayor',
+          accion:        siguiente,
+          aprobado:      siguiente === 'auditado',
+          vigente:       true,
+          audit_dc:      false,
+          id_user:       request.user.id,
+          fecha:         new Date(),
+          observaciones: siguiente === 'desauditado' ? (observaciones || null) : null,
+        },
+      })
+      return siguiente
+    })
+    return { audit: accion === 'auditado' }
   })
 
   // ── DELETE /:id ── borrar un movimiento propio ──────────────────────────
