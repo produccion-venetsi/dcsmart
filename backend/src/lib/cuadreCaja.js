@@ -77,7 +77,18 @@ const num = (v) => {
 // Se exporta porque el reporte de Pagos separa "en efectivo" del resto de las
 // formas de pago y tiene que usar la MISMA regla: si algun dia entra un metodo
 // "Efectivo USD", el cuadre de caja y la reporteria cambian juntos.
-export const esEfectivo = (nombreMetodo) => /efectivo/i.test(String(nombreMetodo ?? ''))
+//
+// Ese dia llego (migracion 2026-08-19): DON ALDO cobra en "Efectivo Reales" y
+// "Efectivo dolar". Son OTRA moneda -- TapTap la informa convertida a ARS pero
+// esa plata NO esta en el campo caja.efectivo, que es el conteo del cajon en
+// pesos. Tratarlos como "efectivo" los hacia desaparecer del cuadre y 172
+// cajas descuadraban por exactamente esa suma. El efectivo del cajon es
+// "Efectivo" a secas (o con sufijo ARS); con moneda extranjera es un cobro.
+const RE_MONEDA_EXTRANJERA = /d[oó]lar|usd|real|brl|eur|guaran[ií]|uyu/i
+export const esEfectivo = (nombreMetodo) => {
+  const n = String(nombreMetodo ?? '')
+  return /efectivo/i.test(n) && !RE_MONEDA_EXTRANJERA.test(n)
+}
 
 // La clasificacion del propio detalle gana sobre la de su tipo: el usuario la
 // elige al cargar el detalle y puede diferir a proposito (un "Rappi" que en una

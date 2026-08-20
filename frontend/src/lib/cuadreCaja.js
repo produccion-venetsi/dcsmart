@@ -66,7 +66,13 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0
 }
 
-export const esEfectivo = (nombreMetodo) => /efectivo/i.test(String(nombreMetodo ?? ''))
+// "Efectivo Reales" / "Efectivo dolar" (DON ALDO, multi-moneda) son OTRA
+// moneda: cobros, no el efectivo del cajon en pesos. Espejo del backend.
+const RE_MONEDA_EXTRANJERA = /d[oó]lar|usd|real|brl|eur|guaran[ií]|uyu/i
+export const esEfectivo = (nombreMetodo) => {
+  const n = String(nombreMetodo ?? '')
+  return /efectivo/i.test(n) && !RE_MONEDA_EXTRANJERA.test(n)
+}
 
 // COPIA EXACTA del backend. Lo era en intencion y no en los hechos: leia
 // `detalle.tipo.clasificacion` (como si `tipo` fuera un objeto) y caia en 'informativo',
