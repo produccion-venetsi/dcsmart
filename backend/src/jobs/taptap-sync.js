@@ -85,6 +85,20 @@ async function resolverMetodoNombre(monedaname, cacheMetodos) {
   return nombre
 }
 
+// Busca (SIN crear) la entrada del catálogo para un nombre convertido de
+// movimiento. Cachea también los "no está" (null) para no repetir queries.
+async function catalogoDe(nombre, id_app, cacheCatalogo) {
+  const key = `${id_app}|${nombre}`
+  if (cacheCatalogo.has(key)) return cacheCatalogo.get(key)
+  const dt = await prisma.detalleTipo.findUnique({
+    where: { nombre_id_app: { nombre, id_app } },
+    select: { id: true, clasificacion: true },
+  })
+  const resuelto = dt ? { id: dt.id, tipo: ROL_POR_CLASIFICACION[dt.clasificacion] ?? 'cobro' } : null
+  cacheCatalogo.set(key, resuelto)
+  return resuelto
+}
+
 // Resuelve (o crea) el DetalleTipo para un nombre, scopeado por id_app.
 // Devuelve también el TIPO explícito que le corresponde al detalle: en el
 // modelo simple cada fila lleva cobro/gasto/informativo escrito, así que el rol
@@ -104,7 +118,7 @@ async function resolverDetalleTipo(nombre, id_app, cacheDetalleTipos) {
   return resuelto
 }
 
-async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
+async function procesarLocal(local, cacheMetodos, cacheDetalleTipos, cacheCatalogo) {
   const local_db = await prisma.local.findUnique({ where: { id: local.id_local }, select: { id_app: true } })
   if (!local_db) throw new Error(`Local ${local.id_local} no existe en la base`)
 
@@ -146,11 +160,23 @@ async function procesarLocal(local, cacheMetodos, cacheDetalleTipos) {
     // MISMA regla que convirtió los históricos (lib/movimientoADetalle.js). El
     // método de pago deja de ser una FK: es el nombre del detalle. La cantidad
     // (el groupCount: 23 cobros con Crédito) viaja igual.
+    //
+    // Si el catálogo de la app YA tiene una entrada para ese nombre, su
+    // clasificación le gana a la regla estática: es como la calibración le
+    // dice al sync "este nombre acá no es un cobro". Sin entrada, la regla
+    // estática manda y NO se crea una (el catálogo es de la carga manual).
     const detallesDeMovimientos = []
     for (const m of movimientos) {
       const metodo = await resolverMetodoNombre(m.monedaname, cacheMetodos)
       const c = movimientoADetalle({ tipo: m.tipo, metodo })
-      detallesDeMovimientos.push({ tipo: c.tipo, nombre: c.nombre, monto: String(m.monto), cantidad: m.cantidad })
+      const enCatalogo = await catalogoDe(c.nombre, local_db.id_app, cacheCatalogo)
+      detallesDeMovimientos.push({
+        tipo: enCatalogo?.tipo ?? c.tipo,
+        id_tipo: enCatalogo?.id ?? null,
+        nombre: c.nombre,
+        monto: String(m.monto),
+        cantidad: m.cantidad,
+      })
     }
 
     const detalles = [...detallesSiempre, ...detallesSiOcurren]
@@ -194,6 +220,7 @@ async function main() {
   }
   const run = await prisma.tapTapSyncRun.create({ data: {} })
   const cacheMetodos = new Map()
+  const cacheCatalogo = new Map()
   const cacheDetalleTipos = new Map()
   const resultado = {}
   let ok = true
@@ -203,7 +230,7 @@ async function main() {
     if (!primero) await new Promise((r) => setTimeout(r, RATE_MS))
     primero = false
     try {
-      resultado[local.id_local] = await procesarLocal(local, cacheMetodos, cacheDetalleTipos)
+      resultado[local.id_local] = await procesarLocal(local, cacheMetodos, cacheDetalleTipos, cacheCatalogo)
       console.log(`[${local.groupId}] ${resultado[local.id_local].turnosNuevos} turnos nuevos`)
     } catch (err) {
       ok = false

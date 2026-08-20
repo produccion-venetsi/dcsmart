@@ -66,8 +66,25 @@ function credenciales(local) {
   return { apiKey, apiSecret }
 }
 
+// Busca (SIN crear) la entrada del catalogo para un nombre convertido de
+// movimiento: si existe, su clasificacion le gana a la regla estatica -- es
+// como la calibracion le dice al sync "este nombre aca no es un cobro" (el
+// caso real: "Metodo desconocido" es informativo en ACUARIO). Cachea tambien
+// los "no esta" para no repetir queries.
+async function catalogoDe(nombre, id_app, cacheCatalogo) {
+  const key = `${id_app}|${nombre}`
+  if (cacheCatalogo.has(key)) return cacheCatalogo.get(key)
+  const dt = await prisma.detalleTipo.findUnique({
+    where: { nombre_id_app: { nombre, id_app } },
+    select: { id: true, clasificacion: true },
+  })
+  const resuelto = dt ? { id: dt.id, tipo: ROL_POR_CLASIFICACION[dt.clasificacion] ?? 'cobro' } : null
+  cacheCatalogo.set(key, resuelto)
+  return resuelto
+}
+
 // Crea la caja del dia, o la actualiza conservando lo que cargo el encargado.
-async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre, turnoFudo }) {
+async function escribirCaja({ local, id_app, armado, metodosPorCode, tiposPorNombre, turnoFudo, cacheCatalogo }) {
   const { caja, movimientos, detalles } = armado
 
   const previa = await prisma.caja.findFirst({
@@ -79,11 +96,19 @@ async function escribirCaja({ local, armado, metodosPorCode, tiposPorNombre, tur
   // CajaMovimiento -- nacen como detalles de tres tipos, con la MISMA regla que
   // convirtio los historicos (lib/movimientoADetalle.js). El metodo de pago
   // deja de ser una FK: es el nombre del detalle.
-  const detallesDeMovimientos = movimientos.map((m) => {
+  const detallesDeMovimientos = []
+  for (const m of movimientos) {
     const metodo = metodosPorCode.get(m.code)?.nombre ?? null
     const c = movimientoADetalle({ tipo: m.tipo, metodo })
-    return { tipo: c.tipo, nombre: c.nombre, monto: m.monto, cantidad: m.cantidad }
-  })
+    const enCatalogo = await catalogoDe(c.nombre, id_app, cacheCatalogo)
+    detallesDeMovimientos.push({
+      tipo: enCatalogo?.tipo ?? c.tipo,
+      id_tipo: enCatalogo?.id ?? null,
+      nombre: c.nombre,
+      monto: m.monto,
+      cantidad: m.cantidad,
+    })
+  }
   const datosDetalles = [
     ...detallesDeMovimientos,
     ...detalles.map((d) => ({
@@ -187,6 +212,7 @@ async function turnoDelDia(cliente, { desde, hasta }, etiqueta) {
 }
 
 async function procesarLocal(local) {
+  const cacheCatalogo = new Map()
   const local_db = await prisma.local.findUnique({ where: { id: local.id_local }, select: { id_app: true } })
   if (!local_db) throw new Error(`Local ${local.id_local} no existe en la base`)
 
@@ -250,7 +276,7 @@ async function procesarLocal(local) {
 
       const turnoFudo = await turnoDelDia(cliente, { desde, hasta }, `${local.nombre} ${fecha}`)
 
-      const r = await escribirCaja({ local, armado, metodosPorCode: porCode, tiposPorNombre, turnoFudo })
+      const r = await escribirCaja({ local, id_app: local_db.id_app, armado, metodosPorCode: porCode, tiposPorNombre, turnoFudo, cacheCatalogo })
       if (r === 'nueva') nuevas++
       else actualizadas++
     } catch (err) {
