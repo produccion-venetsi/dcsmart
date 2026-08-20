@@ -347,7 +347,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
         <div className="rep-chart-card" style={{ marginBottom: '1.25rem' }}>
           <div className="rep-chart-title">Desglose por turno</div>
           <div className="rep-chart-sub">
-            Tocá un turno para ver cómo te pagaron y sus gastos
+            Tocá un turno para ver sus cobros y sus gastos
           </div>
           {skel ? (
             Array.from({ length: 3 }).map((_, i) => (
@@ -455,7 +455,7 @@ export default function ReporteCajas({ applied, activeLocal, tipoTurno }) {
           {showPagos && (
             <div className="rep-paired-col">
               <div className="rep-chart-card">
-                <div className="rep-chart-title">Cómo te pagaron</div>
+                <div className="rep-chart-title">Cobros</div>
                 <div className="rep-chart-sub">La venta del período por medio de pago; Efectivo es lo contado en caja</div>
                 {skel ? (
                   <div className="rep-skel" style={{ width: '100%', height: 220 }} />
