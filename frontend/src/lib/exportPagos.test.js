@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, esNotaCredito, conSignoNotaCredito } from './exportPagos.js'
+import { tiposImpuestoPresentes, columnasImpuesto, filaTotales, esNotaCredito, esIngreso, conSignoIngreso } from './exportPagos.js'
 
 const pagos = [
   { importe_neto: 1000, importe: 1210, impuestos: [{ tipo: 'IVA21', monto: 210 }] },
@@ -110,8 +110,8 @@ test('esNotaCredito reconoce NCA y NCB, y nada mas', () => {
   assert.equal(esNotaCredito(null), false)
 })
 
-test('conSignoNotaCredito invierte las columnas de plata de una NC', () => {
-  const columns = conSignoNotaCredito([
+test('conSignoIngreso invierte las columnas de plata de una NC', () => {
+  const columns = conSignoIngreso([
     { label: 'Neto',    get: (p) => p.importe_neto ?? '', total: true },
     { label: 'Importe', get: (p) => p.importe ?? '',      total: true },
   ])
@@ -120,15 +120,15 @@ test('conSignoNotaCredito invierte las columnas de plata de una NC', () => {
   assert.equal(columns[1].get(nc), -1210)
 })
 
-test('conSignoNotaCredito no toca las facturas comunes', () => {
-  const columns = conSignoNotaCredito([{ label: 'Neto', get: (p) => p.importe_neto, total: true }])
+test('conSignoIngreso no toca las facturas comunes', () => {
+  const columns = conSignoIngreso([{ label: 'Neto', get: (p) => p.importe_neto, total: true }])
   assert.equal(columns[0].get({ id_tipo: 'A', importe_neto: 1000 }), 1000)
 })
 
-test('conSignoNotaCredito no toca las columnas de texto aunque la fila sea NC', () => {
+test('conSignoIngreso no toca las columnas de texto aunque la fila sea NC', () => {
   // El tipo, el proveedor y las fechas de una NC salen igual que siempre:
   // el signo es solo de las columnas de plata.
-  const columns = conSignoNotaCredito([
+  const columns = conSignoIngreso([
     { label: 'Tipo',  get: (p) => p.id_tipo },
     { label: 'Nro',   get: (p) => p.nro },
   ])
@@ -137,22 +137,22 @@ test('conSignoNotaCredito no toca las columnas de texto aunque la fila sea NC', 
   assert.equal(columns[1].get(nc), '00001234')
 })
 
-test('conSignoNotaCredito deja vacio lo que ya venia vacio', () => {
+test('conSignoIngreso deja vacio lo que ya venia vacio', () => {
   // Un Neto sin cargar tiene que seguir siendo celda vacia, no un 0 inventado.
-  const columns = conSignoNotaCredito([{ label: 'Neto', get: (p) => p.importe_neto ?? '', total: true }])
+  const columns = conSignoIngreso([{ label: 'Neto', get: (p) => p.importe_neto ?? '', total: true }])
   assert.equal(columns[0].get({ id_tipo: 'NCA' }), '')
 })
 
-test('conSignoNotaCredito normaliza el -0 a 0', () => {
-  const columns = conSignoNotaCredito([{ label: 'IVA21', get: () => 0, total: true }])
+test('conSignoIngreso normaliza el -0 a 0', () => {
+  const columns = conSignoIngreso([{ label: 'IVA21', get: () => 0, total: true }])
   assert.equal(Object.is(columns[0].get({ id_tipo: 'NCA' }), -0), false)
   assert.equal(columns[0].get({ id_tipo: 'NCA' }), 0)
 })
 
-test('conSignoNotaCredito hereda el signo en las columnas de impuesto', () => {
+test('conSignoIngreso hereda el signo en las columnas de impuesto', () => {
   // columnasImpuesto marca total:true sola, asi que un tipo de impuesto nuevo
   // sale negativo en las NC sin que nadie lo configure.
-  const [col] = conSignoNotaCredito(columnasImpuesto(['IVA21']))
+  const [col] = conSignoIngreso(columnasImpuesto(['IVA21']))
   assert.equal(col.get({ id_tipo: 'NCA', impuestos: [{ tipo: 'IVA21', monto: 210 }] }), -210)
   assert.equal(col.get({ id_tipo: 'A',   impuestos: [{ tipo: 'IVA21', monto: 210 }] }), 210)
 })
@@ -164,7 +164,7 @@ test('la fila TOTAL resta las notas de credito', () => {
     { id_tipo: 'A',   importe_neto: 100000, importe: 121000, impuestos: [{ tipo: 'IVA21', monto: 21000 }] },
     { id_tipo: 'NCA', importe_neto:  50000, importe:  60500, impuestos: [{ tipo: 'IVA21', monto: 10500 }] },
   ]
-  const columns = conSignoNotaCredito([
+  const columns = conSignoIngreso([
     { label: 'Tipo',    get: (p) => p.id_tipo },
     { label: 'Neto',    get: (p) => p.importe_neto, total: true },
     ...columnasImpuesto(['IVA21']),
@@ -181,4 +181,43 @@ test('filaTotales redondea a 2 decimales para evitar el arrastre de error de flo
   const conFloats = [{ importe_neto: 0.1 }, { importe_neto: 0.2 }, { importe_neto: 0.3 }]
   // 0.1 + 0.2 + 0.3 en floats da 0.6000000000000001 sin redondeo.
   assert.equal(filaTotales(conFloats, columns)[1], 0.6)
+})
+
+// ── Direccion como criterio (2026-08-20) ────────────────────────────────────
+
+test('esIngreso: manda la direccion, con el tipo de respaldo', () => {
+  // El caso normal desde que el backend fuerza la direccion por tipo.
+  assert.equal(esIngreso({ id_tipo: 'NCA', ingresa_egreso: true }), true)
+  // Un reintegro que no es NC pero entro: en la app resta, en el Excel tambien.
+  assert.equal(esIngreso({ id_tipo: 'A', ingresa_egreso: true }), true)
+  // Respaldo: una NC vieja sin corregir sigue restando por su tipo.
+  assert.equal(esIngreso({ id_tipo: 'NCA', ingresa_egreso: false }), true)
+  // Un egreso comun no se toca.
+  assert.equal(esIngreso({ id_tipo: 'A', ingresa_egreso: false }), false)
+  assert.equal(esIngreso({}), false)
+  assert.equal(esIngreso(null), false)
+})
+
+// Regresion del bug reportado el 2026-08-20: la columna Importe se habia
+// firmado tambien en PAGO_CSV_COLUMNS, asi que el envoltorio la negaba dos
+// veces y la NC salia POSITIVA en el Excel y en el Sheet. Las columnas que
+// entran acá traen el valor crudo.
+test('el ingreso se niega UNA sola vez: la columna trae el valor crudo', () => {
+  const columns = conSignoIngreso([
+    { label: 'Importe', get: (p) => p.importe ?? '', total: true },
+  ])
+  const nc = { id_tipo: 'NCA', ingresa_egreso: true, importe: 1465657.6 }
+  assert.equal(columns[0].get(nc), -1465657.6)
+})
+
+test('la fila TOTAL da el neto: los ingresos restan', () => {
+  const columns = conSignoIngreso([
+    { label: 'OP',      get: (p) => p.nro_ord },
+    { label: 'Importe', get: (p) => p.importe ?? '', total: true },
+  ])
+  const pagos = [
+    { nro_ord: 1, id_tipo: 'A',   ingresa_egreso: false, importe: 1000 },
+    { nro_ord: 2, id_tipo: 'NCA', ingresa_egreso: true,  importe: 300 },
+  ]
+  assert.deepEqual(filaTotales(pagos, columns), ['TOTAL', 700])
 })

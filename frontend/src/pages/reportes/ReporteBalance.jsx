@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { reportesApi } from '../../api/reportes.js'
 import { useUiStore } from '../../store/uiStore.js'
 import { downloadExcel } from '../../lib/excel.js'
+import { esIngreso, conSignoIngreso } from '../../lib/exportPagos.js'
 import { fmtDateUTC } from '../../lib/dates.js'
 
 // Reporte de comprobantes fiscales para contabilidad. Los tipos que entran los
@@ -62,14 +63,19 @@ export default function ReporteBalance({ applied, activeLocal }) {
     return [...conocidos, ...resto]
   }, [rows])
 
+  // En el libro de IVA compras la nota de crédito ACREDITA: resta del neto,
+  // del IVA y del total. Mismo criterio que el resto de la app (la dirección,
+  // ver lib/exportPagos.js) para que la pantalla, el Excel y los KPI de Pagos
+  // den el mismo número.
   const totales = useMemo(() => {
     const t = { neto: 0, total: 0, ivas: {} }
     for (const r of rows) {
-      t.neto  += Number(r.importe_neto ?? 0)
-      t.total += Number(r.importe ?? 0)
+      const signo = esIngreso(r) ? -1 : 1
+      t.neto  += signo * Number(r.importe_neto ?? 0)
+      t.total += signo * Number(r.importe ?? 0)
       const ivas = ivasDe(r)
       for (const [tipo, monto] of Object.entries(ivas)) {
-        t.ivas[tipo] = (t.ivas[tipo] ?? 0) + monto
+        t.ivas[tipo] = (t.ivas[tipo] ?? 0) + signo * monto
       }
     }
     return t
@@ -79,7 +85,9 @@ export default function ReporteBalance({ applied, activeLocal }) {
     if (!rows.length) { notify('No hay comprobantes en el período', 'info'); return }
     setExporting(true)
     try {
-      const columns = [
+      // conSignoIngreso al final, igual que el export de Pagos: las columnas de
+      // adentro traen el valor CRUDO y el signo se pone en un solo lugar.
+      const columns = conSignoIngreso([
         { label: 'Proveedor',    get: (r) => r.proveedor?.nombre || '' },
         { label: 'Razón Social', get: (r) => r.proveedor?.razon_social || '' },
         { label: 'CUIT',         get: (r) => r.proveedor?.cuit || '' },
@@ -95,7 +103,7 @@ export default function ReporteBalance({ applied, activeLocal }) {
         })),
         { label: 'Total',        get: (r) => r.importe ?? 0, total: true },
         { label: 'FDP',          get: (r) => r.metodo_pago?.nombre || '' },
-      ]
+      ])
 
       // Misma convención que el export de pagos: TOTAL en la primera celda y
       // vacío en las columnas que no son plata.
@@ -154,6 +162,7 @@ export default function ReporteBalance({ applied, activeLocal }) {
             <tbody>
               {rows.map(r => {
                 const ivas = ivasDe(r)
+                const signo = esIngreso(r) ? -1 : 1
                 return (
                   <tr key={r.id}>
                     <td className="td-primary">{r.proveedor?.nombre || <span className="td-muted">—</span>}</td>
@@ -164,11 +173,15 @@ export default function ReporteBalance({ applied, activeLocal }) {
                       {fmtPV(r.pv)}<span className="td-muted">-</span>{fmtNro(r.nro)}
                     </td>
                     <td>{fmtDateUTC(r.fecha)}</td>
-                    <td className="td-number">{fmt$(r.importe_neto)}</td>
+                    {/* Una NC se ve negativa y en verde, igual que en Pagos:
+                        esa plata se acredita, no se gasta. */}
+                    <td className="td-number">{signo < 0 ? '−' : ''}{fmt$(r.importe_neto)}</td>
                     {ivasPresentes.map(t => (
-                      <td key={t} className="td-number">{ivas[t] ? fmt$(ivas[t]) : <span className="td-muted">—</span>}</td>
+                      <td key={t} className="td-number">{ivas[t] ? `${signo < 0 ? '−' : ''}${fmt$(ivas[t])}` : <span className="td-muted">—</span>}</td>
                     ))}
-                    <td className="td-number" style={{ color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(r.importe)}</td>
+                    <td className="td-number" style={{ color: signo < 0 ? 'var(--green)' : 'var(--gold-bright)', fontWeight: 700 }}>
+                      {signo < 0 ? '−' : ''}{fmt$(r.importe)}
+                    </td>
                     <td style={{ fontSize: 12 }}>{r.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
                   </tr>
                 )

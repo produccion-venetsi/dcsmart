@@ -131,10 +131,12 @@ export default async function reportesRoutes(fastify) {
     // sumando, en vez de correr dos consultas que agrupan distinto: así el
     // desglose por turno no puede quedar desalineado con el total de arriba.
     const payRows = await fastify.db.$queryRawUnsafe(`
-      SELECT turno, nombre, SUM(total) AS total FROM (
+      SELECT turno, nombre, SUM(total) AS total, SUM(cantidad) AS cantidad FROM (
         SELECT c.tipo_turno::text AS turno,
                TRIM(COALESCE(cd.nombre, dt.nombre, 'Sin especificar')) AS nombre,
-               cd.monto AS total
+               cd.monto AS total,
+               -- Cuantas operaciones componen la linea (groupCount de TapTap).
+               cd.cantidad AS cantidad
         FROM caja_detalles cd
         JOIN cajas c ON cd.id_caja = c.id
         LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
@@ -144,7 +146,8 @@ export default async function reportesRoutes(fastify) {
           AND cd.tipo = 'cobro'
           ${payTipoClause}
         UNION ALL
-        SELECT c.tipo_turno::text, 'Efectivo', c.efectivo
+        -- El efectivo sale del campo de la caja: no hay operaciones que contar.
+        SELECT c.tipo_turno::text, 'Efectivo', c.efectivo, NULL
         FROM cajas c
         WHERE c.id_local IN (${localPlaceholders})
           AND c.fecha_inicio >= $${localIds.length + 1}
@@ -225,7 +228,8 @@ export default async function reportesRoutes(fastify) {
       SELECT
         c.tipo_turno::text AS turno,
         TRIM(COALESCE(cd.nombre, dt.nombre, 'Sin nombre')) AS nombre,
-        SUM(cd.monto) AS total
+        SUM(cd.monto) AS total,
+        SUM(cd.cantidad) AS cantidad
       FROM caja_detalles cd
       JOIN cajas c ON cd.id_caja = c.id
       LEFT JOIN detalle_tipos dt ON cd.id_tipo = dt.id
@@ -727,6 +731,9 @@ export default async function reportesRoutes(fastify) {
       },
       select: {
         id: true, nro_ord: true, fecha: true, id_tipo: true,
+        // `ingresa_egreso` para que la pantalla y el export puedan restar las
+        // notas de crédito: en el libro de IVA compras una NCA acredita.
+        ingresa_egreso: true,
         pv: true, nro: true, importe_neto: true, descuento: true, importe: true,
         proveedor:   { select: { nombre: true, razon_social: true, cuit: true } },
         metodo_pago: { select: { nombre: true } },
