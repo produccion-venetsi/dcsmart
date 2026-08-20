@@ -137,6 +137,7 @@ export default function PagoForm() {
   // Intercompany: solo aplica a las STK y solo lo pueden hacer los roles
   // operativos del grupo. `destinoIc` vacío = no se envía a ningún lado.
   const [localesIc,       setLocalesIc]       = useState([])
+  const [icActivo,        setIcActivo]        = useState(false)
   const [destinoIc,       setDestinoIc]       = useState('')
   // Método guardado en el pago que se edita: si quedó inactivo ya no viene en
   // el catálogo y sin esto el select se vería en blanco (ver lib/metodosSelect).
@@ -963,7 +964,7 @@ export default function PagoForm() {
         // editar (ver el comentario en Adjuntos), así que solo importa acá.
         ...(!isEditing ? { cargado_con_ia: Boolean(lectura) } : {}),
         // Intercompany: el backend crea la op espejo después de guardar esta.
-        ...(puedeIntercompany && destinoIc ? { id_local_intercompany: destinoIc } : {}),
+        ...(puedeIntercompany && icActivo && destinoIc ? { id_local_intercompany: destinoIc } : {}),
       }
       if (isEditing) {
         await pagosApi.update(id, payload)
@@ -1287,34 +1288,51 @@ export default function PagoForm() {
               </div>
             </div>
 
-            {/* Intercompany: aparece al elegir STK. Antes esto se marcaba
-                usando "Intercompany" como MÉTODO DE PAGO, que confundía — el
-                método dice cómo se pagó (efectivo, transferencia), no qué es la
-                operación. Ahora se declara acá y el sistema crea solo la op
-                espejo en el otro local. */}
-            {puedeIntercompany && (
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+            {/* Intercompany: aparece al elegir STK, en la misma fila que el
+                tipo. Un check y, al marcarlo, el local al lado — ocupa una
+                celda como cualquier otro campo, no una barra de ancho completo.
+
+                Antes esto se marcaba usando "Intercompany" como MÉTODO DE
+                PAGO, que confundía: el método dice cómo se pagó (efectivo,
+                transferencia), no qué es la operación. */}
+            {puedeIntercompany && destinosIc.length > 0 && (
+              <div className="form-group">
                 <label className="form-label">Intercompany</label>
-                {destinosIc.length === 0 ? (
-                  <p className="form-hint" style={{ margin: 0 }}>
-                    El grupo no tiene otro local al que enviar.
-                  </p>
-                ) : (
-                  <>
-                    <div className="form-input-wrap">
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <label
+                    className="periodico-card"
+                    style={{ padding: '9px 12px', flexShrink: 0 }}
+                    title="La plata de esta op va a otro local del grupo"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={icActivo}
+                      onChange={(e) => {
+                        setIcActivo(e.target.checked)
+                        // Con un solo destino posible no tiene sentido pedir que
+                        // lo elijan de una lista de uno.
+                        setDestinoIc(e.target.checked && destinosIc.length === 1 ? destinosIc[0].id : '')
+                      }}
+                    />
+                    Enviar
+                  </label>
+                  {icActivo && (
+                    <div className="form-input-wrap" style={{ flex: 1, minWidth: 0 }}>
                       <select value={destinoIc} onChange={(e) => setDestinoIc(e.target.value)}>
-                        <option value="">No es un envío a otro local</option>
+                        <option value="">¿A qué local?</option>
                         {destinosIc.map((l) => (
-                          <option key={l.id} value={l.id}>Enviar a {l.nombre}</option>
+                          <option key={l.id} value={l.id}>{l.nombre}</option>
                         ))}
                       </select>
                     </div>
-                    <p className="form-hint" style={{ margin: '4px 0 0' }}>
-                      {destinoIc
-                        ? `Al guardar se crea una op igual en ${destinosIc.find(l => l.id === destinoIc)?.nombre}, como INGRESO y con la nota de que vino de acá. Esta op no cambia.`
-                        : 'Si esta plata va a otro local del grupo, elegilo acá: se crea sola la op que lo recibe.'}
-                    </p>
-                  </>
+                  )}
+                </div>
+                {icActivo && (
+                  <p className="form-hint" style={{ margin: '4px 0 0' }}>
+                    {destinoIc
+                      ? `Se crea una op igual en ${destinosIc.find(l => l.id === destinoIc)?.nombre}, como ingreso. Esta no cambia.`
+                      : 'Elegí el local que recibe.'}
+                  </p>
                 )}
               </div>
             )}
