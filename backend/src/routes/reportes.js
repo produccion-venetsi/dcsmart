@@ -426,8 +426,10 @@ export default async function reportesRoutes(fastify) {
     let pendImpuestos = 0, pendSueldos = 0, pendProveedores = 0
     let totalImpuestos = 0, totalSueldos = 0
     for (const p of pagosEnRango) {
-      if (p.ingresa_egreso === true) continue // no es gasto
-      const importe = Number(p.importe ?? 0)
+      // Los ingresos RESTAN en vez de saltearse: una nota de crédito de CMV es
+      // mercadería devuelta y baja el CMV; una impositiva baja Impuestos.
+      // Ignorarlas inflaba los gastos con plata que volvió (bug 2026-08-20).
+      const importe = Number(p.importe ?? 0) * (p.ingresa_egreso === true ? -1 : 1)
       const rubroNombre = p.rubcat?.rubro?.nombre || ''
       const esCmv = /^CMV/i.test(rubroNombre)
 
@@ -436,9 +438,9 @@ export default async function reportesRoutes(fastify) {
       if (rubroNombre === 'Impositivo') totalImpuestos += importe
       else if (rubroNombre === 'Sueldos') totalSueldos += importe
 
-      // Los ingresos ya salieron del loop en el `continue` de arriba, y el
-      // total los descuenta en deudaNeta: acá alcanza con mirar `pagado`.
-      if (!p.pagado) {
+      // Pendientes: solo egresos impagos, como siempre — la deuda neta de los
+      // ingresos impagos ya la descuenta deudaNeta en total_adeudado.
+      if (!p.pagado && p.ingresa_egreso !== true) {
         if (rubroNombre === 'Impositivo') pendImpuestos += importe
         else if (rubroNombre === 'Sueldos') pendSueldos += importe
         else if (!esCmv) pendProveedores += importe
@@ -535,7 +537,9 @@ export default async function reportesRoutes(fastify) {
       SELECT
         r.nombre AS rubro,
         c.nombre AS categoria,
-        SUM(COALESCE(p.importe, 0)) AS total
+        -- Firmado: una nota de crédito de CMV (ingreso) resta — es mercadería
+        -- que volvió, no costo.
+        SUM(CASE WHEN p.ingresa_egreso THEN -COALESCE(p.importe, 0) ELSE COALESCE(p.importe, 0) END) AS total
       FROM pagos p
       JOIN rubcat rc ON p.id_rubcat = rc.id
       JOIN rubros r ON rc.id_rub = r.id
@@ -666,7 +670,7 @@ export default async function reportesRoutes(fastify) {
       SELECT
         COALESCE(pr.nombre, 'Sin proveedor') AS proveedor,
         COUNT(*)::int AS cantidad,
-        SUM(COALESCE(p.importe, 0)) AS total
+        SUM(CASE WHEN p.ingresa_egreso THEN -COALESCE(p.importe, 0) ELSE COALESCE(p.importe, 0) END) AS total
       FROM pagos p
       JOIN rubcat rc ON p.id_rubcat = rc.id
       JOIN rubros r ON rc.id_rub = r.id
