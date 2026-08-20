@@ -42,7 +42,35 @@ function KpiCard({ label, val }) {
   )
 }
 
-function CostTable({ title, dotColor, items, total, gradient }) {
+// El detalle de una categoría: qué proveedores la componen. Se pide recién al
+// abrir (una categoría puede no interesar nunca) y se cachea por clave para
+// que cerrar y reabrir no vuelva a pegar.
+function DetalleCategoria({ detalle }) {
+  if (detalle === 'cargando') {
+    return <div style={{ padding: '8px 12px' }}><span className="skel" style={{ width: '70%', display: 'inline-block' }} /></div>
+  }
+  if (detalle === 'error') {
+    return <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--red)' }}>No se pudo cargar el detalle.</div>
+  }
+  if (!detalle?.proveedores?.length) {
+    return <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--t3)' }}>Sin pagos en el rango.</div>
+  }
+  return (
+    <div style={{ padding: '6px 4px 10px 18px', borderBottom: '1px solid var(--border)' }}>
+      {detalle.proveedores.map((pr, i) => (
+        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, padding: '3px 0' }}>
+          <span style={{ color: 'var(--t2)' }}>
+            {pr.nombre}
+            <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--t4)' }}>x {pr.cantidad}</span>
+          </span>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(pr.total)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CostTable({ title, dotColor, items, total, gradient, onToggle, abierta, detalles }) {
   return (
     <div className="rep-chart-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -51,21 +79,34 @@ function CostTable({ title, dotColor, items, total, gradient }) {
         <span style={{ fontSize: 11, color: 'var(--t3)', marginLeft: 'auto' }}>$</span>
       </div>
       {items.map((r, i) => (
-        <div key={i} style={{
-          display: 'grid', gridTemplateColumns: '1fr 168px', alignItems: 'center',
-          height: 33, borderBottom: '1px solid var(--border)'
-        }}>
-          <span style={{ fontSize: 13, color: 'var(--t2)' }}>{r.name}</span>
-          <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
-            <div style={{
-              position: 'absolute', top: 5, bottom: 5, right: 0,
-              width: `${r.h}%`, background: gradient, borderRadius: 4
-            }} />
-            <span style={{
-              position: 'relative', fontSize: 13, fontWeight: 500,
-              color: 'var(--t1)', paddingRight: 8, fontVariantNumeric: 'tabular-nums'
-            }}>{fmt(r.val)}</span>
+        <div key={i}>
+          {/* La fila abre la composición de la categoría: qué proveedores la
+              forman y por cuánto. El número deja de ser opaco. */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onToggle(r.name)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(r.name) } }}
+            title={abierta === r.name ? 'Cerrar el detalle' : `Ver qué compone ${r.name}`}
+            style={{
+              display: 'grid', gridTemplateColumns: '14px 1fr 168px', alignItems: 'center',
+              height: 33, borderBottom: '1px solid var(--border)', cursor: 'pointer'
+            }}
+          >
+            <span style={{ fontSize: 10, color: 'var(--t4)' }}>{abierta === r.name ? '▾' : '▸'}</span>
+            <span style={{ fontSize: 13, color: 'var(--t2)' }}>{r.name}</span>
+            <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' }}>
+              <div style={{
+                position: 'absolute', top: 5, bottom: 5, right: 0,
+                width: `${r.h}%`, background: gradient, borderRadius: 4
+              }} />
+              <span style={{
+                position: 'relative', fontSize: 13, fontWeight: 500,
+                color: 'var(--t1)', paddingRight: 8, fontVariantNumeric: 'tabular-nums'
+              }}>{fmt(r.val)}</span>
+            </div>
           </div>
+          {abierta === r.name && <DetalleCategoria detalle={detalles[r.name]} />}
         </div>
       ))}
       <div style={{
@@ -149,24 +190,37 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
   // tarjeta de fórmula de arriba, no como KPI suelto.
   const kpisCat = kpis.filter(k => k.label !== 'CMV Total')
 
-  // Desglose consolidado: TODAS las categorías juntas, rankeadas, con su peso
-  // dentro del CMV y sobre las ventas. Las tablas por grupo muestran cada una
-  // en su caja; acá se responde "¿qué categoría me está comiendo el margen?"
-  // sin comparar tres tablas a ojo.
-  const GRUPO = { alimentos: 'Alimentos', bebidas: 'Bebidas', movstock: 'MovStock' }
-  const categorias = [
-    ...alimentos.map(r => ({ ...r, grupo: 'alimentos' })),
-    ...bebidas.map(r => ({ ...r, grupo: 'bebidas' })),
-    ...movstock.map(r => ({ ...r, grupo: 'movstock' })),
-  ]
-    .sort((a, b) => b.val - a.val)
-    .map(r => ({
-      ...r,
-      pctCmv: cmvMonto > 0 ? ((r.val / cmvMonto) * 100).toFixed(1) : '0.0',
-      pctVentas: ventasTotal > 0 ? ((r.val / ventasTotal) * 100).toFixed(2) : '0.00',
-    }))
 
   const skel = loading || !data
+
+  // Drill-down por categoría: una sola abierta por grupo (clave grupo|nombre),
+  // detalle cacheado para que reabrir no vuelva a pegar. Cambiar el rango o el
+  // local invalida todo: los números tienen que hablar del rango visible.
+  const [abiertaKey, setAbiertaKey] = useState(null)
+  const [detalles, setDetalles] = useState({})
+  useEffect(() => { setAbiertaKey(null); setDetalles({}) }, [modo, mes, desde, hasta, activeLocal?.id])
+
+  const toggleCategoria = (grupo) => (nombre) => {
+    const key = `${grupo}|${nombre}`
+    if (abiertaKey === key) { setAbiertaKey(null); return }
+    setAbiertaKey(key)
+    if (detalles[key]) return
+    setDetalles(prev => ({ ...prev, [key]: 'cargando' }))
+    const local = activeLocal ? { id_local: activeLocal.id } : {}
+    const rangoParams = modo === 'mes' ? { mes } : { desde, hasta }
+    reportesApi.cmvDetalle({ ...rangoParams, ...local, categoria: nombre, grupo })
+      .then((res) => setDetalles(prev => ({ ...prev, [key]: res.data })))
+      .catch(() => setDetalles(prev => ({ ...prev, [key]: 'error' })))
+  }
+  // Cada tabla recibe su vista: la abierta sin el prefijo de grupo, y los
+  // detalles reindexados por nombre pelado.
+  const vistaGrupo = (grupo) => ({
+    abierta: abiertaKey?.startsWith(`${grupo}|`) ? abiertaKey.slice(grupo.length + 1) : null,
+    detalles: Object.fromEntries(Object.entries(detalles)
+      .filter(([k]) => k.startsWith(`${grupo}|`))
+      .map(([k, v]) => [k.slice(grupo.length + 1), v])),
+    onToggle: toggleCategoria(grupo),
+  })
 
   return (
     <>
@@ -251,11 +305,11 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
       ) : (
         <div className="rep-3col-grid" style={{ marginBottom: 18 }}>
           <CostTable title="Alimentos" dotColor="var(--green)" items={alimentos}
-            total={totAlim} gradient={CAT_COLORS.alimentos.gradient} />
+            total={totAlim} gradient={CAT_COLORS.alimentos.gradient} {...vistaGrupo('alimentos')} />
           <CostTable title="Bebidas" dotColor="var(--gold)" items={bebidas}
-            total={totBeb} gradient={CAT_COLORS.bebidas.gradient} />
+            total={totBeb} gradient={CAT_COLORS.bebidas.gradient} {...vistaGrupo('bebidas')} />
           <CostTable title="MovStock" dotColor="#5FA8D9" items={movstock}
-            total={totMovstock} gradient={CAT_COLORS.movstock.gradient} />
+            total={totMovstock} gradient={CAT_COLORS.movstock.gradient} {...vistaGrupo('movstock')} />
         </div>
       )}
 
@@ -268,51 +322,6 @@ export default function ReporteCMV({ modo, mes, desde, hasta, activeLocal }) {
         </div>
       )}
 
-      {/* ── Desglose de categorías: todas juntas, rankeadas ── */}
-      {!skel && categorias.length > 0 && (
-        <div className="rep-chart-card" style={{ marginTop: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span className="rep-chart-title" style={{ marginBottom: 0 }}>Desglose de categorías</span>
-            <span style={{ fontSize: 11, color: 'rgba(var(--velo-rgb), .4)' }}>peso en el CMV y sobre las ventas</span>
-          </div>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Categoría</th>
-                  <th>Grupo</th>
-                  <th className="num">Monto</th>
-                  <th className="num" title="Qué parte del CMV total es esta categoría">% del CMV</th>
-                  <th className="num" title="Cuánto pesa sobre las ventas del período (los KPI de arriba suman estos)">% s/ Ventas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categorias.map((r, i) => (
-                  <tr key={i}>
-                    <td style={{ fontWeight: 600 }}>{r.name}</td>
-                    <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--t2)' }}>
-                        <span style={{ width: 8, height: 8, borderRadius: 2, background: CAT_COLORS[r.grupo].bar }} />
-                        {GRUPO[r.grupo]}
-                      </span>
-                    </td>
-                    <td className="num td-number">{fmt(r.val)}</td>
-                    <td className="num">{r.pctCmv}%</td>
-                    <td className="num td-muted">{r.pctVentas}%</td>
-                  </tr>
-                ))}
-                <tr style={{ fontWeight: 700 }}>
-                  <td>Total</td>
-                  <td></td>
-                  <td className="num td-number">{fmt(cmvMonto)}</td>
-                  <td className="num">100%</td>
-                  <td className="num">{cmvPct}%</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </>
   )
 }

@@ -625,6 +625,67 @@ export default async function reportesRoutes(fastify) {
     }
   })
 
+  // ── GET /cmv/detalle ─────────────────────────────────────────────────────
+  // La composición de UNA categoría del CMV ("Carnes", "Vinos"): qué
+  // proveedores la forman y por cuánto, en el mismo rango que el reporte.
+  // Alimenta el drill-down de las tablas por grupo — el número deja de ser
+  // opaco: se clickea y se ve de dónde salió.
+  fastify.get('/cmv/detalle', { preHandler: viewHandler }, async (request, reply) => {
+    const { id_local, desde, hasta, mes, mes_desde, mes_hasta, categoria, grupo } = request.query
+
+    if (!categoria) return reply.code(400).send({ error: 'Falta la categoría' })
+    // El mismo resolutor de rango que el reporte: los números del drill-down
+    // tienen que hablar del MISMO tiempo que la fila que se clickeó.
+    const rango = resolverRangoCmv({ mes, mes_desde, mes_hasta, desde, hasta })
+    if (!rango) return reply.code(400).send({ error: 'Rango de fechas inválido' })
+
+    if (id_local && !request.allowedLocalIds.includes(id_local)) {
+      return reply.code(403).send({ error: 'Sin acceso a este local' })
+    }
+    const localIds = id_local ? [id_local] : request.allowedLocalIds
+    if (!localIds.length) return { proveedores: [], total: 0 }
+
+    const { campoPago, pagoDesde, pagoHasta } = rango
+    if (campoPago !== 'periodo' && campoPago !== 'fecha') {
+      return reply.code(500).send({ error: 'Campo de fecha inválido' })
+    }
+
+    // El mismo reparto en grupos que usa el reporte (movstock gana, después
+    // bebidas, el resto es alimentos): una categoría puede llamarse igual en
+    // dos rubros CMV distintos y el grupo la desambigua.
+    const filtroGrupo = grupo === 'movstock'
+      ? `AND UPPER(r.nombre) LIKE '%MOVSTOCK%'`
+      : grupo === 'bebidas'
+        ? `AND UPPER(r.nombre) LIKE '%BEBIDA%' AND UPPER(r.nombre) NOT LIKE '%MOVSTOCK%'`
+        : grupo === 'alimentos'
+          ? `AND UPPER(r.nombre) NOT LIKE '%BEBIDA%' AND UPPER(r.nombre) NOT LIKE '%MOVSTOCK%'`
+          : ''
+
+    const localPlaceholders = localIds.map((_, i) => `$${i + 1}`).join(', ')
+    const rows = await fastify.db.$queryRawUnsafe(`
+      SELECT
+        COALESCE(pr.nombre, 'Sin proveedor') AS proveedor,
+        COUNT(*)::int AS cantidad,
+        SUM(COALESCE(p.importe, 0)) AS total
+      FROM pagos p
+      JOIN rubcat rc ON p.id_rubcat = rc.id
+      JOIN rubros r ON rc.id_rub = r.id
+      JOIN categorias c ON rc.id_cat = c.id
+      LEFT JOIN proveedores pr ON p.id_proveedor = pr.id
+      WHERE p.id_local IN (${localPlaceholders})
+        AND p.${campoPago} >= $${localIds.length + 1}
+        AND p.${campoPago} <= $${localIds.length + 2}
+        AND UPPER(r.nombre) LIKE 'CMV%'
+        AND c.nombre = $${localIds.length + 3}
+        ${filtroGrupo}
+      GROUP BY COALESCE(pr.nombre, 'Sin proveedor')
+      ORDER BY total DESC
+    `, ...localIds, pagoDesde, pagoHasta, categoria)
+
+    const proveedores = rows.map((r) => ({ nombre: r.proveedor, cantidad: r.cantidad, total: Number(r.total) }))
+    return { proveedores, total: proveedores.reduce((a, r) => a + r.total, 0) }
+  })
+
   // ── GET /balance ───────────────────────────────────────────────────────
   // Listado de comprobantes fiscales para contabilidad: un renglón por
   // comprobante con proveedor, CUIT, tipo, PV-Nro, fecha de factura, neto, IVA
