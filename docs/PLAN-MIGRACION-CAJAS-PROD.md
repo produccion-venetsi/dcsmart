@@ -1,7 +1,27 @@
 # Plan de migración a producción — Modelo simple de cajas (DEV-82)
 
-**Estado: BORRADOR para revisar. Nada de esto se ejecuta sin el OK explícito del usuario.**
-Fecha del relevamiento: 2026-08-19, medido contra producción en solo lectura.
+**Estado: EJECUTADA la noche del 2026-08-19, con OK explícito del usuario.**
+Este documento queda como registro. Resultado:
+
+- Conversión: 3.066 cajas, 32.391 movimientos → detalles, 29.472 normalizados,
+  **0 fallas, 0 movimientos restantes**. Validación de sumas caja por caja.
+- Dos bugs cazados por el ensayo y corregidos antes de que nadie los viera:
+  el "Tarjetas" resumen de DON ALDO (198 filas) y el efectivo en moneda
+  extranjera (`esEfectivo`, 151 cobros reparados). PRs #170–#175.
+- Turnos Fudo: 51/52 cajas con su número real de `/cash-counts` + fechas
+  reales; el sync los asigna de acá en más.
+- Descuentos históricos: 3.442 detalles "(POS)" extraídos de observaciones.
+- Jobs `taptap-sync`/`fudo-sync` re-apuntados a la imagen del backend
+  (el CI NO los actualiza — a mano tras cada cambio de jobs).
+- Cuadre final: **44% correcto / 12% menor / 44% incorrecto**, idéntico al
+  ensayo (pipeline determinístico). El salto a ~75% es la calibración por
+  local, pendiente de aprobación del usuario.
+- Backups probados en `backups\prod-2026-08-19*.dump`; la copia del ensayo
+  quedó en `dcsmart_lab`.
+
+---
+
+Fecha del relevamiento original: 2026-08-19, medido contra producción en solo lectura.
 
 ---
 
@@ -111,9 +131,12 @@ de otras branches mergeadas a dev).
 1. **Snapshot Cloud SQL on-demand** de `dcsmart-mvp-insta` (consola web o
    `gcloud sql backups create` — OJO: el token de gcloud local está vencido,
    hace falta `gcloud auth login` o hacerlo desde la consola).
-2. **pg_dump completo** de la base `postgres` vía el proxy local
-   (pg_dump 17 está instalado): `pg_dump -h localhost -p 5433 -d postgres -Fc -f
-   backup-prod-AAAAMMDD.dump`. Guardar fuera del repo.
+2. **pg_dump completo** de la base `postgres` vía el proxy local:
+   `pg_dump -h localhost -p 5433 -d postgres -Fc -f backup-prod-AAAAMMDD.dump`.
+   Guardar fuera del repo (`C:\Users\agusl\Repos\dcsmart-apps\backups\`).
+   **OJO: el server es Postgres 18** — el pg_dump 17 que había instalado se
+   niega por versión; usar los binarios 18
+   (`C:\Program Files\PostgreSQL\18\bin\`).
 3. **Dump quirúrgico** solo de las tablas afectadas (`cajas`, `caja_movimientos`,
    `caja_detalles`) en formato SQL plano — para poder restaurar SOLO eso sin
    pisar pagos/usuarios/todo lo demás que siguió moviéndose.
@@ -132,16 +155,24 @@ de otras branches mergeadas a dev).
 ## 4. Ensayo general (obligatorio antes de prod)
 
 Correr el pipeline COMPLETO contra una copia FULL de prod (no la muestra de
-20/local):
+20/local). La copia va a una base NUEVA `dcsmart_lab` en la misma instancia —
+no se pisa `dcsmart_test`, que es donde el usuario prueba la app — y el nombre
+matchea el guard `dcsmart_(test|lab)` de todos los scripts.
 
-1. Copia completa de `postgres` → `dcsmart_test` (o al Postgres local).
-2. Aplicar columna `cantidad`.
-3. Convertidor prod (nuevo, por caja) → medir tiempos.
-4. Calibración greedy en dry-run → **revisar la lista de reclasificaciones a
+1. `pg_dump` completo de `postgres` (ES el backup del plan: se prueba acá).
+2. `CREATE DATABASE dcsmart_lab` + `pg_restore` (esto valida el restore).
+3. `ALTER TABLE caja_detalles ADD COLUMN cantidad integer` (el diff de esquema).
+4. **Baseline**: `scripts/medir-cuadre.js` → guardar la tabla por local.
+5. Convertidor (`convertir-a-detalles-simples.js --aplicar`) → medir tiempos.
+6. Re-medir cuadre: la distribución debe ser ≈ igual al baseline (la conversión
+   es neutra para el cuadre; el fallback ya leía los movimientos).
+7. Calibración greedy en dry-run → **revisar la lista de reclasificaciones a
    mano local por local** (regla del usuario: la clasificación no se
    autocompleta; acá se aplica masivamente, así que la lista se aprueba antes).
-5. Extraer descuentos TapTap de observaciones.
-6. **Validaciones** (sección 6) + comparar % de cuadre antes/después por local.
+8. Extraer descuentos TapTap de observaciones; backfill turnos Fudo (con las
+   credenciales de Trello).
+9. Re-medir cuadre → esta es la foto "cómo va a quedar prod".
+10. **Validaciones** (sección 6).
 
 ## 5. Orden del día D (una vez aprobado el ensayo)
 
@@ -156,11 +187,17 @@ TapTap descuadran en vivo). Además `dev` y `master` despliegan AL MISMO backend
 3. **Deploy del código**: PR DEV-82 → `dev` (verificar base branch del PR).
    Eso ya redeploya el backend de prod. `master` (frontend live) cuando el
    usuario lo diga, con confirmación explícita.
-4. **Verificar la app con datos SIN convertir** (el fallback hace que todo se
-   vea igual que hoy): listado, detalle, alta, edición, cuadres de una muestra
-   TapTap/Fudo/manual, arqueo de un local.
-5. **Conversión de datos** (convertidor prod, por caja). Estimado ~15k
-   transacciones chicas; se puede pausar/reanudar por la idempotencia.
+4. **Verificar la app con datos SIN convertir — CON UNA SALVEDAD medida en el
+   ensayo**: el fallback a movimientos solo se activa cuando la caja NO tiene
+   detalles, y las cajas TapTap SIEMPRE tienen (los informativos del sync).
+   Con el código nuevo y datos sin convertir, los cuadres TapTap se ven mal
+   (baseline del ensayo: 35% ok vs ~75% esperado post-conversión). Es un
+   problema de LECTURA, no daña datos — pero obliga a que el paso 5 corra
+   INMEDIATAMENTE después del deploy, no "cuando se pueda". Verificar acá solo
+   que la app carga, el detalle abre y las cajas manuales cuadran.
+5. **Conversión de datos** (convertidor prod, por caja), pegada al deploy.
+   Se puede pausar/reanudar por la idempotencia. Duración medida en el ensayo:
+   ver `backups/ensayo-conversion.txt`.
 6. **Validaciones** (sección 6). Si algo no da: STOP, evaluar rollback.
 7. **Calibración**: aplicar la lista YA aprobada en el ensayo (no re-decidir en
    caliente).

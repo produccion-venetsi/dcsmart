@@ -22,10 +22,13 @@
 // julio pertenece a junio). Las ventas se toman de los días de esos mismos meses
 // completos, así el numerador y el denominador del % hablan del mismo tiempo.
 //
-// La entrada acepta un mes, un rango de meses, o un rango de días. El rango de
-// días se REDONDEA a los meses que toca (no se puede comparar un día contra un
-// campo mensual sin perder meses enteros), y el resultado dice en `mesDesde`/
-// `mesHasta` qué se mostró realmente para que la pantalla no mienta.
+// La entrada acepta un mes, un rango de meses, o un rango de días. Un rango de
+// días de MESES ENTEROS va por período (es la misma pregunta contable); un
+// rango parcial ("esta semana") no la puede responder un campo mensual, así
+// que va por `fecha` de carga del pago — y el resultado declara `modo` para
+// que la pantalla diga qué está midiendo (2026-08-20, pedido del usuario:
+// antes el rango parcial se redondeaba al mes y "una semana" mostraba julio
+// entero).
 //
 // Sobre las zonas horarias, que ya mordieron antes en este proyecto:
 // `pago.periodo` se guarda a medianoche UTC del día elegido (no es un instante
@@ -73,8 +76,44 @@ function resolverMeses({ mes, mes_desde, mes_hasta, desde, hasta }) {
   return null
 }
 
+// ¿El par de días cubre meses enteros exactos (del 1 al último)?
+function esMesesEnteros(desde, hasta) {
+  if (!desde.endsWith('-01')) return false
+  const [anio, mes] = hasta.slice(0, 7).split('-').map(Number)
+  return hasta === `${hasta.slice(0, 7)}-${String(ultimoDiaDelMes(anio, mes)).padStart(2, '0')}`
+}
+
 export function resolverRangoCmv(query) {
-  const meses = resolverMeses(query ?? {})
+  const q = query ?? {}
+
+  // Un rango de días que NO es de meses enteros pide otra pregunta: "¿cuánto
+  // CMV se cargó ESTA SEMANA?". El período contable es mensual y no puede
+  // responderla — redondearla a los meses que toca (lo que se hacía antes)
+  // devolvía el mes entero aunque pidieras siete días. En ese caso se filtra
+  // por `fecha` de carga del pago, y la respuesta declara el modo para que la
+  // pantalla diga qué está midiendo. Los meses completos y los parámetros de
+  // mes siguen yendo por `periodo`, la lectura contable de siempre.
+  const pidioDias = !vino(q.mes) && !vino(q.mes_desde) && !vino(q.mes_hasta) && esDia(q.desde) && esDia(q.hasta)
+  if (pidioDias) {
+    if (q.desde > q.hasta) return null
+    if (!esMesesEnteros(q.desde, q.hasta)) {
+      return {
+        modo: 'fecha',
+        mesDesde: q.desde.slice(0, 7),
+        mesHasta: q.hasta.slice(0, 7),
+        diaDesde: q.desde,
+        diaHasta: q.hasta,
+        campoPago: 'fecha',
+        // `fecha` se guarda a medianoche UTC del día elegido, igual que periodo.
+        pagoDesde:   new Date(`${q.desde}T00:00:00.000Z`),
+        pagoHasta:   new Date(`${q.hasta}T23:59:59.999Z`),
+        ventasDesde: new Date(`${q.desde}T00:00:00.000${AR_OFFSET}`),
+        ventasHasta: new Date(`${q.hasta}T23:59:59.999${AR_OFFSET}`),
+      }
+    }
+  }
+
+  const meses = resolverMeses(q)
   if (!meses) return null
 
   const [mesDesde, mesHasta] = meses
@@ -83,8 +122,11 @@ export function resolverRangoCmv(query) {
   const ultimoDia = `${mesHasta}-${String(ultimoDiaDelMes(anioFin, mFin)).padStart(2, '0')}`
 
   return {
+    modo: 'periodo',
     mesDesde,
     mesHasta,
+    diaDesde: primerDia,
+    diaHasta: ultimoDia,
     campoPago: 'periodo',
     pagoDesde:   new Date(`${primerDia}T00:00:00.000Z`),
     pagoHasta:   new Date(`${ultimoDia}T23:59:59.999Z`),

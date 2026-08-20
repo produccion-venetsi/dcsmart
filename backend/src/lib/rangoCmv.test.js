@@ -82,20 +82,43 @@ test('un rango de meses que cruza el año no se rompe', () => {
   assert.equal(r.pagoHasta.toISOString(), '2026-02-28T23:59:59.999Z')
 })
 
-test('un rango de dias entra igual pero se redondea a los meses que toca', () => {
-  // Este era el bug original: `periodo >= 2026-07-04` dejaba julio entero
-  // afuera, porque julio vive el 2026-07-01. Redondear al mes lo arregla sin
-  // volver a filtrar por `fecha`.
+// Antes un rango parcial se redondeaba a los meses que tocaba: pedias una
+// semana y el reporte mostraba julio entero (reportado por el usuario,
+// 2026-08-20). Ahora un rango parcial pregunta otra cosa -- cuanto se CARGO
+// en esos dias -- y va por `fecha`, declarando el modo.
+test('un rango de dias parcial va por fecha de carga, con los dias exactos', () => {
   const r = resolverRangoCmv({ desde: '2026-07-04', hasta: '2026-08-03' })
+  assert.equal(r.modo, 'fecha')
+  assert.equal(r.campoPago, 'fecha')
+  assert.equal(r.diaDesde, '2026-07-04')
+  assert.equal(r.diaHasta, '2026-08-03')
+  assert.equal(r.pagoDesde.toISOString(), '2026-07-04T00:00:00.000Z')
+  assert.equal(r.pagoHasta.toISOString(), '2026-08-03T23:59:59.999Z')
+  // Las ventas acompañan los MISMOS dias: numerador y denominador del % hablan
+  // del mismo tiempo, igual que en el modo contable.
+  assert.equal(r.ventasDesde.toISOString(), '2026-07-04T03:00:00.000Z')
+  assert.equal(r.ventasHasta.toISOString(), '2026-08-04T02:59:59.999Z')
+})
+
+test('una semana va por fecha: el caso reportado', () => {
+  const r = resolverRangoCmv({ desde: '2026-08-10', hasta: '2026-08-16' })
+  assert.equal(r.modo, 'fecha')
+  assert.equal(r.pagoDesde.toISOString(), '2026-08-10T00:00:00.000Z')
+  assert.equal(r.pagoHasta.toISOString(), '2026-08-16T23:59:59.999Z')
+})
+
+test('un rango de dias de meses ENTEROS sigue siendo contable (periodo)', () => {
+  const r = resolverRangoCmv({ desde: '2026-07-01', hasta: '2026-08-31' })
+  assert.equal(r.modo, 'periodo')
   assert.equal(r.campoPago, 'periodo')
-  assert.equal(r.mesDesde, '2026-07')
-  assert.equal(r.mesHasta, '2026-08')
   assert.equal(r.pagoDesde.toISOString(), '2026-07-01T00:00:00.000Z')
   assert.equal(r.pagoHasta.toISOString(), '2026-08-31T23:59:59.999Z')
-  // Las ventas acompañan a los mismos meses completos: si el costo es de dos
-  // meses, el % no puede dividirse por las ventas de 30 días.
-  assert.equal(r.ventasDesde.toISOString(), '2026-07-01T03:00:00.000Z')
-  assert.equal(r.ventasHasta.toISOString(), '2026-09-01T02:59:59.999Z')
+})
+
+test('los parametros de mes ganan sobre desde/hasta: siguen por periodo', () => {
+  const r = resolverRangoCmv({ mes: '2026-07', desde: '2026-07-04', hasta: '2026-07-10' })
+  assert.equal(r.modo, 'periodo')
+  assert.equal(r.mesDesde, '2026-07')
 })
 
 test('un rango de dias dentro de un mes da exactamente ese mes', () => {

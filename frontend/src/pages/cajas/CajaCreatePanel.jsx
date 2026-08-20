@@ -324,7 +324,7 @@ export default function CajaCreatePanel({ activeLocal, locales, onCreated, onClo
           </div>
         </div>
       </div>
-      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>2 · Cómo te lo pagaron, gastos y demás</div>
+      <div className="drawer-section-title" style={{ marginTop: '1.5rem' }}>2 · Cómo te lo pagaron (cobros), gastos y demás</div>
       <p className="form-hint" style={{ margin: '0 0 0.6rem' }}>
         Una línea por cada cosa: elegí la clasificación (cobro, gasto o informativo) y el monto. La suma de efectivo + cobros tiene que dar el total.
       </p>

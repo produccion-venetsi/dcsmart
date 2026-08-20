@@ -13,4 +13,6 @@ export const cajaMayorApi = {
   // Sirve para las dos procedencias: por `id` si el movimiento ya tiene fila,
   // por `id_pago` la primera vez que se gestiona una op de gestión.
   estado:  (body)      => client.put('/caja-mayor/estado', body),
+  // Alterna la auditoría (mismo circuito append-only que Pagos).
+  audit:   (id, body)  => client.patch(`/caja-mayor/${id}/audit`, body),
 }

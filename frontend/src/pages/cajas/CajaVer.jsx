@@ -262,7 +262,7 @@ export default function CajaVer() {
 
           <div className="card"><div className="card-body">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-              <div className="card-title" style={{ margin: 0 }}>Cómo te lo pagaron</div>
+              <div className="card-title" style={{ margin: 0 }}>Cómo te lo pagaron (cobros)</div>
               <strong style={{ fontSize: 13.5 }}>{fmt$(suma(cobros))}</strong>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

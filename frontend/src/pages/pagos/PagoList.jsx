@@ -166,7 +166,8 @@ const PAGO_CSV_COLUMNS = [
   { label: 'PV',          get: (p) => p.pv != null ? fmtPV(p.pv) : '' },
   { label: 'Nro',         get: (p) => p.nro != null ? fmtNro(p.nro) : '' },
   { label: 'Neto',        get: (p) => p.importe_neto ?? '', total: true },
-  { label: 'Importe',     get: (p) => p.importe ?? '', total: true },
+  // Firmado: una nota de crédito exporta negativa, así la planilla suma sola.
+  { label: 'Importe',     get: (p) => p.importe == null ? '' : (p.ingresa_egreso ? -Number(p.importe) : Number(p.importe)), total: true },
   { label: 'Método',      get: (p) => p.metodo_pago?.nombre || '' },
   { label: 'Observaciones', get: (p) => p.observaciones || '' },
   { label: 'Cashflow',    get: (p) => p.cashflow ? fmtDate(p.cashflow) : '' },
@@ -1099,7 +1100,12 @@ export default function PagoList() {
                       : <span className="td-muted">—</span>}
                   </td>
                   <td className="td-number" style={{ minWidth: 100 }}>{fmt$(p.importe_neto)}</td>
-                  <td className="td-number" style={{ minWidth: 100, color: 'var(--gold-bright)', fontWeight: 700 }}>{fmt$(p.importe)}</td>
+                  {/* El ingreso (nota de crédito) se ve NEGATIVO y en verde:
+                      esa plata volvió. Mostrarla igual que un gasto era lo que
+                      hacía creer que la NC sumaba (y en los KPI, sumaba). */}
+                  <td className="td-number" style={{ minWidth: 100, color: p.ingresa_egreso ? 'var(--green)' : 'var(--gold-bright)', fontWeight: 700 }}>
+                    {p.ingresa_egreso ? `−${fmt$(p.importe)}` : fmt$(p.importe)}
+                  </td>
                   <td style={{ minWidth: 120, fontSize: 12 }}>{p.metodo_pago?.nombre || <span className="td-muted">—</span>}</td>
                   {/* El truncado va en un span inline-block y no en el td:
                       .data-table es width 100% sin table-layout fixed, y el

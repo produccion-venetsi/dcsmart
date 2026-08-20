@@ -7,6 +7,7 @@ import { partirIdsPorEstado } from '../lib/estadoOp.js'
 import { parseCsvParam } from '../lib/queryParams.js'
 import { parseRangosFecha, whereRangosFecha } from '../lib/rangosFecha.js'
 import { wheresDeuda, deudaNeta } from '../lib/deuda.js'
+import { direccionPorTipo } from '../lib/direccionPago.js'
 import { validarClienteYEstado } from '../lib/cuentaCorriente.js'
 import { buildAuditFilter } from '../lib/auditFilter.js'
 import { avisarDesauditado } from '../lib/avisos.js'
@@ -417,22 +418,30 @@ export default async function pagosRoutes(fastify) {
 
     const { egresos, ingresos } = wheresDeuda(where)
 
-    const [totalAgg, porImpuestoRows, egresosAgg, ingresosAgg] = await Promise.all([
-      fastify.db.pago.aggregate({ where, _sum: { importe: true } }),
-      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: where }, _sum: { monto: true } }),
+    // Todo NETO por dirección: una nota de crédito (ingreso) RESTA. Sumar los
+    // dos sentidos en un solo número mostraba $4,4M de "total" en ADA con una
+    // NCA de $1,4M adentro sumando como gasto (bug 2026-08-20).
+    const [totEgresos, totIngresos, impEgresos, impIngresos, egresosAgg, ingresosAgg] = await Promise.all([
+      fastify.db.pago.aggregate({ where: { ...where, ingresa_egreso: false }, _sum: { importe: true } }),
+      fastify.db.pago.aggregate({ where: { ...where, ingresa_egreso: true },  _sum: { importe: true } }),
+      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: { ...where, ingresa_egreso: false } }, _sum: { monto: true } }),
+      fastify.db.impuesto.groupBy({ by: ['tipo'], where: { pago: { ...where, ingresa_egreso: true } },  _sum: { monto: true } }),
       fastify.db.pago.aggregate({ where: egresos,  _sum: { importe: true }, _count: { id: true } }),
       fastify.db.pago.aggregate({ where: ingresos, _sum: { importe: true } })
     ])
 
+    // Impuestos netos: el IVA de una nota de crédito también se acredita.
+    const porImpuesto = {}
+    for (const row of impEgresos) porImpuesto[row.tipo] = Number(row._sum.monto ?? 0)
+    for (const row of impIngresos) porImpuesto[row.tipo] = (porImpuesto[row.tipo] ?? 0) - Number(row._sum.monto ?? 0)
+
     return {
-      total_importe: Number(totalAgg._sum.importe ?? 0),
+      total_importe: Number(totEgresos._sum.importe ?? 0) - Number(totIngresos._sum.importe ?? 0),
       // Deuda del conjunto FILTRADO, no del local entero: es lo que hace falta
       // para "cuánto le debo a este proveedor". Ver lib/deuda.js.
       total_deuda: deudaNeta(egresosAgg._sum.importe, ingresosAgg._sum.importe),
       count_deuda: egresosAgg._count.id,
-      por_impuesto: Object.fromEntries(
-        porImpuestoRows.map(row => [row.tipo, Number(row._sum.monto ?? 0)])
-      )
+      por_impuesto: porImpuesto
     }
   })
 
@@ -473,19 +482,26 @@ export default async function pagosRoutes(fastify) {
       } : {})
     }
 
+    // Cada monto NETO por dirección: los ingresos (notas de crédito) restan.
+    const neto = async (w) => {
+      const [eg, ing, count] = await Promise.all([
+        fastify.db.pago.aggregate({ where: { ...w, ingresa_egreso: false }, _sum: { importe: true } }),
+        fastify.db.pago.aggregate({ where: { ...w, ingresa_egreso: true },  _sum: { importe: true } }),
+        fastify.db.pago.count({ where: w }),
+      ])
+      return { monto: Number(eg._sum.importe ?? 0) - Number(ing._sum.importe ?? 0), count }
+    }
     const [total, noPagados, pagados] = await Promise.all([
-      fastify.db.pago.aggregate({ where, _sum: { importe: true }, _count: { id: true } }),
-      fastify.db.pago.aggregate({ where: { ...where, pagado: false }, _sum: { importe: true }, _count: { id: true } }),
-      fastify.db.pago.aggregate({ where: { ...where, pagado: true },  _sum: { importe: true }, _count: { id: true } })
+      neto(where), neto({ ...where, pagado: false }), neto({ ...where, pagado: true })
     ])
 
     return {
-      importe_total:      Number(total._sum.importe      ?? 0),
-      count_total:        total._count.id,
-      importe_pendientes: Number(noPagados._sum.importe  ?? 0),
-      count_pendientes:   noPagados._count.id,
-      importe_pagados:    Number(pagados._sum.importe    ?? 0),
-      count_pagados:      pagados._count.id
+      importe_total:      total.monto,
+      count_total:        total.count,
+      importe_pendientes: noPagados.monto,
+      count_pendientes:   noPagados.count,
+      importe_pagados:    pagados.monto,
+      count_pagados:      pagados.count
     }
   })
 
@@ -677,7 +693,9 @@ export default async function pagosRoutes(fastify) {
           estado_op:      estado_op      || null,
           foto_url, pdf_url,
           periodo:        periodo        ? new Date(periodo)        : null,
-          ingresa_egreso: ingresa_egreso ?? true,
+          // El tipo de comprobante manda: una NCA es ingreso por definición
+          // (había 272 cargadas como egreso sumando $10M de gasto fantasma).
+          ingresa_egreso: direccionPorTipo(id_tipo) ?? ingresa_egreso ?? true,
           periodico:      periodico      ?? false,
           cargado_con_ia: cargado_con_ia ?? false,
           id_local,
@@ -782,7 +800,9 @@ export default async function pagosRoutes(fastify) {
           estado_op,
           foto_url, pdf_url,
           periodo:        periodo                     ? new Date(periodo)           : undefined,
-          ingresa_egreso,
+          // La dirección que impone el tipo RESULTANTE gana siempre; sin
+          // imposición, vale lo que vino (o no tocar si no vino).
+          ingresa_egreso: direccionPorTipo(effectiveTipo) ?? ingresa_egreso,
           periodico:      periodico      !== undefined ? periodico                  : undefined,
           id_local:       id_local       !== undefined ? id_local                  : undefined,
           id_cliente:     id_cliente     !== undefined ? (id_cliente || null)      : undefined,
