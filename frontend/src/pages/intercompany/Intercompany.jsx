@@ -13,9 +13,15 @@
 // importa, requireOperativo en el backend).
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { intercompanyApi } from '../../api/intercompany.js'
+import { pagosApi } from '../../api/pagos.js'
+import { metodosApi } from '../../api/metodospago.js'
 import { useAppStore } from '../../store/appStore.js'
 import { useUiStore } from '../../store/uiStore.js'
+import DrawerPanel from '../../components/DrawerPanel.jsx'
+import PagoDetailPanel from '../pagos/PagoDetailPanel.jsx'
+import { esRolDc, puedeEditar, puedeBorrarPagos } from '../../lib/roles.js'
 import { fmtDateUTC, todayInputDate } from '../../lib/dates.js'
 
 const fmt$ = (n) =>
@@ -31,10 +37,30 @@ function rangoInicial() {
   return { desde: desde.toISOString().slice(0, 10), hasta: todayInputDate() }
 }
 
+// El número de OP abre su detalle. Es un botón y no la fila entera: las filas
+// tienen sus propios botones (Enviar, Revertir) y un click de más no puede
+// terminar mandando plata a otro local.
+function BotonOp({ id, children, title, onOpen, abriendo }) {
+  return (
+    <button
+      type="button"
+      className="link-op"
+      onClick={() => onOpen(id)}
+      disabled={abriendo === id}
+      title={title || 'Ver el detalle de la op'}
+    >
+      {abriendo === id ? '…' : children}
+    </button>
+  )
+}
+
 export default function Intercompany() {
+  const navigate = useNavigate()
   const activeApp = useAppStore((s) => s.activeApp)
   const notify = useUiStore((s) => s.notify)
   const showConfirm = useUiStore((s) => s.showConfirm)
+  const showPrompt = useUiStore((s) => s.showPrompt)
+  const role = activeApp?.role
 
   const [rango, setRango] = useState(rangoInicial)
   const [locales, setLocales] = useState([])
@@ -44,6 +70,13 @@ export default function Intercompany() {
   const [enviando, setEnviando] = useState(null)   // id de la op elegida
   const [destino, setDestino] = useState('')
   const [trabajando, setTrabajando] = useState(null)
+  // El detalle de la op: el mismo panel completo de Pagos. Antes había que
+  // anotarse el número, ir a Pagos, filtrar y buscarlo para ver la factura o
+  // el proveedor de una op que se estaba a punto de mandar a otro local.
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [selectedPago, setSelectedPago] = useState(null)
+  const [abriendo, setAbriendo] = useState(null)   // id de la op que se está pidiendo
+  const [metodos, setMetodos] = useState([])
 
   const cargar = useCallback((signal) => {
     setLoading(true)
@@ -66,6 +99,13 @@ export default function Intercompany() {
       .catch(() => {})
     return () => ctrl.abort()
   }, [activeApp?.id])
+
+  // Los métodos de pago los pide el panel de detalle para poder cambiar el
+  // método sin salir de acá; si fallan, el panel simplemente no ofrece el
+  // cambio y el resto del detalle se ve igual.
+  useEffect(() => {
+    metodosApi.list().then((r) => setMetodos(r.data || [])).catch(() => {})
+  }, [])
 
   const pendientes = data?.pendientes ?? []
   const enviadas   = data?.enviadas ?? []
@@ -125,9 +165,58 @@ export default function Intercompany() {
     } finally { setTrabajando(null) }
   }
 
+  // El listado de Intercompany trae una proyección corta de la op (lo que la
+  // tabla muestra), así que el detalle se pide completo: el panel necesita
+  // impuestos, adjuntos, estado y auditoría, y sin eso abriría a medias.
+  const abrirDetalle = async (idPago) => {
+    if (!idPago) return
+    setAbriendo(idPago)
+    try {
+      const { data } = await pagosApi.get(idPago)
+      setSelectedPago(data)
+      setPanelOpen(true)
+    } catch (err) {
+      // El 403 acá no es un error de la pantalla: la op del otro lado puede
+      // estar en un local al que este usuario no llega (el listado se recorta
+      // por locales permitidos, pero la copia y el origen viven en otro).
+      const msg = err.response?.status === 403
+        ? 'Esa op es de un local al que no tenés acceso'
+        : err.response?.data?.error || 'No se pudo abrir el detalle de la op'
+      notify(msg, err.response?.status === 403 ? 'info' : 'error')
+    } finally { setAbriendo(null) }
+  }
+
+  // Cualquier acción del panel (auditar, pagar, borrar) puede cambiar lo que
+  // esta pantalla muestra, así que se recarga la lista además del pago abierto.
+  const patchPagoAudit = (id, audit) => {
+    setSelectedPago((prev) => (prev?.id === id ? { ...prev, audit } : prev))
+    cargar()
+  }
+
+  const patchPago = (id, fields) => {
+    setSelectedPago((prev) => (prev?.id === id ? { ...prev, ...fields } : prev))
+    cargar()
+  }
+
+  const handleDeletePago = async (id) => {
+    const motivo = await showPrompt(
+      'Se va a eliminar este pago con sus impuestos. No se puede deshacer.',
+      { title: 'Eliminar pago', placeholder: 'Por qué se elimina (opcional)' }
+    )
+    if (motivo === null) return
+    try {
+      await pagosApi.remove(id, motivo)
+      notify('Pago eliminado', 'success')
+      setPanelOpen(false)
+      await cargar()
+    } catch (err) {
+      notify(err.response?.data?.error || 'Error al eliminar', 'error')
+    }
+  }
+
   const filaBase = (op) => (
     <>
-      <td className="td-mono" style={{ whiteSpace: 'nowrap' }}>{etiquetaOp(op)}</td>
+      <td className="td-mono" style={{ whiteSpace: 'nowrap' }}><BotonOp id={op.id} onOpen={abrirDetalle} abriendo={abriendo}>{etiquetaOp(op)}</BotonOp></td>
       <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>{op.fecha ? fmtDateUTC(op.fecha) : '—'}</td>
       <td>{op.local?.nombre ?? '—'}</td>
       <td className="td-number" style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{fmt$(op.importe)}</td>
@@ -253,11 +342,16 @@ export default function Intercompany() {
                   <tr key={op.id}>
                     {filaBase(op)}
                     <td>
+                      {/* La OP del destino abre SU detalle: es otra op, del otro
+                          local, y es la que hay que mirar para ver si allá ya la
+                          operaron antes de revertir. */}
                       {op.copias.map((c) => (
                         <div key={c.id}>
                           <span className="badge badge-green">{c.local?.nombre}</span>
-                          <span className="td-muted" style={{ fontSize: 11, marginLeft: 6 }}>
-                            {c.nro_ord != null ? `OP-${c.nro_ord}` : ''}
+                          <span style={{ fontSize: 11, marginLeft: 6 }}>
+                            <BotonOp id={c.id} onOpen={abrirDetalle} abriendo={abriendo} title={`Ver el detalle de la op en ${c.local?.nombre ?? 'el otro local'}`}>
+                              {c.nro_ord != null ? `OP-${c.nro_ord}` : 'ver op'}
+                            </BotonOp>
                           </span>
                         </div>
                       ))}
@@ -296,13 +390,49 @@ export default function Intercompany() {
                     {filaBase(op)}
                     {/* La nota que dejó el envío: dice el local de origen y su
                         OP. Se muestra tal cual para que coincida con lo que se
-                        lee al abrir la op en Pagos. */}
-                    <td className="td-muted" style={{ fontSize: 12, maxWidth: 320 }}>{op.observaciones ?? '—'}</td>
+                        lee al abrir la op en Pagos, y al lado va el acceso a la
+                        op original -- la pregunta que sigue a "vino de" es
+                        siempre "a ver la de allá". */}
+                    <td className="td-muted" style={{ fontSize: 12, maxWidth: 320 }}>
+                      {op.observaciones ?? '—'}
+                      {op.id_pago_origen && (
+                        <div style={{ marginTop: 4 }}>
+                          <BotonOp id={op.id_pago_origen} onOpen={abrirDetalle} abriendo={abriendo} title="Ver el detalle de la op original">
+                            Ver la op de origen
+                          </BotonOp>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
           </tbody>
         </table>
       </div>
+
+      <DrawerPanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title={selectedPago
+          ? `OP-${selectedPago.nro_ord ?? selectedPago.id?.slice(0, 8)}${selectedPago.local?.nombre ? ` · ${selectedPago.local.nombre}` : ''}`
+          : 'Detalle de la op'}
+        width={580}
+      >
+        {selectedPago && (
+          <PagoDetailPanel
+            pago={selectedPago}
+            navigate={navigate}
+            onDelete={handleDeletePago}
+            onAudit={patchPagoAudit}
+            onPatch={patchPago}
+            metodos={metodos}
+            canEdit={puedeEditar(role)}
+            canDelete={puedeBorrarPagos(role)}
+            canAuditDc={esRolDc(role)}
+            canSeeCreated={esRolDc(role)}
+            canSeeActivity={esRolDc(role)}
+          />
+        )}
+      </DrawerPanel>
     </div>
   )
 }

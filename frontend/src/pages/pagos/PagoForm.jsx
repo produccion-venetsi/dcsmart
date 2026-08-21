@@ -23,7 +23,7 @@ import { todayInputDate, nowDateTimeLocalInput, toDateTimeLocalInput, toUtcIsoFr
 import { nombreProveedor, razonSocialExtra } from '../../lib/proveedorLabel.js'
 import { DESCUENTO_MOVSTOCK_DEFAULT, porcentajeDelLocal, siguienteDescuento, TIPO_MOVSTOCK } from '../../lib/descuentoMovstock.js'
 import { cargarArranquePago, metodoPorDefecto, metodoDeArranque } from '../../lib/arranquePagoForm.js'
-import { opcionesMetodos } from '../../lib/metodosSelect.js'
+import { opcionesMetodos, metodosParaOp } from '../../lib/metodosSelect.js'
 import { mensajeCatalogo } from '../../lib/catalogos.js'
 import { cashflowAutomatico, siguienteCashflow, soloFecha, ayudaCashflow } from '../../lib/cashflowPago.js'
 import CampoCuit from '../../components/CampoCuit.jsx'
@@ -1212,10 +1212,17 @@ export default function PagoForm() {
                 <div className="form-input-wrap">
                   <select required className={marcadoIA('id_metodo').trim()} value={form.id_metodo} onChange={e => set('id_metodo', e.target.value)}>
                     <option value="">Seleccioná un método…</option>
+                    {/* Solo los métodos con los que se carga una op (ver
+                        METODOS_OP en lib/metodosSelect): el catálogo entero son
+                        63, la mayoría nombres que trajeron las integraciones.
+                        El catálogo completo va como último argumento para no
+                        rotular "(inactivo)" a un método que sí está activo y
+                        solo dejó de ofrecerse. */}
                     {opcionesMetodos(
-                      metodos,
+                      metodosParaOp(metodos),
                       form.id_metodo,
-                      metodoOriginal?.id === form.id_metodo ? metodoOriginal?.nombre : undefined
+                      metodoOriginal?.id === form.id_metodo ? metodoOriginal?.nombre : undefined,
+                      metodos
                     ).map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                   </select>
                 </div>
