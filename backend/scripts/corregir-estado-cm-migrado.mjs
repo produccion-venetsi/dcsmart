@@ -14,15 +14,26 @@
 //
 // QUÉ TOCA Y QUÉ NO
 //
-// Solo los migrados: origen PROPIO con el Orden de la app vieja al principio de
-// las observaciones. Los tres prefijos que usó la app: "CM-" y "OP-" en pesos y
-// "CMD-" en la hoja de dólares -- los CMD- son 217 y se habían quedado afuera de
-// la primera versión de este script por buscar solo CM-/OP-. No toca:
-//   - los movimientos origen PAGO (copias de ops de gestión, 198),
-//   - los cargados a mano en el módulo (217 + 16),
+// La migración tuvo DOS patas y las dos quedaron mal, por el mismo motivo:
+//
+//   1. El histórico del Excel -> movimientos origen PROPIO, reconocibles por el
+//      Orden de la app vieja al principio de las observaciones. Los tres
+//      prefijos que usó la app: "CM-" y "OP-" en pesos y "CMD-" en dólares.
+//   2. Las ops CM que YA estaban en gestión -> movimientos origen PAGO creados
+//      por el backfill del alta del módulo (todos el 2026-08-07 19:02-19:03).
+//      Nacieron con el ENVIADA por defecto del modelo, pero en la app vieja esas
+//      mismas filas estaban en ESTUDIO: son las que el usuario seguía viendo mal
+//      en LOS GALGOS (101 movimientos, y en el Excel sus 286 filas son todas
+//      ESTUDIO). Se cruzan por local + OP-<nro_ord> + moneda.
+//
+// No toca:
+//   - los movimientos PAGO creados DESPUÉS del backfill: esos son ops cargadas
+//     en la app nueva y su ENVIADA es real (una op recién cargada está enviada),
+//   - los cargados a mano en el módulo (sin Orden viejo en las observaciones),
 //   - ninguno que tenga `recibida_at` (alguien lo confirmó en el módulo: ese
-//     estado lo puso una persona, no la migración). Hoy son 0, el guard queda
-//     igual por si se corre más tarde.
+//     estado lo puso una persona, no la migración),
+//   - los que no aparecen en el Excel: Local Testing y LORETO nunca estuvieron
+//     en el AppSheet, así que no hay dato viejo que respetar. Se informan.
 //
 // El estado nuevo NO se calcula invirtiendo el actual, se lee del Excel original
 // fila por fila (cruce por el Orden, y por Orden+importe+moneda cuando un Orden
@@ -61,6 +72,26 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 // del Excel no son el mismo número.
 const clave = (orden, importe, moneda) => `${orden}|${Math.round(Math.abs(num(importe)))}|${moneda}`
 
+// EmpresaEnvia (id de AppSheet) -> nombre del local, igual que en
+// migrar-caja-mayor.mjs: el export solo trae el id. Hace falta para cruzar los
+// movimientos origen PAGO, donde el Orden (OP-####) se repite entre locales y el
+// local es lo único que desempata.
+const NOMBRE_POR_ID = {
+  deb7f085: 'DOGG', '6cda1b65': 'EVELIA', '6cda1b66': 'TOGNIS-CAFE', '6cda1b67': 'TOGNIS-PIZZA',
+  d77f7289: 'LA FUERZA', '6cda1b69': 'LF B2B', e5b7eb5f: 'ROMA',
+  becc0667: 'BASA', d77f7288: 'GRAN-DANZON', a6e600f0: 'PUERTO-RETIRO',
+  '64356': '878 BAR', '6cda1b45': '878COOP', '6cda1b68': 'LOS GALGOS',
+  O12UIE2U: 'TITA', OR8GO56T: 'TITA-CH', ccf146ee: 'Estudio DC',
+  '546ergft': 'TI AMO', '54676ergft': 'CAPRICCHIO', '546eFGHF': 'SORELLINA',
+  '56754ghjg': 'ALACENA', KHBJON435: 'LATINO TACUARI 185', FGHDVTV: 'LATINO PASEO',
+  FNHTYHERG: 'GALLOSI', OLHGEOYQ: 'ALDOS', LTRXNBIR: 'GRIS GRIS', J45J3822: 'LUCERO',
+  sdfghjfvfd: 'ADA',
+}
+
+// El backfill de las ops de gestión corrió entero en dos minutos. Todo lo PAGO
+// creado después es la app nueva funcionando, y no se toca.
+const FIN_BACKFILL = new Date('2026-08-07T19:10:00.000Z')
+
 // ── el Excel ────────────────────────────────────────────────────────────────
 const wb = XLSX.read(fs.readFileSync(XLSX_PATH), { cellDates: true })
 const filas = []
@@ -70,6 +101,7 @@ for (const [hoja, moneda] of [['CM', 'ARS'], ['CM_DOLAR', 'USD']]) {
       orden: String(f.Orden ?? ''),
       importe: f.IMPORTE ?? f[' IMPORTE'],
       estado: f['ESTADO OP'],
+      local: NOMBRE_POR_ID[f.EmpresaEnvia] ?? null,
       moneda,
     })
   }
@@ -79,6 +111,8 @@ for (const [hoja, moneda] of [['CM', 'ARS'], ['CM_DOLAR', 'USD']]) {
 // Orden repetidos entre locales.
 const porOrden = new Map()
 const porClave = new Map()
+// Y uno más para las ops de gestión: local + Orden + moneda.
+const porLocalOrden = new Map()
 const sumar = (mapa, k, estado) => {
   const previo = mapa.get(k)
   if (previo === undefined) mapa.set(k, estado)
@@ -88,6 +122,7 @@ for (const f of filas) {
   if (!f.orden) continue
   sumar(porOrden, f.orden, f.estado)
   sumar(porClave, clave(f.orden, f.importe, f.moneda), f.estado)
+  if (f.local && f.orden.startsWith('OP-')) sumar(porLocalOrden, `${f.local}|${f.orden}|${f.moneda}`, f.estado)
 }
 
 // ── los migrados en la base ─────────────────────────────────────────────────
@@ -118,6 +153,27 @@ for (const m of migrados) {
   if (!nuevo) { saltados.sinEstado.push(m); continue }
   if (nuevo === m.estado) { saltados.yaCorrecto.push(m); continue }
   cambios.push({ ...m, viejo, nuevo })
+}
+
+// ── pata 2: las ops de gestión que copió el backfill del alta del módulo ────
+const delBackfill = await p.$queryRawUnsafe(`
+  SELECT mc.id, mc.estado::text estado, mc.moneda::text moneda, mc.importe, mc.recibida_at,
+         mc.created_at, l.nombre local, pg.nro_ord
+  FROM movimientos_cm mc JOIN locales l ON l.id = mc.id_local
+  LEFT JOIN pagos pg ON pg.id = mc.id_pago
+  WHERE mc.origen = 'PAGO' AND mc.created_at < $1
+  ORDER BY l.nombre, pg.nro_ord`, FIN_BACKFILL)
+console.log(`copias de gestion del backfill: ${delBackfill.length}`)
+
+for (const m of delBackfill) {
+  if (m.recibida_at) { saltados.yaConfirmado.push(m); continue }
+  const viejo = porLocalOrden.get(`${m.local}|OP-${m.nro_ord}|${m.moneda}`)
+  if (viejo === undefined) { saltados.sinMatch.push({ ...m, orden: `OP-${m.nro_ord}` }); continue }
+  if (viejo === '__AMBIGUO__') { saltados.ambiguo.push({ ...m, orden: `OP-${m.nro_ord}` }); continue }
+  const nuevo = ESTADO_NUEVO[String(viejo ?? '').toUpperCase()]
+  if (!nuevo) { saltados.sinEstado.push({ ...m, orden: `OP-${m.nro_ord}` }); continue }
+  if (nuevo === m.estado) { saltados.yaCorrecto.push(m); continue }
+  cambios.push({ ...m, orden: `OP-${m.nro_ord}`, viejo, nuevo })
 }
 
 const porTransicion = new Map()
