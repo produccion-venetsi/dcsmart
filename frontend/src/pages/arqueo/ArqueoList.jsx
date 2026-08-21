@@ -132,7 +132,20 @@ function ArqueoCreatePanel({ activeLocal, onCreated }) {
               </span>
             </span>
           </div>
-          <div className="drawer-detail-row"><span className="drawer-detail-key">Ingresos</span><span className="drawer-detail-val">{fmt$(preview?.ingresos)}</span></div>
+          <div className="drawer-detail-row">
+            <span className="drawer-detail-key">
+              Ingresos
+              {/* "Ingresos" no es sinónimo de "el efectivo de las cajas": una op
+                  de ingreso cobrada en efectivo entra al mismo cofre y también
+                  suma. Sin el desglose el número no se puede atar a nada. */}
+              {Number(preview?.ingresos_pagos) > 0 && (
+                <span style={{ display: 'block', fontSize: 11, color: 'var(--t3)', fontWeight: 400 }}>
+                  cajas {fmt$(preview.ingresos_cajas)} + ops de ingreso en efectivo {fmt$(preview.ingresos_pagos)}
+                </span>
+              )}
+            </span>
+            <span className="drawer-detail-val">{fmt$(preview?.ingresos)}</span>
+          </div>
           <div className="drawer-detail-row"><span className="drawer-detail-key">Gastos</span><span className="drawer-detail-val">{fmt$(preview?.gastos)}</span></div>
           <div className="drawer-detail-row">
             <span className="drawer-detail-key">Comprobación</span>
@@ -538,7 +551,7 @@ function MovimientosPeriodo({ idLocal, idArqueo = null, compacto = false }) {
     // plata del turno entra al cofre cuando cierra, no cuando abre. Sin la
     // columna de cierre, un turno que arrancó el día anterior parece estar en
     // el período equivocado.
-    { titulo: `Cajas (efectivo) — ${fmt$(datos.ingresos)}`, filas: datos.cajas, total: datos.total_cajas,
+    { titulo: `Cajas (efectivo) — ${fmt$(datos.ingresos_cajas ?? datos.ingresos)}`, filas: datos.cajas, total: datos.total_cajas,
       cab: ['Apertura', 'Cierre', 'Turno', 'Efectivo'],
       fila: (c) => [
         fmtDateTime(c.fecha_inicio),
@@ -546,9 +559,19 @@ function MovimientosPeriodo({ idLocal, idArqueo = null, compacto = false }) {
         c.tipo_turno || '—',
         fmt$(c.efectivo)
       ] },
-    { titulo: `Pagos en efectivo — ${fmt$(datos.gastos)}`, filas: datos.pagos, total: datos.total_pagos,
+    // Las dos direcciones en la misma tabla: son ops que movieron la plata del
+    // cofre. El título dice cuánto salió y cuánto entró, y cada fila lleva su
+    // signo -- una lista donde $2.000 puede ser suma o resta no se puede leer.
+    { titulo: `Pagos en efectivo — sale ${fmt$(datos.gastos)}` +
+        (Number(datos.ingresos_pagos) > 0 ? ` · entra ${fmt$(datos.ingresos_pagos)}` : ''),
+      filas: datos.pagos, total: datos.total_pagos,
       cab: ['OP', 'Fecha de pago', 'Proveedor', 'Importe'],
-      fila: (pg) => [pg.nro_ord != null ? `OP-${pg.nro_ord}` : '—', fmtDateTime(pg.fecha_pago), pg.proveedor || '—', fmt$(pg.importe)] },
+      fila: (pg) => [
+        pg.nro_ord != null ? `OP-${pg.nro_ord}` : '—',
+        fmtDateTime(pg.fecha_pago),
+        pg.proveedor || '—',
+        `${pg.ingresa_egreso ? '+' : '−'} ${fmt$(pg.importe)}`,
+      ] },
   ]
 
   return (

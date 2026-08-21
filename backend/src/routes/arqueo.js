@@ -5,6 +5,7 @@
 
 import { totalContado, calcularComprobacion, describirComprobacion } from '../lib/cuadreArqueo.js'
 import { whereCajasCandidatas, sumarEfectivoDelPeriodo, cajaEnPeriodo } from '../lib/periodoArqueo.js'
+import { wherePagosEfectivo, separarPagosEfectivo } from '../lib/pagosEfectivoArqueo.js'
 import { nombreDisponibilidad } from '../lib/disponibilidades.js'
 
 // Busca el arqueo anterior de un local (el más reciente con fecha < la nueva).
@@ -29,26 +30,40 @@ async function calcularIngresos(fastify, id_local, fechaDesde, fechaHasta) {
   return sumarEfectivoDelPeriodo(cajas, fechaDesde, fechaHasta)
 }
 
-// Suma Pago.importe del local, pagado=true, en efectivo, egreso real, en (fechaDesde, fechaHasta].
-async function calcularGastos(fastify, id_local, fechaDesde, fechaHasta) {
+// Los pagos en efectivo del local en (fechaDesde, fechaHasta], separados por
+// dirección: los egresos son los gastos del arqueo y los ingresos se suman a
+// los ingresos, porque entran al mismo cofre. Ver lib/pagosEfectivoArqueo.js.
+async function calcularPagosEfectivo(fastify, id_local, fechaDesde, fechaHasta) {
   const metodoEfectivo = await fastify.db.metodoPago.findFirst({
     where: { nombre: { equals: 'Efectivo', mode: 'insensitive' } }
   })
-  if (!metodoEfectivo) return 0
+  if (!metodoEfectivo) return { ingresos: 0, egresos: 0 }
   const pagos = await fastify.db.pago.findMany({
-    where: {
-      id_local,
-      pagado: true,
-      ingresa_egreso: false,
-      id_metodo: metodoEfectivo.id,
-      fecha_pago: {
-        ...(fechaDesde ? { gt: fechaDesde } : {}),
-        lte: fechaHasta
-      }
-    },
-    select: { importe: true }
+    where: wherePagosEfectivo({
+      id_local, id_metodo: metodoEfectivo.id, desde: fechaDesde, hasta: fechaHasta
+    }),
+    select: { importe: true, ingresa_egreso: true }
   })
-  return pagos.reduce((acc, p) => acc + Number(p.importe ?? 0), 0)
+  return separarPagosEfectivo(pagos)
+}
+
+// Ingresos y gastos de un período, listos para calcularComprobacion: el
+// efectivo de las cajas más las ops de ingreso en efectivo, contra las ops
+// pagadas en efectivo. Una sola definición para el preview, el POST y el PUT --
+// tres copias de esto ya se habían desincronizado una vez.
+async function calcularMovimientos(fastify, id_local, fechaDesde, fechaHasta) {
+  const [efectivoCajas, pagos] = await Promise.all([
+    calcularIngresos(fastify, id_local, fechaDesde, fechaHasta),
+    calcularPagosEfectivo(fastify, id_local, fechaDesde, fechaHasta),
+  ])
+  return {
+    ingresos: efectivoCajas + pagos.ingresos,
+    gastos: pagos.egresos,
+    // El desglose viaja para que la pantalla pueda explicar de dónde sale el
+    // número: "Ingresos" dejó de ser sinónimo de "el efectivo de las cajas".
+    ingresos_cajas: efectivoCajas,
+    ingresos_pagos: pagos.ingresos,
+  }
 }
 
 // El estado de auditoría de un arqueo se guarda en la tabla `audits`
@@ -197,13 +212,12 @@ export default async function arqueoRoutes(fastify) {
     const totalUltimoArqueo = anterior ? Number(anterior.total) : 0
     const fechaDesde = anterior ? anterior.fecha : null
 
-    const ingresos = await calcularIngresos(fastify, id_local, fechaDesde, fechaArqueo)
-    const gastos = await calcularGastos(fastify, id_local, fechaDesde, fechaArqueo)
+    const mov = await calcularMovimientos(fastify, id_local, fechaDesde, fechaArqueo)
 
     // La fecha va junto al total porque el arqueo mide el período entre el
     // anterior y este: sin saber desde cuándo, el número de arriba no se puede
     // interpretar. Es null en el primer arqueo del local.
-    return { total_ultimo_arqueo: totalUltimoArqueo, fecha_ultimo_arqueo: fechaDesde, ingresos, gastos }
+    return { total_ultimo_arqueo: totalUltimoArqueo, fecha_ultimo_arqueo: fechaDesde, ...mov }
   })
 
   // ── GET /disponibilidades ─────────────────────────────────────────────
@@ -252,14 +266,15 @@ export default async function arqueoRoutes(fastify) {
 
   // ── GET /movimientos ──────────────────────────────────────────────────
   // Las filas que componen los ingresos y gastos de un periodo de arqueo:
-  // las cajas (su efectivo) y los pagos en efectivo del local.
+  // las cajas (su efectivo) y los pagos en efectivo del local, en las dos
+  // direcciones: los egresos son los gastos y los ingresos suman.
   //
   //   ?id_local=X            -> desde el ultimo arqueo hasta AHORA (lo que
   //                             deberia haber en la caja para el proximo conteo)
   //   ?id_local=X&id_arqueo= -> el periodo de ESE arqueo (entre el anterior y el)
   //
-  // Mismas condiciones que calcularIngresos/calcularGastos: la suma de estas
-  // filas ES el numero de la comprobacion, no una version parecida.
+  // Mismas condiciones que calcularMovimientos: la suma de estas filas ES el
+  // numero de la comprobacion, no una version parecida.
   fastify.get('/movimientos', { preHandler: viewHandler }, async (request, reply) => {
     const { id_local, id_arqueo } = request.query
     if (!id_local || !request.allowedLocalIds.includes(id_local)) {
@@ -283,20 +298,22 @@ export default async function arqueoRoutes(fastify) {
       desde = ultimo ? ultimo.fecha : null
     }
 
-    const rangoCaja = { ...(desde ? { gt: desde } : {}), lte: hasta }
     const metodoEfectivo = await fastify.db.metodoPago.findFirst({
       where: { nombre: { equals: 'Efectivo', mode: 'insensitive' } }
     })
-    const wherePagos = metodoEfectivo ? {
-      id_local, pagado: true, ingresa_egreso: false,
-      id_metodo: metodoEfectivo.id, fecha_pago: rangoCaja
-    } : null
+    // Las dos direcciones: los egresos son los gastos y los ingresos en
+    // efectivo suman, igual que en calcularMovimientos. Van en la misma tabla
+    // de la pantalla porque son lo mismo -- ops que movieron la plata del
+    // cofre-- y cada fila dice para qué lado.
+    const wherePagos = metodoEfectivo ? wherePagosEfectivo({
+      id_local, id_metodo: metodoEfectivo.id, desde, hasta
+    }) : null
 
     // Cap de filas para el primer arqueo (sin `desde` el rango es todo el
     // historial); los totales se calculan sobre el conjunto completo para que
     // sigan siendo los completos aunque la lista este recortada.
     const CAP = 300
-    const [candidatas, pagos, aggPagos, totalPagos] = await Promise.all([
+    const [candidatas, pagos, porDireccion] = await Promise.all([
       // Las cajas se filtran en JS por su fecha efectiva (mismo criterio que
       // calcularIngresos): Prisma no puede comparar fecha_cierre con
       // fecha_inicio dentro del where.
@@ -307,26 +324,39 @@ export default async function arqueoRoutes(fastify) {
       }),
       wherePagos ? fastify.db.pago.findMany({
         where: wherePagos,
-        select: { id: true, nro_ord: true, fecha_pago: true, importe: true, proveedor: { select: { nombre: true, razon_social: true } } },
+        select: { id: true, nro_ord: true, fecha_pago: true, importe: true, ingresa_egreso: true, proveedor: { select: { nombre: true, razon_social: true } } },
         orderBy: { fecha_pago: 'desc' },
         take: CAP
       }) : [],
-      wherePagos ? fastify.db.pago.aggregate({ where: wherePagos, _sum: { importe: true } }) : null,
-      wherePagos ? fastify.db.pago.count({ where: wherePagos }) : 0,
+      // Los totales salen del conjunto completo, no de las CAP filas que se
+      // listan: agrupados por direccion para poder sumar cada lado.
+      wherePagos ? fastify.db.pago.groupBy({
+        by: ['ingresa_egreso'], where: wherePagos, _sum: { importe: true }, _count: { _all: true }
+      }) : [],
     ])
 
     const delPeriodo = candidatas.filter(c => cajaEnPeriodo(c, desde, hasta))
     const totalCajas = delPeriodo.length
     const cajas = delPeriodo.slice(0, CAP)
 
+    const grupo = (esIngreso) => porDireccion.find(g => Boolean(g.ingresa_egreso) === esIngreso)
+    const ingresosPagos = Number(grupo(true)?._sum.importe ?? 0)
+    const efectivoCajas = sumarEfectivoDelPeriodo(delPeriodo, desde, hasta)
+    const totalPagos = porDireccion.reduce((acc, g) => acc + Number(g._count?._all ?? 0), 0)
+
     return {
       desde, hasta,
-      ingresos: sumarEfectivoDelPeriodo(delPeriodo, desde, hasta),
-      gastos: Number(aggPagos?._sum.importe ?? 0),
+      // `ingresos` es el numero que entra en la comprobacion: cajas + ops de
+      // ingreso. El desglose va aparte para que la pantalla lo pueda explicar.
+      ingresos: efectivoCajas + ingresosPagos,
+      ingresos_cajas: efectivoCajas,
+      ingresos_pagos: ingresosPagos,
+      gastos: Number(grupo(false)?._sum.importe ?? 0),
       cajas: cajas.map(c => ({ ...c, efectivo: Number(c.efectivo ?? 0) })),
       pagos: pagos.map(pg => ({
         id: pg.id, nro_ord: pg.nro_ord, fecha_pago: pg.fecha_pago,
         importe: Number(pg.importe ?? 0),
+        ingresa_egreso: pg.ingresa_egreso,
         proveedor: pg.proveedor?.nombre || pg.proveedor?.razon_social || null
       })),
       total_cajas: totalCajas,
@@ -388,8 +418,7 @@ export default async function arqueoRoutes(fastify) {
     const fechaDesde = anterior ? anterior.fecha : null
 
     const total = totalContado({ caja_fuerte, cofre, adicion })
-    const ingresos = await calcularIngresos(fastify, id_local, fechaDesde, fechaArqueo)
-    const gastos = await calcularGastos(fastify, id_local, fechaDesde, fechaArqueo)
+    const { ingresos, gastos } = await calcularMovimientos(fastify, id_local, fechaDesde, fechaArqueo)
     const comprobacion = calcularComprobacion({ ingresos, gastos, contado: total, contadoAnterior: totalUltimoArqueo })
 
     const arqueo = await fastify.db.arqueo.create({
@@ -437,8 +466,7 @@ export default async function arqueoRoutes(fastify) {
     const fechaDesde = anterior ? anterior.fecha : null
 
     const total = totalContado({ caja_fuerte, cofre, adicion })
-    const ingresos = await calcularIngresos(fastify, existente.id_local, fechaDesde, fechaArqueo)
-    const gastos = await calcularGastos(fastify, existente.id_local, fechaDesde, fechaArqueo)
+    const { ingresos, gastos } = await calcularMovimientos(fastify, existente.id_local, fechaDesde, fechaArqueo)
     const comprobacion = calcularComprobacion({ ingresos, gastos, contado: total, contadoAnterior: totalUltimoArqueo })
 
     const arqueo = await fastify.db.arqueo.update({
