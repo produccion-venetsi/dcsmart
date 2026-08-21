@@ -392,16 +392,20 @@ export default function CajaMayor() {
                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Extraído</div>
                 <div style={{ fontSize: 18, color: 'var(--red)' }}>{fmtMonto(vista.totalExtraido, moneda)}</div>
               </div>
-              <div title="Depositado menos extraído, contando todo">
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Neto</div>
-                <div style={{ fontSize: 18 }}><Saldo valor={vista.neto} moneda={moneda} /></div>
+              {/* EL SALDO es lo RECIBIDO: depositado menos extraído contando solo lo
+                  que la caja mayor confirmó. Definición del usuario (2026-08-21). Lo
+                  que sigue en ENVIADA no es plata que la caja tenga, es plata en
+                  camino, y mostrarla dentro del saldo lo infla. */}
+              <div title="Depositado menos extraído, contando solo lo que la caja mayor confirmó (RECIBIDA)">
+                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Saldo</div>
+                <div style={{ fontSize: 18 }}><Saldo valor={vista.netoConfirmado} moneda={moneda} /></div>
               </div>
-              {/* El neto confirmado solo se muestra si difiere: dos números iguales al lado
-                  hacen dudar de cuál mirar. */}
+              {/* Y el otro número solo si difiere: dos iguales al lado hacen dudar de
+                  cuál mirar. */}
               {vista.totalPendiente > 0 && (
-                <div title="El neto contando solo lo que la caja mayor ya confirmó">
-                  <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Neto confirmado</div>
-                  <div style={{ fontSize: 18 }}><Saldo valor={vista.netoConfirmado} moneda={moneda} /></div>
+                <div title="Lo que el saldo va a ser cuando se confirme lo que está enviado">
+                  <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Con lo enviado</div>
+                  <div style={{ fontSize: 18, color: 'var(--t2)' }}><Saldo valor={vista.neto} moneda={moneda} /></div>
                 </div>
               )}
               <div>
@@ -580,16 +584,21 @@ export default function CajaMayor() {
               display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1rem',
               background: 'var(--bg-input)', borderRadius: 8, padding: '0.9rem 1.1rem',
             }}>
-              <div>
+              {/* El saldo del local ES lo recibido: ingresos menos egresos de lo que
+                  la caja mayor confirmó. Lo que está ENVIADA todavía no llegó, así
+                  que va al lado y no adentro del saldo. */}
+              <div title="Ingresos menos egresos de lo que la caja mayor ya confirmó (RECIBIDA)">
                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>
                   Saldo {nombreSeleccion ? `de ${nombreSeleccion}` : 'consolidado'}
                 </div>
-                <div style={{ fontSize: 18 }}><Saldo valor={resumen.saldo.saldo} moneda={moneda} /></div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Ya recibido</div>
                 <div style={{ fontSize: 18 }}><Saldo valor={resumen.saldo_recibido?.saldo} moneda={moneda} /></div>
               </div>
+              {Number(resumen.saldo_recibido?.pendiente) !== 0 && (
+                <div title="Lo que el saldo va a ser cuando se confirme lo que está enviado">
+                  <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Con lo enviado</div>
+                  <div style={{ fontSize: 18, color: 'var(--t2)' }}><Saldo valor={resumen.saldo.saldo} moneda={moneda} /></div>
+                </div>
+              )}
               <div title="Lo que suma o resta cuando se confirme lo que está enviado">
                 <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Pendiente</div>
                 <div style={{ fontSize: 18, color: 'var(--amber)', fontWeight: 700 }}>

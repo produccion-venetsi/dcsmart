@@ -291,3 +291,37 @@ test('un local sin grupo cae en "Sin grupo", no se pierde', () => {
   const grupos = agruparPorGrupo(filas)
   assert.equal(grupos[0].grupo, 'Sin grupo')
 })
+
+// El saldo de un local en la caja mayor es lo RECIBIDO: ingresos menos egresos
+// de lo que el CM confirmó (definición del usuario, 2026-08-21). Lo que sigue en
+// ENVIADA es plata en camino y no puede inflar el saldo. Este test está para que
+// las dos cosas no se vuelvan a mezclar: ya pasó una vez.
+test('el saldo cuenta solo lo recibido; lo enviado va aparte', () => {
+  const v = dividirPorEstado([{
+    id_local: 'L1', local: 'LOS GALGOS', grupo: 'LOS GALGOS', moneda: 'ARS',
+    // Depositó 1.000 (600 confirmados, 400 en camino) y extrajo 300 (100
+    // confirmados, 200 en camino).
+    ingresos: 1000, egresos: 300,
+    pendiente_ingresos: 400, pendiente_egresos: 200,
+    ops: 8, en_estudio: 4, ops_ingresos: 5, ops_egresos: 3,
+  }])
+  const f = v.filas[0]
+  assert.equal(f.recibida_depositado, 600)
+  assert.equal(f.recibida_extraido, 100)
+  // El saldo: 600 - 100.
+  assert.equal(f.recibida_saldo, 500)
+  assert.equal(v.netoConfirmado, 500)
+  // Y el número con lo que todavía viaja es OTRO: 1000 - 300.
+  assert.equal(v.neto, 700)
+  assert.notEqual(v.netoConfirmado, v.neto)
+})
+
+test('sin nada pendiente, el saldo y el total coinciden', () => {
+  const v = dividirPorEstado([{
+    id_local: 'L1', local: 'X', grupo: 'G', moneda: 'ARS',
+    ingresos: 500, egresos: 200, pendiente_ingresos: 0, pendiente_egresos: 0,
+    ops: 3, en_estudio: 0, ops_ingresos: 2, ops_egresos: 1,
+  }])
+  assert.equal(v.netoConfirmado, 300)
+  assert.equal(v.neto, 300)
+})
