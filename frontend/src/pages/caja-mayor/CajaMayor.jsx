@@ -381,17 +381,6 @@ export default function CajaMayor() {
               display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1rem',
               background: 'var(--bg-input)', borderRadius: 8, padding: '0.9rem 1.1rem',
             }}>
-              {/* Los títulos dicen DEPOSITADO y EXTRAÍDO, no "enviado/recibido": esas dos
-                  palabras son los valores del estado (ENVIADA/RECIBIDA) y usarlas para la
-                  dirección hacía que un movimiento RECIBIDA apareciera bajo "enviadas". */}
-              <div title="Plata que los locales pusieron en la caja mayor">
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Depositado</div>
-                <div style={{ fontSize: 18, color: 'var(--green)' }}>{fmtMonto(vista.totalDepositado, moneda)}</div>
-              </div>
-              <div title="Plata que los locales sacaron de la caja mayor">
-                <div style={{ fontSize: 10.5, color: 'var(--t3)', textTransform: 'uppercase' }}>Extraído</div>
-                <div style={{ fontSize: 18, color: 'var(--red)' }}>{fmtMonto(vista.totalExtraido, moneda)}</div>
-              </div>
               {/* EL SALDO es lo RECIBIDO: depositado menos extraído contando solo lo
                   que la caja mayor confirmó. Definición del usuario (2026-08-21). Lo
                   que sigue en ENVIADA no es plata que la caja tenga, es plata en
@@ -429,24 +418,26 @@ export default function CajaMayor() {
           )}
 
           {/* ── La vista partida en dos, por ESTADO ──────────────────────────
-              Pedido del dueño del producto (Trello "CM. Estado"): el primer corte
-              es ENVIADA/RECIBIDA — ¿la caja mayor ya confirmó la plata o sigue en
-              camino? — y la dirección (depositado/extraído) va como desglose
-              ADENTRO de cada lado, con su flecha y su color. Antes el corte era
-              por dirección; si esto vuelve a discutirse, las dos preguntas están
-              explicadas en lib/cajaMayorVista.js.
+              El corte es ENVIADA/RECIBIDA: ¿la caja mayor ya confirmó la plata o
+              sigue en camino? Cada lado muestra el SALDO de ese lado (lo que entró
+              menos lo que salió), que es el único número que se usa acá.
+
+              El desglose depositado/extraído se saco a pedido del usuario
+              (2026-08-21): en esta pantalla nadie lo miraba y competia con el
+              saldo, que es lo que se viene a ver. Los campos siguen existiendo en
+              lib/cajaMayorVista.js por si vuelve a hacer falta.
 
               Los DOS lados listan los mismos locales en el mismo orden, incluso con
               cero de un lado: leer las dos columnas a la misma altura es lo que
               permite comparar, y filtrar los ceros desalinearia las filas. */}
           <div className="cm-split">
             {[
-              { clave: 'enviada_total', dep: 'enviada_depositado', ext: 'enviada_extraido', ops: 'ops_enviada',
+              { clave: 'enviada_saldo', ops: 'ops_enviada',
                 titulo: 'Enviadas — sin confirmar', ayuda: 'La caja mayor todavía no las confirmó',
-                color: 'var(--amber)', total: vista.totalEnviada },
-              { clave: 'recibida_total', dep: 'recibida_depositado', ext: 'recibida_extraido', ops: 'ops_recibida',
+                color: 'var(--amber)', total: vista.saldoEnviada },
+              { clave: 'recibida_saldo', ops: 'ops_recibida',
                 titulo: 'Recibidas — confirmadas', ayuda: 'La caja mayor ya las confirmó',
-                color: 'var(--green)', total: vista.totalRecibida },
+                color: 'var(--green)', total: vista.saldoRecibida },
             ].map((lado) => (
               <div key={lado.clave} className="cm-split-panel">
                 <div className="cm-split-head">
@@ -459,7 +450,7 @@ export default function CajaMayor() {
                     <thead>
                       <tr>
                         <th>Local</th>
-                        <th style={{ textAlign: 'right' }}>Monto</th>
+                        <th style={{ textAlign: 'right' }}>Saldo</th>
                         <th style={{ textAlign: 'right', width: 74 }}>Ops</th>
                       </tr>
                     </thead>
@@ -483,13 +474,8 @@ export default function CajaMayor() {
                           <td style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--t3)' }}>
                             {g.grupo}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', color: g[lado.clave] ? lado.color : 'var(--t4)' }}>
-                            {fmtMonto(g[lado.clave], moneda)}
-                            {lado.clave === 'recibida_total' && (
-                              <div style={{ fontSize: 10.5, fontWeight: 600 }}>
-                                <Saldo valor={g.recibida_saldo} moneda={moneda} /> <span style={{ color: 'var(--t4)' }}>saldo</span>
-                              </div>
-                            )}
+                          <td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            <Saldo valor={g[lado.clave]} moneda={moneda} />
                           </td>
                           <td />
                         </tr>,
@@ -508,43 +494,22 @@ export default function CajaMayor() {
                           <td style={{ paddingLeft: 18 }}>
                             {f.local}
                           </td>
-                          {/* La barra dice quien mueve la caja: una lista de numeros
-                              obliga a compararlos de memoria. */}
+                          {/* El saldo del local en este lado, con la barra al lado: una
+                              lista de numeros pelados obliga a compararlos de memoria.
+                              La barra usa el valor absoluto -- un saldo negativo tambien
+                              tiene tamaño, y sin abs la barra desaparecia. */}
                           <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                            <div style={{ color: f[lado.clave] ? lado.color : 'var(--t4)' }}>
-                              {fmtMonto(f[lado.clave], f.moneda)}
-                            </div>
-                            {/* La dirección, como desglose del mismo importe: cuánto de
-                                este lado fue plata que el local puso (↑) y cuánto que
-                                sacó (↓). Solo las que existen, para no llenar de ceros. */}
-                            {f[lado.dep] > 0 && (
-                              <div style={{ fontSize: 10.5, color: 'var(--green)' }}>
-                                ↑ {fmtMonto(f[lado.dep], f.moneda)} depositado
-                              </div>
-                            )}
-                            {f[lado.ext] > 0 && (
-                              <div style={{ fontSize: 10.5, color: 'var(--red)' }}>
-                                ↓ {fmtMonto(f[lado.ext], f.moneda)} extraído
-                              </div>
-                            )}
-                            {/* El SALDO confirmado del local: lo que la caja
-                                mayor efectivamente tiene de él. El monto de
-                                arriba dice cuánto se movió; este, cuánto hay. */}
-                            {lado.clave === 'recibida_total' && (f[lado.dep] > 0 || f[lado.ext] > 0) && (
-                              <div style={{ fontSize: 10.5, fontWeight: 700 }}>
-                                = <Saldo valor={f.recibida_saldo} moneda={f.moneda} /> <span style={{ color: 'var(--t4)', fontWeight: 400 }}>saldo</span>
-                              </div>
-                            )}
+                            <Saldo valor={f[lado.clave]} moneda={f.moneda} />
                             <div style={{ height: 3, borderRadius: 2, marginTop: 3, background: 'rgba(var(--velo-rgb), 0.07)' }}>
                               <div style={{
                                 height: '100%', borderRadius: 2, background: lado.color,
-                                width: `${proporcion(f[lado.clave], lado.total)}%`,
+                                width: `${proporcion(Math.abs(f[lado.clave]), Math.abs(lado.total))}%`,
                               }} />
                             </div>
                           </td>
-                          {/* Los movimientos de ESTE lado, no los del local entero: en la
-                              columna de depositado, contar también los extraídos hacía que
-                              los dos lados mostraran el mismo número. */}
+                          {/* Los movimientos de ESTE lado (enviadas o recibidas), no los
+                              del local entero: contando todos, las dos columnas mostraban
+                              el mismo número. */}
                           <td style={{ textAlign: 'right' }} className="td-muted">
                             {f[lado.ops]}
                           </td>
@@ -556,13 +521,8 @@ export default function CajaMayor() {
                       <tfoot>
                         <tr>
                           <td style={{ fontWeight: 700 }}>Total</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: lado.color, whiteSpace: 'nowrap' }}>
-                            {fmtMonto(lado.total, moneda)}
-                            {lado.clave === 'recibida_total' && (
-                              <div style={{ fontSize: 11, fontWeight: 700 }}>
-                                = <Saldo valor={vista.saldoRecibida} moneda={moneda} /> <span style={{ color: 'var(--t4)', fontWeight: 400 }}>saldo confirmado</span>
-                              </div>
-                            )}
+                          <td style={{ textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            <Saldo valor={lado.total} moneda={moneda} />
                           </td>
                           <td />
                         </tr>
