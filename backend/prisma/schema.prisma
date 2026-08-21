@@ -1126,8 +1126,13 @@ model FiltroPreset {
 // lo toque en el módulo.
 
 // Ciclo de una op que sale de gestión hacia la caja mayor: el local la ENVIA y el
-// CM confirma que la RECIBIÓ. La app vieja llamaba ENVIADA "ESTUDIO" (1271 filas
-// ahí contra 364 recibidas) -- mismo estado, nombre que no decía nada.
+// CM confirma que la RECIBIÓ.
+//
+// OJO con los nombres de la app vieja, que son al revés de lo que parecen y ya
+// costaron una migración mal hecha (corregida el 2026-08-21, ver
+// scripts/corregir-estado-cm-migrado.mjs):
+//   "ESTUDIO"  = la plata YA ESTÁ en el estudio -> equivale a RECIBIDA (3.381 filas)
+//   "RECIBIDA" = el local la acaba de mandar    -> equivale a ENVIADA  (364 filas)
 //
 // Los movimientos que nacen en el módulo (PROPIO, APERTURA) no tienen este ciclo:
 // nadie los envía. Quedan en ENVIADA y el módulo no les ofrece el botón.

@@ -212,6 +212,11 @@ export function saldoDeAgregados(grupos) {
     }
   }
   return {
+    // Los dos números, y la pantalla muestra `saldo_recibido` como EL saldo: el
+    // saldo de un local en la caja mayor es lo RECIBIDO, ingresos menos egresos
+    // (definición del usuario, 2026-08-21). `saldo` cuenta además lo que sigue
+    // en ENVIADA, que es plata en camino: sirve para decir "cuánto va a haber",
+    // no "cuánto hay".
     saldo: { ingresos, egresos, saldo: ingresos - egresos, pendiente },
     // Lo que hay confirmado en la caja, sin contar lo que todavía viaja.
     saldo_recibido: {

@@ -93,11 +93,12 @@ export function dividirPorDireccion(saldos) {
     filas: ordenadas,
     totalDepositado,
     totalExtraido,
-    // El neto es lo que la caja mayor tiene de ese local: depositó menos extrajo.
-    // Positivo = el local puso más de lo que sacó.
+    // Depositado menos extraído contando TODO, incluso lo que sigue en ENVIADA:
+    // es "cuánto va a haber". La pantalla lo muestra como "Con lo enviado".
     neto: totalDepositado - totalExtraido,
-    // Lo mismo pero contando SOLO lo confirmado: es "cuánto hay" en vez de "cuánto va a
-    // haber". Las dos preguntas se miran y dan números distintos.
+    // EL SALDO: lo mismo contando SOLO lo confirmado. El saldo de un local en la
+    // caja mayor es lo recibido, ingresos menos egresos (definición del usuario,
+    // 2026-08-21) -- lo enviado todavía no llegó y no puede inflarlo.
     netoConfirmado:
       (totalDepositado - filas.reduce((a, f) => a + f.pendiente_depositado, 0)) -
       (totalExtraido - filas.reduce((a, f) => a + f.pendiente_extraido, 0)),

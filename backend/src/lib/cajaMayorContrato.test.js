@@ -73,8 +73,9 @@ test('los origenes con etiqueta en el frontend son los del enum de la base', () 
 })
 
 test('no quedan literales del estado viejo en el modulo', () => {
-  // 'ESTUDIO' era el nombre anterior de ENVIADA. Si reaparece en cualquiera de las
-  // dos puntas, es el bug volviendo.
+  // 'ESTUDIO' es el nombre que usaba la app vieja (y equivale a RECIBIDA, no a
+  // ENVIADA: ver el enum EstadoCM en el schema). Si reaparece en cualquiera de
+  // las dos puntas, es el bug volviendo.
   for (const [rel, src] of [
     ['backend/src/routes/caja_mayor.js', rutas],
     ['backend/src/lib/cajaMayor.js', leer('backend/src/lib/cajaMayor.js')],
