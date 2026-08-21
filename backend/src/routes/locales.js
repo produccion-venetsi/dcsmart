@@ -3,6 +3,7 @@ import multipart from '@fastify/multipart'
 import { sanitizeFolderName, parseGsPath, contentTypePorExt } from '../lib/gcsPaths.js'
 import { normalizarUrl, validarMail } from '../lib/localFicha.js'
 import { validarPorcentaje } from '../lib/descuentoMovstock.js'
+import { activarDefaultEnLocal } from '../lib/altaDisponibilidades.js'
 
 // Datos fiscales del local: no se duplican en `locales`, se leen del proveedor
 // vinculado. Cada local tiene su proveedor propio dentro de la tabla de
@@ -138,6 +139,14 @@ export default async function localesRoutes(fastify) {
         data: { nombre, id_app, direccion, telefono, activo: activo ?? true, ...ficha.data },
         include: { proveedor: { select: PROVEEDOR_SELECT } }
       })
+      // El local arranca con las disponibilidades de siempre (MP, dólares,
+      // transferencia). Si esto falla el local igual queda creado: la lista se
+      // corrige con dos clicks en la ficha, perder el alta por esto sería peor.
+      try {
+        await activarDefaultEnLocal(fastify.db, { id_local: local.id, id_app })
+      } catch (err) {
+        fastify.log.error({ err, id_local: local.id }, 'no se pudieron sembrar las disponibilidades del local')
+      }
       return reply.code(201).send(local)
     } catch (err) {
       if (err.code === 'P2003') return reply.code(400).send({ error: 'App o proveedor no existe' })
